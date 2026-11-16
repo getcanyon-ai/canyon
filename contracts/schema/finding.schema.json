@@ -288,6 +288,10 @@
                 "recorded": {
                   "const": true
                 },
+                "carried_from": {
+                  "type": "string",
+                  "pattern": "^gr_[a-z0-9]{4,}$"
+                },
                 "shown": {
                   "type": "object",
                   "additionalProperties": false,

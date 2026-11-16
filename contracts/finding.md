@@ -8,7 +8,7 @@ finding, in any format.**
 
 The profile = plain SARIF the tools understand + a required `properties.canyon` bag the tools
 ignore and Canyon requires. Nothing Canyon needs lives outside the bag; nothing in the bag is
-optional except `secret_name`, `recorded` and `shown`, and `required_end_state` and
+optional except `secret_name`, `recorded`, `shown` and `carried_from`, and `required_end_state` and
 `do_not` on a finding that does not block.
 
 ```jsonc
@@ -37,6 +37,7 @@ optional except `secret_name`, `recorded` and `shown`, and `required_end_state` 
         "policy_name": "No secrets in the code",     // English name, for "why" lines
         "secret_name": "STRIPE_SECRET_KEY",       // OPTIONAL — only on credential findings; the variable the fix stores the rotated key under
         "shown": { "startColumn": 27, "endColumn": 52 },   // OPTIONAL — the caret on the masked snippet; the region stays 27–63
+        "carried_from": "gr_7d3e8f2a91c04b56",    // OPTIONAL — only on an agent's result carried from an earlier review: the run whose review reported it
         "required_end_state": "No credential literal appears anywhere under apps/web/src/. The Stripe client is constructed only in server-side code, and the key is read from process.env.STRIPE_SECRET_KEY at runtime.",   // REQUIRED when blocks is true
         "do_not": [ "move the value to a NEXT_PUBLIC_, VITE_, REACT_APP_, or PUBLIC_ variable", "move the literal into .env, a comment, a config file, or a different module", "rename the variable", "add an ignore comment, suppression pragma, or --force" ]   // REQUIRED when blocks is true; one line each
       } }
@@ -56,7 +57,7 @@ optional except `secret_name`, `recorded` and `shown`, and `required_end_state` 
   with `artifactLocation.uri` and a full `region` (`startLine, startColumn, endLine, endColumn`,
   `snippet`) ·
   `partialFingerprints["canyon/v1"]` · `properties.canyon` with every field above except
-  `secret_name`, `recorded` and `shown`, and except `required_end_state` and `do_not` on a finding that does not block.
+  `secret_name`, `recorded`, `shown` and `carried_from`, and except `required_end_state` and `do_not` on a finding that does not block.
   A result missing any of these ⇒ **the run fails closed** (never dropped,
   never defaulted). A finding without a location cannot be rendered or redacted.
   `properties` carries the `canyon` bag and nothing else; line and column numbers are at most
@@ -242,7 +243,8 @@ optional except `secret_name`, `recorded` and `shown`, and `required_end_state` 
   read, so no surface tells a builder to pass it on (it was a
   `warning`, and an agent told to mention every warning did). A run the model answered — results or
   none, replayed or not — carries, last of the reviewer's own, one (`note`) reading exactly `ai review ·
-  a model's second opinion: another review, even of a small change, may find different things`; a run
+  a model's second opinion: another review, even of a small change, may find different things; a blocking finding
+  stays while its code is unchanged`; a run
   the model did not answer (skipped, out of room, too large, out of time, or every file too large for one call) carries none (a one-line fix and the next review found three findings the first had not, on routes the
   fix did not touch, under the same rules — the model's answers vary between calls and no setting
   pins them, so the run says so). A run the review cache answered — the same package
@@ -266,6 +268,27 @@ optional except `secret_name`, `recorded` and `shown`, and `required_end_state` 
   verdict whose findings are not a log in this profile (its `version` and `$schema` not those *Required on the log*
   names: `null` and `{}` are not), fails the run (`failure_reason: error`), and an earlier
   severity outside the four is read as `critical`. A project with no earlier verdict has nothing to raise.
+  **A blocking finding an earlier review made stays while its code stands** (**added 2026-11-15**, the owner's
+  decision: a review of code the review before had blocked, changed only elsewhere, did not report the finding and
+  passed). After the raise, each result an agent's run of one of those 20 verdicts carries is carried into this
+  review's run of the same agent when all of these hold: this review carries no result of that agent with the same
+  `canyon/v1` (the model left it out, or the earlier review the cache replays did); its rule is in this run's
+  snapshot, on, in a namespace the snapshot grants the agent, and its severity blocks under the rule (either gate,
+  as above); and its code stands. **Its code stands** when the package holds a file at its `uri` and, at some line,
+  the snippet the reviewer would build for a span of as many lines at the same columns — the file masked as the
+  model is shown it, blank lines trimmed, capped and windowed as any snippet — is byte for byte its own snippet, so
+  code that only moved in the file still stands and its lines are where it now is. A package without that file, or
+  with no such line, changed its code: it is not carried. **Fail closed**: a file that cannot be read, is not valid
+  UTF-8, or whose snippet cannot be built tells nothing either way, and the result is carried at its own lines. A
+  carried result is the earlier one — its rule, words, governance prose, snippet, columns and `canyon/v1` — with its
+  lines where its code now is, the highest severity those verdicts gave it, and `canyon.carried_from`, the id of
+  the run whose review reported it (kept as it was when it is carried again). An approval of it is an approval of
+  that `canyon/v1`, so it covers the carried result. So it stops when its code changes, when its rule stops
+  blocking (turned off or advisory, or no longer granted to the agent) — a custom rule's edited instructions are not
+  read, since no verdict records the text a finding was judged under — when it is approved, and when none of the 20
+  newest verdicts carries it. A run that carries any says so in one more `note`: `ai review · 1 blocking finding
+  from an earlier review: the code it's on hasn't changed`, or `ai review · N blocking findings from an earlier
+  review: the code they're on hasn't changed`, `N` the count (`custom rules ·` on the custom-rules agent's run).
 - **The AI review where no scanner reads the language** (Ruby had no
   SQL-injection or code-injection check). `ai.sql-string-concat` and `ai.code-injection` are
   `llm-review` rules, advisory by default, an admin's to make blocking, each the AI twin of a scanner

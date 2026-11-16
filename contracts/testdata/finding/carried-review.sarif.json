@@ -1,0 +1,88 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "columnKind": "unicodeCodePoints",
+      "tool": {
+        "driver": {
+          "name": "canyon-review",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "auth.unauthenticated-route",
+              "name": "Every route needs sign-in"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "ai review · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged"
+              }
+            },
+            {
+              "level": "note",
+              "message": {
+                "text": "ai review · 1 blocking finding from an earlier review: the code it's on hasn't changed"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "auth.unauthenticated-route",
+          "level": "error",
+          "message": {
+            "text": "/api/admin/policies is reachable without a session"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/admin/policies/route.ts"
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 3,
+                  "endLine": 8,
+                  "endColumn": 68,
+                  "snippet": {
+                    "text": "  return NextResponse.json(await db.policies.forOrg(params.orgId));"
+                  }
+                }
+              }
+            }
+          ],
+          "relatedLocations": [],
+          "partialFingerprints": {
+            "canyon/v1": "f_1ddb72ad9a5d06de4d2cb9c67e3fb584437c9f58dcc7f33b4f026c8fc7484dbf"
+          },
+          "properties": {
+            "canyon": {
+              "severity": "high",
+              "blocks": false,
+              "title": "/api/admin/policies is reachable without a session",
+              "problem": "There's no session check in the handler, and middleware.ts:22 leaves /api/admin/policies out of the matcher — so nothing upstream is checking either. Any caller without a session gets what this handler returns.",
+              "fix": "Either add /api/admin/policies to the middleware matcher, or return early from the handler when the request has no cp_session cookie. The matcher is the safer of the two — it covers routes nobody's written yet.",
+              "policy_name": "Every route needs sign-in",
+              "required_end_state": "/api/admin/policies answers only a request that carries a session: the middleware matcher covers it, or the handler returns before anything else when the session cookie is missing.",
+              "do_not": [
+                "check a query parameter or header the caller sets instead of the session cookie",
+                "move the handler's logic to another route outside the matcher",
+                "add an ignore comment or suppression pragma"
+              ],
+              "carried_from": "gr_7d3e8f2a91c04b56"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -56,7 +56,7 @@ once, in the shell you run every step from. `RELEASE` is the Canyon release you 
 ```sh
 export DOMAIN=canyon.example.com      # Canyon's host; apps live at <app>.preview.$DOMAIN and <app>.prod.$DOMAIN
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-export RELEASE=v0.2.2                 # the release's tag
+export RELEASE=v0.10.0                # the release's tag, such as v0.10.0
 export WORK=$(mktemp -d)              # $WORK holds the release, your overlay and the manifests below; keep it
 export CANYON=$WORK/canyon            # the release's canyon-deploy.tar.gz, unpacked
 curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/download/$RELEASE/canyon-deploy.tar.gz | tar -xz -C $WORK

@@ -1695,7 +1695,7 @@ A deploy or promotion runs as usual until the build. Then its timeline says:
 
 - "handed to your platform · waiting for it to report";
 - "your platform answered 503 · retrying in 1m" for each retry;
-- "live at https://claims.prod.apps.example · reported by your platform" once your platform reports
+- "live at `https://claims.prod.apps.example` · reported by your platform" once your platform reports
   `deployed`.
 
 It fails with one of:

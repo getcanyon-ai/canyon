@@ -84,17 +84,10 @@ injection. [Try it on your laptop](docs/src/content/docs/start/try-it-on-your-la
 through it with the real output. `canyon demo down` removes it, and `canyon demo down --purge` its
 images too.
 
-That installs the latest release published to
-[canyon-releases](https://github.com/getcanyon-ai/canyon-releases), the public download repository
-(`scripts/publish-release.sh` publishes one). For a release of this repository not published there,
-download it with the GitHub CLI and install from there:
+That installs the latest release, from
+[canyon-releases](https://github.com/getcanyon-ai/canyon-releases), Canyon's download repository.
 
-```sh
-gh release download -R getcanyon-ai/canyon -D canyon-release -p '*'
-CANYON_RELEASE_URL="file://$PWD/canyon-release" sh canyon-release/install.sh
-```
-
-**Let your agent ship.** `canyon skill install` teaches Claude Code and Cursor, and with
+**Let your agent ship.** `canyon skill install` teaches Claude Code, Codex and Cursor, and with
 `--harness agents-md` any agent that reads an `AGENTS.md`, how to deploy with Canyon and fix what the
 review finds. Then ask it to "deploy this
 app". Or run `canyon deploy` in the app's directory yourself.

@@ -48,7 +48,7 @@ Apps built outside the org's design system look and behave unlike the rest of th
 This is the fix Canyon prints for a design system that is an npm package:
 
 > Add @meridian/ui to the dependencies of the package.json that holds the UI (registry:
-> https://registry.meridian.example/ui), and build the UI from its components.
+> `https://registry.meridian.example/ui`), and build the UI from its components.
 
 For shadcn/ui, it says to run `npx shadcn@latest init` where the UI's `package.json` is. For
 Canyon, it says to add the `@canyon` registry to the UI's `components.json`.

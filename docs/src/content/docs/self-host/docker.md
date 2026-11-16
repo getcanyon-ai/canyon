@@ -67,7 +67,7 @@ is the Canyon release you install, v0.3.0 or a later one of
 
 ```sh
 export DOMAIN=canyon.example.com   # Canyon's host; apps live at <app>.preview.$DOMAIN and <app>.prod.$DOMAIN
-export RELEASE=v0.3.0              # the release's tag: v0.3.0 or later
+export RELEASE=v0.10.0             # the release's tag, such as v0.10.0 (v0.3.0 or later)
 mkdir -p /opt && cd /opt
 ```
 

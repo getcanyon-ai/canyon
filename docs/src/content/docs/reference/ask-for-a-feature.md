@@ -11,7 +11,7 @@ Where Canyon refuses something it doesn't do yet, the last line says so, with a 
     Paketo Buildpack for Node.js
     …
   No buildpack recognised the package, so nothing was compiled: not an error in the code, not a policy block.
-  Not supported yet. Ask for it: https://github.com/getcanyon-ai/canyon/issues/new?category=language_unrecognised&os=linux&template=missing-feature.yml&version=v0.9.0
+  Not supported yet. Ask for it: https://github.com/getcanyon-ai/canyon/issues/new?category=language_unrecognised&os=linux&template=missing-feature.yml&version=v0.10.0
 ```
 
 The link opens a new issue on Canyon's repository, already filled in with what Canyon doesn't do, your
@@ -32,10 +32,10 @@ app to get around it.
 
 ```
 $ canyon feedback
-Ask for a feature: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missing-feature.yml&version=v0.9.0
-Canyon blocked something it shouldn't: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=blocked-wrongly.yml&version=v0.9.0
-Canyon missed something it should have caught: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missed.yml&version=v0.9.0
-Canyon didn't install or start: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=install-failed.yml&version=v0.9.0
+Ask for a feature: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missing-feature.yml&version=v0.10.0
+Canyon blocked something it shouldn't: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=blocked-wrongly.yml&version=v0.10.0
+Canyon missed something it should have caught: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missed.yml&version=v0.10.0
+Canyon didn't install or start: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=install-failed.yml&version=v0.10.0
 ```
 
 Each link opens one kind of issue, filled in with your Canyon version and operating system:

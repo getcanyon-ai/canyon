@@ -120,6 +120,7 @@ jobs:
     timeout-minutes: 50 # the journey builds the dashboard and installs Chromium (#2439)
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: kube
@@ -244,6 +245,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache
         with:
           job: kube
@@ -295,6 +297,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache
         with:
           job: kube

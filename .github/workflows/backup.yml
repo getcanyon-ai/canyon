@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - if: runner.environment == 'github-hosted' # a fork's pull request; our own VMs have the disk
         name: free the runner's disk, as kube.yml's kind job does
         run: |

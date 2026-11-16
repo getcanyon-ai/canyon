@@ -24,14 +24,17 @@ import (
 
 const (
 	hostB = "http://localhost:7779" // canyon-b, e2e/compose.e2e.yml: sign-in off
-	// oldRelease is the last release before per-host sessions (#2171): it knows config.json alone.
-	oldRelease = "v0.1.11"
+	// oldRelease is the oldest release published on canyon-releases, and an older CLI than this one: it writes
+	// config.json and each host's session under hosts/ in that release's shape.
+	oldRelease = "v0.2.3"
+	// releases is where every release is published, public and read with no token.
+	releases = "https://github.com/getcanyon-ai/canyon-releases/releases/download/"
 )
 
 // TestAnOldCLIKeepsAnotherHostsSession is J14's sessions (design/OPERATIONS.md §2.5): the new CLI signs in to this
 // Canyon (A), whose session is real, then to canyon-b, so config.json names B and A's session is in hosts/. An old
-// release's CLI, which knows config.json alone, reads it and logs in to B, writing it whole: A's session survives,
-// byte for byte, and still signs the new CLI in to A; config.json round-trips between the two.
+// release's CLI reads it and logs in to B: A's session survives, byte for byte, and still signs the new CLI in to A;
+// config.json round-trips between the two.
 func TestAnOldCLIKeepsAnotherHostsSession(t *testing.T) {
 	var config struct{ Auth string }
 	if code := get(t, &http.Client{Timeout: 10 * time.Second}, host+"/auth/config", &config); code != http.StatusOK || config.Auth != "oidc" {
@@ -94,26 +97,14 @@ func TestAnOldCLIKeepsAnotherHostsSession(t *testing.T) {
 	}
 }
 
-// oldCLI is oldRelease's canyon for this machine, from the repository's release (gh, signed in, or GH_TOKEN as CI's
-// oidc job sets it), checked against its SHA256SUMS.
+// oldCLI is oldRelease's canyon for this machine, from its published release, checked against its SHA256SUMS.
 func oldCLI(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	tarball := "canyon_" + oldRelease + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	args := []string{"release", "download", oldRelease, "-p", tarball, "-p", "SHA256SUMS", "-D", dir}
-	if repo := os.Getenv("GITHUB_REPOSITORY"); repo != "" {
-		args = append(args, "-R", repo)
-	}
-	get := exec.Command("gh", args...) //nolint:gosec // a fixed release's assets
-	get.Dir = "../.."                  // the checkout, whose remote names the repository when GITHUB_REPOSITORY doesn't
-	if out, err := get.CombinedOutput(); err != nil {
-		t.Fatalf("gh release download %s: %v\n%s", oldRelease, err, out)
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, tarball)) //nolint:gosec // the download above
-	must(t, err)
+	raw := download(t, releases+oldRelease+"/"+tarball)
 	sum := sha256.Sum256(raw)
-	sums, err := os.ReadFile(filepath.Join(dir, "SHA256SUMS")) //nolint:gosec // the download above
-	must(t, err)
+	sums := download(t, releases+oldRelease+"/SHA256SUMS")
 	if !slices.Contains(strings.Split(string(sums), "\n"), hex.EncodeToString(sum[:])+"  "+tarball) {
 		t.Fatalf("%s is not the release's: its SHA256SUMS has no line for sha256 %x", tarball, sum)
 	}
@@ -135,4 +126,19 @@ func oldCLI(t *testing.T) string {
 		must(t, os.WriteFile(bin, body, 0o700)) //nolint:gosec // an executable: the release's CLI
 		return bin
 	}
+}
+
+// download is one published file whole, or the test stops.
+func download(t *testing.T, u string) []byte {
+	t.Helper()
+	res, err := (&http.Client{Timeout: 5 * time.Minute}).Get(u) //nolint:noctx // the client's timeout bounds it
+	if err != nil {
+		t.Fatalf("download %s: %v", u, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, err := io.ReadAll(res.Body)
+	if err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("download %s: %d %v", u, res.StatusCode, err)
+	}
+	return body
 }

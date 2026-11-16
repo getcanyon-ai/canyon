@@ -172,8 +172,6 @@ jobs:
       - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
       - run: make e2e-up OIDC=1
       - name: the team setup's sign-in, deploy and sharing (e2e/oidc), every test listed run and passed, so a skip never passes
-        env:
-          GH_TOKEN: ${{ github.token }} # the job's own token, contents: read: J14's old release CLI, gh release download (e2e/oidc/host_test.go)
         run: |
           want=$(go test -tags oidc -list . ./e2e/oidc/ | grep '^Test' | sort)
           rc=0

@@ -57,6 +57,10 @@ Working on Canyon itself? Set DO_NOT_TRACK=1 (or CANYON_TELEMETRY=0) so your loc
 - **Kubernetes:** `make test-kube` against a kind cluster, and `e2e/cluster/` against a real one.
 - **Coding agents:** `qa/agent/` runs headless Claude Code through real tasks and scores what it did
   with Canyon's answers ([qa/agent/README.md](qa/agent/README.md)).
+- **What a pull request from a fork runs:** the fast checks, which are lint, the Go and database tests, the
+  dashboard's tests, the images and the docs. The stack suites (the browser journeys, sign-in, outbound,
+  patching, the tour and Kubernetes) run on GitHub's runners on every push to `main` and nightly, so your pull
+  request never waits on them; a maintainer's own pull request runs them too.
 
 ## Pull requests
 

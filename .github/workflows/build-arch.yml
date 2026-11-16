@@ -29,6 +29,7 @@ concurrency:
 
 jobs:
   kind:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +40,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go, as kube.yml's
         with:
           job: kube

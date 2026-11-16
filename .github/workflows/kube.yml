@@ -106,6 +106,7 @@ concurrency:
 
 jobs:
   kind:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     strategy:
       fail-fast: false
       # kindnet proves the probe says "not enforced" on a cluster without NetworkPolicy, and that under run_by: canyon
@@ -119,6 +120,7 @@ jobs:
     timeout-minutes: 50 # the journey builds the dashboard and installs Chromium (#2439)
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: kube
@@ -237,12 +239,13 @@ jobs:
     # this machine with the cluster's own executor, kpack readied as build-arch.yml readies it, so a deploy through the
     # server builds and runs, and the chart's bootstrap saves a door not enforcing again. A pull request's, as Calico's
     # suite; a cluster of its own, so it adds no time to that suite's.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     name: kind (run_by canyon)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as the kind job's
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache
         with:
           job: kube
@@ -279,6 +282,7 @@ jobs:
           kubectl -n canyon logs deploy/canyon-executor --tail=200
 
   handoff-repo:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The hand-off journey through a deploy repo (e2e/handoff/README.md; #2470): Calico's cluster, External Secrets and
     # CloudNativePG on it (.github/kind/platform.sh), Gitea beside it, and the deploy repo synced by each GitOps
     # controller deploy/gitops has a reference set-up for, Argo CD and Flux (#2479), each on a cluster of its own. A pull
@@ -293,6 +297,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache
         with:
           job: kube

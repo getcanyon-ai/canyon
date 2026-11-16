@@ -53,10 +53,13 @@ download() {
 }
 
 # own makes grype's database the scan's user's, as the executor's refresh makes it (grype makes its directory 0700),
-# and every database readable by all, so the runner's cache save reads one downloaded as root or as that user.
+# trivy-java's directory root's, as a Docker volume's is: the executor's refresh runs as root with every capability
+# dropped, so it makes /db/tmp only in a /db root owns, and the bind's directory is the runner's user's. And every
+# database readable by all, so the runner's cache save reads one downloaded as root or as that user.
 own() {
   local chown=
   [ "$1" = grype ] && chown='chown -R 65534:65534 /db && '
+  [ "$1" = trivy-java ] && chown='chown 0:0 /db && '
   ops "$1" "${chown}chmod -R a+rX /db"
 }
 

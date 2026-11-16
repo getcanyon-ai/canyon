@@ -1,0 +1,40 @@
+name: stack
+
+# The stack suites on main, in the public repository: the browser journeys (e2e-ui), patching (patch-e2e) and
+# the guided tour (tour), at each push to main and nightly, on GitHub's hosted runners. A fork's pull request
+# never runs them (each job's if), so a contributor waits on the fast checks alone, and what they merge is
+# checked here. In any other repository every job here is skipped: it runs these suites its own way.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *' # nightly: drift in a base image or a dependency
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stack-${{ github.ref }}
+  cancel-in-progress: true # a newer main replaces a run still on an older one
+
+jobs:
+  e2e-ui:
+    if: github.repository == 'getcanyon-ai/canyon'
+    uses: ./.github/workflows/e2e-ui.yml
+    permissions:
+      contents: read
+      actions: read # its stacks' jobs read the run's jobs (.github/actions/scan-dbs)
+
+  patch-e2e:
+    if: github.repository == 'getcanyon-ai/canyon'
+    uses: ./.github/workflows/patch-e2e.yml
+    permissions:
+      contents: read
+      actions: read # its stack's job reads the run's jobs (.github/actions/scan-dbs)
+
+  tour:
+    if: github.repository == 'getcanyon-ai/canyon'
+    uses: ./.github/workflows/tour.yml
+    permissions:
+      contents: read

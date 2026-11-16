@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Session } from "./signin";
 import { onCluster, repo } from "./surfaces";
+import { why } from "./why";
 
 // The cluster project has no default target (playwright.config.ts's baseURL, deliberately); a run
 // under it with the variable unset must fail loudly, not quietly talk to a local dev server.
@@ -52,12 +53,16 @@ export async function uploadVersion(app: string, fixture: string, files: Record<
 
 type Run = { run: { id: string; state: string } };
 
-// review starts a gate run of app's current package and waits for it to end, as session. The first
-// review on a fresh host pulls the scanners' images and downloads trivy's and grype's databases
-// (contracts/finding.md, Canyon-run tools): minutes on a CI runner, so ten of them.
+// review starts a gate run of app's current package and waits for it to end, as session, failing when it
+// failed: a blocked review is a journey's to read. The first review on a fresh host pulls the scanners' images
+// and downloads trivy's and grype's databases (contracts/finding.md, Canyon-run tools): minutes on a CI runner,
+// so ten of them.
 export async function review(app: string, session: Session | null = null): Promise<string> {
   const { run } = await api<Run>(session, "POST", `/api/v1/projects/${app}/gate-runs`, {});
-  return ended(run.id, 10 * 60_000, session);
+  const id = await ended(run.id, 10 * 60_000, session);
+  const { run: read } = await api<Run>(session, "GET", `/api/v1/gate-runs/${id}`);
+  if (read.state === "failed") throw new Error(`review of ${app} failed. ${await why(id, reader(session))}`);
+  return id;
 }
 
 // deploy deploys app's current package to preview, waits for the run to end (a build) and fails
@@ -66,7 +71,7 @@ export async function deploy(app: string, session: Session | null = null): Promi
   const { run } = await api<Run>(session, "POST", `/api/v1/projects/${app}/deploys`, {});
   const id = await ended(run.id, 15 * 60_000, session);
   const { project } = await api<{ project: { envs: Record<string, unknown> } }>(session, "GET", `/api/v1/projects/${app}`);
-  if (!project.envs.preview) throw new Error(`deploy of ${app} (${id}) left nothing in preview: see its timeline`);
+  if (!project.envs.preview) throw new Error(`deploy of ${app} left nothing in preview. ${await why(id, reader(session))}`);
   return id;
 }
 
@@ -76,7 +81,7 @@ export async function promote(app: string, gateRun: string, session: Session | n
   const { run } = await api<Run>(session, "POST", `/api/v1/projects/${app}/promotions`, { gate_run: gateRun });
   const id = await ended(run.id, 15 * 60_000, session);
   const { run: read } = await api<Run>(session, "GET", `/api/v1/gate-runs/${id}`);
-  if (read.state !== "clean") throw new Error(`promotion of ${app} (${id}) ended ${read.state}: see its timeline`);
+  if (read.state !== "clean") throw new Error(`promotion of ${app} didn't end clean. ${await why(id, reader(session))}`);
   return id;
 }
 
@@ -87,5 +92,8 @@ async function ended(id: string, within: number, session: Session | null): Promi
     if (!["pending", "running"].includes(run.state)) return id;
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`run ${id} did not end within ${within} ms`);
+  throw new Error(`run ${id} did not end within ${within} ms. ${await why(id, reader(session))}`);
 }
+
+// reader is api's GET as session, for why.
+const reader = (session: Session | null) => <T>(path: string) => api<T>(session, "GET", path);

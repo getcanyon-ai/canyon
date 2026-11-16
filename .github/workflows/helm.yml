@@ -191,11 +191,13 @@ jobs:
           grep -F "NetworkPolicy canyon-apps-signin rendered" <<<"$out" || { echo "failed for another reason: $out"; exit 1; }
 
   install:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     name: the chart on kind, its bundled parts running, and the upgrade from the release before (#2778)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as the chart job's
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - name: helm — the pinned release, checksum-verified, as the chart job's
         env:
           HELM_VERSION: v4.0.5

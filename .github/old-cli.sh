@@ -5,10 +5,10 @@
 # On the compose stack from this tree: the release's CLI, checked against its SHA256SUMS, checks
 # claims-portal's next version (blocked, exit 2) and claims-archive (clean, exit 0), deploys claims-archive (exit 0, the preview answers) and
 # promotes it (exit 0, prod answers). Any other exit, or a line that says the two disagree, fails it.
-# Needs gh signed in (GH_TOKEN in CI); tears the stack down with make demo-down, pass or fail.
+# Needs gh signed in (GH_TOKEN in CI; any token reads the public releases); tears the stack down with make demo-down, pass or fail.
 set -euo pipefail
 
-repo=${GITHUB_REPOSITORY:-getcanyon-ai/canyon}
+repo=getcanyon-ai/canyon-releases # where every release is published, and people install from: the source repository has none
 host=http://127.0.0.1:7777
 work=$(mktemp -d)
 

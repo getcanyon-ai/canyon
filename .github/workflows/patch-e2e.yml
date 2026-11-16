@@ -31,7 +31,7 @@ on:
       - 'e2e/ui/playwright.config.ts'
       - 'e2e/compose.patch.yml'
       - '.github/workflows/patch-e2e.yml'
-  workflow_call: # journeys.yml
+  workflow_call: # journeys.yml, stack.yml
   workflow_dispatch:
 
 permissions:
@@ -43,6 +43,7 @@ concurrency:
 
 jobs:
   patch:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 75 # three deploys and a promotion, then three patch runs one at a time, each its gate, rebase, SBOM and a minute's watch
     permissions:
@@ -50,6 +51,7 @@ jobs:
       actions: read # a scan-dbs job in the run, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui

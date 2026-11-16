@@ -37,7 +37,8 @@ Every command is a `Makefile` target and CI runs the same targets: the table is 
 cheap: **push and let CI run the checks** — every one your change's
 paths call for (the race and database tests, lint, the stack, e2e-ui, kind); the journeys,
 e2e-ui and the tour run nightly on `main` when it moved since the last green nightly, or by hand, and a red
-run on `main` opens or comments on one issue labelled ci. On the laptop run only
+run on `main` opens or comments on one issue labelled ci. In the public repository a fork's pull request runs
+the fast checks alone, and the stack suites run there on push to `main` and nightly (`stack.yml`). On the laptop run only
 the quick, narrow tests: `make test PKG=./cmd/canyon-server RUN=TestServer`, then
 `make test-affected`, every package your change can reach. **Never run `make preflight` or any
 e2e (`make e2e`, `make e2e-ui`, `make test-kube`, `make tour-check`) locally**, except to debug a red CI check.

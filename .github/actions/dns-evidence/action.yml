@@ -1,0 +1,44 @@
+name: dns-evidence
+description: >-
+  What a stack job's DNS did, on GitHub's hosted runners, for a red that names a lookup's failure ("lookup nodejs.org
+  on 127.0.0.11:53: server misbehaving"). With step: start, run right after checkout, it turns on dockerd's debug
+  log, so its resolver says each query it forwards and what answered, and restarts Docker before anything starts a
+  container. With step: collect, run under if: failure(), it prints which upstreams Docker hands a container it creates and
+  when dockerd started, the runner's resolver files, dockerd's resolver lines and systemd-resolved's log and statistics. On any
+  other runner it does nothing.
+inputs:
+  step:
+    description: start or collect
+    required: true
+runs:
+  using: composite
+  steps:
+    - if: runner.environment == 'github-hosted' && inputs.step == 'start'
+      shell: bash
+      run: |
+        set -euo pipefail
+        conf=/etc/docker/daemon.json
+        current=$(sudo cat "$conf" 2>/dev/null || true)
+        [ -n "$current" ] || current='{}'
+        jq '. + {debug: true}' <<<"$current" | sudo tee "$conf.new" >/dev/null
+        sudo mv "$conf.new" "$conf"
+        sudo systemctl restart docker
+        for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+        docker info --format 'Docker {{.ServerVersion}}, debug {{.Debug}}'
+        date -u +%FT%TZ | sudo tee /run/canyon-dns-evidence-start >/dev/null
+    - if: runner.environment == 'github-hosted' && inputs.step == 'collect'
+      shell: bash
+      run: |
+        set +e
+        since=$(cat /run/canyon-dns-evidence-start 2>/dev/null || echo "-3h")
+        echo "::group::the runner's resolver files, and when dockerd started"
+        ls -l --time-style=full-iso /etc/resolv.conf /run/systemd/resolve/resolv.conf; head -50 /etc/resolv.conf /run/systemd/resolve/resolv.conf
+        resolvectl status --no-pager; systemctl show docker -p ActiveEnterTimestamp
+        echo "::endgroup::"
+        echo "::group::the upstreams Docker hands a container it creates now, on a network like canyon-builds (ExtServers; host(...) is asked from the host)"
+        docker network create canyon-dns-evidence >/dev/null && docker run --rm --network canyon-dns-evidence busybox:1.37 cat /etc/resolv.conf
+        docker network rm canyon-dns-evidence >/dev/null
+        echo "::endgroup::"
+        echo "::group::dockerd's resolver lines"; sudo journalctl -u docker --since "$since" --no-pager -o short-iso | grep -i -E 'resolver|dns' | tail -400; echo "::endgroup::"
+        echo "::group::systemd-resolved"; resolvectl statistics --no-pager; sudo journalctl -u systemd-resolved --since "$since" --no-pager -o short-iso | tail -200; echo "::endgroup::"
+        exit 0

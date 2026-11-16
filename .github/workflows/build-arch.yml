@@ -40,7 +40,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go, as kube.yml's
         with:
           job: kube

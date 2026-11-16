@@ -49,7 +49,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
+        with:
+          step: start
       - run: .github/old-cli.sh
         env:
           GH_TOKEN: ${{ github.token }}
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
+        if: failure()
+        with:
+          step: collect
+

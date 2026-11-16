@@ -53,7 +53,9 @@ jobs:
     timeout-minutes: 45 # ten real buildpack builds, a stock Next 16 among them (#1240), and the Paketo samples' image scans (#2216): the test step ran 23 min
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
+        with:
+          step: start
       - if: github.event_name == 'pull_request'
         name: free the runner's disk — ten app builds, canyon-run and the scanners' images need more than it leaves
         run: |
@@ -83,3 +85,8 @@ jobs:
         run: make test-e2e
       - if: github.event_name == 'push' # what make test-e2e compiles, into the build cache go-cache saves for pull requests
         run: go test -tags e2e -count=1 -run '^$' ./executor
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
+        if: failure()
+        with:
+          step: collect
+

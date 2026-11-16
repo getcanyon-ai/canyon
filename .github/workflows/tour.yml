@@ -39,7 +39,9 @@ jobs:
     timeout-minutes: 45 # the stack's images, the four sample apps' builds and two tours
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
+        with:
+          step: start
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: tour
@@ -50,3 +52,8 @@ jobs:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
       - run: make tour-check
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
+        if: failure()
+        with:
+          step: collect
+

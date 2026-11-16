@@ -384,7 +384,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2 # the pull request's merge commit and its base, which the next step diffs
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
+        with:
+          step: start
       - id: compose
         if: github.event_name == 'pull_request'
         run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy/egress Makefile cmd/canyon-server/localpeer.go cmd/canyon-server/published.go cmd/canyon-server/main.go executor/published.go executor/http.go executor/executor.go executor/appfloor.go executor/appfloor.sh || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
@@ -399,6 +401,11 @@ jobs:
             --entrypoint /bin/sh "$(jq -r '.services["egress-envoy"].image' <<<"$config")" /etc/canyon/envoy.sh --mode validate
       - if: github.event_name == 'push' || steps.compose.outputs.changed == 'true'
         run: make demo-check
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
+        if: failure()
+        with:
+          step: collect
+
 
   images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image is multi-arch
@@ -419,7 +426,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2 # the merge commit and its base, which the next steps diff
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
+        with:
+          step: start
       - id: bundle
         run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
       - if: steps.bundle.outputs.changed == 'true'
@@ -440,4 +449,9 @@ jobs:
           done
           ! grep -q '/\.git\(/\|$\)' "$RUNNER_TEMP/opengrep-source.txt" || { echo "::error::the source tarball carries .git"; exit 1; }
           echo "$(wc -l < "$RUNNER_TEMP/opengrep-source.txt") files"
+      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
+        if: failure()
+        with:
+          step: collect
+
 

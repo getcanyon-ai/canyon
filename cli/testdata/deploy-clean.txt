@@ -1,0 +1,17 @@
+
+  Review
+
+  ✓ Review passed · 0 blocking, 3 warnings
+
+  ✓ Build      [52.0s]
+  ✓ Deploy     preview
+
+  Live   http://claims-portal.preview.localhost:7777
+  Fleet  http://localhost:7777/#/apps/claims-portal
+  Private: only its owners and admins can open it. Share it: canyon share <email> · canyon share everyone
+
+  ! 3 warnings didn't block — auth.unauthenticated-route, auth.unauthenticated-route, perf.unbounded-refetch · canyon check
+
+  Next: canyon deploy --env prod
+
+  Done in 14.7s · run gr_8f2a

@@ -1,0 +1,441 @@
+name: CI
+
+on:
+  pull_request:
+    paths: ['**', '!**.md', '!design/**', 'design/EXPERIENCE.md', 'design/specs/cli.md', 'contracts/**', 'docs/src/content/docs/reference/cli.md', 'docs/src/content/docs/rules/**', 'docs/src/content/docs/self-host/configuration.md', 'docs/src/content/docs/self-host/docker.md']
+  push:
+    branches: [main]
+    paths: ['**', '!**.md', '!design/**', 'design/EXPERIENCE.md', 'design/specs/cli.md', 'contracts/**', 'docs/src/content/docs/reference/cli.md', 'docs/src/content/docs/rules/**', 'docs/src/content/docs/self-host/configuration.md', 'docs/src/content/docs/self-host/docker.md']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }} # a PR's newer push cancels its older run; a main run always finishes
+
+jobs:
+  test-rest:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        # the data dir in memory: a test DB's fsyncs to the runner's EBS disk, not local SSD as on GitHub's, cost ./runs 582s against 455s
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the next step reads each file's last commit
+      - name: each file and directory takes its last commit's time, so Go's test cache hits across checkouts
+        shell: python3 {0} # no `python` on our runners' Ubuntu, only python3. Go keys a test's opened files (testdata, goldens) on mtime and size; checkout's mtimes are all "now"
+        run: |
+          import os, subprocess
+          # first parent only, each merge as its diff against it: a pull request's merge commit stamps every
+          # file the pull request changed, never a time from either side of the merge
+          log = subprocess.run(["git", "-c", "core.quotepath=off", "log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--format=%x00%ct", "--name-only", "HEAD"], capture_output=True, text=True, check=True).stdout
+          when = {}
+          for line in log.splitlines():
+              if line.startswith("\0"):
+                  t = int(line[1:])
+              elif line:
+                  p = line
+                  while p and p not in when: # newest first: a path's first commit in the log is its last
+                      when[p] = t
+                      p = os.path.dirname(p)
+          for p, t in when.items():
+              if os.path.lexists(p) and not os.path.islink(p):
+                  os.utime(p, (t, t))
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: test
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make web # the dashboard test asserts what the binary serves, so the bundle exists first
+      - run: make third-party-notices-check # THIRD_PARTY_NOTICES is the generator's output for this tree: the Go modules and web/node_modules, which make web installed
+      - run: make test-rest # every package but the server's and runs, which server-shard and runs-shard run; the test cache, main's, makes this run only what changed
+      - run: make test-bounds # custom rules' cost bounds at the facts' largest, without -race (test-rest skips them under it)
+      - if: github.event_name == 'push' # the cache main saves is the one server-shard and runs-shard restore: their test binaries' packages, compiled once here
+        run: go test -race -c -o "$RUNNER_TEMP/" ./cmd/canyon-server ./runs
+      - run: make install-test # the release's curl | sh installer, against this platform's archive built here
+      - run: make test-cluster-unit # the cluster harness's own pieces (e2e/cluster/README.md); no test cluster, no $E2E_* needed
+      - name: govulncheck (reachable advisories in dependencies fail the build)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  server-shard:
+    # ./cmd/canyon-server's tests, most of the suite's time, split by name across the matrix (make
+    # test-shards): each shard first checks that every test the package lists is in exactly one
+    # shard, so a test in none fails here. On main and on a pull request alike: never affected-only.
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4] # N is this list's length
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 # as test-rest
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go, as test-rest
+        with:
+          job: test # test-rest's build cache (its key keeps the name test): the same race-built packages, the server's test binary's among them
+          save: 'false' # test-rest alone writes it, on main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make web # as test-rest
+      - run: make test-shards SHARD_PKG=./cmd/canyon-server SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  noee-rest:
+    # Canyon built without Canyon Enterprise (design/ARCHITECTURE.md §8): ee/ deleted, the module built and vetted
+    # under -tags noee, and every package test-rest runs tested so; a core change that leans on ee/ fails here.
+    # runs' code carries no build constraint and imports no ee/ (internal/enterprise's import test); its Enterprise
+    # tests (ee_inject_test.go, ee_patching_test.go and the patch tests that plan with ee/patching, //go:build !noee)
+    # are runs-shard's alone, a pipeline without a Patcher among runs-shard's (TestWithoutAPatcherATickPlansNothing),
+    # and go vet below compiles the rest under noee.
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # as test-rest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 # as test-rest
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+      GOFLAGS: -tags=noee
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go, as test-rest
+        with:
+          job: test
+          save: 'false'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make web # as test-rest
+      - run: rm -rf ee
+      - run: go build ./... && go vet ./...
+      - run: make test-rest
+
+  noee-server-shard:
+    # ./cmd/canyon-server's tests built without Canyon Enterprise, as noee-rest, in server-shard's shards:
+    # noee_test.go among them, which holds what such a server answers (contracts/routes.md, Licence).
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as server-shard
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # every shard's verdict: a core test that leans on ee/ is named wherever it sorts
+      matrix:
+        shard: [1, 2, 3, 4] # N is this list's length
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 # as test-rest
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+      GOFLAGS: -tags=noee
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go, as test-rest
+        with:
+          job: test
+          save: 'false'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make web # as test-rest
+      - run: rm -rf ee
+      - run: make test-shards SHARD_PKG=./cmd/canyon-server SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  runs-shard:
+    # ./runs' tests, ~16 minutes in one go test process under -race (#2232), split by name as server-shard's,
+    # with the same exactly-once check. Two shards ran 421 s and 535 s of tests on #2727's head, close to go
+    # test's 10-minute timeout (#2733); three ran 343 s, 309 s and 324 s on #2734's. A shard nearing the
+    # timeout gets another shard, never a longer -timeout, which would only hide a hang.
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        shard: [1, 2, 3] # N is this list's length
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 # as test-rest
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go, as test-rest
+        with:
+          job: test # test-rest's build cache, as server-shard's
+          save: 'false' # test-rest alone writes it, on main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: make test-shards SHARD_PKG=./runs SHARD=${{ matrix.shard }}/${{ strategy.job-total }} # runs embeds no dashboard: no make web
+
+  provisioners:
+    # the built-in driver's tests on every Postgres it supports (design/DATABASE-SESSIONS.md §4): 15 to
+    # 18 under the non-superuser admin provisioners/builtin_test.go makes, 14 under the superuser (the
+    # test picks by the server's version). test-rest runs them on 16 too, with every other package.
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false # each version's result is the point: one failing never hides another's
+      matrix:
+        postgres: [14, 15, 16, 17, 18]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_PASSWORD: canyon
+        ports: ['5432:5432']
+        # as test-rest; 18's image keeps its data under /var/lib/postgresql/18 and refuses a mount at the old path
+        options: --tmpfs ${{ matrix.postgres >= 18 && '/var/lib/postgresql' || '/var/lib/postgresql/data' }} --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CANYON_TEST_DATABASE_URL: postgres://postgres:canyon@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go, as test-rest
+        with:
+          job: test # test-rest's build cache, as server-shard's
+          save: 'false' # test-rest alone writes it, on main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: make test PKG=./provisioners
+      - run: make test PKG=./provisioners RUN='^TestAnIssueRacingADeleteLeavesNoRole$$' COUNT=20 # the race of #2380, 20 times on each Postgres
+
+  test:
+    # the one check named test, which branch protection and merge-on-green require by its exact name:
+    # green only when test-rest, every server-shard, every runs-shard, every provisioners job and
+    # the build without Canyon Enterprise (noee-rest, every noee-server-shard) succeeded (a matrix's result is failure when any of its jobs failed); a failed, cancelled or
+    # skipped one reddens it
+    if: always()
+    needs: [test-rest, server-shard, runs-shard, provisioners, noee-rest, noee-server-shard]
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 2
+    steps:
+      - run: test "${{ needs.test-rest.result }}" = success && test "${{ needs.server-shard.result }}" = success && test "${{ needs.runs-shard.result }}" = success && test "${{ needs.provisioners.result }}" = success && test "${{ needs.noee-rest.result }}" = success && test "${{ needs.noee-server-shard.result }}" = success
+
+  prune-test-cache:
+    # main saves test-rest's build cache on every push (.github/actions/go-cache): keep the newest
+    # alone, ~600 MB, so a day of pushes doesn't push every other cache out of the 10 GB
+    if: github.event_name == 'push'
+    needs: test-rest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      actions: write # deletes caches; a job of its own, so no test code ever holds it
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list -R "$GITHUB_REPOSITORY" --ref refs/heads/main --key go-build-test- --sort created_at --order desc --limit 100 --json id -q '.[1:][].id' |
+            xargs -r -n1 gh cache delete -R "$GITHUB_REPOSITORY"
+
+  lint:
+    if: github.event_name == 'pull_request' # a merge that lints on its PR lints on main: no re-run
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: lint
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - name: golangci-lint — the pinned release, checksum-verified, never compiled here
+        env:
+          GOLANGCI_LINT_SHA256: a2a4e0065aa41be71f7c5ac90f271b61751331e5d04314e62afe4027855f0893 # linux-arm64 of the Makefile's GOLANGCI_LINT_VERSION; bump both together
+          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^GOLANGCI_LINT_VERSION ?= v//p' Makefile)
+          .github/fetch.sh "https://github.com/golangci/golangci-lint/releases/download/v$v/golangci-lint-$v-linux-arm64.tar.gz" "$GOLANGCI_LINT_SHA256" golangci-lint.tar.gz
+          tar -xzf golangci-lint.tar.gz --strip-components=1 -C "$(go env GOPATH)/bin" "golangci-lint-$v-linux-arm64/golangci-lint"
+      - run: make lint
+      - run: python3 designsystem/canyon/validate.py
+      - run: make tokens-check
+      - run: python3 -m pip install --break-system-packages jsonschema==4.23.0 # a throwaway VM: Ubuntu's PEP 668 guard has nothing to protect
+      - run: python3 contracts/validate.py
+      - run: make opengrep-rules-test # the vendored sast-rules over the probe apps: each probe's rule reports
+      - name: the vendored sast-rules are the pinned commit's, folder-filtered, byte for byte
+        timeout-minutes: 5 # it clones from gitlab.com and fetches two licence texts: an outage fails it, never hangs it
+        run: make vendor-sast-rules && git diff --exit-code gate/opengrep/sast-rules.tar
+
+  web:
+    if: github.event_name == 'pull_request' # as lint
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: make e2e-ui-typecheck # e2e/ui, its own package.json; a run only transforms what it loads, so nothing else catches this
+
+  tidy:
+    if: github.event_name == 'pull_request' # as lint
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: tidy
+          build: 'false' # go mod tidy compiles nothing: the module cache alone
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - run: make tidy-check
+      - name: a module download the proxy cuts short is asked again, as go-cache has every job's Go commands do (#2533)
+        run: |
+          set -euo pipefail
+          # A proxy that answers each file's first ask 500, as proxy.golang.org's stream errors cut a download short,
+          # and proxy.golang.org's answer after.
+          python3 - <<'EOF' &
+          import http.server, urllib.error, urllib.request
+          cut = set()
+          class Flaky(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path not in cut:
+                      cut.add(self.path)
+                      self.send_error(500)
+                      return
+                  try:
+                      with urllib.request.urlopen("https://proxy.golang.org" + self.path, timeout=60) as r:
+                          status, body = r.status, r.read()
+                  except urllib.error.HTTPError as e:
+                      status, body = e.code, e.read()
+                  self.send_response(status)
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+              def log_message(self, *a):
+                  pass
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8123), Flaky).serve_forever()
+          EOF
+          until curl -s -o /dev/null http://127.0.0.1:8123/; do sleep 0.2; done
+          # a module of go.sum into an empty cache, the source never fetched directly (GOVCS), with the Go setup-go installed: only the proxy asked again answers
+          GOPROXY=$(.github/actions/go-cache/goproxy.sh http://127.0.0.1:8123) GOVCS='*:off' GOTOOLCHAIN=local GOMODCACHE="$RUNNER_TEMP/flaky-modcache" \
+            go mod download -x github.com/jackc/pgx/v5
+
+  compose-up: # the stack boots and Envoy's bootstrap validates: checked once per merge on main, and on a pull request only when it changes the compose file, deploy/egress, the Makefile that holds demo-check, the peer rule and published-port check it proves (#2491), or the app floor it probes (#2503)
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which the next step diffs
+      - id: compose
+        if: github.event_name == 'pull_request'
+        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy/egress Makefile cmd/canyon-server/localpeer.go cmd/canyon-server/published.go cmd/canyon-server/main.go executor/published.go executor/http.go executor/executor.go executor/appfloor.go executor/appfloor.sh || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+      - if: github.event_name == 'push' || steps.compose.outputs.changed == 'true'
+        name: the pinned Envoy validates its bootstrap, filled in by deploy/egress/envoy.sh from egress-envoy's own environment (design/EGRESS.md §2.1)
+        run: |
+          set -euo pipefail
+          config=$(docker compose config --format json)
+          trap 'rm -f "$RUNNER_TEMP/envoy.env"' EXIT # it holds the token: gone when the step ends, pass or fail
+          jq -r '.services["egress-envoy"].environment | to_entries[] | "\(.key)=\(.value)"' <<<"$config" > "$RUNNER_TEMP/envoy.env"
+          docker run --rm --env-file "$RUNNER_TEMP/envoy.env" --tmpfs /var/run/envoy -v "$PWD/deploy/egress:/etc/canyon:ro" \
+            --entrypoint /bin/sh "$(jq -r '.services["egress-envoy"].image' <<<"$config")" /etc/canyon/envoy.sh --mode validate
+      - if: github.event_name == 'push' || steps.compose.outputs.changed == 'true'
+        run: make demo-check
+
+  images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image is multi-arch
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the merge commit and its base, which the next step diffs
+      - id: images
+        run: git diff --quiet HEAD^1 HEAD -- 'Dockerfile*' 'executor/*.Dockerfile' Makefile LICENSE NOTICE THIRD_PARTY_NOTICES || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+      - if: steps.images.outputs.changed == 'true'
+        run: make images-load
+
+  deploy-bundle: # canyon-deploy.tar.gz starts with no source (make deploy-bundle-check), and Opengrep's complete source still builds from its pinned commit: on a pull request or a merge that changes what they are built from
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the bundle runs is multi-arch
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the merge commit and its base, which the next steps diff
+      - id: bundle
+        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+      - if: steps.bundle.outputs.changed == 'true'
+        run: make deploy-bundle-check
+      - id: source
+        run: git diff --quiet HEAD^1 HEAD -- scripts/opengrep-source.sh scripts/tarball.sh scripts/release-archives-check.sh || echo changed=true >> "$GITHUB_OUTPUT"
+      - if: steps.source.outputs.changed == 'true'
+        name: Opengrep's complete source, as scripts/publish-release.sh attaches it, is clean and carries its licences and its submodules
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/source"
+          scripts/opengrep-source.sh "$RUNNER_TEMP/source/opengrep-1.30.0-source.tar.gz"
+          ls -l "$RUNNER_TEMP/source/opengrep-1.30.0-source.tar.gz"
+          scripts/release-archives-check.sh "$RUNNER_TEMP/source" # clean of the runner's owners and metadata, as publish-release.sh checks it
+          tar -tzf "$RUNNER_TEMP/source/opengrep-1.30.0-source.tar.gz" > "$RUNNER_TEMP/opengrep-source.txt"
+          for f in LICENSE libs/commons/license.txt languages/go/tree-sitter/semgrep-go/README.md libs/ocaml-tree-sitter-core/LICENSE; do
+            grep -qx "opengrep-1.30.0/$f" "$RUNNER_TEMP/opengrep-source.txt" || { echo "::error::the source tarball has no opengrep-1.30.0/$f"; exit 1; }
+          done
+          ! grep -q '/\.git\(/\|$\)' "$RUNNER_TEMP/opengrep-source.txt" || { echo "::error::the source tarball carries .git"; exit 1; }
+          echo "$(wc -l < "$RUNNER_TEMP/opengrep-source.txt") files"
+

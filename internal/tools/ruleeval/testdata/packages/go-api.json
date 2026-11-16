@@ -1,0 +1,81 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a62d-0ff4-7860-a98d-f3c81ea462a1",
+  "CreatedAt": "2026-11-04T10:48:53.492549569Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "go.mod",
+      "Class": "lang-pkgs",
+      "Type": "gomod",
+      "Packages": [
+        {
+          "ID": "example.com/api",
+          "Name": "example.com/api",
+          "Identifier": {
+            "PURL": "pkg:golang/example.com/api",
+            "UID": "1acc887cb6c6d730"
+          },
+          "Relationship": "root",
+          "DependsOn": [
+            "github.com/go-chi/chi/v5@v5.1.0",
+            "github.com/jackc/pgx/v5@v5.7.1",
+            "github.com/jackc/pgpassfile@v1.0.0",
+            "golang.org/x/crypto@v0.31.0"
+          ],
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/go-chi/chi/v5@v5.1.0",
+          "Name": "github.com/go-chi/chi/v5",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/go-chi/chi/v5@v5.1.0",
+            "UID": "8cf704d19a314c02"
+          },
+          "Version": "v5.1.0",
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/jackc/pgx/v5@v5.7.1",
+          "Name": "github.com/jackc/pgx/v5",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/jackc/pgx/v5@v5.7.1",
+            "UID": "c186328299cbcbe0"
+          },
+          "Version": "v5.7.1",
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/jackc/pgpassfile@v1.0.0",
+          "Name": "github.com/jackc/pgpassfile",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/jackc/pgpassfile@v1.0.0",
+            "UID": "844223c661847715"
+          },
+          "Version": "v1.0.0",
+          "Indirect": true,
+          "Relationship": "indirect",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "golang.org/x/crypto@v0.31.0",
+          "Name": "golang.org/x/crypto",
+          "Identifier": {
+            "PURL": "pkg:golang/golang.org/x/crypto@v0.31.0",
+            "UID": "9905f0e18082754"
+          },
+          "Version": "v0.31.0",
+          "Indirect": true,
+          "Relationship": "indirect",
+          "AnalyzedBy": "gomod"
+        }
+      ]
+    }
+  ]
+}

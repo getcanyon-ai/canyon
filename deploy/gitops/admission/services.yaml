@@ -1,0 +1,36 @@
+# The Services an app may make (design/HAND-OFF.md §10): in Canyon's app namespaces, type ClusterIP alone, with no
+# externalIPs and no loadBalancerClass. An AppProject restricts kinds, never fields, so without this whoever can write
+# the deploy repo could commit a LoadBalancer Service (a cloud load balancer, internet-facing when annotated), a
+# NodePort (a port on every node) or externalIPs (CVE-2020-8554). It holds for every Service in those namespaces,
+# whoever makes it, an operator's for a database too. Apply it once per cluster, outside the deploy repo. It needs
+# Kubernetes 1.30 or later, where ValidatingAdmissionPolicy is GA.
+#
+# Its scope is the request's namespace, by name: every namespace the AppProjects' canyon-*-<env> admit. A namespaced
+# object is in its request's namespace and a namespace's name never changes, so nothing on the Service moves it out.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: canyon-app-services
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["services"]
+  matchConditions:
+    - name: canyon-app-namespace
+      expression: request.namespace.matches('^canyon-.*-(preview|prod)$')
+  validations:
+    - expression: object.spec.type == 'ClusterIP' && !has(object.spec.externalIPs) && !has(object.spec.loadBalancerClass)
+      reason: Forbidden
+      message: "Canyon's app namespaces take ClusterIP Services alone, with no externalIPs or loadBalancerClass: people reach an app through your gateway's route, never a load balancer, a node port or an external IP."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: canyon-app-services
+spec:
+  policyName: canyon-app-services
+  validationActions: [Deny]

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: canyon
+description: >-
+  Try Canyon: an all-in demo on one machine, not for production (production installs use deploy/k8s).
+  The server, executor, router and kpack builder of deploy/k8s, plus (each optional) a registry, both
+  Postgres servers without backups, kpack, Pocket ID for sign-in, a Caddy gateway and Headlamp. A
+  post-install hook sets the front door from values.
+type: application
+version: 0.0.0-dev # a release's chart is versioned as its tag, less the v (scripts/chart-package.sh)
+kubeVersion: ">=1.29.0-0"
+annotations:
+  artifacthub.io/license: AGPL-3.0-only # LICENSE, which scripts/chart-package.sh packages with the chart

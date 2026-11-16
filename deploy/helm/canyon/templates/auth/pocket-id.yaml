@@ -1,0 +1,95 @@
+{{- /* Pocket ID, the bundled OIDC provider, at https://<auth.pocketId.host>.<domain> behind the gateway.
+     SQLite on its volume. Users, the group and the two clients are set up by the bootstrap hook through
+     the API with STATIC_API_KEY; the client ids and secrets come from values, so Canyon's own sign-in
+     settings are known at install. */}}
+{{- with .Values.auth.pocketId }}{{ if .enabled }}
+{{- if not .existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pocket-id
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+  annotations: {helm.sh/resource-policy: keep}   # ENCRYPTION_KEY unlocks the database
+type: Opaque
+stringData:
+  ENCRYPTION_KEY: {{ include "canyon.secret" (dict "root" $ "ns" "canyon-auth" "name" "pocket-id" "key" "ENCRYPTION_KEY" "value" .encryptionKey) | quote }}
+  STATIC_API_KEY: {{ include "canyon.secret" (dict "root" $ "ns" "canyon-auth" "name" "pocket-id" "key" "STATIC_API_KEY" "value" .staticApiKey) | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pocket-id-clients
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+  annotations: {helm.sh/resource-policy: keep}
+type: Opaque
+stringData:
+  canyon: {{ include "canyon.clientSecret" (dict "root" $ "client" "canyon") | quote }}
+  canyonApps: {{ include "canyon.clientSecret" (dict "root" $ "client" "canyonApps") | quote }}
+---
+{{ include "canyon.pvc" (dict "root" $ "ns" "canyon-auth" "name" "pocket-id-data" "size" .storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocket-id
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # SQLite, one writer
+  selector: {matchLabels: {app: pocket-id}}
+  template:
+    metadata: {labels: {app: pocket-id}}
+    spec:
+      # Pod Security restricted (#2772): 1000, the user Pocket ID's entrypoint drops to when started as root (PUID), so
+      # its data is already 1000's and an existing volume needs no chown.
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: pocket-id
+          image: {{ include "canyon.image" (dict "root" $ "name" "pocketId") }}
+          env:
+            - {name: APP_URL, value: {{ include "canyon.pocketIdURL" $ | quote }}}
+            - {name: TRUST_PROXY, value: {{ $.Values.global.podCIDR | quote }}}   # the gateway, a pod
+            - {name: ALLOW_INSECURE_CALLBACK_URLS, value: "false"}
+            - {name: ALLOW_USER_SIGNUPS, value: disabled}
+            - {name: ANALYTICS_DISABLED, value: "true"}
+            - {name: ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: {{ .existingSecret | default "pocket-id" }}, key: ENCRYPTION_KEY}}}
+            - {name: STATIC_API_KEY, valueFrom: {secretKeyRef: {name: {{ .existingSecret | default "pocket-id" }}, key: STATIC_API_KEY}}}
+          ports: [{name: http, containerPort: 1411}]
+          volumeMounts: [{name: data, mountPath: /app/data}]
+          readinessProbe: {httpGet: {path: /healthz, port: 1411}, periodSeconds: 10}
+          resources: {requests: {cpu: 20m, memory: 48Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: pocket-id-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocket-id
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  selector: {app: pocket-id}
+  ports: [{name: http, port: 80, targetPort: 1411}]
+---
+# In: the gateway alone. Out: DNS and public 443/465/587 (SMTP, if configured later).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pocket-id
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  podSelector: {matchLabels: {app: pocket-id}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: canyon-gateway}}, podSelector: {matchLabels: {app: caddy}}}]
+      ports: [{protocol: TCP, port: 1411}]
+  egress:
+    {{- include "canyon.dnsEgress" $ | nindent 4 }}
+    - to: [{ipBlock: {cidr: 0.0.0.0/0, except: {{ include "canyon.private" $ }}}}]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 465}, {protocol: TCP, port: 587}]
+{{- end }}{{ end }}

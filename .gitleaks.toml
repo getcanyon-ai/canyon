@@ -1,0 +1,46 @@
+# gitleaks config for this repo. Default rules stay on. Planted test values are allowlisted
+# per RULE, with condition AND on path and value: gitleaks honours AND only inside a rule's own
+# allowlist — a top-level [[allowlists]] entry with paths exempts the whole file whatever its
+# regexes say (measured: a second key appended to such a file went unflagged). So each entry
+# below exempts one value in named files, and any other secret in those files is still a leak.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "stripe-access-token"
+[[rules.allowlists]]
+description = "claims-portal fixture app: the planted fake key the gate exists to catch (gate/testdata/apps/claims-portal/README.md)"
+condition = "AND"
+paths = ['''gate/testdata/apps/claims-portal/apps/web/src/lib/payments\.ts''']
+regexes = ['''sk_live_51MZq8fFIXTUREFAKEKEY07Kx2''']
+[[rules.allowlists]]
+description = "hand-off release test: a Stripe-shaped value the test seals and then proves absent from the release body"
+condition = "AND"
+paths = ['''runs/release_test\.go''']
+regexes = ['''sk_live_51NotARealStripeKeyFixtureValue123''']
+
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "platform-webhook test fixtures: a realistic-shaped secret makes the openssl HMAC vector legible"
+condition = "AND"
+paths = ['''webhook/sign_test\.go''', '''cmd/canyon-server/routes_platform_webhook_test\.go''']
+regexes = ['''wh_sec_[A-Za-z0-9_]+''']
+[[rules.allowlists]]
+description = "Settings › Outbound's sub-CA test (#2145): a PKCS #8 key's shape, the fixed ASN.1 header every 2048-bit RSA key starts with and no key, as is and in base64, which the test proves never reaches the page"
+condition = "AND"
+paths = ['''web/src/screens/OutboundKeys\.test\.tsx''']
+regexes = ['''MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC''', '''TUlJRXZnSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NCS2d3Z2dTa0FnRUFBb0lCQVFD''']
+[[rules.allowlists]]
+description = "canyon db connect's listener tests: a counting placeholder as the local token, which SCRAM proves and the relay never sees"
+condition = "AND"
+paths = ['''cli/dblisten_test\.go''']
+regexes = ['''0123456789abcdef0123456789abcdef01234567''']
+
+[[rules]]
+id = "sourcegraph-access-token"
+[[rules.allowlists]]
+description = "live-key test: a public actions/checkout commit sha beside the word sourcegraph, which the log check must not pair across strings"
+condition = "AND"
+paths = ['''gate/finding/livekey_test\.go''']
+regexes = ['''b4ffde65f46336ab88eb53be808477a3936bae11''']

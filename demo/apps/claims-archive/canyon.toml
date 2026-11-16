@@ -1,0 +1,2 @@
+app = "claims-archive"
+description = "Search closed claims older than seven years (the demo's sample app)"

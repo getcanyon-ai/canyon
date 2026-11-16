@@ -1,0 +1,71 @@
+# POST /running's time for a large fleet on a real Docker daemon (#2752): the fleet read asks the executor about
+# every environment it reads whole, in calls of 400 at once under one 2 s bound (cmd/canyon-server, runningWithin).
+# The job makes `apps` apps, preview and prod each, as busybox containers named and labelled as Canyon runs them,
+# starts as many as the runner's memory holds and leaves the rest created, then executor/fleetbench_test.go times
+# the fan-out and where its time goes. By hand (Actions -> fleet-running -> Run workflow), and on a pull request that
+# changes it or its test: never on a laptop, whose daemon it would fill.
+name: fleet-running
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: how many apps, each with a preview and a prod container
+        default: '2000'
+  pull_request:
+    paths:
+      - '.github/workflows/fleet-running.yml'
+      - 'executor/fleetbench_test.go'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-running-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  time:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 60
+    env:
+      APPS: ${{ inputs.apps || '2000' }}
+      BUSYBOX: docker.io/library/busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e # the executor's pin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: test # test-rest's build cache, which compiles executor's tests
+          save: 'false'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: the fleet, created, and as many started as memory holds (2 GiB left free)
+        run: |
+          set -euo pipefail
+          case "$APPS" in ''|*[!0-9]*) echo "apps must be a whole number, not $APPS"; exit 1 ;; esac
+          docker pull -q "$BUSYBOX" >/dev/null
+          image=$(docker image inspect -f '{{.Id}}' "$BUSYBOX") # by id, as /run starts an app: Running counts sha256: images alone
+          for i in $(seq 0 $((APPS - 1))); do printf 'fleet-%04d-preview\nfleet-%04d-prod\n' "$i" "$i"; done > "$RUNNER_TEMP/names"
+          xargs -P 16 -I{} sh -c 'docker create --name "$1" --label canyon.fleetbench=1 --label "canyon.app=${1%-*}" --network none --restart no "$2" sleep 86400 >/dev/null' _ {} "$image" < "$RUNNER_TEMP/names"
+          started=0
+          while read -r batch; do
+            [ "$(awk '/^MemAvailable/ {print $2}' /proc/meminfo)" -gt 2097152 ] || break
+            # shellcheck disable=SC2086 # a batch is names, split on purpose
+            docker start $batch >/dev/null
+            started=$((started + $(wc -w <<< "$batch")))
+          done < <(xargs -n 100 < "$RUNNER_TEMP/names")
+          total=$(wc -l < "$RUNNER_TEMP/names")
+          {
+            echo "### The fleet"
+            echo "$APPS apps, $total containers: $started started, the rest created; $(nproc) CPUs, $(awk '/^MemTotal/ {printf "%.1f GiB", $2/1048576}' /proc/meminfo); $(docker version -f 'Docker {{.Server.Version}}')"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: POST /running's fan-out, timed (executor/fleetbench_test.go)
+        run: |
+          set -o pipefail
+          FLEET_APPS="$APPS" ROUNDS=20 go test -tags fleetbench -count=1 -v -timeout 30m -run '^TestFleetRunningTiming$' ./executor | tee "$RUNNER_TEMP/timing.txt"
+          { echo "### POST /running"; echo '```'; grep 'fleetbench_test.go' "$RUNNER_TEMP/timing.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        name: the fleet removed
+        run: docker ps -aq --filter label=canyon.fleetbench=1 | xargs -r -n 200 docker rm -f >/dev/null

@@ -1,0 +1,32 @@
+# Build output (make build)
+/bin/
+# and what `go build ./cmd/<binary>` leaves at the root, never committed
+/canyon
+/canyon-executor
+/canyon-executor-kube
+/canyon-identity
+/canyon-server
+
+# Python bytecode: build-css.py imports validate.py, and contracts/validate.py imports the timeline generator
+__pycache__/
+
+# The retired beads tracker's local data, still present in older clones (tracking moved to GitHub Issues, #1311)
+/.beads/
+.beads-credential-key
+
+# The dashboard bundle (`make web`), embedded by web/embed.go; the marker is committed for //go:embed.
+/web/dist/*
+!/web/dist/.gitkeep
+/web/node_modules/
+/web/*.tsbuildinfo
+
+
+# The E2E harness's generated fixtures and request log (make e2e-up)
+/e2e/.work/
+
+# A `go build` run inside cmd/canyon-server leaves its binary there
+/cmd/canyon-server/canyon-server
+
+# Coding agents' local settings and browser sessions, never committed
+.claude/
+.playwright-mcp/

@@ -1,0 +1,12 @@
+# Buildpack project descriptor (schema 0.2): the Next.js app lives under apps/web and needs its
+# build script run. This is the app's own build configuration, read by pack from the tree.
+[_]
+schema-version = "0.2"
+
+[[io.buildpacks.build.env]]
+name = "BP_NODE_PROJECT_PATH"
+value = "apps/web"
+
+[[io.buildpacks.build.env]]
+name = "BP_NODE_RUN_SCRIPTS"
+value = "build"

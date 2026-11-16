@@ -1,0 +1,5 @@
+
+  Stopping Canyon and removing its data
+  Removing the apps Canyon started
+
+  ✓ The demo is gone: its containers, data and images, and its files in ~/.canyon/demo.

@@ -1,0 +1,29 @@
+
+  Canyon tour · chapter 1 of 3 · Standards: your agent ignores the design system
+
+  Canyon checks AI-built apps at three stages: when a coding agent deploys, on every pull request,
+  and before production. The three chapters show three kinds of rule: the company's standards,
+  security, and what production needs.
+
+  You make the company's design system mandatory in the dashboard, with one click. Then you ask your
+  coding agent for a claims tracker. The tour hands it the quick version an agent often writes, with
+  a page of its own making. Canyon rejects the deploy, and nothing is built until the page uses the
+  design system.
+
+  The tour is made for a coding agent to run. Paste this into yours:
+
+    Give me the Canyon tour. Run canyon demo tour and follow it. One chapter at a time; ask me before each.
+
+  To walk through it by hand instead:
+
+    canyon fleet               what is running, and the link to the dashboard
+    (open http://localhost:7777/#/guardrails/policies?rule=design.org-system, set the marked
+     row to Blocking, and press Save)
+    canyon manifest            the rules a coding agent is handed
+    canyon demo tour plant     writes the app into ./canyon-tour
+    cd canyon-tour
+    canyon deploy              blocked: the page is not in the design system
+    canyon demo tour plant     writes the page again, in the design system
+    canyon deploy              live in preview
+    canyon demo tour next      on to chapter 2
+    canyon demo tour skip      on to chapter 2 without doing this one

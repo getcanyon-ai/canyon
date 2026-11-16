@@ -1,0 +1,214 @@
+{
+  "version": 9,
+  "hash": "snap_9e1c40d2",
+  "rules": [
+    {
+      "id": "secrets.client-bundle",
+      "name": "No secrets in the code",
+      "state": "blocking",
+      "producer": "scanner"
+    },
+    {
+      "id": "sql.string-concat",
+      "name": "No hand-built SQL from user input",
+      "state": "blocking",
+      "producer": "scanner"
+    },
+    {
+      "id": "prod.clean-gate",
+      "name": "Production needs a passing review",
+      "state": "blocking",
+      "producer": "promote-gate"
+    },
+    {
+      "id": "prod.human-approval",
+      "name": "A person promotes",
+      "state": "blocking",
+      "producer": "promote-gate"
+    },
+    {
+      "id": "auth.unauthenticated-route",
+      "name": "Every route needs sign-in",
+      "state": "advisory",
+      "producer": "llm-review"
+    },
+    {
+      "id": "deps.known-vuln",
+      "name": "No known-vulnerable dependencies",
+      "state": "advisory",
+      "producer": "scanner"
+    },
+    {
+      "id": "stack.blessed",
+      "name": "Approved stacks only",
+      "state": "advisory",
+      "producer": "server-state"
+    },
+    {
+      "id": "owner.required",
+      "name": "Every app has an owner",
+      "state": "advisory",
+      "producer": "server-state"
+    },
+    {
+      "id": "perf.unbounded-refetch",
+      "name": "No unbounded refetch on user input",
+      "state": "advisory",
+      "producer": "llm-review"
+    },
+    {
+      "id": "design.org-system",
+      "name": "Apps use the org's design system",
+      "state": "advisory",
+      "producer": "scanner"
+    },
+    {
+      "id": "code.injection",
+      "name": "No user input reaching commands, files, pages or URLs",
+      "state": "advisory",
+      "producer": "scanner"
+    },
+    {
+      "id": "iac.misconfig",
+      "name": "Infrastructure config passes its benchmark checks",
+      "state": "advisory",
+      "producer": "scanner"
+    },
+    {
+      "id": "ai.sql-string-concat",
+      "name": "No hand-built SQL from user input (AI review)",
+      "state": "advisory",
+      "producer": "llm-review"
+    },
+    {
+      "id": "ai.code-injection",
+      "name": "No user input reaching commands, files, pages or URLs (AI review)",
+      "state": "advisory",
+      "producer": "llm-review"
+    },
+    {
+      "id": "sarif.checkov",
+      "name": "Findings from checkov",
+      "state": "advisory",
+      "producer": "sarif",
+      "run": true
+    },
+    {
+      "id": "sarif.eslint",
+      "name": "Findings from eslint",
+      "state": "advisory",
+      "producer": "sarif",
+      "run": true
+    },
+    {
+      "id": "sarif.gitleaks",
+      "name": "Findings from gitleaks",
+      "state": "advisory",
+      "producer": "sarif"
+    },
+    {
+      "id": "sarif.opengrep",
+      "name": "Findings from opengrep",
+      "state": "advisory",
+      "producer": "sarif",
+      "run": true
+    },
+    {
+      "id": "sarif.trivy",
+      "name": "Findings from trivy",
+      "state": "advisory",
+      "producer": "sarif",
+      "run": true
+    },
+    {
+      "id": "platform.known-vuln",
+      "name": "No known-vulnerable system libraries or build tools",
+      "state": "off",
+      "producer": "promote-gate"
+    },
+    {
+      "id": "prod.egress-allowed",
+      "name": "Production allows everything preview connects to",
+      "state": "off",
+      "producer": "server-state"
+    },
+    {
+      "id": "custom.customer-email-encrypted",
+      "name": "Customer emails are encrypted at rest",
+      "state": "blocking",
+      "producer": "llm-review",
+      "instructions": "Flag code that writes a customer's email address to a database column or a file without encrypting it.\nHashing it for a lookup is fine.",
+      "check": {
+        "by": "ai",
+        "facts_version": 3
+      }
+    },
+    {
+      "id": "custom.no-console-pii",
+      "name": "No personal data in logs",
+      "state": "off",
+      "producer": "llm-review",
+      "instructions": "Flag a log or console call that prints a customer's name, email address or phone number.",
+      "check": {
+        "by": "ai",
+        "facts_version": 3
+      }
+    },
+    {
+      "id": "custom.no-lodash",
+      "name": "No lodash",
+      "state": "blocking",
+      "producer": "scanner",
+      "instructions": "No app may depend on lodash.",
+      "check": {
+        "by": "code",
+        "expr": "!dependencies.exists(d, d.name == 'lodash')",
+        "says": "No dependency is named lodash.",
+        "facts_version": 3
+      }
+    }
+  ],
+  "exclusions": [
+    ".env*",
+    "!.env.example",
+    "node_modules",
+    ".git",
+    "/dist",
+    "/build",
+    "/.next",
+    ".venv"
+  ],
+  "agents": [
+    {
+      "id": "canyon-review",
+      "namespace": [
+        "perf",
+        "auth",
+        "ai"
+      ],
+      "model": "resolved-model-id"
+    },
+    {
+      "id": "custom-rules",
+      "namespace": [
+        "custom"
+      ],
+      "model": "resolved-model-id"
+    }
+  ],
+  "component_menu": [
+    "postgres",
+    "s3"
+  ],
+  "stacks": [],
+  "limits": {
+    "gate_runs_per_project_per_hour": 30,
+    "gate_runs_per_actor_per_hour": 60
+  },
+  "capabilities": {
+    "design_systems": {
+      "enabled": true,
+      "org_default": null
+    }
+  }
+}

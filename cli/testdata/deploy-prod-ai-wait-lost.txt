@@ -1,0 +1,15 @@
+CANYON PROMOTE — RESULT: UNKNOWN
+
+app: claims-portal
+env: prod
+host: http://localhost:7777
+reason: Canyon didn't answer for 2 minutes (can't reach a Canyon host at http://localhost:7777).
+outcome: the approval was still open when Canyon last answered. A person may have approved it since.
+fleet url: http://localhost:7777/#/apps/claims-portal
+
+NEXT STEPS:
+1. Run canyon status: its production line says what production runs. If canyon status can't reach Canyon either, tell the user and stop.
+2. Tell the user what canyon status says.
+3. Do not promote again or take production offline because of this.
+
+exit code: 3

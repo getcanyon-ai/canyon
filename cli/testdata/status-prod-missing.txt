@@ -1,0 +1,19 @@
+
+  claims-portal · Meridian
+
+  preview      v1.3   http://claims-portal.preview.localhost:7777   1d ago
+  production   v1.3   ✗ stopped   canyon logs --env prod says why
+               ! ORDERS_TOKEN is set for preview but not production. Set it with: canyon secret set ORDERS_TOKEN --env prod
+  access       shared with 1 person · you are an owner
+  review       ✓ passed   0 blocking findings, 0 warnings   2h ago
+
+  ✓ Production needs a passing review
+      v1.3 passed review: no blocking finding
+  ✓ A person promotes
+      a person promotes, or an agent they ask, with their CLI sign-in
+  · Approved stacks only
+      no approved stacks set
+  ✓ Every app has an owner
+      owned by Dana Whitfield
+
+  Open in Canyon http://localhost:7777/#/apps/claims-portal

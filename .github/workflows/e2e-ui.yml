@@ -1,0 +1,204 @@
+# The UX journeys (e2e/ui/README.md), on the compose stack, at desktop and phone width, and the
+# probes (e2e/stack_test.go) on the same stack, the egress floor and Envoy (e2e/egress_test.go)
+# on a stack of their own, and the team setup's sign-in (e2e/oidc) on one of its own: what a change to the dashboard, the journeys, the goldens the dashboard
+# reads, the e2e fixtures, the stack's compose file or a new table can break. This check is the run:
+# nobody runs e2e-ui on a laptop except to debug a red one (AGENTS.md, Commands). journeys.yml calls it
+# nightly on main, whatever the paths.
+name: e2e-ui
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'e2e/**'
+      - 'docker-compose.yml' # the stack these run on: the egress floor (e2e/egress_test.go) among it
+      - 'deploy/egress/**'
+      - 'internal/egresscontrol/**' # the check beside Envoy and the listener it serves, which the egress job's interception tests run against
+      - 'runs/egress_ca.go' # the roots a /run carries, which e2e/inject_test.go's app trusts (#2143)
+      - 'executor/egress.go' # how either executor lays them in the app
+      - 'internal/subjecthash/**' # the names it lays them under
+      - 'deploy/docker/**' # the team setup, e2e/oidc's stack
+      - 'docs/src/content/docs/self-host/docker.md' # its Caddyfile, which e2e/fixtures/gen.sh writes from the guide's own block
+      - 'scripts/guide-block.sh'
+      - 'contracts/testdata/**'
+      - 'db/migrations/**' # the journeys diff every public table: a new table that changes on its own reddens them all (#1969)
+      - '.github/workflows/e2e-ui.yml'
+      - '.github/actions/scan-dbs/**'
+  workflow_call: # journeys.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan-dbs:
+    # today's scanner databases, downloaded once for the run's stacks when the cache does not hold them yet (#2510): the
+    # jobs below set up meanwhile, and wait for it only when their own restore misses (.github/actions/scan-dbs)
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5 # go doc reads the executor's image pins
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/scan-dbs
+        with:
+          fill: 'true'
+
+  e2e-ui-shard:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
+    strategy:
+      fail-fast: false # one red journey's shard does not cancel the others' runs
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8] # Playwright deals its file×project test groups across the shards in order, each in exactly one: today three to a shard, desktop's journeys in 1-4 and phone's in 5-8, and eight is the fewest that part promote (~7 min) from putback (~12 min): 2.7 to 13.3 minutes a shard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: e2e-ui
+          build: 'false' # no main run saves this job's build cache
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/ui/package-lock.json
+      - run: npm ci && npx playwright install --with-deps chromium # the browser's system libraries, which make e2e-ui's install leaves out
+        working-directory: e2e/ui
+      - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
+      - run: make e2e-up
+      - run: make e2e-ui SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
+      - name: the shard ran a journey (with --shard, Playwright passes one that found none)
+        run: jq -e '.stats.expected > 0' e2e/ui/.work/run.json
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/scan-dbs
+        with:
+          check: 'true'
+      - name: no journey's build cache is left behind (harness/teardown.ts)
+        run: test -z "$(docker volume ls -q --filter 'name=^canyon-cache-ux-')"
+      - if: matrix.shard == 1 # once, on its own apps, in a shard whose journeys today take ~3 minutes, not putback's ~13
+        run: go test -tags stack -count=1 -run TestProbesNeverReadClean -v ./e2e/
+      - if: failure()
+        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ui-results-${{ matrix.shard }}
+          path: e2e/ui/.work/results
+          retention-days: 7
+
+  egress:
+    # The stack's egress tests in two parts, each on a stack of its own: together they passed the package's 30-minute
+    # -timeout on #2850's run, and a part nearing it gets another part, never a longer -timeout, which would only hide a
+    # hang (as the server's shards, ci.yml). Each part lists and runs its own tests alone.
+    name: egress (${{ matrix.part.name }})
+    strategy:
+      fail-fast: false # one part's red never cancels the other's run
+      matrix:
+        part:
+          - name: floor # the egress floor, Envoy and its check (e2e/egress_test.go): ~20 minutes on #2850's run
+            tests: 'Connect|Floor|Envoy|Control'
+          - name: layer 3 # interception (e2e/intercept_test.go), a route's credential at its upstream (e2e/inject_test.go) and over HTTP/2 and gRPC, and a destination with no route never decrypted (e2e/layer3_test.go): ~12 minutes
+            tests: 'Interception$|ForgedInterceptHeaderRejected$|ARouteCredentialReachesItsUpstream$|ForcedHTTP2CarriesTheRouteCredential$|GRPCCarriesTheRouteCredential$|PassThroughDestinationIsNeverDecrypted$'
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: e2e-ui
+          build: 'false' # no main run saves this job's build cache
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
+      - name: a public address of the Docker host's own, on its loopback, before the stack lists the host's addresses (e2e/egress_test.go, TestEnvoyRefusesTheHostsOwnAddress; #2524)
+        run: docker run --rm --network host --cap-add NET_ADMIN busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e ip addr add 198.51.100.200/32 dev lo
+      - run: make e2e-up
+      - name: the part's egress tests, every test listed run and passed, so a skip never passes
+        env:
+          TESTS: ^Test(${{ matrix.part.tests }})
+        run: |
+          want=$(go test -tags stack -list "$TESTS" ./e2e/ | grep '^Test' | sort)
+          rc=0
+          go test -tags stack -count=1 -timeout 30m -json -run "$TESTS" ./e2e/ > "$RUNNER_TEMP/floor.json" || rc=$?
+          jq -j 'select(.Output) | .Output' "$RUNNER_TEMP/floor.json"
+          passed=$(jq -r 'select(.Action == "pass" and .Test and (.Test | contains("/") | not)) | .Test' "$RUNNER_TEMP/floor.json" | sort) # top-level tests, as -list names them: a subtest's failure fails its test
+          skipped=$(jq -r 'select(.Action == "skip" and .Test) | .Test' "$RUNNER_TEMP/floor.json" | sort) # a test or a subtest: a skipped subtest leaves its test passed
+          if [ "$rc" != 0 ] || [ -z "$want" ] || [ "$want" != "$passed" ] || [ -n "$skipped" ]; then
+            printf 'go test exited %s\nlisted:\n%s\npassed:\n%s\nskipped:\n%s\n' "$rc" "$want" "$passed" "$skipped"; exit 1
+          fi
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/scan-dbs
+        with:
+          check: 'true'
+      - if: failure()
+        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
+
+  oidc:
+    # The team setup on one Docker server (docs: self-host/docker.md): the shipped compose file and deploy/docker/team.yml,
+    # signing people in through the stub's OIDC issuer (make e2e-up OIDC=1), and e2e/oidc's journey on it: the admin's
+    # browser sign-in, canyon login's code approved, a deploy, and a teammate refused until the app is shared.
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: e2e-ui
+          build: 'false' # no main run saves this job's build cache
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
+      - run: make e2e-up OIDC=1
+      - name: the team setup's sign-in, deploy and sharing (e2e/oidc), every test listed run and passed, so a skip never passes
+        env:
+          GH_TOKEN: ${{ github.token }} # the job's own token, contents: read: J14's old release CLI, gh release download (e2e/oidc/host_test.go)
+        run: |
+          want=$(go test -tags oidc -list . ./e2e/oidc/ | grep '^Test' | sort)
+          rc=0
+          go test -tags oidc -count=1 -timeout 30m -json ./e2e/oidc/ > "$RUNNER_TEMP/oidc.json" || rc=$?
+          jq -j 'select(.Output) | .Output' "$RUNNER_TEMP/oidc.json"
+          # -list names top-level tests alone, so the two lists match while the journey has no subtests: add a t.Run
+          # and compare top-level passes only (.Test without a slash), or the check reds on a green run
+          passed=$(jq -r 'select(.Action == "pass" and .Test) | .Test' "$RUNNER_TEMP/oidc.json" | sort)
+          if [ "$rc" != 0 ] || [ -z "$want" ] || [ "$want" != "$passed" ]; then
+            printf 'go test exited %s\nlisted:\n%s\npassed:\n%s\n' "$rc" "$want" "$passed"; exit 1
+          fi
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/scan-dbs
+        with:
+          check: 'true'
+      - if: failure()
+        run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
+
+  e2e-ui:
+    # the one check named e2e-ui, required by its exact name: green only when every e2e-ui-shard,
+    # egress and oidc succeeded (a matrix's result is failure when any of its jobs failed), red when one
+    # failed, was cancelled or skipped
+    if: always()
+    needs: [e2e-ui-shard, egress, oidc]
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 2
+    steps:
+      - run: test "${{ needs.e2e-ui-shard.result }}" = success && test "${{ needs.egress.result }}" = success && test "${{ needs.oidc.result }}" = success

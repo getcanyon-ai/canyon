@@ -1,0 +1,22 @@
+
+  Looking for coding agents in this environment…
+
+  ✓ Claude Code    ~/.claude/skills/canyon/SKILL.md          written
+  · Canyon's session hook, in ~/.claude/settings.json under hooks.SessionStart:
+      {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon","args":["manifest","--harness","claude-code"]}]}
+    It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
+  ✓ Claude Code    ~/.claude/settings.json                   written
+  ✓ Codex          ~/.agents/skills/canyon/SKILL.md          written
+  · Canyon's session hook, in ~/.codex/hooks.json under hooks.SessionStart:
+      {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon manifest --harness codex"}]}
+    It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
+    Codex asks you to trust it the next time it starts; /hooks in Codex shows it any time.
+  ✓ Codex          ~/.codex/hooks.json                       written
+  ✓ Cursor         ./.cursor/rules/canyon.mdc                written
+  · Canyon's session hook, in ./.cursor/hooks.json under hooks.sessionStart:
+      {"command":"canyon manifest --harness cursor"}
+  ✓ Cursor         ./.cursor/hooks.json                      written
+  ✓ AGENTS.md      ./AGENTS.md                               written
+
+  Your agent can now deploy. Try asking it:
+    "deploy this app"

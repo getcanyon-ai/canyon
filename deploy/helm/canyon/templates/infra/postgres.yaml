@@ -1,0 +1,79 @@
+{{- /* Canyon's Postgres (5432) and the apps' Postgres (5433, admin login canyon_admin). Any pod may reach
+     the port (k3s admits a new pod's address late, so allow-lists refused the server on restart); apps
+     are kept off 5432 by their egress policies, and every login has a random password. */}}
+{{- range $p := list
+    (dict "key" "canyonPostgres" "name" "canyon-postgres" "port" 5432 "user" "canyon" "db" "canyon" "pw" "canyon.canyonPostgresPassword")
+    (dict "key" "appPostgres" "name" "app-postgres" "port" 5433 "user" "canyon_admin" "db" "postgres" "pw" "canyon.appPostgresPassword") }}
+{{- $v := index $.Values.infra $p.key }}
+{{- if $v.enabled }}
+{{- if not $v.existingSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $p.name }}
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+  annotations: {helm.sh/resource-policy: keep}   # the database was initialised with it
+type: Opaque
+stringData:
+  password: {{ include $p.pw $ | quote }}
+{{- end }}
+---
+{{ include "canyon.pvc" (dict "root" $ "ns" "canyon-infra" "name" $p.name "size" $v.storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $p.name }}
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: {{ $p.name }}}}
+  template:
+    metadata: {labels: {app: {{ $p.name }}}}
+    spec:
+      # Pod Security restricted (#2772): the image's own postgres user, 70 on Alpine, which owns every database the
+      # image made as root before, so an existing volume needs no chown; fsGroup lets 70 write a new volume's root.
+      securityContext: {runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, fsGroup: 70, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: postgres
+          image: {{ include "canyon.image" (dict "root" $ "name" "postgres") }}
+          args: ["-c", "listen_addresses=*", "-c", "port={{ $p.port }}"]
+          env:
+            - {name: POSTGRES_USER, value: {{ $p.user }}}
+            - {name: POSTGRES_DB, value: {{ $p.db }}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: {{ $v.existingSecret | default $p.name }}, key: password}}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+          readinessProbe: {exec: {command: [pg_isready, -p, "{{ $p.port }}", -U, {{ $p.user }}, -d, {{ $p.db }}]}, periodSeconds: 5}
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: {{ $p.name }}}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $p.name }}
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  selector: {app: {{ $p.name }}}
+  ports: [{name: postgres, port: {{ $p.port }}, targetPort: {{ $p.port }}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $p.name }}
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  podSelector: {matchLabels: {app: {{ $p.name }}}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ipBlock: {cidr: {{ $.Values.global.podCIDR }}}}]
+      ports: [{protocol: TCP, port: {{ $p.port }}}]
+{{- end }}
+{{- end }}

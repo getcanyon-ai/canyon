@@ -1,0 +1,114 @@
+{
+  "list": {
+    "channels": [
+      {
+        "id": "platform-alerts",
+        "name": "#platform-alerts",
+        "kind": "slack",
+        "host": "hooks.slack.com",
+        "tail": "a1B9",
+        "set_by": {
+          "kind": "person",
+          "subject": "sub-dana",
+          "display": "Dana Whitfield"
+        },
+        "set_at": "2026-11-09T10:00:00Z",
+        "failing": null
+      },
+      {
+        "id": "risk-team",
+        "name": "Risk team",
+        "kind": "teams",
+        "host": "prod-12.westeurope.logic.azure.com",
+        "tail": "Qx7Z",
+        "set_by": {
+          "kind": "person",
+          "subject": "sub-dana",
+          "display": "Dana Whitfield"
+        },
+        "set_at": "2026-11-09T10:05:00Z",
+        "failing": {
+          "since": "2026-11-09T15:00:00Z",
+          "status": 404
+        }
+      }
+    ]
+  },
+  "put": {
+    "name": "#platform-alerts",
+    "kind": "slack",
+    "url": "https://hooks.slack.com/services/T000/B000/XXXXXXXXXXXXXXXXXXXXa1B9"
+  },
+  "summary": {
+    "kind": "summary",
+    "needs": 3,
+    "apps": [
+      "claims-portal",
+      "endorsement-hub"
+    ],
+    "more": 0,
+    "link": "https://canyon.meridian.example/#/fleet"
+  },
+  "messages": [
+    {
+      "kind": "need",
+      "need": "refused",
+      "state": "open",
+      "app": "claims-portal",
+      "env": "prod",
+      "fields": {
+        "destination": "api.stripe.com"
+      },
+      "since": "2026-11-09T14:02:00Z",
+      "link": "https://canyon.meridian.example/#/apps/claims-portal/outbound"
+    },
+    {
+      "kind": "need",
+      "need": "secret",
+      "state": "open",
+      "app": "claims-portal",
+      "fields": {
+        "version": "v1.4"
+      },
+      "link": "https://canyon.meridian.example/#/apps/claims-portal"
+    },
+    {
+      "kind": "need",
+      "need": "down",
+      "state": "open",
+      "app": "endorsement-hub",
+      "env": "prod",
+      "fields": {
+        "state": "restarting"
+      },
+      "since": "2026-11-09T14:10:00Z",
+      "link": "https://canyon.meridian.example/#/apps/endorsement-hub"
+    },
+    {
+      "kind": "need",
+      "need": "refused",
+      "state": "cleared",
+      "app": "claims-portal",
+      "env": "prod",
+      "fields": {
+        "destination": "api.stripe.com"
+      },
+      "link": "https://canyon.meridian.example/#/apps/claims-portal/outbound"
+    },
+    {
+      "kind": "need",
+      "need": "notify_failing",
+      "state": "open",
+      "fields": {
+        "channel": "Risk team"
+      },
+      "since": "2026-11-09T15:00:00Z",
+      "link": "https://canyon.meridian.example/#/settings/integrations"
+    },
+    {
+      "kind": "overflow",
+      "more": 7,
+      "link": "https://canyon.meridian.example/#/fleet"
+    }
+  ]
+}

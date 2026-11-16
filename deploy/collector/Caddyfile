@@ -1,0 +1,11 @@
+# The collector's TLS front (compose.yml). Every log line Caddy would write is discarded: a failed proxy request's
+# line names the sender's address and headers, which the collector never keeps.
+{
+	log default {
+		output discard
+	}
+}
+
+{$COLLECTOR_DOMAIN} {
+	reverse_proxy collector:8080
+}

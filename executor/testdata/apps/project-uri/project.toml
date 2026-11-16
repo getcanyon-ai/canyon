@@ -1,0 +1,7 @@
+# Must fail (contracts/executor.md, pack fetches nothing an app names): pack would fetch this buildpack from its
+# own process, outside the build's floor, so the executor refuses the build before pack runs.
+[_]
+schema-version = "0.2"
+
+[[io.buildpacks.group]]
+uri = "https://example.com/buildpacks/fetched.tgz"

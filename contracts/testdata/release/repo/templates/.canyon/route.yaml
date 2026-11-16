@@ -1,0 +1,18 @@
+# How people reach each app: a Gateway API HTTPRoute on the org's gateway, to the sign-in sidecar's
+# port. Canyon reads canyon.dev/address back as the app's address.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ${service}
+  annotations:
+    canyon.dev/address: https://${app}.${env}.apps.meridian.example
+spec:
+  parentRefs:
+    - name: apps
+      namespace: gateway
+  hostnames:
+    - ${app}.${env}.apps.meridian.example
+  rules:
+    - backendRefs:
+        - name: ${service}
+          port: 4180

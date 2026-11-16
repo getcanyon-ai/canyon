@@ -1,0 +1,5 @@
+/* Tailwind's own theme is not this design system. Cleared before tokens.css maps ours, so a
+   component cannot ask for a weight the bundle has no face for (font-bold) or a colour that is
+   in no token (bg-red-500): both stop resolving and emit nothing. CI's hex grep cannot see a
+   class name, which is why this is the check that holds. */
+@theme { --color-*: initial; --font-weight-*: initial; }

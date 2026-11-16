@@ -1,0 +1,16 @@
+{
+  "tiles": { "secrets_exposed": 0, "blocked": 0, "approved": 0, "never_reviewed": 0, "unowned": 0, "failed": 0, "refused": 0, "needs_you": 1 },
+  "stats": { "apps": 0, "owners": 0, "production": 0, "preview": 0, "passed": 0, "deploys_7d": 0, "production_7d": 0 },
+  "apps": [
+    { "id": "claims-archive", "name": "claims-archive", "owner_groups": [], "owners": [{ "kind": "person", "subject": "tomas@meridian.example", "display": "Tomas Neri" }], "summary": "Search closed claims older than seven years", "access": { "level": "none" }, "claimable": false, "envs": { "prod": { "url": "http://claims-archive.prod.localhost:7777", "state": "running" } } },
+    { "id": "claims-portal", "name": "claims-portal", "owner_groups": [], "owners": [{ "kind": "person", "subject": "dana@meridian.example", "display": "Dana Whitfield" }], "summary": "File and track motor claims", "access": { "level": "none" }, "claimable": false, "hold": { "by": { "kind": "person", "subject": "rhea@meridian.example", "display": "Rhea Okafor" }, "at": "2026-10-11T09:40:00Z", "reason": "Exports claimant SSNs unauthenticated (INC-2231)", "version": "v1.4" }, "needs": [{ "kind": "held", "env": "prod", "rank": 1, "since": "2026-10-11T09:40:00Z", "you": true, "ask": [{ "display": "Elena Vasquez", "as": "admin" }] }] },
+    { "id": "quote-engine", "name": "quote-engine", "owner_groups": [], "owners": [], "summary": "", "access": { "level": "none" }, "claimable": true }
+  ],
+  "total": 3,
+  "page": 1,
+  "next": null,
+  "unchecked": 0,
+  "org_needs": [],
+  "banner": "none",
+  "viewer": { "display": "Rhea Okafor", "role": "responder", "github_logins": [], "github_link": false }
+}

@@ -1,0 +1,29 @@
+
+  claims-portal · Meridian
+
+  preview      v1.3   http://claims-portal.preview.localhost:7777   1d ago
+  production   —      not promoted yet
+  access       shared with everyone at Meridian · you are an owner
+  review       ✗ blocked   1 blocking finding, 3 warnings   2h ago
+
+  ✓ Production needs a passing review
+      v1.3 passed review: no blocking finding
+  ✓ A person promotes
+      a person promotes, or an agent they ask, with their CLI sign-in
+  · Approved stacks only
+      no approved stacks set
+  ✓ Every app has an owner
+      owned by Dana Whitfield
+  ! No known-vulnerable system libraries or build tools (beta)  advisory
+      6 known-vulnerable packages with a published fix, in the system
+      libraries and build tools Canyon adds; 18 notes: no fix published, or
+      Canyon can't tell what put it there
+      brace-expansion 5.0.9 · CVE-2026-102276 fixed in 5.0.10, 3.0.7,
+        2.1.5, 1.1.19 · and 1 more advisory
+      libssl3t64 3.0.13-0ubuntu3.15 · CVE-2026-84782 fixed in
+        3.0.13-0ubuntu3.16
+      openssl 3.0.13-0ubuntu3.15 · CVE-2026-84782 fixed in
+        3.0.13-0ubuntu3.16
+      and 3 more: canyon status --format ai lists every one
+
+  Open in Canyon http://localhost:7777/#/apps/claims-portal

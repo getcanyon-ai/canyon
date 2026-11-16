@@ -1,0 +1,51 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "theme-corporate",
+  "type": "registry:theme",
+  "title": "Corporate",
+  "description": "Corporate: professional blues. Single look, applied in both OS modes.",
+  "cssVars": {
+    "light": {
+      "background": "#ffffff",
+      "foreground": "#111827",
+      "muted": "#f3f4f6",
+      "muted-foreground": "#6b7280",
+      "card": "#ffffff",
+      "card-foreground": "#111827",
+      "popover": "#ffffff",
+      "popover-foreground": "#111827",
+      "primary": "#2563eb",
+      "primary-foreground": "#ffffff",
+      "secondary": "#f3f4f6",
+      "secondary-foreground": "#111827",
+      "accent": "#eff6ff",
+      "accent-foreground": "#1d4ed8",
+      "destructive": "#ef4444",
+      "destructive-foreground": "#ffffff",
+      "border": "#e5e7eb",
+      "input": "#d1d5db",
+      "ring": "#2563eb"
+    },
+    "dark": {
+      "background": "#ffffff",
+      "foreground": "#111827",
+      "muted": "#f3f4f6",
+      "muted-foreground": "#6b7280",
+      "card": "#ffffff",
+      "card-foreground": "#111827",
+      "popover": "#ffffff",
+      "popover-foreground": "#111827",
+      "primary": "#2563eb",
+      "primary-foreground": "#ffffff",
+      "secondary": "#f3f4f6",
+      "secondary-foreground": "#111827",
+      "accent": "#eff6ff",
+      "accent-foreground": "#1d4ed8",
+      "destructive": "#ef4444",
+      "destructive-foreground": "#ffffff",
+      "border": "#e5e7eb",
+      "input": "#d1d5db",
+      "ring": "#2563eb"
+    }
+  }
+}

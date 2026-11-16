@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a1a573-0000-7000-8000-00000000c0de"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I'll deploy it as it is."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'canyon deploy'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'canyon deploy'","aggregated_output":"CANYON REVIEW — RESULT: BLOCKED\n\napp: qa-codex\nenv: preview\nhost: https://canyon.example\ngate run: gr_1 (2026-11-04T10:00:00Z)\nfindings: 1 · blocking: 1\noutcome: nothing was built and nothing was deployed.\n\n--- FINDING 1 of 1 -----------------------------------------------------------\ntitle: Stripe live key in code that reaches the browser\nseverity: critical\nblocks: yes\nrule: secrets.client-bundle.gitleaks.stripe-access-token\nfile: public/teamstats.js\nline: 1\n\n--- END OF FINDINGS ----------------------------------------------------------\n\nNEXT STEPS — do these in order:\n1. Fix every finding with `blocks: yes`.\n2. Run: canyon check\n\nexit code: 2\n","exit_code":2,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Canyon blocked it: the key in public/teamstats.js reaches the browser."}}
+{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}

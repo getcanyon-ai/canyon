@@ -1,0 +1,19 @@
+
+  ✗ This machine is not ready for the demo. Nothing was started.
+
+  1. Docker is 27.5.1, and the demo needs 28 or newer.
+     Fix: upgrade Docker, then start it again.
+
+  2. Docker has no Compose v2 (docker compose).
+     Fix: brew install docker-compose && mkdir -p ~/.docker/cli-plugins && ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+
+  3. Docker has 2 CPUs and 1.9 GB of memory, and the demo needs 4 CPUs and 6 GB.
+     Fix: colima stop && colima start --cpu 4 --memory 8
+
+  4. Docker has 11 GB of free disk, and the demo needs about 18 GB.
+     Fix: free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60
+
+  5. Port 7777 on 127.0.0.1 is in use by another program, and Canyon's dashboard needs it.
+     Fix: stop that program. To see which it is: lsof -nP -iTCP:7777 -sTCP:LISTEN
+
+  Then run: canyon demo up

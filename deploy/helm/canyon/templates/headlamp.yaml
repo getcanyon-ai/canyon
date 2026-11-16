@@ -1,0 +1,22 @@
+{{- /* Headlamp, the cluster UI, as a k3s HelmChart object (k3s's helm-controller installs it). Its own
+     account gets no role: people log in with a service-account token of theirs. */}}
+{{- if .Values.headlamp.enabled }}
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: headlamp
+  namespace: kube-system
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+spec:
+  repo: https://kubernetes-sigs.github.io/headlamp/
+  chart: headlamp
+  version: {{ .Values.headlamp.chartVersion }}
+  targetNamespace: headlamp
+  createNamespace: true
+  valuesContent: |-
+    clusterRoleBinding:
+      create: false
+    resources:
+      requests: {cpu: 20m, memory: 64Mi}
+      limits: {memory: 256Mi}
+{{- end }}

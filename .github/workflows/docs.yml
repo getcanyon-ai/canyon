@@ -1,0 +1,85 @@
+name: docs
+
+on:
+  pull_request:
+    paths: ['**.md', 'docs/**', 'contracts/**', 'designsystem/canyon/**', 'web/src/fonts/**', 'Makefile', 'scripts/publish-docs.sh', '.github/workflows/docs.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: lychee — the pinned release, checksum-verified
+        env:
+          LYCHEE_VERSION: v0.24.2
+          LYCHEE_SHA256: 91a7bd65685da41b90ccb9bc867a3d649a7818042dae04ff405e55a25bddee4c # lychee-aarch64-unknown-linux-gnu.tar.gz of LYCHEE_VERSION; bump both together
+          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
+        run: |
+          set -euo pipefail
+          .github/fetch.sh "https://github.com/lycheeverse/lychee/releases/download/lychee-$LYCHEE_VERSION/lychee-aarch64-unknown-linux-gnu.tar.gz" "$LYCHEE_SHA256" lychee.tar.gz
+          sudo tar -xzf lychee.tar.gz --strip-components=1 -C /usr/local/bin lychee-aarch64-unknown-linux-gnu/lychee
+      - run: make docs-links
+
+  site:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 10
+    env:
+      CANYON_PUBLIC_CHECK_NAMES: ${{ secrets.CANYON_PUBLIC_CHECK_NAMES }} # the names public-check refuses, hashed: never in the tree
+      CANYON_PUBLIC_CHECK_FORK: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') }} # a fork's pull request, and one Dependabot opened, get no secrets: their names are main's build's to check (#2895; Dependabot changes no page text)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: make docs-site # fails on a link to a page or heading that doesn't exist
+      - name: the site fetches no font from Google, every face is self-hosted as the dashboard's are
+        run: |
+          if grep -rIlE 'fonts\.(googleapis|gstatic)\.com' docs/dist; then echo "::error::the built docs load a font from Google: serve it from web/src/fonts instead"; exit 1; fi
+      - uses: actions/upload-artifact@v4 # read the built site without deploying it: download, then npx serve
+        with:
+          name: docs-site
+          path: docs/dist
+          retention-days: 7
+      - name: the site names the Canyon version it documents, main's unless a release tag sets it, and publish-docs.sh refuses a HEAD with no release tag
+        run: |
+          set -eu
+          grep -q 'Docs for Canyon main (unreleased)' docs/dist/index.html || { echo "::error::without CANYON_DOCS_VERSION, dist/index.html doesn't say Docs for Canyon main (unreleased)"; exit 1; }
+          CANYON_DOCS_VERSION=v0.0.0-check npm --prefix docs run build
+          grep -q 'Docs for Canyon v0.0.0-check' docs/dist/index.html || { echo "::error::with CANYON_DOCS_VERSION=v0.0.0-check, dist/index.html doesn't say Docs for Canyon v0.0.0-check"; exit 1; }
+          mono=$(mktemp -d) # a workspace checkout as the script recognises one, its app directory holding a file the script must not touch
+          touch "$mono/pnpm-workspace.yaml" && mkdir -p "$mono/apps/canyon-docs" && touch "$mono/apps/canyon-docs/kept"
+          refuses() { # $1: the HEAD it is run on, $2: the words its refusal must say
+            if scripts/publish-docs.sh "$mono" 2> "$RUNNER_TEMP/publish.err"; then echo "::error::scripts/publish-docs.sh published from $1"; exit 1; fi
+            cat "$RUNNER_TEMP/publish.err"
+            grep -qF "$2" "$RUNNER_TEMP/publish.err" || { echo "::error::scripts/publish-docs.sh failed on $1, but didn't say: $2"; exit 1; }
+            test -f "$mono/apps/canyon-docs/kept" || { echo "::error::scripts/publish-docs.sh refused $1, but only after it emptied apps/canyon-docs"; exit 1; }
+          }
+          refuses 'a HEAD with no release tag' 'carries no release tag'
+          git tag 'v0.6.0;echo' # vercel.json's build command is a shell command: a tag that isn't a version never reaches it
+          refuses 'a HEAD tagged v0.6.0;echo' 'v0.6.0;echo is not a release tag'
+          git tag -d 'v0.6.0;echo'
+          # a release HEAD with a page base-links cannot rewrite (a link: escaped in its YAML, never in its text):
+          # the refusal comes before the workspace's copy is touched (#2869)
+          page=docs/src/content/docs/zz-unrewritable.md
+          printf -- '---\ntitle: Unrewritable\nhero:\n  actions:\n    - text: Go\n      link: "/x\\x79"\n---\n' > "$page" && git add "$page"
+          git tag v0.0.0-check
+          refuses 'a page base-links cannot rewrite' "can't find link: /xy"
+          git tag -d v0.0.0-check && git rm -q -f "$page"
+      - name: under /docs, where scripts/publish-docs.sh publishes it, the site builds and every link stays under the base # last: it rewrites docs/'s pages
+        run: |
+          set -eu
+          node docs/scripts/base-links.mjs docs /docs
+          CANYON_DOCS_BASE=/docs npm --prefix docs run build # starlight-links-validator fails on a link to a page the rewrite missed
+          stray=$(grep -rhoE '(href|src)="/[^"]*"' docs/dist --include='*.html' | grep -vE '="/(docs/|docs"|/)' | sort -u) || true
+          [ -z "$stray" ] || { echo "::error::under CANYON_DOCS_BASE=/docs, the built pages link outside it:"; echo "$stray"; exit 1; }
+          grep -q 'href="/docs/start/try-it-on-your-laptop/"' docs/dist/index.html || { echo "::error::under CANYON_DOCS_BASE=/docs, the home page's hero doesn't link /docs/start/try-it-on-your-laptop/"; exit 1; }

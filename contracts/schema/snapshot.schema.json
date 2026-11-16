@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/snapshot.schema.json",
+  "title": "Canyon policy snapshot (seam 5)",
+  "description": "The one versioning primitive: everything that shapes a verdict. contracts/snapshot.md is canonical; this schema pins its shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "hash", "rules", "exclusions", "agents", "component_menu", "stacks", "limits", "capabilities"],
+  "definitions": {
+    "sourceSettings": { "description": "platform.known-vuln's settings (snapshot.md): the imported tool whose image reports it reads, never trivy, whose own is no settings.", "type": "object", "additionalProperties": false, "required": ["source"], "properties": { "source": { "type": "string", "maxLength": 40, "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "not": { "enum": ["trivy", "opengrep", "eslint", "grype", "checkov"] } } } },
+    "toolSettings": {
+      "skip_paths": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "maxLength": 256, "pattern": "^([^-./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+)(/([^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+))*$"}},
+      "trivy": {"type": "object", "additionalProperties": false, "properties": {"scanners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["vuln", "misconfig", "secret"]}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "opengrep": {"type": "object", "additionalProperties": false, "properties": {"rules": {"type": "object", "additionalProperties": false, "required": ["repo", "commit"], "properties": {"repo": {"type": "string", "maxLength": 2048, "pattern": "^https://[^@/?#\\s]+(/[^?#\\s]*)?$"}, "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "grype": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "eslint": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "checkov": {"type": "object", "additionalProperties": false, "properties": {"frameworks": {"type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"}}, "skip_checks": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$"}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}}
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "hash": { "type": "string", "pattern": "^snap_[0-9a-f]{8,}$" },
+    "rules": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "state", "producer"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^([a-z]+\\.[a-z][a-z-]*|sarif\\.[a-z0-9]+(-[a-z0-9]+)*)$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "state": { "enum": ["off", "advisory", "blocking"] },
+          "production": { "enum": ["advisory", "blocking"], "description": "The rule's state before production, carried only on a rule placed there: absent is Off (snapshot.md, Two gates)." },
+          "producer": { "enum": ["scanner", "promote-gate", "server-state", "llm-review", "sarif"] },
+          "run": { "const": true },
+          "settings": { "type": "object", "minProperties": 1 },
+          "instructions": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\x00-\\x09\\x0B-\\x1F\\x7F-\\x9F]+$", "description": "A custom rule's text, the admin's (snapshot.md, Custom rules); only on custom.*, and on every one." },
+          "check": {
+            "description": "How a custom rule's version is checked, fixed when it is saved (snapshot.md, Custom rules); only on custom.*, and on every one.",
+            "type": "object", "additionalProperties": false, "required": ["by", "facts_version"],
+            "properties": {
+              "by": { "enum": ["code", "ai"] },
+              "expr": { "type": "string", "minLength": 1, "maxLength": 4096 },
+              "says": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" },
+              "facts_version": { "type": "integer", "minimum": 1 }
+            },
+            "if": { "properties": { "by": { "const": "code" } } },
+            "then": { "required": ["expr", "says"] },
+            "else": { "not": { "anyOf": [{ "required": ["expr"] }, { "required": ["says"] }] } }
+          }
+        },
+        "allOf": [
+          { "if": { "properties": { "id": { "enum": ["prod.clean-gate", "prod.human-approval", "owner.required", "stack.blessed", "platform.known-vuln", "prod.egress-allowed"] } } }, "then": { "not": { "required": ["production"] } } },
+          { "if": { "properties": { "id": { "pattern": "^custom\\." } } },
+            "then": { "required": ["instructions", "check"], "properties": { "id": { "pattern": "^custom\\.[a-z][a-z-]{0,39}$" }, "name": { "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" } },
+              "if": { "properties": { "check": { "properties": { "by": { "const": "code" } } } } },
+              "then": { "properties": { "producer": { "const": "scanner" } } },
+              "else": { "properties": { "producer": { "const": "llm-review" } } } },
+            "else": { "not": { "anyOf": [{ "required": ["instructions"] }, { "required": ["check"] }] } } },
+          { "if": { "properties": { "id": { "const": "sarif.trivy" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/trivy"}}} },
+          { "if": { "properties": { "id": { "const": "sarif.opengrep" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/opengrep"}}} },
+          { "if": { "properties": { "id": { "const": "sarif.grype" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/grype"}}} },
+          { "if": { "properties": { "id": { "const": "sarif.eslint" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/eslint"}}} },
+          { "if": { "properties": { "id": { "const": "sarif.checkov" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/checkov"}}} },
+          { "if": { "properties": { "id": { "const": "platform.known-vuln" } } }, "then": { "not": { "required": ["run"] }, "properties": { "settings": { "$ref": "#/definitions/sourceSettings" } } } },
+          { "if": { "properties": { "id": { "not": { "enum": ["sarif.trivy", "sarif.opengrep", "sarif.eslint", "sarif.grype", "sarif.checkov", "platform.known-vuln"] } } } }, "then": { "not": { "anyOf": [{ "required": ["run"] }, { "required": ["settings"] }] } } }
+        ]
+      }
+    },
+    "exclusions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "namespace", "model"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "namespace": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z]+$" } },
+          "model": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "component_menu": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
+    "stacks": {
+      "type": "array", "maxItems": 16,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["language", "frameworks"],
+        "properties": {
+          "language": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1F\\x7F]+$" },
+          "frameworks": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1F\\x7F]+$" } }
+        }
+      }
+    },
+    "approved_buildpacks": {
+      "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9./-]{0,127}$" }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_runs_per_project_per_hour", "gate_runs_per_actor_per_hour"],
+      "properties": {
+        "gate_runs_per_project_per_hour": { "type": "integer", "minimum": 1 },
+        "gate_runs_per_actor_per_hour": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "required": ["enabled"], "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "org_default": {
+            "type": ["object", "null"], "additionalProperties": false, "required": ["name", "namespace", "registry_url"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1F\\x7F]+$" },
+              "namespace": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\x00-\\x1F\\x7F]+$" },
+              "registry_url": { "type": "string", "maxLength": 2048, "pattern": "^(https://[^@/?#\\s]+|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?)(/[^\\s]*)?$" },
+              "tokens_url": { "type": "string", "maxLength": 2048, "pattern": "^(https://[^@/?#\\s]+|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?)(/[^\\s]*)?$" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

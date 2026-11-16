@@ -1,0 +1,18 @@
+
+  canyon dev · claims-portal preview → prod · localhost:7777
+
+  Promoting v1.3 (passed review) from preview to production. Nothing runs in production yet.
+  Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
+
+  Promote
+  │ postgres db: creating
+  │ postgres db: ready
+  │ deploying to production
+  │ live at http://claims-portal.prod.localhost:7777
+
+  ✓ Promote    prod
+
+  Live   http://claims-portal.prod.localhost:7777
+  Fleet  http://localhost:7777/#/apps/claims-portal
+
+  Done in 0.0s

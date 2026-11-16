@@ -1,0 +1,529 @@
+# Canyon's egress gateway (https://www.getcanyon.ai/docs/self-host/configuration/#egress-gateway): Envoy, the
+# stock image pinned by digest, on deploy/egress's envoy.yaml and envoy.sh byte for byte, started by kube.sh with this cluster's resolvers and the server's receiver. An app whose
+# /run carries egress reaches it, and nothing else outside its pod, at http://canyon-egress.canyon.svc:3128.
+# The overlay writes the Secret canyon-egress, its token for the receiver, which the server reads too (server.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: canyon-egress, namespace: canyon}
+data:
+  kube.sh: |
+    #!/bin/sh
+    # Canyon's Envoy on Kubernetes: envoy.sh, the two values the cluster
+    # decides filled in first — the resolvers, the pod's own (kube-dns, its resolv.conf's nameservers), and the
+    # receiver, the server's Service canyon-server on CANYON_EGRESS_RECEIVER_PORT. envoy.sh checks both: a name
+    # that does not resolve leaves no IPv4 address, and it stops before Envoy starts.
+    set -eu
+    CANYON_EGRESS_RESOLVERS=$(sed -n 's/^nameserver[[:space:]][[:space:]]*\([^[:space:]]*\).*/\1/p' /etc/resolv.conf | paste -sd, -)
+    server=$(getent ahostsv4 canyon-server.canyon.svc | sed -n '1s/[[:space:]].*//p')
+    [ -n "$server" ] || { echo "kube.sh: canyon-server.canyon.svc does not resolve, so the receiver of the server has no address" >&2; exit 1; }
+    CANYON_EGRESS_RECEIVER_ADDR=$server:${CANYON_EGRESS_RECEIVER_PORT:?the port the server takes records on}
+    export CANYON_EGRESS_RESOLVERS CANYON_EGRESS_RECEIVER_ADDR
+    exec /bin/sh /etc/canyon/envoy.sh "$@"
+  envoy.sh: |
+    #!/bin/sh
+    # Canyon's Envoy, started in canyon-egress's network namespace: envoy.yaml with the
+    # server's receiver, the token Envoy sends it, the upstream resolvers and egress-control's loopback address
+    # (127.0.0.1:7783 unset) filled in from the environment, written where only Envoy reads it, then Envoy
+    # on it. Any argument is Envoy's: CI's --mode validate checks what runs. Envoy runs one ALS stream per worker,
+    # CANYON_EGRESS_CONCURRENCY of them, eight unset, which the receiver's sixteen leave room for: on Kubernetes two
+    # replicas run four each (deploy/k8s/egress.yaml).
+    # A value the server or Envoy would not take stops it, naming the variable, before anything is written.
+    set -eu
+
+    receiver=${CANYON_EGRESS_RECEIVER_ADDR:?the receiver of the server on canyon-egress-ctl, ip:port}
+    token=${CANYON_EGRESS_RECEIVER_TOKEN:?the token Envoy sends the receiver, the same as the server has}
+    resolvers=${CANYON_EGRESS_RESOLVERS:?the upstream resolvers of the machine, comma-separated IPv4 addresses}
+    concurrency=${CANYON_EGRESS_CONCURRENCY:-8}
+    control=${CANYON_EGRESS_CONTROL_ADDR:-127.0.0.1:7783}
+
+    refuse() {
+    	echo "envoy.sh: $1" >&2
+    	exit 1
+    }
+
+    # ipv4 holds when $1 is a dotted-quad IPv4 address: four decimal octets of 0 to 255, none with a leading zero.
+    ipv4() {
+    	case $1 in
+    	*[!0-9.]* | .* | *. | *..*) return 1 ;;
+    	esac
+    	set -f
+    	IFS=.
+    	set -- $1
+    	IFS=,
+    	[ $# -eq 4 ] || return 1
+    	for octet; do
+    		case $octet in
+    		[0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) ;;
+    		*) return 1 ;;
+    		esac
+    	done
+    }
+
+    # The server's own rule for its token: 32 to 512 of these characters.
+    case $token in
+    *[!A-Za-z0-9._~+/=-]*) refuse "CANYON_EGRESS_RECEIVER_TOKEN holds a character the server's token never does" ;;
+    esac
+    [ ${#token} -ge 32 ] && [ ${#token} -le 512 ] || refuse "CANYON_EGRESS_RECEIVER_TOKEN is not 32 to 512 characters"
+    case $concurrency in
+    '' | *[!0-9]* | 0*) refuse "CANYON_EGRESS_CONCURRENCY is not a positive integer" ;;
+    esac
+    [ "$concurrency" -le 16 ] || refuse "CANYON_EGRESS_CONCURRENCY is over 16, the receiver's streams"
+    port=${receiver##*:}
+    case $port in
+    '' | *[!0-9]* | 0*) refuse "CANYON_EGRESS_RECEIVER_ADDR is not ip:port" ;;
+    esac
+    ipv4 "${receiver%:*}" && [ "$port" -le 65535 ] || refuse "CANYON_EGRESS_RECEIVER_ADDR is not an IPv4 address and a port"
+    control_port=${control##*:}
+    case $control_port in
+    '' | *[!0-9]* | 0*) refuse "CANYON_EGRESS_CONTROL_ADDR is not ip:port" ;;
+    esac
+    case ${control%:*} in
+    127.*) ;;
+    *) refuse "CANYON_EGRESS_CONTROL_ADDR is not a loopback address: egress-control answers Envoy beside it alone" ;;
+    esac
+    ipv4 "${control%:*}" && [ "$control_port" -le 65535 ] ||
+    	refuse "CANYON_EGRESS_CONTROL_ADDR is not an IPv4 address and a port"
+
+    list=
+    IFS=,
+    for resolver in $resolvers; do
+    	ipv4 "$resolver" || refuse "CANYON_EGRESS_RESOLVERS holds $resolver, no IPv4 address"
+    	list="${list:+$list, }{socket_address: {address: \"$resolver\", port_value: 53}}"
+    done
+    [ -n "$list" ] || refuse "CANYON_EGRESS_RESOLVERS names no resolver"
+    umask 077
+    sed -e "s|@receiver_address@|${receiver%:*}|" -e "s|\"@receiver_port@\"|$port|" \
+    	-e "s|@control_address@|${control%:*}|" -e "s|\"@control_port@\"|$control_port|" \
+    	-e "s|@receiver_token@|$token|" -e "s|\"@resolvers@\"|[$list]|" \
+    	/etc/canyon/envoy.yaml >/var/run/envoy/envoy.yaml
+    exec envoy -c /var/run/envoy/envoy.yaml --concurrency "$concurrency" "$@"
+  envoy.yaml: |
+    # Canyon's Envoy: a static forward proxy on :3128 in canyon-egress's network
+    # namespace, whose floor (floor.sh) refuses every private destination. Every call is first checked by
+    # egress-control, beside it on loopback, before anything is resolved or sent upstream. Its one log is ALS to the
+    # server's receiver; its admin is a Unix socket. envoy.sh fills the @…@ values from the environment and starts
+    # Envoy on what it wrote; CI validates that, as it runs. Layer 3 (design/EGRESS.md §4.2): a CONNECT the check marks
+    # for interception goes to the one internal listener, which egress-control serves by LDS, its leaves by SDS, over
+    # ADS on the check's own loopback address; every other call passes through as before, never decrypted.
+    node: {id: canyon-egress, cluster: canyon-egress} # egress-control serves the one Envoy beside it, whatever node it names
+
+    bootstrap_extensions: # the internal listener the one internal cluster reaches
+    - name: envoy.bootstrap.internal_listener
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.bootstrap.internal_listener.v3.InternalListener
+
+    dynamic_resources: # listeners alone, and their secrets, from egress-control: no clusters, routes or endpoints come by xDS
+      lds_config: {ads: {}, resource_api_version: V3, initial_fetch_timeout: 5s} # egress-control answers at once, with no listener until a policy; past 5 s :3128 starts all the same, every call checked
+      ads_config:
+        api_type: GRPC
+        transport_api_version: V3
+        set_node_on_first_message_only: true
+        grpc_services: [{envoy_grpc: {cluster_name: control}}]
+
+    admin: # never a TCP port, and no admin access log
+      address:
+        pipe:
+          path: /var/run/envoy-admin/admin.sock
+          mode: 384 # 0600
+
+    overload_manager: # Envoy's edge best practice: shed load before the heap runs out, and cap the connections it holds
+      refresh_interval: 0.25s
+      resource_monitors:
+      - name: envoy.resource_monitors.fixed_heap
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.resource_monitors.fixed_heap.v3.FixedHeapConfig
+          max_heap_size_bytes: 1073741824 # 1 GiB
+      - name: envoy.resource_monitors.global_downstream_max_connections
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+          max_active_downstream_connections: 16384
+      actions:
+      - name: envoy.overload_actions.shrink_heap
+        triggers: [{name: envoy.resource_monitors.fixed_heap, threshold: {value: 0.95}}]
+      - name: envoy.overload_actions.stop_accepting_requests
+        triggers: [{name: envoy.resource_monitors.fixed_heap, threshold: {value: 0.98}}]
+      - name: envoy.overload_actions.reduce_timeouts # from half of the connections, reaching it at 90%, idle connections are shed sooner
+        triggers: [{name: envoy.resource_monitors.global_downstream_max_connections, scaled: {scaling_threshold: 0.5, saturation_threshold: 0.9}}]
+        typed_config:
+          "@type": type.googleapis.com/envoy.config.overload.v3.ScaleTimersOverloadActionConfig
+          timer_scale_factors: # never a stream's: a byte every few seconds beats it, and it would cut every app's silent call while one floods
+          - {timer: HTTP_DOWNSTREAM_CONNECTION_IDLE, min_timeout: 5s}
+
+    static_resources:
+      listeners:
+      - name: egress
+        address: {socket_address: {address: 0.0.0.0, port_value: 3128}}
+        filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: egress
+              codec_type: HTTP1 # proxy clients speak HTTP/1.1; h2c would carry streams without end on one connection
+              upgrade_configs: [{upgrade_type: CONNECT}] # CONNECT over HTTP/1.0 is 426: accept_http_10 stays false
+              skip_xff_append: true
+              generate_request_id: false
+              common_http_protocol_options:
+                idle_timeout: 60s # a connection with no request open, one that never sends a byte among them, is closed
+                max_stream_duration: 900s # a call has 15 minutes, as a tunnel does, a request whose body trickles in among them
+              request_headers_timeout: 10s # a client that never finishes its headers is closed
+              stream_idle_timeout: 300s # a request or a tunnel that moves no byte for 5 minutes is closed
+              access_log_options: # a long tunnel is attributed while its caller lives, and is its row from the moment it opens, not at its end
+                access_log_flush_interval: 60s
+                flush_log_on_tunnel_successfully_established: true
+              access_log:
+              - name: envoy.access_loggers.http_grpc
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.access_loggers.grpc.v3.HttpGrpcAccessLogConfig
+                  common_config:
+                    log_name: egress
+                    transport_api_version: V3
+                    custom_tags: [{tag: canyon.tunnel_open_entry, literal: {value: "1"}}] # says so on every entry: this Envoy's tunnels were counted as they opened, so the receiver counts no last entry of one
+                    grpc_service:
+                      envoy_grpc: {cluster_name: receiver}
+                      initial_metadata: [{key: authorization, value: "Bearer @receiver_token@"}] # the token the server's receiver checks
+              local_reply_config: # the check did not answer in time, or at all: Canyon's line, never Envoy's
+                mappers:
+                - filter:
+                    and_filter:
+                      filters:
+                      - status_code_filter: {comparison: {op: EQ, value: {default_value: 503}}}
+                      - response_flag_filter: {flags: [UAEX]}
+                  body: {inline_string: "Canyon's egress check did not answer, so this call was not made."}
+                # An absolute-form call to a destination with a route — one whose check's OK named it — that fails before it
+                # is sent: upstream_failed, never on a CONNECT, whose failure to find the internal listener stays 503. A
+                # metadata_filter matches a call without the key unless match_if_key_not_found is false: every other call's
+                # failure would read upstream_failed.
+                - filter:
+                    and_filter:
+                      filters:
+                      - response_flag_filter: {flags: [UF, DF]}
+                      - metadata_filter: {matcher: {filter: envoy.filters.http.ext_authz, path: [{key: destination}], value: {present_match: true}}, match_if_key_not_found: false}
+                      - header_filter: {header: {name: ":method", string_match: {exact: CONNECT}, invert_match: true}}
+                  status_code: 502
+                  body_format_override:
+                    text_format_source: {inline_string: "Canyon could not connect to %DYNAMIC_METADATA(envoy.filters.http.ext_authz:destination)% or verify its certificate, so it did not send this call."}
+                  headers_to_add:
+                  - {header: {key: Canyon-Egress, value: upstream_failed}, append_action: OVERWRITE_IF_EXISTS_OR_ADD}
+                  - {header: {key: content-type, value: "text/plain; charset=utf-8"}, append_action: OVERWRITE_IF_EXISTS_OR_ADD}
+              http_filters:
+              # First, before any check: a request that already carries x-canyon-intercept, the header that sends a
+              # CONNECT to the internal listener, is refused, so no app routes itself there (contracts/routes.md,
+              # Interception). Its 403 is Envoy's own.
+              - name: envoy.filters.http.rbac
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+                  rules:
+                    action: DENY
+                    policies:
+                      forged-intercept:
+                        permissions: [{header: {name: x-canyon-intercept, present_match: true}}]
+                        principals: [{any: true}]
+              # The check, before anything is resolved or sent upstream. It reads the
+              # connection's own peer, which no listener filter rewrites (none here takes PROXY protocol), and the
+              # method, scheme and authority, fields of their own; allowed_headers sends it no app header but Proxy-Authorization.
+              # Its answer's metadata, in the namespace envoy.filters.http.ext_authz, which no other filter here writes,
+              # reaches the receiver on the call's access-log entry, an OK's and a refusal's alike. An OK that sets or
+              # removes x-canyon-intercept routes the request again (clear_route_cache).
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  transport_api_version: V3
+                  grpc_service:
+                    envoy_grpc: {cluster_name: control}
+                    timeout: 5s # room for the refetch a new pod's first call waits on (4 s), never for a known caller's
+                  failure_mode_allow: false # no answer is a 503, never a call let through
+                  status_on_error: {code: ServiceUnavailable}
+                  allowed_headers: {patterns: [{exact: ":method"}, {exact: "proxy-authorization"}]} # the method, the check's own field, and a pod's token on Kubernetes, which the check's OK removes (design/EGRESS.md §4.3)
+                  clear_route_cache: true
+              # What the check's intercept OK names, the caller and the destination it approved, carried into the tunnel as
+              # filter state, once (shared_with_upstream ONCE): the internal listener's header_mutation reads them, an
+              # object missing an empty header there, which ext_authz #2 refuses. An absolute-form inject OK names its
+              # destination too, so canyon.destination is set for it, and read by nothing: it goes to tls, no internal
+              # listener. Nothing is set for any other call.
+              - name: envoy.filters.http.set_filter_state
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.set_filter_state.v3.Config
+                  on_request_headers:
+                  - object_key: canyon.caller
+                    factory_key: envoy.string
+                    format_string: {text_format_source: {inline_string: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:caller)%"}, omit_empty_values: true}
+                    shared_with_upstream: ONCE
+                    skip_if_empty: true
+                  - object_key: canyon.destination
+                    factory_key: envoy.string
+                    format_string: {text_format_source: {inline_string: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:destination)%"}, omit_empty_values: true}
+                    shared_with_upstream: ONCE
+                    skip_if_empty: true
+              - name: envoy.filters.http.dynamic_forward_proxy
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+                  dns_cache_config: &dns
+                    name: egress
+                    dns_lookup_family: V4_ONLY
+                    max_hosts: 16384
+                    dns_cache_circuit_breaker: {max_pending_requests: 16384} # as many resolutions waiting as Envoy holds connections, not 1,024
+                    typed_dns_resolver_config: &resolver # the machine's upstream resolvers, never Docker's 127.0.0.11, which would answer canyon-server
+                      name: envoy.network.dns_resolver.cares
+                      typed_config:
+                        "@type": type.googleapis.com/envoy.extensions.network.dns_resolver.cares.v3.CaresDnsResolverConfig
+                        resolvers: "@resolvers@"
+                        dns_resolver_options: {no_default_search_domain: true} # a name is looked up as given, never under the resolv.conf's search domains (on Kubernetes, the cluster's own)
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                  suppress_envoy_headers: true
+              route_config:
+                name: egress
+                request_headers_to_remove: [x-request-id, x-forwarded-proto] # suppress_envoy_headers leaves both
+                virtual_hosts:
+                - name: egress
+                  domains: ["*"]
+                  # Every route names its port: 443 for CONNECT and https, 80 for http, and no other, so no one can ask
+                  # Envoy for the server's receiver, the one port of Canyon's networks the floor admits. Any other
+                  # request matches no route: 404.
+                  routes:
+                  - match: # CONNECT the check marked for interception: to the one internal listener, never the plain tunnel
+                      connect_matcher: {}
+                      headers:
+                      - {name: ":authority", string_match: {safe_regex: {regex: "[^:]+:443"}}}
+                      - {name: x-canyon-intercept, string_match: {exact: "1"}}
+                    route:
+                      cluster: intercept
+                      upgrade_configs: [{upgrade_type: CONNECT, connect_config: {}}]
+                      timeout: 0s # a tunnel ends when either side closes it, or at 15 minutes
+                      max_stream_duration: {max_stream_duration: 900s}
+                  - match: # CONNECT, terminated: the tunnel's bytes are spliced to the authority, never read
+                      connect_matcher: {}
+                      headers: [{name: ":authority", string_match: {safe_regex: {regex: "[^:]+:443"}}}]
+                    route:
+                      cluster: plain
+                      upgrade_configs: [{upgrade_type: CONNECT, connect_config: {}}]
+                      timeout: 0s # a tunnel ends when either side closes it, or at 15 minutes
+                      max_stream_duration: {max_stream_duration: 900s}
+                  - match: # absolute-form https:// (axios ≤ 1.7 sends it instead of CONNECT): Envoy originates the TLS
+                      prefix: /
+                      headers:
+                      - {name: ":scheme", string_match: {exact: https}}
+                      - {name: ":authority", string_match: {safe_regex: {regex: "[^:]+(:443)?"}}}
+                    route: {cluster: tls, timeout: 900s} # a slow call, a model API's, has a tunnel's 15 minutes, not Envoy's default 15 s
+                  - match: # absolute-form http://: the check refuses it to a destination with a route itself (inject_requires_tls), whatever this regex admits
+                      prefix: /
+                      headers:
+                      - {name: ":scheme", string_match: {exact: http}}
+                      - {name: ":authority", string_match: {safe_regex: {regex: "[^:]+(:80)?"}}}
+                    route: {cluster: plain, timeout: 900s}
+
+      clusters:
+      - name: plain
+        lb_policy: CLUSTER_PROVIDED
+        circuit_breakers: &breakers # as many as Envoy holds downstream, never the default 1,024, which a few apps' tunnels would fill for all
+          thresholds: [{max_connections: 16384, max_pending_requests: 16384, max_requests: 16384}]
+        cluster_type:
+          name: envoy.clusters.dynamic_forward_proxy
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+            dns_cache_config: *dns
+      - name: tls
+        lb_policy: CLUSTER_PROVIDED
+        circuit_breakers: *breakers
+        cluster_type:
+          name: envoy.clusters.dynamic_forward_proxy
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+            dns_cache_config: *dns
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            upstream_http_protocol_options: {auto_sni: true, auto_san_validation: true}
+            auto_config: {http2_protocol_options: {}, http_protocol_options: {}}
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            max_session_keys: 0 # a session for one destination is never resumed for another on a shared CDN address
+            common_tls_context:
+              alpn_protocols: [h2, http/1.1]
+              validation_context: {trusted_ca: {filename: /etc/ssl/certs/ca-certificates.crt}} # the image's own
+      - name: intercept # the one internal cluster: to the internal listener egress-control serves, the tunnel's filter state with it
+        type: STATIC
+        circuit_breakers: *breakers
+        load_assignment:
+          cluster_name: intercept
+          endpoints:
+          - lb_endpoints:
+            - endpoint: {address: {envoy_internal_address: {server_listener_name: intercept}}}
+        transport_socket:
+          name: envoy.transport_sockets.internal_upstream
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.internal_upstream.v3.InternalUpstreamTransport
+            transport_socket:
+              name: envoy.transport_sockets.raw_buffer
+              typed_config: {"@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer}
+      - name: intercepted # an inner request's way out: TLS Envoy originates and verifies, never resuming a session; one sub-cluster a destination, resolved as :3128's are
+        lb_policy: CLUSTER_PROVIDED
+        circuit_breakers: *breakers
+        dns_lookup_family: V4_ONLY
+        typed_dns_resolver_config: *resolver
+        cluster_type:
+          name: envoy.clusters.dynamic_forward_proxy
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+            sub_clusters_config: {max_sub_clusters: 16384}
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            upstream_http_protocol_options: {auto_sni: true, auto_san_validation: true}
+            auto_config: {http2_protocol_options: {}, http_protocol_options: {}}
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            max_session_keys: 0
+            common_tls_context:
+              alpn_protocols: [h2, http/1.1]
+              validation_context: {trusted_ca: {filename: /etc/ssl/certs/ca-certificates.crt}} # the image's own
+      - name: control # egress-control, beside Envoy on loopback, over gRPC: the check, and the interception listener by ADS
+        type: STATIC
+        circuit_breakers: *breakers # every call waits on one check: as many as Envoy holds, so none overflows to a 503
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            explicit_http_config: {http2_protocol_options: {}}
+        load_assignment:
+          cluster_name: control
+          endpoints:
+          - lb_endpoints:
+            - endpoint: {address: {socket_address: {address: "@control_address@", port_value: "@control_port@"}}}
+      - name: receiver # the server's on canyon-egress-ctl, over gRPC
+        type: STATIC
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            explicit_http_config: {http2_protocol_options: {}}
+        load_assignment:
+          cluster_name: receiver
+          endpoints:
+          - lb_endpoints:
+            - endpoint: {address: {socket_address: {address: "@receiver_address@", port_value: "@receiver_port@"}}}
+---
+# Two replicas, each with four workers and so four access-log streams: with the one a rollout adds, twelve,
+# under the receiver's sixteen. The template carries the config's sum, so a
+# changed bootstrap rolls Envoy. Each pod is Envoy and
+# egress-control beside it: the check Envoy asks on loopback, so their availability is
+# one, and the pod is ready only once egress-control holds a policy.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: canyon-egress, namespace: canyon}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+  selector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: canyon-egress}
+      annotations: {canyon.egress-config-sha256: 011c2f3225bd025e85e22adaf75fc27ed449ec3a9251f006f69c5a04a8710129}
+    spec:
+      serviceAccountName: canyon-egress # whose projected token the server's policy listener takes
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, seccompProfile: {type: RuntimeDefault}}
+      # Apart by node and by zone where there are several: one's loss leaves the apps a way out. ScheduleAnyway, so a
+      # rollout's surge pod never waits on a node that cannot take it.
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}}
+        - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}}
+      containers:
+        - name: envoy
+          image: docker.io/envoyproxy/envoy:v1.39.3@sha256:dd85940439de19a0b6ae8419610363ea0ad351d9a994ea007161c206ec1e1865
+          command: [/bin/sh, /etc/canyon/kube.sh]
+          env:
+            - {name: CANYON_EGRESS_RECEIVER_PORT, value: "7781"}
+            - {name: CANYON_EGRESS_RECEIVER_TOKEN, valueFrom: {secretKeyRef: {name: canyon-egress, key: token}}}
+            - {name: CANYON_EGRESS_CONCURRENCY, value: "4"}
+          ports: [{name: proxy, containerPort: 3128}]
+          readinessProbe: {tcpSocket: {port: 3128}, periodSeconds: 5}
+          # The bootstrap's overload manager sheds load at 1 GiB of heap: the limit leaves Envoy room above it.
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "2", memory: 1536Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/canyon, readOnly: true}
+            - {name: run, mountPath: /var/run/envoy} # the filled-in bootstrap, which holds the token
+            - {name: admin, mountPath: /var/run/envoy-admin} # the admin socket, a Unix socket and never a port
+        # egress-control, the server's image as a subcommand: it pulls the policy over
+        # TLS pinned to the certificate the server minted, with the pod's own token for the policy's audience, and
+        # keeps nothing across a start, so it is ready once the server's 200 gives it a policy — which only an exec
+        # probe can ask, as its listener is loopback's alone. It stops answering at SIGTERM, so a pod a rollout ends
+        # lets nothing more through: two and the rollout's one, three answer at once at most, the share each takes
+        # of the rate limit (CANYON_EGRESS_REPLICAS).
+        - name: egress-control
+          image: canyon-server@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          args: [egress-control]
+          env:
+            - {name: CANYON_EGRESS_REPLICAS, value: "3"}
+            - {name: CANYON_EGRESS_POLICY_URL, value: "https://canyon-server.canyon.svc:7782/egress/policy"}
+            - {name: CANYON_EGRESS_POLICY_TOKEN_FILE, value: /var/run/canyon-egress-policy/token}
+            - {name: CANYON_EGRESS_POLICY_CERT_FILE, value: /var/run/canyon-egress-policy/tls.crt}
+            - {name: CANYON_EGRESS_CONTROL_METRICS_ADDR, value: "0.0.0.0:7784"} # the policy's age, refusals and refetches; the policy below admits the scraper alone
+            - {name: CANYON_EGRESS_RECEIVER_TOKEN, valueFrom: {secretKeyRef: {name: canyon-egress, key: token}}} # Envoy's, above: the interception listener's access log sends it; without it nothing is intercepted
+          ports: [{name: metrics, containerPort: 7784}]
+          readinessProbe: {exec: {command: [/canyon-server, egress-control, probe]}, periodSeconds: 5, timeoutSeconds: 2}
+          # One policy is 64 MiB at most, held once parsed beside the one before it while the next is read.
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: policy, mountPath: /var/run/canyon-egress-policy, readOnly: true}
+            - {name: admin, mountPath: /var/run/envoy-admin, readOnly: true} # Envoy's admin socket: whoever reaches it reads the bootstrap, token and all, and POSTs admin calls, and only these two reach it
+      volumes:
+        - {name: config, configMap: {name: canyon-egress}}
+        - {name: run, emptyDir: {medium: Memory, sizeLimit: 16Mi}}
+        - {name: admin, emptyDir: {medium: Memory, sizeLimit: 1Mi}} # the two containers of this pod alone; no app shares a pod with them
+        # egress-control's token, audience canyon-egress-policy, bound to the pod and refused within ten minutes of
+        # its deletion, and the certificate the install step published (https://www.getcanyon.ai/docs/self-host/kubernetes/), which it pins.
+        - name: policy
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, audience: canyon-egress-policy, expirationSeconds: 600}
+              - configMap: {name: canyon-egress-policy-cert, items: [{key: tls.crt, path: tls.crt}]}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: canyon-egress, namespace: canyon}
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: canyon-egress, namespace: canyon}
+spec:
+  selector: {app.kubernetes.io/name: canyon-egress}
+  ports: [{name: proxy, port: 3128, targetPort: 3128}]
+---
+# The floor. In: 3128 from the apps' pods and from the executor's, whose gateway check
+# dials it, and egress-control's metrics on 7784 from your scraper's namespace alone: ingress[2], a placeholder
+# no namespace matches until the overlay's JSON patch names yours (the install guide), as server.yaml's egress[3..5]
+# are. Out: DNS, the server's receiver and the policy egress-control pulls, and TCP 80 and 443 at public addresses alone — the ranges
+# an app's own policy leaves out, Docker's floor's list (deploy/egress/floor.sh) — so no app reaches another, the control plane or instance metadata through it. That
+# assumes the cluster's pod and Service addresses are among those ranges. IPv4 alone: an IPv6 destination is
+# unreachable.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: canyon-egress, namespace: canyon}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: canyon-apps}}, podSelector: {matchExpressions: [{key: canyon.app, operator: Exists}]}}]
+      ports: [{protocol: TCP, port: 3128}]
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-executor}}}]
+      ports: [{protocol: TCP, port: 3128}]
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: REPLACE-scraper-namespace}}}] # ingress[2]: REPLACE with your scraper's namespace — the overlay's JSON patch (the install guide)
+      ports: [{protocol: TCP, port: 7784}]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-server}}}]
+      ports: [{protocol: TCP, port: 7781}, {protocol: TCP, port: 7782}]
+    - to: [{ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, 224.0.0.0/4, 240.0.0.0/4, 168.63.129.16/32]}}]
+      ports: [{protocol: TCP, port: 80}, {protocol: TCP, port: 443}]

@@ -1,0 +1,122 @@
+/* Starlight in Canyon's colours and type: its variables point at the dashboard's tokens (tokens.css,
+   generated from designsystem/canyon/dashboard.tokens.json), which switch with the light and dark theme. */
+:root {
+  --sl-font: var(--ds-font-sans);
+  --sl-font-mono: var(--ds-font-mono);
+  --sl-color-accent-low: var(--ds-color-accent-dim);
+  --sl-color-accent: var(--ds-color-accent);
+  --sl-color-accent-high: var(--ds-color-link);
+  --sl-color-white: var(--ds-color-text);
+  --sl-color-gray-1: var(--ds-color-text);
+  --sl-color-gray-2: var(--ds-color-text-dim);
+  --sl-color-gray-3: var(--ds-color-text-faint);
+  --sl-color-gray-4: var(--ds-color-border-strong);
+  --sl-color-gray-5: var(--ds-color-border);
+  --sl-color-gray-6: var(--ds-color-surface-2);
+  --sl-color-gray-7: var(--ds-color-surface);
+  --sl-color-black: var(--ds-color-bg);
+  --sl-color-bg: var(--ds-color-bg);
+  --sl-color-bg-nav: var(--ds-color-surface);
+  --sl-color-bg-sidebar: var(--ds-color-surface);
+  --sl-color-hairline: var(--ds-color-border);
+  --sl-color-hairline-light: var(--ds-color-border);
+  --sl-color-hairline-shade: var(--ds-color-border-strong);
+  --sl-color-text: var(--ds-color-text);
+  --sl-color-text-accent: var(--ds-color-link);
+  --sl-color-text-invert: var(--ds-color-accent-ink);
+  --sl-color-red-low: var(--ds-color-critical-dim);
+  --sl-color-red: var(--ds-color-critical);
+  --sl-color-orange-low: var(--ds-color-amber-dim);
+  --sl-color-orange: var(--ds-color-amber);
+  --sl-color-green-low: var(--ds-color-ok-dim);
+  --sl-color-green: var(--ds-color-ok);
+}
+
+.diagram {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+.diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  font-family: var(--ds-font-sans);
+}
+/* On a phone, a wide diagram shrunk to the column's width has unreadable text: it keeps at least 32rem
+   and scrolls sideways inside its figure, never the page. A narrower one still fits as it is. A shadow
+   shows on each edge with more to scroll to: the page-coloured covers scroll with the content and hide
+   it at the ends, so a diagram that fits shows none. */
+@media (max-width: 40rem) {
+  .diagram svg {
+    max-width: max(100%, 32rem);
+  }
+  .diagram {
+    --edge: color-mix(in srgb, var(--ds-color-text) 22%, transparent);
+    background:
+      linear-gradient(to right, var(--ds-color-bg) 40%, transparent) left / 2.5rem 100% no-repeat local,
+      linear-gradient(to left, var(--ds-color-bg) 40%, transparent) right / 2.5rem 100% no-repeat local,
+      linear-gradient(to right, var(--edge), transparent) left / 1rem 100% no-repeat scroll,
+      linear-gradient(to left, var(--edge), transparent) right / 1rem 100% no-repeat scroll;
+  }
+}
+.diagram figcaption {
+  margin-top: 0.5rem;
+  color: var(--ds-color-text-dim);
+  font-size: var(--sl-text-sm);
+  text-align: center;
+}
+
+/* An edge's label is plain text on its line: the renderer boxes it, so the box takes the page's
+   colour and loses its border. */
+.diagram .edge-label rect {
+  fill: var(--ds-color-bg);
+  stroke: none;
+}
+.diagram .edge-label text {
+  font-size: 12px;
+}
+
+/* The home page reads as one column: the hero, the output and the text share one left edge, and
+   prose keeps a comfortable line length. */
+[data-has-hero] .content-panel .sl-container {
+  max-width: 52rem;
+  margin-inline: auto;
+}
+[data-has-hero] .hero {
+  padding-block-end: 1rem;
+}
+[data-has-hero] .sl-markdown-content > p {
+  max-width: 65ch;
+}
+
+/* The home page's way in for each reader: one card each, two across where they fit, one on a phone. */
+.reader-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+.reader-card {
+  border: 1px solid var(--ds-color-border);
+  border-radius: 8px;
+  background: var(--ds-color-surface);
+  padding: 1rem 1.25rem;
+}
+.sl-markdown-content .reader-card > p {
+  margin: 0;
+}
+.sl-markdown-content .reader-card > p + p {
+  margin-top: 0.5rem;
+  color: var(--ds-color-text-dim);
+}
+.reader-card-title a {
+  font-weight: 600;
+  font-size: var(--sl-text-lg);
+}
+
+/* A dashboard screenshot (docs/README.md): framed, and a link to itself at full size. */
+.sl-markdown-content a[href*="/screens/"] img {
+  display: block;
+  border: 1px solid var(--ds-color-border);
+  border-radius: 8px;
+}

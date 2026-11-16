@@ -1,0 +1,70 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a682-9e31-7d80-ab11-196b5d933d41",
+  "CreatedAt": "2026-11-04T12:22:20.465885536Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "api/package-lock.json",
+      "Class": "lang-pkgs",
+      "Type": "npm",
+      "Packages": [
+        {
+          "ID": "express@4.21.2",
+          "Name": "express",
+          "Identifier": {
+            "PURL": "pkg:npm/express@4.21.2",
+            "UID": "4b3fd8a61a0cf62d"
+          },
+          "Version": "4.21.2",
+          "Relationship": "direct",
+          "Locations": [
+            {}
+          ],
+          "AnalyzedBy": "npm"
+        }
+      ]
+    },
+    {
+      "Target": "svc/yarn.lock",
+      "Class": "lang-pkgs",
+      "Type": "yarn",
+      "Packages": [
+        {
+          "ID": "svc/package.json",
+          "Name": "svc",
+          "Identifier": {
+            "PURL": "pkg:npm/svc",
+            "UID": "2bb7383c83792172"
+          },
+          "Relationship": "root",
+          "DependsOn": [
+            "lodash@[4.17.21"
+          ],
+          "AnalyzedBy": "yarn"
+        },
+        {
+          "ID": "lodash@[4.17.21",
+          "Name": "lodash",
+          "Identifier": {
+            "PURL": "pkg:npm/lodash@%5B4.17.21",
+            "UID": "f50c4c8bce42bfe4"
+          },
+          "Version": "[4.17.21",
+          "Relationship": "direct",
+          "Locations": [
+            {
+              "StartLine": 4,
+              "EndLine": 5
+            }
+          ],
+          "AnalyzedBy": "yarn"
+        }
+      ]
+    }
+  ]
+}

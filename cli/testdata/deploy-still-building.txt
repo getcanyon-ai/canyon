@@ -1,0 +1,2 @@
+
+  claims-portal is still building after 35 minutes, and it carries on without this command: canyon status says when it's live.

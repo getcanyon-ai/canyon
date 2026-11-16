@@ -1,0 +1,7 @@
+# Adds the stub as the AI reviewer's model: docker compose ... -f e2e/compose.model.yml (make e2e-up MODEL=1).
+# The model is read at boot, so turning it on or off is a server restart.
+services:
+  server:
+    environment:
+      - CANYON_MODEL_URL=http://stub:8080
+      - ANTHROPIC_API_KEY=e2e

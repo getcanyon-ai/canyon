@@ -1,0 +1,134 @@
+Canyon
+Copyright (c) 2026 PlatCo GmbH and the Canyon contributors.
+
+Canyon's source is licensed in parts, as LICENSE says:
+
+  every directory named ee/            the Elastic License 2.0, Elastic-2.0 (ee/LICENSE)
+  cli/ (with cli/skill/), contracts/,  Apache-2.0 (the LICENSE in each)
+  and the CLI's other packages:
+  cmd/canyon/, gate/finding/,
+  gate/policy/, ingest/,
+  internal/answered/, internal/names/,
+  internal/trivy/
+  deploy/gitops/                       0BSD (deploy/gitops/LICENSE)
+  everything else                      AGPL-3.0-only (LICENSE)
+
+The canyon CLI is built only from Apache-2.0 parts and third-party components. A binary or image
+built from more than one part is under each part's licence for that part: each image's
+org.opencontainers.image.licenses label gives the SPDX expression for what it holds. The
+third-party components below, and those THIRD_PARTY_NOTICES lists, are under their own licences.
+
+The deploy repo's reference set-up, under 0BSD
+----------------------------------------------
+
+deploy/gitops/ (the Argo CD, Flux and External Secrets manifests, the admission policy, the example Gateway,
+the namespaces chart and the templates a platform team applies or copies for a deploy repo), in the source and in
+canyon-deploy.tar.gz, is licensed under the Zero-Clause BSD licence (SPDX 0BSD), Copyright (c) 2026
+PlatCo GmbH; its text is in deploy/gitops/LICENSE. It is not under the AGPL-3.0: copy, change and share it freely.
+
+Third-party rules shipped inside Canyon
+---------------------------------------
+
+gate/opengrep/sast-rules.tar is GitLab's sast-rules (https://gitlab.com/gitlab-org/security-products/sast-rules),
+tag v2.10.1, commit 53bf5cf6df3c51b6c02110f5a638b5e6213666cd, unmodified, the rule files of these folders only:
+
+  python, java, javascript, csharp, scala               MIT, Copyright (c) GitLab Inc. (LICENSE in the archive)
+  go                                                    Apache License 2.0 (rules derived from gosec; each file's header;
+                                                        LICENSE.Apache-2.0 in the archive)
+  rules/lgpl/javascript, rules/lgpl/java,
+  rules/lgpl/kotlin                                     GNU LGPL v3.0 (rules derived from njsscan, FindSecBugs and
+                                                        mobsfscan; rules/lgpl/LICENSE and COPYING.GPL-3.0 in the archive)
+
+Left out: c (GPL-2.0), rules/lgpl-cc (Commons Clause), rules/gitlab (GitLab EE), and rules/lgpl's
+oc and swift. Each rule file keeps its upstream licence header. The archive is rebuilt from the pinned commit by
+`make vendor-sast-rules`; the source of every file is that commit of the repository above.
+
+Third-party software in Canyon's binaries
+-----------------------------------------
+
+THIRD_PARTY_NOTICES, beside this file in every CLI archive, the Helm chart, the deploy bundle and
+Canyon's own images (/usr/share/doc/canyon), lists the Go modules each binary links, the npm packages
+in the dashboard and the third-party files vendored into Canyon's source, with each one's licence
+text. Each is under its own licence, not Canyon's.
+
+Third-party tools inside Canyon's images
+----------------------------------------
+
+These images are mostly third-party software, each under its own licence, not Canyon's. Each image's
+org.opencontainers.image.licenses label gives the SPDX expression for what it holds, and each keeps
+its base image's own notices (/usr/share/doc) as the base ships them.
+
+  canyon-opengrep    Opengrep 1.30.0, its release binary, unmodified: GNU LGPL v2.1 only, with the
+                     OCaml linking exception its source files name (LGPL-2.1-only WITH
+                     OCaml-LGPL-linking-exception). Source: https://github.com/opengrep/opengrep/tree/v1.30.0
+                     (commit acf67b45c97c4b63626536605c77064ef536806d), and its complete source with
+                     every submodule, opengrep-1.30.0-source.tar.gz, on every Canyon release. The
+                     image holds both licence texts and this source pointer in
+                     /usr/share/licenses/opengrep/.
+  canyon-eslint      ESLint 9.39.5, eslint-plugin-security 4.2.0, @typescript-eslint/parser 8.71.0,
+                     TypeScript 5.9.3 and @microsoft/eslint-formatter-sarif 3.1.0, from the npm
+                     registry, with the packages they depend on: MIT, Apache-2.0, BSD-2-Clause,
+                     BSD-3-Clause, ISC, 0BSD, BlueOak-1.0.0, Python-2.0 and (MIT OR CC0-1.0). Each
+                     package's licence is in its directory under /opt/eslint/node_modules. Source:
+                     https://github.com/eslint/eslint, https://github.com/eslint-community/eslint-plugin-security,
+                     https://github.com/typescript-eslint/typescript-eslint,
+                     https://github.com/microsoft/TypeScript, https://github.com/microsoft/sarif-js-sdk.
+                     Canyon adds its config, /opt/eslint/eslint.config.js.
+  canyon-build,      Paketo's Ubuntu 24.04 (Noble) build and run images, Apache-2.0
+  canyon-run         (https://github.com/paketo-buildpacks/noble-base-stack), on Ubuntu, whose packages
+                     carry their licences in /usr/share/doc. Canyon adds Ubuntu's own packages only:
+                     libpq5 to canyon-build, and libatomic1, libsqlite3-0 and libpq5 to canyon-run.
+  canyon-executor    Canyon's executor, on the Docker CLI image (docker:28.4.0-cli, Apache-2.0), with
+                     pack 0.40.3, its release binary, unmodified: Apache-2.0
+                     (https://github.com/buildpacks/pack/tree/v0.40.3; the licence's text is in
+                     THIRD_PARTY_NOTICES, in the image's /usr/share/doc/canyon/).
+
+Scanners Canyon pulls and runs, unmodified
+------------------------------------------
+
+Canyon's executor pulls these scanners' images by digest from their publishers' registries and runs
+them unmodified. Canyon does not ship them: each is under its own licence, not Canyon's.
+
+  Trivy 0.74.0       Aqua Security, Apache-2.0. ghcr.io/aquasecurity/trivy (the same image as
+                     docker.io/aquasec/trivy:0.74.0). Source: https://github.com/aquasecurity/trivy
+  Grype 0.119.0      Anchore, Apache-2.0, with Syft 1.52.0 inside (Apache-2.0).
+                     ghcr.io/anchore/grype (the same image as docker.io/anchore/grype:v0.119.0).
+                     Source: https://github.com/anchore/grype
+  Checkov 3.3.19     Bridgecrew (Palo Alto Networks), Apache-2.0. docker.io/bridgecrew/checkov.
+                     Source: https://github.com/bridgecrewio/checkov
+
+The digests are in executor/scan.go.
+
+Their vulnerability databases
+-----------------------------
+
+Trivy and Grype each download their own vulnerability database, straight from their publishers, on
+the host that runs Canyon's executor: Trivy from mirror.gcr.io/aquasec/trivy-db and
+ghcr.io/aquasecurity/trivy-db (and its index of Java artifacts, trivy-java-db, from the same
+places), or from a mirror the operator names; Grype from https://grype.anchore.io/databases. Canyon
+does not ship or redistribute these databases or their contents. Each database's content stays
+under its sources' terms, which include:
+
+  - the National Vulnerability Database (NVD), from the U.S. National Institute of Standards and
+    Technology. NVD data reaches Canyon only through these databases, and Canyon is not endorsed or
+    certified by the NVD.
+  - the GitHub Advisory Database, under the Creative Commons Attribution 4.0 International licence
+    (CC-BY-4.0): https://github.com/github/advisory-database
+
+Trivy's other sources, as its documentation lists them
+(https://trivy.dev/latest/docs/scanner/vulnerability/#data-sources): the security advisories of
+Alpine Linux (secdb), Amazon Linux (ALAS), AlmaLinux, Arch Linux, Azure Linux (CBL-Mariner),
+Chainguard, Debian (Security Bug Tracker, OVAL), Echo, MinimOS, openSUSE and SUSE (CVRF), Oracle
+Linux (OVAL), Photon OS, Red Hat (OVAL, Security Data), Rocky Linux, Ubuntu (CVE Tracker) and Wolfi;
+Root.io's patch feed and Seal Security's vulnerability feed; the PHP Security Advisories Database,
+the Ruby Advisory Database, the Node.js Ecosystem Security Working Group, the Go Vulnerability
+Database, Open Source Vulnerabilities (OSV) for crates.io, the GitLab Advisory Database (Community)
+and the Kubernetes official CVE feed.
+
+Grype's other sources, as its documentation lists them
+(https://oss.anchore.com/docs/reference/grype/data-sources/): the AlmaLinux OSV Database, Alpine
+SecDB, Amazon Linux Security Center, Microsoft Azure Linux and CBL-Mariner OVAL, the Bitnami
+Vulnerability Database, Chainguard Security and Chainguard Libraries, the Debian Security Tracker,
+ECHO Security, MINIMOS Security, Oracle Linux Security, the Red Hat Security Data API, SUSE Security
+OVAL, the Ubuntu CVE Tracker and Wolfi Security; and, for scoring, FIRST's Exploit Prediction
+Scoring System (EPSS) and CISA's Known Exploited Vulnerabilities catalog (KEV).

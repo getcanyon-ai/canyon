@@ -1,0 +1,52 @@
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: claims-portal-preview-res-db
+  namespace: canyon-claims-portal-preview
+spec:
+  allowRepeat: true
+  digits: 8
+  length: 32
+  noUpper: false
+  symbols: 0
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: claims-portal-preview-res-db
+  namespace: canyon-claims-portal-preview
+spec:
+  dataFrom:
+  - sourceRef:
+      generatorRef:
+        apiVersion: generators.external-secrets.io/v1alpha1
+        kind: Password
+        name: claims-portal-preview-res-db
+  refreshPolicy: CreatedOnce
+  target:
+    creationPolicy: Owner
+    name: claims-portal-preview-res-db
+    template:
+      data:
+        DATABASE_URL: postgres://app:{{ .password }}@claims-portal-preview-db-rw.canyon-claims-portal-preview.svc:5432/app?sslmode=require
+        password: '{{ .password }}'
+        username: app
+      type: kubernetes.io/basic-auth
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  annotations:
+    canyon.dev/endpoint: postgres://claims-portal-preview-db-rw.canyon-claims-portal-preview.svc:5432/app
+  name: claims-portal-preview-db
+  namespace: canyon-claims-portal-preview
+spec:
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+      secret:
+        name: claims-portal-preview-res-db
+  instances: 1
+  storage:
+    size: 1Gi

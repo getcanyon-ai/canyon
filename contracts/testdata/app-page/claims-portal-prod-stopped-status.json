@@ -1,0 +1,103 @@
+{
+  "project": "claims-portal",
+  "envs": {
+    "preview": {
+      "url": "http://claims-portal.preview.localhost:7777",
+      "package": "pkg_7a1c",
+      "label": "v1.3",
+      "image_digest": "sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d",
+      "deployed_at": "2026-09-01T11:26:40Z",
+      "gate_run": "gr_6c12",
+      "deployed_by": {
+        "kind": "agent",
+        "subject": "agent:claude-code/dana",
+        "display": "Dana's agent"
+      },
+      "run_by": "canyon",
+      "state": "running"
+    },
+    "prod": {
+      "url": "http://claims-portal.prod.localhost:7777",
+      "package": "pkg_7a1c",
+      "label": "v1.3",
+      "image_digest": "sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d",
+      "deployed_at": "2026-09-02T10:15:00Z",
+      "gate_run": "gr_6c12",
+      "deployed_by": {
+        "kind": "agent",
+        "subject": "agent:claude-code/dana",
+        "display": "Dana's agent"
+      },
+      "promoted_by": {
+        "kind": "person",
+        "subject": "dana@meridian.example",
+        "display": "Dana Whitfield"
+      },
+      "run_by": "canyon",
+      "state": "stopped",
+      "missing": ["ORDERS_TOKEN"],
+      "stopped": {
+        "exit_code": 1,
+        "said": "Error: password authentication failed for user \"claims_portal\" (<DATABASE_URL password>)"
+      }
+    }
+  },
+  "last_run": "gr_8f2a",
+  "promote_run": "gr_6c12",
+  "receipt": {
+    "org": "Meridian",
+    "blocked_by": [],
+    "rules": [
+      {
+        "id": "prod.clean-gate",
+        "name": "Production needs a passing review",
+        "blocks": true,
+        "passed": true,
+        "why": "v1.3 passed review: no blocking finding"
+      },
+      {
+        "id": "prod.human-approval",
+        "name": "A person promotes",
+        "blocks": true,
+        "passed": true,
+        "why": "a person promotes, or an agent they ask, with their CLI sign-in"
+      },
+      {
+        "id": "stack.blessed",
+        "name": "Approved stacks only",
+        "blocks": false,
+        "passed": false,
+        "why": "no approved stacks set",
+        "unset": true
+      },
+      {
+        "id": "owner.required",
+        "name": "Every app has an owner",
+        "blocks": false,
+        "passed": true,
+        "why": "owned by Dana Whitfield"
+      }
+    ]
+  },
+  "earlier": [],
+  "needs": [
+    {
+      "kind": "down",
+      "env": "prod",
+      "rank": 2,
+      "since": "2026-09-02T10:15:00Z",
+      "you": true,
+      "ask": [],
+      "state": "stopped"
+    },
+    {
+      "kind": "secret",
+      "env": null,
+      "rank": 4,
+      "since": null,
+      "you": true,
+      "ask": [],
+      "version": "v1.4"
+    }
+  ]
+}

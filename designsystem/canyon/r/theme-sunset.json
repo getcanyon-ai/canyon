@@ -1,0 +1,51 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "theme-sunset",
+  "type": "registry:theme",
+  "title": "Sunset",
+  "description": "Sunset: Open-Props-inspired warm amber palette. Single look, applied in both OS modes.",
+  "cssVars": {
+    "light": {
+      "background": "#FFFFFF",
+      "foreground": "#2A1F15",
+      "muted": "#FDF8F3",
+      "muted-foreground": "#9E7B5A",
+      "card": "#FFFFFF",
+      "card-foreground": "#2A1F15",
+      "popover": "#FFFFFF",
+      "popover-foreground": "#2A1F15",
+      "primary": "#FD7E14",
+      "primary-foreground": "#FFFFFF",
+      "secondary": "#FDF8F3",
+      "secondary-foreground": "#2A1F15",
+      "accent": "#FFF3BF",
+      "accent-foreground": "#E67700",
+      "destructive": "#FA5252",
+      "destructive-foreground": "#FFFFFF",
+      "border": "#F5EBE0",
+      "input": "#E6D5C3",
+      "ring": "#FF922B"
+    },
+    "dark": {
+      "background": "#FFFFFF",
+      "foreground": "#2A1F15",
+      "muted": "#FDF8F3",
+      "muted-foreground": "#9E7B5A",
+      "card": "#FFFFFF",
+      "card-foreground": "#2A1F15",
+      "popover": "#FFFFFF",
+      "popover-foreground": "#2A1F15",
+      "primary": "#FD7E14",
+      "primary-foreground": "#FFFFFF",
+      "secondary": "#FDF8F3",
+      "secondary-foreground": "#2A1F15",
+      "accent": "#FFF3BF",
+      "accent-foreground": "#E67700",
+      "destructive": "#FA5252",
+      "destructive-foreground": "#FFFFFF",
+      "border": "#F5EBE0",
+      "input": "#E6D5C3",
+      "ring": "#FF922B"
+    }
+  }
+}

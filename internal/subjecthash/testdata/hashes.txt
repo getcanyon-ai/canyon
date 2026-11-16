@@ -1,0 +1,8 @@
+utf8-spaces-case b20cba2d
+printable aea6fb85
+utf8-non-ascii 2e9306d4
+multivalue 627e29ad
+email c1e385ae
+t61-latin1 d7587034
+bmp 6c73da0a
+tabs 1d78de52

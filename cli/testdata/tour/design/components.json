@@ -1,0 +1,6 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "registries": {
+    "@canyon": "https://canyon.example/registry/canyon/{name}.json"
+  }
+}

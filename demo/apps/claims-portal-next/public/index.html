@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims portal</title>
+<style>
+  body { font: 1rem/1.5 system-ui, sans-serif; max-width: 32rem; margin: 3rem auto; padding: 0 1rem; }
+  input, button { font: inherit; padding: 0.25rem 0.5rem; }
+</style>
+<h1>Claims portal</h1>
+<p>Find a motor claim by its policy number: MRD-1001, MRD-1002 or MRD-1003.</p>
+<form>
+  <input name="policy" value="MRD-1001" aria-label="Policy number" required>
+  <button>Search</button>
+</form>
+<ul></ul>
+<p id="none" hidden>No claims on that policy.</p>
+<script>
+  const form = document.querySelector("form");
+  const list = document.querySelector("ul");
+  const none = document.querySelector("#none");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const answer = await fetch("/claims?" + new URLSearchParams({ policy: form.policy.value }));
+    const claims = await answer.json();
+    list.replaceChildren(...claims.map((c) => {
+      const item = document.createElement("li");
+      item.textContent = `${c.policy_number}: ${c.claim} (${c.status})`;
+      return item;
+    }));
+    none.hidden = claims.length > 0;
+  });
+</script>

@@ -1,0 +1,8 @@
+# The docs site's dependencies, its build, the copy of it Vercel serves (the build command in scripts/publish-docs.sh's
+# vercel.json), and the contracts' pages that scripts/contracts.mjs writes (README.md)
+/node_modules/
+/dist/
+/dist-vercel/
+/.astro/
+/src/content/docs/reference/contracts/
+/public/contracts/

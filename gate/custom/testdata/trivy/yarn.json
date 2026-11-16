@@ -1,0 +1,71 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a627-c970-723b-9f4d-15a8e8422f23",
+  "CreatedAt": "2026-11-04T10:43:07.760147338Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "yarn.lock",
+      "Class": "lang-pkgs",
+      "Type": "yarn",
+      "Packages": [
+        {
+          "ID": "shop@1.0.0",
+          "Name": "shop",
+          "Identifier": {
+            "PURL": "pkg:npm/shop@1.0.0",
+            "UID": "5dcd416481c7d8bc"
+          },
+          "Version": "1.0.0",
+          "Relationship": "root",
+          "DependsOn": [
+            "express@4.21.2"
+          ],
+          "AnalyzedBy": "yarn"
+        },
+        {
+          "ID": "express@4.21.2",
+          "Name": "express",
+          "Identifier": {
+            "PURL": "pkg:npm/express@4.21.2",
+            "UID": "7349f9e66cb1ef63"
+          },
+          "Version": "4.21.2",
+          "Relationship": "direct",
+          "DependsOn": [
+            "debug@2.6.9"
+          ],
+          "Locations": [
+            {
+              "StartLine": 8,
+              "EndLine": 11
+            }
+          ],
+          "AnalyzedBy": "yarn"
+        },
+        {
+          "ID": "debug@2.6.9",
+          "Name": "debug",
+          "Identifier": {
+            "PURL": "pkg:npm/debug@2.6.9",
+            "UID": "c57a8dba29be9198"
+          },
+          "Version": "2.6.9",
+          "Indirect": true,
+          "Relationship": "indirect",
+          "Locations": [
+            {
+              "StartLine": 5,
+              "EndLine": 6
+            }
+          ],
+          "AnalyzedBy": "yarn"
+        }
+      ]
+    }
+  ]
+}

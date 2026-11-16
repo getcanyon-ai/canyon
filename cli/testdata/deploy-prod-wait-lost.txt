@@ -1,0 +1,4 @@
+
+  Canyon didn't answer for 2 minutes (can't reach a Canyon host at http://localhost:7777).
+  The approval was still open when Canyon last answered. A person may have approved it since: canyon status says what production runs.
+  Don't promote again or take production offline because of this.

@@ -1,0 +1,51 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a627-cb91-7829-8754-3e1d72dc2d63",
+  "CreatedAt": "2026-11-04T10:43:08.305535434Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "gradle.lockfile",
+      "Class": "lang-pkgs",
+      "Type": "gradle",
+      "Packages": [
+        {
+          "ID": "com.fasterxml.jackson.core:jackson-annotations:2.18.2",
+          "Name": "com.fasterxml.jackson.core:jackson-annotations",
+          "Identifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.18.2",
+            "UID": "da55e6aeb4e5c438"
+          },
+          "Version": "2.18.2",
+          "Locations": [
+            {
+              "StartLine": 4,
+              "EndLine": 4
+            }
+          ],
+          "AnalyzedBy": "gradle-lockfile"
+        },
+        {
+          "ID": "com.fasterxml.jackson.core:jackson-databind:2.18.2",
+          "Name": "com.fasterxml.jackson.core:jackson-databind",
+          "Identifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.2",
+            "UID": "bb6b53d728109df6"
+          },
+          "Version": "2.18.2",
+          "Locations": [
+            {
+              "StartLine": 5,
+              "EndLine": 5
+            }
+          ],
+          "AnalyzedBy": "gradle-lockfile"
+        }
+      ]
+    }
+  ]
+}

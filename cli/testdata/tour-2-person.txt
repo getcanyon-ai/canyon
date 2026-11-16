@@ -1,0 +1,15 @@
+
+  Canyon tour · chapter 2 of 3 · Security: your agent writes a flaw
+
+  The same review, a different kind of rule. You ask for search by policy number. The tour plants
+  the quick version an agent often writes: it builds its SQL from the request. Canyon blocks the
+  deploy and names the file, the line and the fix.
+
+  To walk through it by hand, in ./canyon-tour:
+
+    canyon demo tour plant     writes the planted search
+    canyon deploy              blocked: read what Canyon found
+    (fix the one line in server.js that the finding names)
+    canyon check               passes
+    canyon deploy              live in preview
+    canyon demo tour next      on to chapter 3

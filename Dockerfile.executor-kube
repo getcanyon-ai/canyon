@@ -1,0 +1,20 @@
+# canyon-executor-kube, the executor on Kubernetes (contracts/executor.md, On Kubernetes): one static
+# binary on gcr.io/distroless/static-debian12:nonroot (its multi-arch index, pinned by digest) — no
+# Docker socket, no shell. The system roots it carries are what POST /probe verifies a certificate
+# against.
+FROM golang:1.26.11 AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+# Go's default; CI passes a list that asks the proxy again on any error (#2533)
+ARG GOPROXY=https://proxy.golang.org,direct
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/canyon-executor-kube ./cmd/canyon-executor-kube
+
+FROM gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2
+COPY --from=build /out/canyon-executor-kube /canyon-executor-kube
+# Canyon's licence, NOTICE, and the licence texts of the third-party code in the binary (THIRD_PARTY_NOTICES).
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES /usr/share/doc/canyon/
+USER 65532:65532
+EXPOSE 7778
+ENTRYPOINT ["/canyon-executor-kube"]

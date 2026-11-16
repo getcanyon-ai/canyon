@@ -1,0 +1,7 @@
+# Canyon's own checks of the shipped docker-compose.yml (make demo-check, .github/old-cli.sh, scripts/tour-check.sh,
+# scripts/deploy-bundle-check.sh, scripts/release-smoke.sh) run it with this file over it: their server sends no usage
+# report. The runner's CI never reaches the server, and docker-compose.yml is the demo people run, which reports (#2870).
+services:
+  server:
+    environment:
+      - DO_NOT_TRACK=1

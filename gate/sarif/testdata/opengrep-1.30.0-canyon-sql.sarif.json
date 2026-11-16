@@ -1,0 +1,78 @@
+{
+ "version": "2.1.0",
+ "runs": [
+  {
+   "invocations": [
+    {
+     "executionSuccessful": true,
+     "toolExecutionNotifications": []
+    }
+   ],
+   "results": [
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "a08a18a3f0bfdb2b2c4944b9392d671840e35147e914a3ade726be1fc382937b24e8e08e4d58fbf5f0f82da3405fa7881584509b7ca3ef37e8ffe6477b91d852_0"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "src/app/api/claims/route.ts",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 83,
+         "endLine": 6,
+         "snippet": {
+          "text": "  const rows = await db.query(`SELECT * FROM claims WHERE claimant ILIKE '%${q}%'`);"
+         },
+         "startColumn": 31,
+         "startLine": 6
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "A value from the request reaches the text of a SQL statement, so whoever sends the request can\nrewrite the statement: read other rows, change them or drop the table.\n\nPass the value as a bound parameter, beside the statement text and never inside it, or build the\nstatement with a tag that binds its substitutions (`sql`, `Prisma.sql`, `prisma.$queryRaw`) \u2014\nnever by concatenation or an untagged template literal.\n"
+     },
+     "properties": {},
+     "ruleId": "canyon_sql_rule-request-in-sql-text"
+    }
+   ],
+   "tool": {
+    "driver": {
+     "name": "Opengrep OSS",
+     "rules": [
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "A value from the request reaches the text of a SQL statement, so whoever sends the request can\nrewrite the statement: read other rows, change them or drop the table.\n\nPass the value as a bound parameter, beside the statement text and never inside it, or build the\nstatement with a tag that binds its substitutions (`sql`, `Prisma.sql`, `prisma.$queryRaw`) \u2014\nnever by concatenation or an untagged template literal.\n"
+       },
+       "help": {
+        "markdown": "A value from the request reaches the text of a SQL statement, so whoever sends the request can\nrewrite the statement: read other rows, change them or drop the table.\n\nPass the value as a bound parameter, beside the statement text and never inside it, or build the\nstatement with a tag that binds its substitutions (`sql`, `Prisma.sql`, `prisma.$queryRaw`) \u2014\nnever by concatenation or an untagged template literal.\n",
+        "text": "A value from the request reaches the text of a SQL statement, so whoever sends the request can\nrewrite the statement: read other rows, change them or drop the table.\n\nPass the value as a bound parameter, beside the statement text and never inside it, or build the\nstatement with a tag that binds its substitutions (`sql`, `Prisma.sql`, `prisma.$queryRaw`) \u2014\nnever by concatenation or an untagged template literal.\n"
+       },
+       "id": "canyon_sql_rule-request-in-sql-text",
+       "name": "canyon_sql_rule-request-in-sql-text",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-89",
+         "security"
+        ],
+        "security-severity": "Critical"
+       },
+       "shortDescription": {
+        "text": "Improper neutralization of special elements used in an SQL command ('SQL Injection')"
+       }
+      }
+     ],
+     "semanticVersion": "1.30.0"
+    }
+   }
+  }
+ ],
+ "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json"
+}

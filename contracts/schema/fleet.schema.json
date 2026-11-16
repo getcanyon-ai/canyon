@@ -1,0 +1,308 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/fleet.schema.json",
+  "title": "Canyon fleet read (seam 3)",
+  "description": "The response of GET /api/v1/fleet: tiles (org-wide for an admin, the caller's team apps for everyone else), one page of app rows, the cursor for the next page, and the derived honesty banner. contracts/routes.md is canonical — row 75 for the route, the stage vocabulary for what a package's stage means; this schema pins the shape. The golden under contracts/testdata/fleet/ is one complete page (next: null), which is what lets contracts/validate.py count the tiles from its rows.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tiles", "stats", "apps", "total", "page", "next", "banner", "viewer", "unchecked", "org_needs"],
+  "allOf": [{ "description": "The org's needs are an admin's alone (routes.md, the fleet read's org_needs).", "if": { "properties": { "viewer": { "properties": { "role": { "const": "admin" } } } } }, "then": {}, "else": { "properties": { "org_needs": { "maxItems": 0 } } } }],
+  "properties": {
+    "tiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secrets_exposed", "blocked", "approved", "never_reviewed", "unowned", "failed", "refused", "needs_you"],
+      "properties": {
+        "secrets_exposed": { "$ref": "#/definitions/count" },
+        "blocked": { "$ref": "#/definitions/count" },
+        "approved": { "$ref": "#/definitions/count" },
+        "never_reviewed": { "$ref": "#/definitions/count" },
+        "unowned": { "$ref": "#/definitions/count" },
+        "failed": { "$ref": "#/definitions/count" },
+        "refused": { "description": "Apps with an egress request of either env pending: a person allows or dismisses it (routes.md, the fleet read).", "$ref": "#/definitions/count" },
+        "needs_you": { "description": "How many needs the rows of this read carry, every page's, whatever the filters, and org_needs: the count the rail and the browser tab show, its list the rows needs_you=true selects (routes.md, the fleet read; #2724).", "$ref": "#/definitions/count" }
+      }
+    },
+    "stats": {
+      "description": "The same apps the tiles count, never narrowed by a filter, scope or sort (routes.md, the fleet read): how many, their distinct owners, those deployed to production and to preview, those whose gate_state is clean, and their deploys in the seven days before the read, production's among them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apps", "owners", "production", "preview", "passed", "deploys_7d", "production_7d"],
+      "properties": {
+        "apps": { "$ref": "#/definitions/count" }, "owners": { "$ref": "#/definitions/count" },
+        "production": { "$ref": "#/definitions/count" }, "preview": { "$ref": "#/definitions/count" },
+        "passed": { "$ref": "#/definitions/count" },
+        "deploys_7d": { "$ref": "#/definitions/count" }, "production_7d": { "$ref": "#/definitions/count" }
+      }
+    },
+    "apps": { "description": "A responder's rows are read as responderApp, everyone else's as app (routes.md, *The hold*).", "type": "array" },
+    "total": { "description": "How many rows the filters and scope select, across every page (routes.md, the fleet read).", "$ref": "#/definitions/count" },
+    "page": { "description": "The page served by its number, 1-based, a page past the last clamped to it; null on a read by cursor (routes.md, the fleet read).", "type": ["integer", "null"], "minimum": 1 },
+    "next": { "type": ["string", "null"], "minLength": 1 },
+    "banner": { "enum": ["none", "loopback", "exposed"] },
+    "org_needs": { "description": "The org's own needs, which no app's row carries: to an admin each chat channel failing (notify_failing) and a licence in grace, lapsed or invalid (licence; #2879) and patching the server is set to do that no licence unlocks (patching_unlicensed), [] to everyone else; counted in tiles.needs_you (routes.md, the fleet read; #2725).", "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/need" }, { "properties": { "kind": { "enum": ["notify_failing", "licence", "patching_unlicensed"] } } }] } },
+    "unchecked": { "description": "How many environments Canyon runs, of the apps the reader reads whole, this read could not tell are running: never all clear while above 0 (routes.md, the fleet read; #2724).", "$ref": "#/definitions/count" },
+    "viewer": {
+      "description": "Who is reading, for the header that replaces the banner (routes.md row 75). On a demo host it is the anonymous actor. github_logins are the logins of the GitHub accounts the reader linked, as each was when linked, sorted; github_link is whether this host can link one, never with sign-in off (#2228).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display", "role", "github_logins", "github_link"],
+      "properties": {
+        "display": { "type": "string" },
+        "role": { "enum": ["member", "responder", "admin"] },
+        "github_logins": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 39 } },
+        "github_link": { "type": "boolean" }
+      }
+    }
+  },
+  "if": { "properties": { "viewer": { "properties": { "role": { "const": "responder" } } } } },
+  "then": { "properties": { "apps": { "items": { "$ref": "#/definitions/responderApp" } } } },
+  "else": { "properties": { "apps": { "items": { "$ref": "#/definitions/app" } } } },
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "need": {
+      "description": "One thing that waits on a person (routes.md, *What needs a person*): what, where, since when, whether the reader can resolve it, who else acts, and what its kind adds. The server orders the list; a kind a client does not know reads as something that needs a person.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "env", "rank", "since", "you", "ask"],
+      "properties": {
+        "kind": { "enum": ["held", "down", "refused", "refused_code", "secret", "approval", "blocked", "unchecked", "blocked_prod", "will_refuse", "patch", "access", "unowned", "never_reviewed", "recreate", "notify_failing", "licence", "patching_unlicensed"] },
+        "env": { "enum": ["preview", "prod", null] },
+        "rank": { "description": "The kind's rank in routes.md's table: what a screen orders needs by across apps, then since.", "type": "integer", "minimum": 1, "maximum": 11 },
+        "since": { "oneOf": [{ "$ref": "#/definitions/ts" }, { "type": "null" }] },
+        "you": { "type": "boolean" },
+        "ask": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["display", "as"], "properties": { "display": { "type": "string", "minLength": 1 }, "as": { "enum": ["admin"] } } } },
+        "state": { "enum": ["stopped", "restarting"] },
+        "destination": { "type": "string", "minLength": 1, "maxLength": 253 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "refusals": { "type": "integer", "minimum": 1 },
+        "last_refused_at": { "$ref": "#/definitions/ts" },
+        "other_calls": { "$ref": "#/definitions/count" },
+        "held": { "type": "boolean" },
+        "why": { "enum": ["address", "port"] },
+        "calls": { "type": "integer", "minimum": 1 },
+        "last_seen_at": { "$ref": "#/definitions/ts" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "count": { "type": ["integer", "null"], "minimum": 0 },
+        "checks": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["tool", "reason", "fix"], "properties": { "tool": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 }, "fix": { "enum": ["host", "review"] } } } },
+        "asked_by": { "$ref": "#/definitions/actor" },
+        "code": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$" },
+        "expires_at": { "$ref": "#/definitions/ts" },
+        "blocks": { "type": "boolean" },
+        "denied": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["destination", "port", "allowable"], "properties": { "destination": { "type": "string", "minLength": 1, "maxLength": 253 }, "port": { "type": "integer", "minimum": 1, "maximum": 65535 }, "allowable": { "type": "boolean" } } } },
+        "email": { "type": "string", "minLength": 3, "maxLength": 254 },
+        "level": { "description": "Added 2026-11-09 (#2774): an access request's asker's level on the app when they asked, through their grants, their groups' and the org's: none, or viewer, a read-only member asking to join its team. null on a request from before it was recorded, never none.", "enum": ["none", "viewer", null] },
+        "network": { "enum": ["internal", "open", "unknown"] },
+        "via": { "enum": ["canyon", "off"] },
+        "channel": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "channel_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
+        "licence": { "description": "Added 2026-11-14 (#2879): the licence's state, as GET /api/v1/licence answers it.", "enum": ["grace", "lapsed", "invalid"] },
+        "grace_until": { "description": "Added 2026-11-14 (#2879): when a licence in grace lapses, its expires plus 30 days.", "$ref": "#/definitions/ts" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "held" } } }, "then": { "required": [], "properties": { "env": {"const": "prod"} } } },
+        { "if": { "properties": { "kind": { "const": "down" } } }, "then": { "required": ["state"], "properties": { "env": {"enum": ["preview", "prod"]} } } },
+        { "if": { "properties": { "kind": { "const": "refused" } } }, "then": { "required": ["destination", "refusals", "last_refused_at", "other_calls", "held"], "properties": { "env": {"enum": ["preview", "prod"]} } } },
+        { "if": { "properties": { "kind": { "const": "refused_code" } } }, "then": { "required": ["destination", "port", "why", "calls", "last_seen_at"], "properties": { "env": {"enum": ["preview", "prod"]} } } },
+        { "if": { "properties": { "kind": { "const": "secret" } } }, "then": { "required": ["version"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "approval" } } }, "then": { "required": ["version", "asked_by", "code", "expires_at"], "properties": { "env": {"const": "prod"} } } },
+        { "if": { "properties": { "kind": { "const": "blocked" } } }, "then": { "required": ["version", "count"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "unchecked" } } }, "then": { "required": ["version", "count", "checks"], "properties": { "env": {"enum": [null, "prod"]} } } },
+        { "if": { "properties": { "kind": { "const": "blocked_prod" } } }, "then": { "required": ["version", "count"], "properties": { "env": {"const": "prod"} } } },
+        { "if": { "properties": { "kind": { "const": "will_refuse" } } }, "then": { "required": ["version", "blocks", "denied"], "properties": { "env": {"const": "prod"} } } },
+        { "if": { "properties": { "kind": { "const": "patch" } } }, "then": { "required": ["version", "code", "expires_at"], "properties": { "env": {"const": "prod"} } } },
+        { "if": { "properties": { "kind": { "const": "access" } } }, "then": { "required": ["asked_by", "email", "level"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "unowned" } } }, "then": { "required": [], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "never_reviewed" } } }, "then": { "required": [], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "recreate" } } }, "then": { "required": ["network", "via"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "notify_failing" } } }, "then": { "required": ["channel", "channel_id"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "licence" } } }, "then": { "required": ["licence"], "properties": { "env": {"const": null} } } },
+        { "if": { "properties": { "kind": { "const": "patching_unlicensed" } } }, "then": { "required": [], "properties": { "env": {"const": null} } } },
+        { "if": { "required": ["licence"], "properties": { "licence": { "const": "grace" } } }, "then": { "required": ["grace_until"] }, "else": { "not": { "required": ["grace_until"] } } },
+        { "description": "Only the kinds a person hands on name the admins (routes.md, *What needs a person*).", "if": { "properties": { "kind": { "enum": ["held", "blocked", "unchecked", "blocked_prod", "unowned"] } } }, "then": {}, "else": { "properties": { "ask": { "maxItems": 0 } } } },
+        { "description": "A count is null only where a placed rule's row fails with no count to read.", "if": { "properties": { "kind": { "enum": ["blocked", "unchecked"] } } }, "then": { "properties": { "count": { "type": "integer", "minimum": 1 } } } }
+      ]
+    },
+    "needs": { "description": "An app's needs, in the server's order (routes.md, *What needs a person*): never the org's own, which org_needs carries.", "type": "array", "items": { "allOf": [{ "$ref": "#/definitions/need" }, { "not": { "required": ["kind"], "properties": { "kind": { "enum": ["notify_failing", "licence", "patching_unlicensed"] } } } }] } },
+    "heldNeeds": { "description": "A responder's reduced row, and the status read trimmed for one: the held need alone (routes.md, *What needs a person*).", "type": "array", "maxItems": 1, "items": { "allOf": [{ "$ref": "#/definitions/need" }, { "properties": { "kind": { "const": "held" } } }] } },
+    "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "runId": { "type": "string", "pattern": "^gr_[a-z0-9]{4,}$" },
+    "packageId": { "type": "string", "pattern": "^pkg_[a-z0-9]{4,}$" },
+    "label": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+    "stage": { "enum": ["created", "awaiting_review", "reviewing", "blocked", "approved", "passed", "building", "preview", "production", "failed"] },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "subject", "display"],
+      "properties": {
+        "kind": { "enum": ["person", "agent", "canyon"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "display": { "type": "string" }
+      }
+    },
+    "actorOrNull": { "type": ["object", "null"], "allOf": [{ "if": { "type": "object" }, "then": { "$ref": "#/definitions/actor" } }] },
+    "runningEnv": { "description": "An env on the status read and the fleet row (routes.md, envs.<env>.state): one Canyon runs says whether it runs.", "allOf": [{ "$ref": "#/definitions/env" }, { "if": { "properties": { "run_by": { "const": "canyon" } } }, "then": { "required": ["state"] } }] },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "package", "image_digest", "deployed_at", "gate_run", "deployed_by", "run_by"],
+      "allOf": [
+        { "if": { "required": ["pending"] }, "then": { "required": ["run_by"], "properties": { "run_by": { "const": "org" } } } },
+        { "if": { "properties": { "run_by": { "const": "org" } } }, "then": { "not": { "required": ["state"] } } },
+        { "if": { "properties": { "run_by": { "const": "canyon" } } }, "then": { "not": { "required": ["seen_at"] } } }
+      ],
+      "properties": {
+        "url": { "type": "string", "pattern": "^https?://" },
+        "package": { "$ref": "#/definitions/packageId" },
+        "label": { "$ref": "#/definitions/label" },
+        "image_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{12,}$" },
+        "deployed_at": { "$ref": "#/definitions/ts" },
+        "gate_run": { "$ref": "#/definitions/runId" },
+        "deployed_by": { "$ref": "#/definitions/actorOrNull" },
+        "promoted_by": { "$ref": "#/definitions/actorOrNull" },
+        "patch": { "description": "routes.md, envs.<env>.patch: the environment's patch state, on every read that carries the environment, the fleet's rows among them, at contributor and above and on no reduced row; absent until the operator turns patching on (#2883).", "$ref": "patch.schema.json#/definitions/env_patch" },
+        "run_by": { "description": "Who runs it (the hand-off design §1), recorded when the row is written; a row written before the column answers canyon.", "enum": ["canyon", "org"] },
+        "pending": { "$ref": "release.schema.json#/properties/env_pending/properties/pending" },
+        "state": { "description": "Whether its container runs now, as the executor answers on this read (routes.md, envs.<env>.state): on the status read and the fleet row, never on an environment the org runs.", "enum": ["running", "restarting", "stopped", "unknown"] },
+        "seen_at": { "description": "When a pod of the release that put it live last pulled its access list (routes.md, envs.<env>.seen_at; #2452): on an environment the org runs, absent until one has; never on one Canyon runs.", "$ref": "#/definitions/ts" }
+      }
+    },
+    "latest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "stage", "since"],
+      "properties": {
+        "package": { "type": ["string", "null"], "pattern": "^pkg_[a-z0-9]{4,}$" },
+        "label": { "$ref": "#/definitions/label" },
+        "stage": { "$ref": "#/definitions/stage" },
+        "since": { "$ref": "#/definitions/ts" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["stage"], "properties": { "stage": { "const": "created" } } },
+          "then": { "properties": { "package": { "type": "null" } }, "not": { "required": ["label"] } },
+          "else": { "properties": { "package": { "type": "string" } } }
+        }
+      ]
+    },
+    "owner": {
+      "description": "An email grant at owner (routes.md, App teams): subject is empty for someone who has never signed in, display is the address when the grant holds no name.",
+      "type": "object", "additionalProperties": false, "required": ["kind", "subject", "display"],
+      "properties": { "kind": { "const": "person" }, "subject": { "type": "string" }, "display": { "type": "string", "minLength": 1 } }
+    },
+    "access": {
+      "type": "object", "additionalProperties": false, "required": ["level", "everyone", "people", "groups"],
+      "properties": {
+        "level": { "enum": ["owner", "contributor", "viewer", "none"] },
+        "everyone": { "type": "boolean" }, "people": { "$ref": "#/definitions/count" }, "groups": { "$ref": "#/definitions/count" },
+        "requests": { "$ref": "#/definitions/count" }
+      }
+    },
+    "summary": { "type": "string", "maxLength": 200 },
+    "hold": {
+      "description": "Production held by a responder or an admin (routes.md, *The hold*): who, when, why, and the version it ran then, null when it ran nothing. Read by contributors and above, responders and admins; never on a member's reduced row.",
+      "type": "object", "additionalProperties": false, "required": ["by", "at", "reason", "version"],
+      "properties": {
+        "by": { "$ref": "#/definitions/actor" }, "at": { "$ref": "#/definitions/ts" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "version": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "responderApp": {
+      "description": "A row as a responder reads it: whole from contributor, as anyone's; below it the reduced row with production's address and state and its hold, and nothing of preview but a viewer's (routes.md, *The hold*; the permissions design, Security responders).",
+      "if": { "required": ["gate_state"] }, "then": { "$ref": "#/definitions/teamApp" }, "else": { "$ref": "#/definitions/responderReduced" }
+    },
+    "responderReduced": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name", "owners", "owner_groups", "summary", "access", "claimable"],
+      "if": { "properties": { "access": { "properties": { "level": { "const": "viewer" } } } } },
+      "then": { "required": ["envs"] },
+      "else": { "properties": { "envs": { "properties": { "preview": false } } } },
+      "properties": {
+        "envs": {
+          "type": "object", "additionalProperties": false,
+          "properties": { "preview": { "$ref": "#/definitions/viewerEnv" }, "prod": { "$ref": "#/definitions/viewerEnv" } }
+        },
+        "hold": { "$ref": "#/definitions/hold" },
+        "needs": { "$ref": "#/definitions/heldNeeds" },
+        "id": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "maxLength": 55 },
+        "name": { "type": "string", "minLength": 1 },
+        "owners": { "type": "array", "items": { "$ref": "#/definitions/owner" } },
+        "owner_groups": { "$ref": "#/definitions/ownerGroups" },
+        "summary": { "$ref": "#/definitions/summary" },
+        "claimable": { "$ref": "#/definitions/claimable" },
+        "access": { "type": "object", "additionalProperties": false, "required": ["level"], "properties": { "level": { "enum": ["viewer", "none"] } } }
+      }
+    },
+    "app": {
+      "description": "A row the caller is contributor or above on (every row, for an admin) carries gate_state and the rest; below contributor the row is the reduced one and nothing else (routes.md, App teams).",
+      "if": { "required": ["gate_state"] }, "then": { "$ref": "#/definitions/teamApp" }, "else": { "$ref": "#/definitions/reducedApp" }
+    },
+    "viewerEnv": {
+      "description": "An environment as a viewer reads it on the reduced row (routes.md, the project read): its address and, on one Canyon runs, whether it runs, or, on one the org runs, when a pod last checked in (#2452) — nothing of what it runs or who put it there.",
+      "type": "object", "additionalProperties": false, "required": ["url"],
+      "not": { "required": ["state", "seen_at"] },
+      "properties": {
+        "url": { "type": "string", "pattern": "^https?://" },
+        "state": { "enum": ["running", "restarting", "stopped", "unknown"] },
+        "seen_at": { "$ref": "#/definitions/ts" }
+      }
+    },
+    "ownerGroups": {
+      "description": "The groups holding a grant at owner, by name, sorted (routes.md, the project read): whom to ask where no person owns the app.",
+      "type": "array", "items": { "type": "string", "minLength": 1 }
+    },
+    "claimable": {
+      "description": "Whether this caller's claim (PUT /api/v1/projects/:id/owner) would be accepted now: an admin's and an owner's always, anyone's on an app open to claim (routes.md, the project read). The dashboard offers Claim only where it is true.",
+      "type": "boolean"
+    },
+    "reducedApp": {
+      "description": "Below contributor: the seven fields and nothing else, but a viewer's adds envs, the app's live addresses (routes.md, the project read); none carries no envs.",
+      "type": "object", "additionalProperties": false, "required": ["id", "name", "owners", "owner_groups", "summary", "access", "claimable"],
+      "if": { "properties": { "access": { "properties": { "level": { "const": "viewer" } } } } },
+      "then": { "required": ["envs"] },
+      "else": { "not": { "required": ["envs"] } },
+      "properties": {
+        "envs": {
+          "type": "object", "additionalProperties": false,
+          "properties": { "preview": { "$ref": "#/definitions/viewerEnv" }, "prod": { "$ref": "#/definitions/viewerEnv" } }
+        },
+        "id": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "maxLength": 55 },
+        "name": { "type": "string", "minLength": 1 },
+        "owners": { "type": "array", "items": { "$ref": "#/definitions/owner" } },
+        "owner_groups": { "$ref": "#/definitions/ownerGroups" },
+        "summary": { "$ref": "#/definitions/summary" },
+        "access": { "type": "object", "additionalProperties": false, "required": ["level"], "properties": { "level": { "enum": ["viewer", "none"] } } },
+        "claimable": { "$ref": "#/definitions/claimable" }
+      }
+    },
+    "teamApp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "owners", "owner_groups", "summary", "access", "claimable", "gate_state", "envs", "latest", "last_run", "warnings", "needs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "maxLength": 55 },
+        "name": { "type": "string", "minLength": 1 },
+        "owners": { "type": "array", "items": { "$ref": "#/definitions/owner" } },
+        "owner_groups": { "$ref": "#/definitions/ownerGroups" },
+        "summary": { "$ref": "#/definitions/summary" },
+        "access": { "$ref": "#/definitions/access" },
+        "claimable": { "$ref": "#/definitions/claimable" },
+        "stack": { "type": "string" },
+        "gate_state": { "enum": ["never_reviewed", "pending", "running", "clean", "blocked", "failed"] },
+        "envs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preview": { "oneOf": [{ "allOf": [{ "$ref": "#/definitions/runningEnv" }, { "not": { "required": ["promoted_by"] } }] }, { "$ref": "release.schema.json#/properties/env_pending" }] },
+            "prod": { "oneOf": [{ "allOf": [{ "$ref": "#/definitions/runningEnv" }, { "required": ["promoted_by"] }] }, { "$ref": "release.schema.json#/properties/env_pending" }] }
+          }
+        },
+        "latest": { "$ref": "#/definitions/latest" },
+        "last_run": { "type": ["string", "null"], "pattern": "^gr_[a-z0-9]{4,}$" },
+        "warnings": { "type": "integer", "minimum": 0, "description": "the last run's verdict's advisory count, 0 before its verdict and with no run (routes.md, the fleet read)" },
+        "hold": { "$ref": "#/definitions/hold" },
+        "needs": { "$ref": "#/definitions/needs" }
+      }
+    }
+  }
+}

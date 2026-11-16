@@ -1,0 +1,36 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a62d-13a5-7c82-be3c-b02ac7d66a83",
+  "CreatedAt": "2026-11-04T10:48:54.437820498Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "composer.lock",
+      "Class": "lang-pkgs",
+      "Type": "composer",
+      "Packages": [
+        {
+          "ID": "monolog/monolog@3.8.0",
+          "Name": "monolog/monolog",
+          "Identifier": {
+            "PURL": "pkg:composer/monolog/monolog@3.8.0",
+            "UID": "4abaa107ee15738f"
+          },
+          "Version": "3.8.0",
+          "Relationship": "direct",
+          "Locations": [
+            {
+              "StartLine": 1,
+              "EndLine": 1
+            }
+          ],
+          "AnalyzedBy": "composer"
+        }
+      ]
+    }
+  ]
+}

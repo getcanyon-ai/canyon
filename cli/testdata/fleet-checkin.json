@@ -1,0 +1,41 @@
+{
+  "tiles": {},
+  "apps": [
+    {
+      "id": "ledger-sync", "name": "ledger-sync", "owners": [{"subject": "sub-dana", "display": "Dana Whitfield"}], "summary": "", "stack": "Go", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"prod": {"url": "https://ledger-sync.prod.meridian.example", "package": "pkg_1a", "deployed_at": "2026-09-02T09:00:00Z", "run_by": "org", "seen_at": "2026-09-02T11:40:00Z"}}
+    },
+    {
+      "id": "claims-intake", "name": "claims-intake", "owners": [{"subject": "sub-priya", "display": "Priya Raman"}], "summary": "", "stack": "Remix", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"preview": {"url": "https://claims-intake.preview.meridian.example", "package": "pkg_2b", "deployed_at": "2026-09-02T11:30:00Z", "run_by": "org"}}
+    },
+    {
+      "id": "broker-feed", "name": "broker-feed", "owners": [{"subject": "sub-marcus", "display": "Marcus Bell"}], "summary": "", "stack": "Nuxt 3", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"prod": {"url": "https://broker-feed.prod.meridian.example", "package": "pkg_3c", "deployed_at": "2026-09-02T09:00:00Z", "run_by": "org", "seen_at": "2026-09-02T11:58:00Z"}}
+    },
+    {
+      "id": "quote-desk", "name": "quote-desk", "owners": [{"subject": "sub-tomas", "display": "Tomas Neri"}], "summary": "", "stack": "FastAPI", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"preview": {"url": "https://quote-desk.preview.meridian.example", "package": "pkg_4d", "deployed_at": "2026-09-02T11:55:00Z", "run_by": "org"}}
+    },
+    {
+      "id": "rate-cards", "name": "rate-cards", "owners": [{"subject": "sub-dana", "display": "Dana Whitfield"}], "summary": "", "stack": "Go", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"prod": {"url": "https://rate-cards.prod.meridian.example", "package": "pkg_5e", "deployed_at": "2026-09-02T09:00:00Z", "run_by": "org", "seen_at": "2026-09-02T11:59:00Z",
+        "pending": {"via": "webhook", "release": "rel_5e", "event": "remove", "sent_at": "2026-09-02T11:58:30Z", "state": "accepted"}}}
+    },
+    {
+      "id": "fnol-intake", "name": "fnol-intake", "owners": [{"subject": "sub-marcus", "display": "Marcus Bell"}], "summary": "", "stack": "Nuxt 3", "gate_state": "passed",
+      "latest": {"since": "2026-09-02T11:00:00Z", "stage": "passed"},
+      "envs": {"prod": {"url": "https://fnol-intake.prod.localhost:7777", "package": "pkg_6f", "deployed_at": "2026-09-02T09:00:00Z", "run_by": "canyon", "state": "running"}}
+    },
+    {
+      "id": "pricing-lab", "name": "pricing-lab", "owners": [{"subject": "sub-nora", "display": "Nora Lind"}], "summary": "Tries new premium curves",
+      "envs": {"prod": {"url": "https://pricing-lab.prod.meridian.example", "seen_at": "2026-09-02T11:00:00Z"}}
+    }
+  ],
+  "next": null
+}

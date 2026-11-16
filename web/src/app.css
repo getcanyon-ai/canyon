@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "./theme-reset.css";
+@import "./tokens.css";
+
+/*! IBM Plex Sans — Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"; Space Grotesk —
+    Copyright 2020 The Space Grotesk Project Authors; JetBrains Mono — Copyright 2020 The JetBrains
+    Mono Project Authors. SIL Open Font License 1.1, full texts in web/src/fonts (LICENSE.txt,
+    SpaceGrotesk-OFL.txt, JetBrainsMono-OFL.txt). The notice is here rather than in the generated
+    tokens.css because Tailwind drops comments out of the files it inlines. */
+
+@layer base {
+  :root           { color-scheme: light dark; accent-color: var(--color-accent) }
+  *               { box-sizing: border-box }
+  body            { background: var(--color-bg); color: var(--color-text);
+                    font-family: var(--font-sans); font-size: var(--text-base); line-height: var(--leading-normal) }
+  /* Every h1 is a page title, in the landing page's face; the rest of the page stays in Plex. */
+  h1              { font-family: var(--font-display) }
+  :focus-visible  { outline: var(--focus-width) solid var(--color-accent);
+                    outline-offset: var(--focus-offset); border-radius: var(--focus-radius) }
+  ::selection     { background: var(--color-accent-dim) }
+  .tnum           { font-variant-numeric: tabular-nums }
+  /* Reduced motion is respected once, here, never per component (ds/tailwind.md rule 5). */
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
+}
+
+/* The unlock (D6): a checklist row that has just turned ✓ swells once, and the promote button
+   fills 160ms later — cause visibly precedes effect. The base layer's one reduced-motion rule
+   above already kills this, so there is no per-component media query. */
+@keyframes flip { 50% { transform: scale(var(--ds-motion-transform-flip)) } }
+@utility flip-row { animation: flip var(--ds-motion-duration-medium) var(--ds-motion-easing-standard) }

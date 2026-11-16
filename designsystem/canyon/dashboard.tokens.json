@@ -1,0 +1,160 @@
+{
+  "$description": "Canyon dashboard tokens (W3C DTCG, hex-string draft, as Style Dictionary reads it). Values are the redesign's (#1401, proposal revision 2, approved 2026-10-02) in the getcanyon.ai landing page's brand (#2885): one colour per status, the indigo accent only for what you can act on. Every text token clears 4.5:1 on bg, surface and surface-2 in both sets, which validate.py checks; the figures are on each token. Light is the base set; dark is the OS-dark set. This file is NOT a registry item: it carries radius, type, shadow and motion, which the registry README keeps out of published themes. See README.md for the generator and the drift check.",
+
+  "color": {
+    "$type": "color",
+
+    "light": {
+      "$description": "The light set, in the getcanyon.ai landing page's colours (#2885): its violet-greys, and its indigo as the accent. validate.py holds every text colour to 4.5:1 on bg, surface and surface-2 and on its own -dim fill, in both sets; the figures here are its output.",
+
+      "bg":            { "$value": "#f6f5fa", "$description": "Page ground. The landing's card." },
+      "surface":       { "$value": "#ffffff", "$description": "Cards, tables, the rail, panels, menus." },
+      "surface-2":     { "$value": "#f4f2f8", "$description": "Table head, row hover, code excerpts, inset boxes. The landing's deep." },
+      "border":        { "$value": "#eae8f0", "$description": "Hairline between rows and around a box. The landing's border." },
+      "border-strong": { "$value": "#dad7e4", "$description": "Control edges: inputs, buttons, segments. The landing's border2." },
+      "text":          { "$value": "#17151f", "$description": "The landing's fg. 18.05:1 on surface · 16.25:1 on surface-2." },
+      "text-dim":      { "$value": "#4a4756", "$description": "Secondary text. The landing's muted. 9.03:1 on surface · 8.12:1 on surface-2." },
+      "text-faint":    { "$value": "#686574", "$description": "Meta: ages, table heads, captions. The landing's faint, darkened to clear AA. 5.67:1 on surface · 5.11:1 on surface-2." },
+      "accent":        { "$value": "#5a66c8", "$description": "Canyon indigo, the landing's: buttons, links and the selected page, nothing else. 5.04:1 on surface · 4.53:1 on surface-2." },
+      "accent-dim":    { "$value": "#f1f2fc", "$description": "The selected rail item's fill. accent reads 4.52:1 on it." },
+      "accent-ink":    { "$value": "#ffffff", "$description": "Label on an accent fill. 5.04:1." },
+      "link":          { "$value": "{color.light.accent}", "$description": "Alias. A link is indigo: something you can act on." },
+      "critical":      { "$value": "#b42318", "$description": "Blocked, failed, critical and high severity. 6.57:1 on surface." },
+      "critical-dim":  { "$value": "#fdedeb", "$description": "The blocked pill's fill. critical reads 5.79:1 on it." },
+      "amber":         { "$value": "#9a5a06", "$description": "Waiting, awaiting review, approved with an exception, medium severity. 5.47:1 on surface." },
+      "amber-dim":     { "$value": "#fcf2e1", "$description": "The waiting pill's fill. amber reads 4.93:1 on it." },
+      "ok":            { "$value": "#15803d", "$description": "Passed, running, live. 5.02:1 on surface · 4.51:1 on surface-2." },
+      "ok-dim":        { "$value": "#eef8f1", "$description": "The passed pill's fill. ok reads 4.62:1 on it." },
+      "neutral":       { "$value": "#625f6e", "$description": "Not checked, never reviewed, nothing uploaded, low severity. 6.21:1 on surface." },
+      "neutral-dim":   { "$value": "#efeef4", "$description": "The neutral pill's fill. neutral reads 5.38:1 on it." },
+      "beta":          { "$value": "#a21caf", "$description": "The Beta chip (EXPERIENCE.md D5, #2384): a feature that works but isn't complete or fully tested yet. Not a status, so a hue no status uses, and not the indigo accent: the landing's crimson, deepened. 6.32:1 on surface." },
+      "beta-dim":      { "$value": "#fbeefc", "$description": "The Beta chip's fill. beta reads 5.64:1 on it." }
+    },
+
+    "dark": {
+      "$description": "The dark set, under @media (prefers-color-scheme: dark). The landing has no dark mode: these are its violet-greys and indigo carried to a dark ground, which starts at its strong.",
+
+      "bg":            { "$value": "#0e0c16", "$description": "Page ground. The landing's strong." },
+      "surface":       { "$value": "#15131e" },
+      "surface-2":     { "$value": "#1c1a26" },
+      "border":        { "$value": "#26232f" },
+      "border-strong": { "$value": "#383443" },
+      "text":          { "$value": "#ecebf2", "$description": "15.50:1 on surface." },
+      "text-dim":      { "$value": "#aeaabb", "$description": "8.10:1 on surface · 7.56:1 on surface-2." },
+      "text-faint":    { "$value": "#8e8a9c", "$description": "5.48:1 on surface · 5.11:1 on surface-2." },
+      "accent":        { "$value": "#959ef0", "$description": "7.37:1 on surface." },
+      "accent-dim":    { "$value": "#22243f", "$description": "accent reads 6.05:1 on it." },
+      "accent-ink":    { "$value": "#0e0c16", "$description": "Label on an accent fill. 7.78:1." },
+      "link":          { "$value": "{color.dark.accent}" },
+      "critical":      { "$value": "#f0877c", "$description": "7.40:1 on surface." },
+      "critical-dim":  { "$value": "#361b19", "$description": "critical reads 6.37:1 on it." },
+      "amber":         { "$value": "#e3a84b", "$description": "8.72:1 on surface." },
+      "amber-dim":     { "$value": "#33270f", "$description": "amber reads 6.93:1 on it." },
+      "ok":            { "$value": "#5bc98a", "$description": "8.89:1 on surface." },
+      "ok-dim":        { "$value": "#142c1d", "$description": "ok reads 7.22:1 on it." },
+      "neutral":       { "$value": "#9c98aa", "$description": "6.54:1 on surface." },
+      "neutral-dim":   { "$value": "#22202b", "$description": "neutral reads 5.72:1 on it." },
+      "beta":          { "$value": "#e48af5", "$description": "8.09:1 on surface." },
+      "beta-dim":      { "$value": "#341a3b", "$description": "beta reads 6.82:1 on it." }
+    }
+  },
+
+  "font": {
+    "$type": "fontFamily",
+    "sans":    { "$value": ["IBM Plex Sans", "-apple-system", "Segoe UI", "Roboto", "sans-serif"], "$description": "Self-hosted woff2, three weights. Everything that is not code or a title: at 13px in a dense table it reads clearer than the landing's Space Grotesk, whose I, l, 1 and | nearly merge." },
+    "display": { "$value": ["Space Grotesk", "IBM Plex Sans", "-apple-system", "Segoe UI", "sans-serif"], "$description": "The landing page's face, self-hosted, semibold alone: page titles (every h1) and the wordmark." },
+    "mono":    { "$value": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"], "$description": "The landing page's mono, self-hosted, three weights, its code ligatures (calt) cut so code reads as typed. Code only: snippets, commit hashes and terminal commands." }
+  },
+
+  "size": {
+    "$type": "dimension",
+    "$description": "Four sizes: 12, 13, 14 and 24px, and nothing on a screen under 12px. The other names alias the four until each screen's redesign PR (#1401) moves its classes onto them.",
+    "sm":    { "$value": "12px", "$description": "Small: pills, table heads, meta lines, captions." },
+    "md":    { "$value": "13px", "$description": "Secondary: sub-lines, descriptions, help under a control." },
+    "base":  { "$value": "14px", "$description": "Body: text, table cells, buttons, and section headings in semibold." },
+    "title": { "$value": "24px", "$description": "Page titles." },
+    "2xs":   { "$value": "{size.sm}" },
+    "xs":    { "$value": "{size.sm}" },
+    "lg":    { "$value": "{size.base}" },
+    "xl":    { "$value": "{size.base}" },
+    "2xl":   { "$value": "{size.base}" },
+    "3xl":   { "$value": "{size.base}" },
+    "4xl":   { "$value": "{size.title}" }
+  },
+
+  "weight": {
+    "$type": "fontWeight",
+    "regular":  { "$value": 400 },
+    "medium":   { "$value": 500, "$description": "Table heads, banner emphasis, ghost buttons." },
+    "semibold": { "$value": 600, "$description": "The workhorse: names, titles, blocked and production stage words, tile numbers, the brand mark. There is deliberately no 700: the mockup's two bold declarations snap here, and 400/500/600 in Plex Sans and JetBrains Mono, with 600 alone in Space Grotesk, are the only faces the bundle ships. This file cannot prevent a component asking for 700 — Tailwind's own --font-weight-* and --color-* defaults survive @theme inline, so font-bold and bg-red-500 still resolve; the scaffold PR resets those namespaces to initial in its @theme. Until it does, font-bold renders a synthesised face." }
+  },
+
+  "leading": {
+    "$type": "number",
+    "none":    { "$value": 1,    "$description": "Glyph-only buttons." },
+    "tight":   { "$value": 1.25, "$description": "URLs and big stage lines. mockup 1.25 and 1.3." },
+    "snug":    { "$value": 1.35, "$description": "Tile reason line." },
+    "normal":  { "$value": 1.5,  "$description": "Body. mockup 1.45, 1.5, 1.55." },
+    "relaxed": { "$value": 1.6,  "$description": "Finding prose." }
+  },
+
+  "tracking": {
+    "$type": "dimension",
+    "tight":      { "$value": "-0.01em", "$description": "Page title." },
+    "caps":       { "$value": "0.1em",   "$description": "Every uppercase label. Collapses the mockup's 0.04 / 0.06 / 0.08 / 0.09 / 0.1; at 10px the widest gap is 0.4px per character." }
+  },
+
+  "radius": {
+    "$type": "dimension",
+    "$description": "Six steps plus a pill. The mockup's 5, 7 and 9 round to the nearest step (1px drift, 7 declarations).",
+    "xs":   { "$value": "2px",    "$description": "Legend swatches, chart bars." },
+    "sm":   { "$value": "4px",    "$description": "Chips, rule-id pills, the focus ring." },
+    "md":   { "$value": "6px",    "$description": "Chevrons, textareas. mockup 5 and 7 land here." },
+    "lg":   { "$value": "8px",    "$description": "Buttons, selects, search, inset boxes, segmented controls." },
+    "xl":   { "$value": "10px",   "$description": "Panels, tables, cards, findings, receipt, toast, inspector boxes. mockup 9 lands here." },
+    "2xl":  { "$value": "12px",   "$description": "Owner cards." },
+    "full": { "$value": "9999px", "$description": "The Needs-you pill and status dots." }
+  },
+
+  "shadow": {
+    "$type": "shadow",
+    "light": {
+      "overlay": { "$value": "0 8px 30px #0e0c161f", "$description": "Inspector, drawer, toast, floating button. The landing's strong at 12%." }
+    },
+    "dark": {
+      "overlay": { "$value": "0 8px 30px #00000080", "$description": "rgba(0,0,0,.5)." }
+    },
+    "ring-inset": { "$value": "inset 0 0 0 1px currentColor", "$description": "A pressed tile. Drawn in the accent by the component. Mode-independent." }
+  },
+
+  "focus": {
+    "$description": "One ring, everywhere, on :focus-visible.",
+    "width":  { "$type": "dimension", "$value": "2px" },
+    "offset": { "$type": "dimension", "$value": "2px" },
+    "radius": { "$type": "dimension", "$value": "{radius.sm}" }
+  },
+
+  "motion": {
+    "$description": "Everything here is suppressed under prefers-reduced-motion: reduce.",
+    "duration": {
+      "$type": "duration",
+      "instant": { "$value": "150ms", "$description": "Tile border on hover and press." },
+      "fast":    { "$value": "200ms", "$description": "The promote button filling, and the activity rail rows fading in." },
+      "medium":  { "$value": "240ms", "$description": "The receipt row flip (scale 1.02) and its colour change." },
+      "drawer":  { "$value": "220ms", "$description": "Inspector and drawer slide from the right edge." },
+      "slow":    { "$value": "400ms", "$description": "A finding dimming during re-review. D6: findings dim, they never disappear before the result is known." }
+    },
+    "delay": {
+      "$type": "duration",
+      "unlock": { "$value": "160ms", "$description": "D6, the one carefully-built animation: the receipt row flips, then 160ms later the button fills. Cause visibly precedes effect. This number is load-bearing copy — EXPERIENCE.md states it and the app-detail mockup prints it on the page." }
+    },
+    "easing": {
+      "$type": "cubicBezier",
+      "standard": { "$value": "ease", "$description": "The mockup's only easing. One curve, everywhere." }
+    },
+    "transform": {
+      "flip":     { "$type": "number", "$value": 1.02, "$description": "The receipt row's scale at the top of the flip." },
+      "rail-in":  { "$type": "dimension", "$value": "4px", "$description": "How far an activity row rises as it fades in." }
+    }
+  }
+}

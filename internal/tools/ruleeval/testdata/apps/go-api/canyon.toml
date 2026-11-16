@@ -1,0 +1,8 @@
+description = "The API"
+
+[resources]
+db = { type = "postgres" }
+cache = { type = "redis" }
+
+[roles]
+editor = "Edits records"

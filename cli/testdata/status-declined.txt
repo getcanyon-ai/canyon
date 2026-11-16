@@ -1,0 +1,19 @@
+
+  claims-portal · Meridian
+
+  preview      v1.3   http://claims-portal.preview.localhost:7777   1d ago   patched by Canyon 2h ago
+  production   v1.3   http://claims-portal.prod.localhost:7777   3d ago
+  platform     ! Your team turned down Canyon's fix for production. Production still has libssl3 3.0.13-0ubuntu3.4. Canyon will ask again when a newer fix is out.
+  access       shared with everyone at Meridian · you are an owner
+  review       ✗ blocked   1 blocking finding, 3 warnings   2h ago
+
+  ✓ Production needs a passing review
+      v1.3 passed review: no blocking finding
+  ✓ A person promotes
+      a person promotes, or an agent they ask, with their CLI sign-in
+  · Approved stacks only
+      no approved stacks set
+  ✓ Every app has an owner
+      owned by Dana Whitfield
+
+  Open in Canyon http://localhost:7777/#/apps/claims-portal

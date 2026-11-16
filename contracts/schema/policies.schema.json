@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/policies.schema.json",
+  "title": "Canyon org policies (seam 3)",
+  "description": "The answers the Policies screen reads: GET /api/v1/policies, the preview (PUT /api/v1/policies/:rule without ?apply=true), the apply (?apply=true), a member's 403, a tool Canyon runs itself turned on with its settings, and the custom rules: their list (GET /api/v1/custom-rules), a version saved (PUT /api/v1/custom-rules/:slug) with its audit row, and one turned on with no model on the host; a rule set before production alone with its audit row, the same set with a grace, pending there, and the refusal on a go-live rule; an app's addition (PUT /api/v1/projects/:id/policies/:rule) with its audit row, and the refusal of one that would weaken. contracts/routes.md's policies row is canonical; this schema pins the shapes. A rule never edited carries no edit fields at all — not nulls.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policies", "preview", "apply", "member", "scanner_apply", "custom_rules", "custom_rule_put", "custom_rule_dry_run", "no_model", "production_apply", "production_scheduled", "production_no_model", "production_not_offered", "app_policy_put", "not_stricter"],
+  "properties": {
+    "production_apply": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response", "audit"],
+      "properties": {
+        "rule": { "$ref": "#/definitions/ruleId" }, "request": { "$ref": "#/definitions/request" }, "response": { "$ref": "#/definitions/apply/properties/response" },
+        "audit": { "type": "object", "additionalProperties": false, "required": ["action", "detail"],
+                   "properties": { "action": { "const": "policy.set" },
+                                   "detail": { "type": "object", "additionalProperties": false, "required": ["rule", "before", "after"],
+                                               "properties": { "rule": { "$ref": "#/definitions/ruleId" }, "name": { "type": "string", "minLength": 1 }, "before": { "$ref": "#/definitions/state" }, "after": { "$ref": "#/definitions/state" },
+                                                               "grace_days": { "$ref": "#/definitions/graceDays" }, "production": { "$ref": "#/definitions/beforeAfterState" },
+                                                               "run": { "type": "object" }, "settings": { "type": "object" } } } } }
+      }
+    },
+    "production_scheduled": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"],
+      "properties": { "rule": { "$ref": "#/definitions/ruleId" }, "request": { "$ref": "#/definitions/request" }, "response": { "$ref": "#/definitions/apply/properties/response" } }
+    },
+    "production_no_model": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"],
+      "properties": {
+        "rule": { "$ref": "#/definitions/ruleId" }, "request": { "$ref": "#/definitions/request" },
+        "response": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                      "properties": { "error": { "const": "no_model" }, "message": { "type": "string", "minLength": 1 } } }
+      }
+    },
+    "production_not_offered": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"],
+      "properties": {
+        "rule": { "$ref": "#/definitions/goLive" }, "request": { "$ref": "#/definitions/request" },
+        "response": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                      "properties": { "error": { "const": "production_not_offered" }, "message": { "const": "The go-live rules are checked before production only: set their state" } } }
+      }
+    },
+    "app_policy_put": {
+      "type": "object", "additionalProperties": false, "required": ["project", "rule", "request", "response", "audit"],
+      "properties": {
+        "project": { "$ref": "#/definitions/project" }, "rule": { "$ref": "#/definitions/ruleId" }, "request": { "$ref": "#/definitions/addition" },
+        "response": { "$ref": "#/definitions/apply/properties/response" },
+        "audit": { "type": "object", "additionalProperties": false, "required": ["action", "project", "detail"],
+                   "properties": { "action": { "const": "app_policy.set" }, "project": { "$ref": "#/definitions/project" },
+                                   "detail": { "type": "object", "additionalProperties": false, "required": ["rule"], "minProperties": 2,
+                                               "properties": { "rule": { "$ref": "#/definitions/ruleId" }, "state": { "$ref": "#/definitions/beforeAfterState" }, "production": { "$ref": "#/definitions/beforeAfterState" } } } } }
+      }
+    },
+    "not_stricter": {
+      "type": "object", "additionalProperties": false, "required": ["project", "rule", "request", "response"],
+      "properties": {
+        "project": { "$ref": "#/definitions/project" }, "rule": { "$ref": "#/definitions/ruleId" }, "request": { "$ref": "#/definitions/addition" },
+        "response": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                      "properties": { "error": { "const": "not_stricter" }, "message": { "const": "An app's checks can only add to the org's, never weaken them." } } }
+      }
+    },
+    "custom_rules": {
+      "type": "object", "additionalProperties": false, "required": ["custom_rules"],
+      "properties": { "custom_rules": { "type": "array", "maxItems": 20, "items": { "$ref": "#/definitions/customRule" } } }
+    },
+    "custom_rule_put": {
+      "type": "object", "additionalProperties": false, "required": ["slug", "request", "response", "audit"],
+      "properties": {
+        "slug": { "type": "string", "pattern": "^[a-z][a-z-]{0,39}$" },
+        "request": { "type": "object", "additionalProperties": false, "required": ["name", "instructions"],
+                     "properties": { "name": { "$ref": "#/definitions/customName" }, "instructions": { "$ref": "#/definitions/instructions" }, "check": { "enum": ["code", "ai"] } } },
+        "response": { "type": "object", "additionalProperties": false, "required": ["custom_rule"], "properties": { "custom_rule": { "$ref": "#/definitions/customRule" },
+                      "why": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "Why the AI review checks the rule though code was asked for (routes.md, the custom-rules row)." } } },
+        "audit": {
+          "type": "object", "additionalProperties": false, "required": ["action", "detail"],
+          "properties": {
+            "action": { "const": "custom_rule.set" },
+            "detail": { "type": "object", "additionalProperties": false, "required": ["rule", "version", "name", "instructions", "check"],
+                        "properties": { "rule": { "$ref": "#/definitions/customId" }, "version": { "type": "integer", "minimum": 1 },
+                                        "name": { "$ref": "#/definitions/beforeAfterName" }, "instructions": { "$ref": "#/definitions/beforeAfterText" },
+                                        "check": { "type": "object", "additionalProperties": false, "required": ["by"],
+                                                   "properties": { "by": { "enum": ["code", "ai"] }, "says": { "$ref": "#/definitions/says" } },
+                                                   "if": { "properties": { "by": { "const": "code" } } }, "then": { "required": ["says"] }, "else": { "not": { "required": ["says"] } } } } }
+          }
+        }
+      }
+    },
+    "custom_rule_dry_run": {
+      "type": "object", "additionalProperties": false, "required": ["slug", "response", "checked_by_ai", "running"],
+      "description": "POST /api/v1/custom-rules/:slug/dry-run (routes.md): each app's result for the rule's current version checked by code, and the 409 for one checked by AI.",
+      "properties": {
+        "slug": { "type": "string", "pattern": "^[a-z][a-z-]{0,39}$" },
+        "response": { "type": "object", "additionalProperties": false, "required": ["rule", "version", "apps"],
+                      "properties": { "rule": { "$ref": "#/definitions/customId" }, "version": { "type": "integer", "minimum": 1 },
+                                      "apps": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["project", "result"],
+                                                "properties": { "project": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" }, "result": { "enum": ["pass", "fail", "not_checked"] },
+                                                                "why": { "type": "string", "minLength": 1, "maxLength": 400, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" } },
+                                                "if": { "properties": { "result": { "const": "not_checked" } } }, "then": { "required": ["why"] }, "else": { "not": { "required": ["why"] } } } } } },
+        "checked_by_ai": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                           "properties": { "error": { "const": "checked_by_ai" }, "message": { "const": "This rule is checked by AI. A dry run checks a rule checked by code." } } },
+        "running": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                     "properties": { "error": { "const": "dry_run_running" }, "message": { "const": "Another dry run is running on this Canyon. Try again when it ends." } } }
+      }
+    },
+    "no_model": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"],
+      "properties": {
+        "rule": { "$ref": "#/definitions/customId" },
+        "request": { "$ref": "#/definitions/request" },
+        "response": { "type": "object", "additionalProperties": false, "required": ["error", "message"],
+                      "properties": { "error": { "const": "no_model" }, "message": { "type": "string", "minLength": 1 } } }
+      }
+    },
+    "policies": {
+      "type": "object", "additionalProperties": false, "required": ["policies"],
+      "properties": { "policies": { "type": "array", "items": { "$ref": "#/definitions/policy" } } }
+    },
+    "preview": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"], "allOf": [{ "$ref": "#/definitions/edit" }],
+      "properties": {
+        "rule": { "$ref": "#/definitions/ruleId" },
+        "request": { "$ref": "#/definitions/request" },
+        "response": {
+          "type": "object", "additionalProperties": false, "required": ["would_block"],
+          "properties": { "would_block": { "$ref": "#/definitions/wouldBlock" } }
+        }
+      }
+    },
+    "apply": { "$ref": "#/definitions/apply" },
+    "scanner_apply": { "$ref": "#/definitions/apply" },
+    "member": {
+      "type": "object", "additionalProperties": false, "required": ["error", "message"],
+      "properties": { "error": { "const": "admin_required" }, "message": { "type": "string", "pattern": "^only an admin can do this: ask .+$" } }
+    }
+  },
+  "definitions": {
+    "customId": { "type": "string", "pattern": "^custom\\.[a-z][a-z-]{0,39}$" },
+    "customName": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" },
+    "instructions": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\x00-\\x09\\x0B-\\x1F\\x7F-\\x9F]+$" },
+    "customRule": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "name", "instructions", "check", "version", "set_by", "set_at"],
+      "properties": { "rule": { "$ref": "#/definitions/customId" }, "name": { "$ref": "#/definitions/customName" }, "instructions": { "$ref": "#/definitions/instructions" },
+                      "check": { "$ref": "#/definitions/check" },
+                      "version": { "type": "integer", "minimum": 1 }, "set_by": { "$ref": "#/definitions/actor" }, "set_at": { "$ref": "#/definitions/ts" } }
+    },
+    "says": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "A code check's condition in plain words (snapshot.md, Custom rules)." },
+    "check": {
+      "description": "How a custom rule's version is checked (snapshot.md, Custom rules).",
+      "type": "object", "additionalProperties": false, "required": ["by", "facts_version"],
+      "properties": { "by": { "enum": ["code", "ai"] }, "expr": { "type": "string", "minLength": 1, "maxLength": 4096 }, "says": { "$ref": "#/definitions/says" }, "facts_version": { "type": "integer", "minimum": 1 } },
+      "if": { "properties": { "by": { "const": "code" } } }, "then": { "required": ["expr", "says"] }, "else": { "not": { "anyOf": [{ "required": ["expr"] }, { "required": ["says"] }] } }
+    },
+    "beforeAfterName": { "type": "object", "additionalProperties": false, "required": ["after"], "properties": { "before": { "$ref": "#/definitions/customName" }, "after": { "$ref": "#/definitions/customName" } } },
+    "beforeAfterText": { "type": "object", "additionalProperties": false, "required": ["after"], "properties": { "before": { "$ref": "#/definitions/instructions" }, "after": { "$ref": "#/definitions/instructions" } } },
+    "ruleId": { "type": "string", "pattern": "^([a-z]+\\.[a-z][a-z-]*|sarif\\.[a-z0-9]+(-[a-z0-9]+)*)$" },
+    "state": { "enum": ["blocking", "advisory", "off"] },
+    "goLive": { "enum": ["prod.clean-gate", "prod.human-approval", "owner.required", "stack.blessed", "platform.known-vuln", "prod.egress-allowed"] },
+    "project": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "maxLength": 55 },
+    "scheduled": {
+      "type": "object", "additionalProperties": false, "required": ["state", "effective_at"],
+      "properties": { "state": { "$ref": "#/definitions/state" }, "effective_at": { "$ref": "#/definitions/ts" } }
+    },
+    "beforeAfterState": { "type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": { "before": { "$ref": "#/definitions/state" }, "after": { "$ref": "#/definitions/state" } } },
+    "addition": {
+      "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["state"] }, { "required": ["production"] }],
+      "properties": { "state": { "$ref": "#/definitions/state" }, "production": { "$ref": "#/definitions/state" } }
+    },
+    "apply": {
+      "type": "object", "additionalProperties": false, "required": ["rule", "request", "response"], "allOf": [{ "$ref": "#/definitions/edit" }],
+      "properties": {
+        "rule": { "$ref": "#/definitions/ruleId" },
+        "request": { "$ref": "#/definitions/request" },
+        "response": {
+          "type": "object", "additionalProperties": false, "required": ["policy", "would_block"],
+          "properties": { "policy": { "$ref": "#/definitions/policy" }, "would_block": { "$ref": "#/definitions/wouldBlock" } }
+        }
+      }
+    },
+    "edit": {
+      "description": "routes.md's policies row: run and settings on the tools Canyon runs only, each with its own settings.",
+      "allOf": [
+        { "if": { "properties": { "request": { "anyOf": [{ "required": ["run"] }, { "required": ["settings"] }] } } },
+          "then": { "properties": { "rule": { "enum": ["sarif.trivy", "sarif.opengrep", "sarif.eslint", "sarif.grype", "sarif.checkov", "platform.known-vuln"] } } } },
+        { "if": { "properties": { "rule": { "const": "platform.known-vuln" } } }, "then": {"properties": {"request": {"not": {"required": ["run"]}, "properties": {"settings": {"type": "object", "additionalProperties": false, "required": ["source"], "properties": {"source": {"type": "string", "maxLength": 40, "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}}}}}}} },
+        { "if": { "properties": { "rule": { "const": "sarif.trivy" } } }, "then": {"properties": {"request": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/trivy"}}}}} },
+        { "if": { "properties": { "rule": { "const": "sarif.opengrep" } } }, "then": {"properties": {"request": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/opengrep"}}}}} },
+        { "if": { "properties": { "rule": { "const": "sarif.grype" } } }, "then": {"properties": {"request": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/grype"}}}}} },
+        { "if": { "properties": { "rule": { "const": "sarif.eslint" } } }, "then": {"properties": {"request": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/eslint"}}}}} },
+        { "if": { "properties": { "rule": { "const": "sarif.checkov" } } }, "then": {"properties": {"request": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/checkov"}}}}} }
+      ]
+    },
+    "toolSettings": {
+      "skip_paths": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "maxLength": 256, "pattern": "^([^-./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+)(/([^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+))*$"}},
+      "trivy": {"type": "object", "additionalProperties": false, "properties": {"scanners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["vuln", "misconfig", "secret"]}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "opengrep": {"type": "object", "additionalProperties": false, "properties": {"rules": {"type": "object", "additionalProperties": false, "required": ["repo", "commit"], "properties": {"repo": {"type": "string", "maxLength": 2048, "pattern": "^https://[^@/?#\\s]+(/[^?#\\s]*)?$"}, "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "grype": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "eslint": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "checkov": {"type": "object", "additionalProperties": false, "properties": {"frameworks": {"type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"}}, "skip_checks": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$"}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}}
+    },
+    "graceDays": { "type": "integer", "minimum": 0, "maximum": 365 },
+    "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "actor": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "subject", "display"],
+      "properties": {
+        "kind": { "enum": ["person", "agent", "canyon"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "display": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name", "state"],
+      "dependencies": { "grace_days": ["set_by", "set_at"], "set_by": ["grace_days", "set_at"], "set_at": ["grace_days", "set_by"], "scheduled": ["grace_days"], "scheduled_production": ["grace_days"] },
+      "properties": {
+        "id": { "$ref": "#/definitions/ruleId" },
+        "name": { "type": "string", "minLength": 1 },
+        "state": { "$ref": "#/definitions/state" },
+        "production": { "enum": ["advisory", "blocking"] },
+        "grace_days": { "$ref": "#/definitions/graceDays" },
+        "scheduled": { "$ref": "#/definitions/scheduled", "description": "the gate before preview's pending edit (a go-live rule's only gate)" },
+        "scheduled_production": { "$ref": "#/definitions/scheduled", "description": "the gate before production's pending edit" },
+        "additions": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "object", "additionalProperties": false, "required": ["project", "set_by", "set_at"], "anyOf": [{ "required": ["state"] }, { "required": ["production"] }],
+                     "properties": { "project": { "$ref": "#/definitions/project" }, "state": { "$ref": "#/definitions/state" }, "production": { "$ref": "#/definitions/state" },
+                                     "set_by": { "$ref": "#/definitions/actor" }, "set_at": { "$ref": "#/definitions/ts" } } }
+        },
+        "set_by": { "$ref": "#/definitions/actor" },
+        "set_at": { "$ref": "#/definitions/ts" },
+        "run": { "const": true },
+        "settings": { "type": "object", "minProperties": 1 }
+      },
+      "allOf": [
+        { "if": { "properties": { "id": { "$ref": "#/definitions/goLive" } } },
+          "then": { "not": { "anyOf": [{ "required": ["production"] }, { "required": ["scheduled_production"] }] }, "properties": { "additions": { "items": { "not": { "required": ["production"] } } } } } },
+        { "if": { "properties": { "id": { "const": "sarif.trivy" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/trivy"}}} },
+        { "if": { "properties": { "id": { "const": "sarif.opengrep" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/opengrep"}}} },
+        { "if": { "properties": { "id": { "const": "sarif.grype" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/grype"}}} },
+        { "if": { "properties": { "id": { "const": "sarif.eslint" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/eslint"}}} },
+        { "if": { "properties": { "id": { "const": "sarif.checkov" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/checkov"}}} },
+        { "if": { "properties": { "id": { "not": { "enum": ["sarif.trivy", "sarif.opengrep", "sarif.eslint", "sarif.grype", "sarif.checkov"] } } } }, "then": { "not": { "anyOf": [{ "required": ["run"] }, { "required": ["settings"] }] } } }
+      ]
+    },
+    "request": {
+      "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["state"] }, { "required": ["production"] }, { "required": ["run"] }, { "required": ["settings"] }],
+      "dependencies": { "grace_days": { "anyOf": [{ "required": ["state"] }, { "required": ["production"] }] } },
+      "properties": { "state": { "$ref": "#/definitions/state" }, "production": { "$ref": "#/definitions/state" }, "grace_days": { "$ref": "#/definitions/graceDays" }, "run": { "type": "boolean" }, "settings": { "type": "object" } }
+    },
+    "wouldBlock": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["project", "findings"],
+        "properties": { "project": { "type": "string", "minLength": 1 }, "findings": { "type": "integer", "minimum": 0, "description": "0 only before production: a project whose promote_run did not have the rule on" } }
+      }
+    }
+  }
+}

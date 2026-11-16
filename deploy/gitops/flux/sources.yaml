@@ -1,0 +1,145 @@
+# What Flux reads (design/HAND-OFF.md §3b, §10), every ${INTERVAL} (1m is a good default).
+#
+# canyon-preview and canyon-prod, in canyon-sync: the deploy repo's environment branches, each app's Kustomization's
+# source. Each keeps <root>/<app>/<env>/ for its own environment alone, and leaves out every canyon.json and every
+# kustomization file, so kustomize-controller builds the manifests Canyon commits as they are, as Argo CD's directory
+# source does: a kustomization.yaml in the deploy repo is never run.
+#
+# canyon-preview-names and canyon-prod-names, in flux-system: the same branches again, for the namespaces generator.
+# Each keeps exactly two kinds of file, its own environment's <root>/<app>/<env>/canyon.json and the route template
+# <root>/.canyon/route.yaml, the generator's sentinel. canyon-platform is your platform repo, where the namespaces chart
+# (deploy/gitops/namespaces) is, at ${PLATFORM_PATH} on ${PLATFORM_REVISION}, a branch.
+#
+# One ArtifactGenerator per environment, canyon-namespaces-<env>, lays out the chart as canyon-namespace/ (Helm loads a
+# chart from a directory, never the archive's root) and copies its environment's names under canyon-namespace/deploy/,
+# where the chart reads their paths and never their contents. The names come as a directory, never a glob: a glob
+# that matches nothing fails, and the generator would keep its last artifact, so an environment's last app would never
+# be removed. Neither copy merges or extracts.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: canyon-preview
+  namespace: canyon-sync
+spec:
+  url: ${REPO_URL}
+  ref:
+    branch: ${PREVIEW_BRANCH}
+  interval: ${INTERVAL}
+  secretRef:
+    name: canyon-deploy-repo
+  ignore: |
+    /*
+    !/${ROOT}/*/preview/
+    **/canyon.json
+    **/kustomization.yaml
+    **/kustomization.yml
+    **/Kustomization
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: canyon-prod
+  namespace: canyon-sync
+spec:
+  url: ${REPO_URL}
+  ref:
+    branch: ${PROD_BRANCH}
+  interval: ${INTERVAL}
+  secretRef:
+    name: canyon-deploy-repo
+  ignore: |
+    /*
+    !/${ROOT}/*/prod/
+    **/canyon.json
+    **/kustomization.yaml
+    **/kustomization.yml
+    **/Kustomization
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: canyon-preview-names
+  namespace: flux-system
+spec:
+  url: ${REPO_URL}
+  ref:
+    branch: ${PREVIEW_BRANCH}
+  interval: ${INTERVAL}
+  secretRef:
+    name: canyon-deploy-repo
+  ignore: |
+    /*
+    !/${ROOT}/*/preview/canyon.json
+    !/${ROOT}/.canyon/route.yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: canyon-prod-names
+  namespace: flux-system
+spec:
+  url: ${REPO_URL}
+  ref:
+    branch: ${PROD_BRANCH}
+  interval: ${INTERVAL}
+  secretRef:
+    name: canyon-deploy-repo
+  ignore: |
+    /*
+    !/${ROOT}/*/prod/canyon.json
+    !/${ROOT}/.canyon/route.yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: canyon-platform
+  namespace: flux-system
+spec:
+  url: ${PLATFORM_REPO_URL}
+  ref:
+    branch: ${PLATFORM_REVISION}
+  interval: ${INTERVAL}
+  secretRef:
+    name: canyon-platform-repo
+---
+apiVersion: source.extensions.fluxcd.io/v1beta1
+kind: ArtifactGenerator
+metadata:
+  name: canyon-namespaces-preview
+  namespace: flux-system
+spec:
+  sources:
+    - alias: platform
+      kind: GitRepository
+      name: canyon-platform
+    - alias: names
+      kind: GitRepository
+      name: canyon-preview-names
+  artifacts:
+    - name: canyon-namespaces-preview
+      copy:
+        - from: "@platform/${PLATFORM_PATH}/**"
+          to: "@artifact/canyon-namespace/"
+        - from: "@names/"
+          to: "@artifact/canyon-namespace/deploy/"
+---
+apiVersion: source.extensions.fluxcd.io/v1beta1
+kind: ArtifactGenerator
+metadata:
+  name: canyon-namespaces-prod
+  namespace: flux-system
+spec:
+  sources:
+    - alias: platform
+      kind: GitRepository
+      name: canyon-platform
+    - alias: names
+      kind: GitRepository
+      name: canyon-prod-names
+  artifacts:
+    - name: canyon-namespaces-prod
+      copy:
+        - from: "@platform/${PLATFORM_PATH}/**"
+          to: "@artifact/canyon-namespace/"
+        - from: "@names/"
+          to: "@artifact/canyon-namespace/deploy/"

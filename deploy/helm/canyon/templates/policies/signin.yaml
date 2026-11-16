@@ -1,0 +1,44 @@
+{{- /* The in-cluster sign-in rule (https://www.getcanyon.ai/docs/self-host/kubernetes/, Install for production step 3): routed pods,
+     labelled canyon.floor, reach the sign-in provider's own pods on one port, beside the executor's per-app policy.
+     Refused at render: no namespace or labels; a label value that is not a string; a port that is not a whole
+     number from 1 to 65535; a namespace the chart writes or installs into (Canyon's own, Caddy's, Pocket ID's,
+     kpack's, headlamp's) or kube-system's, never a provider's own; and no host in canyon.egress.signin.hosts
+     without an address, the in-cluster entry the sidecars call directly. An empty entry in hosts, which the
+     executor's CANYON_KUBE_SIGNIN_DIRECT is written from, is refused here too. check-rendered.py derives the same
+     namespaces from the render, so the two lists can't drift. */}}
+{{- $s := .Values.canyon.egress.signin }}
+{{- range $s.hosts }}{{ if or (not (kindIs "string" .)) (not (trim .)) }}{{ fail "canyon.egress.signin.hosts holds an empty entry: each is <host> or <host>=<address>/32" }}{{ end }}{{ end }}
+{{- with $s.inCluster }}
+{{- if or .namespace .podLabels .port }}
+{{- $own := list "canyon" "canyon-apps" "canyon-builds" "canyon-scans" "canyon-infra" "canyon-auth" "canyon-gateway" "kpack" "headlamp" "kube-system" }}
+{{- if or (not (kindIs "string" .namespace)) (not .namespace) (not (kindIs "map" .podLabels)) (not .podLabels) }}
+{{- fail "canyon.egress.signin.inCluster needs namespace and podLabels, a name and a map of labels" }}
+{{- end }}
+{{- range $k, $v := .podLabels }}{{ if not (kindIs "string" $v) }}{{ fail (printf "canyon.egress.signin.inCluster.podLabels holds %s, whose value is not a string" $k) }}{{ end }}{{ end }}
+{{- if has .namespace $own }}
+{{- fail (printf "canyon.egress.signin.inCluster names %s, a namespace of Canyon's or the cluster's own: name your provider's own pods, never a gateway's" .namespace) }}
+{{- end }}
+{{- $p := .port }}
+{{- $whole := or (kindIs "int" $p) (kindIs "int64" $p) (and (kindIs "float64" $p) (eq (float64 $p) (floor $p))) }}
+{{- if or (not $whole) (lt (float64 $p) 1.0) (gt (float64 $p) 65535.0) }}
+{{- fail "canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535" }}
+{{- end }}
+{{- $inside := false }}
+{{- range $s.hosts }}{{ if and (trim .) (not (contains "=" .)) }}{{ $inside = true }}{{ end }}{{ end }}
+{{- if not $inside }}
+{{- fail "canyon.egress.signin.inCluster needs its host in canyon.egress.signin.hosts, listed without an address" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: canyon-apps-signin
+  namespace: canyon-apps
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  podSelector: {matchLabels: {canyon.floor: "true"}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .namespace | quote }}}}, podSelector: {matchLabels: {{ toJson .podLabels }}}}]
+      ports: [{protocol: TCP, port: {{ int .port }}}]
+{{- end }}
+{{- end }}

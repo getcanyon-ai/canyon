@@ -1,0 +1,28 @@
+{
+  "project": "claims-archive",
+  "envs": {
+    "prod": {
+      "url": "http://claims-archive.prod.localhost:7777",
+      "package": "pkg_8b21",
+      "label": "v3.1",
+      "image_digest": "sha256:767dbbc78400d7b0fcb3baaf4a96805d2f382cfdc57785093f45a60df340224b",
+      "deployed_at": "2026-08-24T13:55:02Z",
+      "gate_run": "gr_2e88",
+      "deployed_by": { "kind": "agent", "subject": "agent:cursor/tomas", "display": "Tomas's agent" },
+      "run_by": "org",
+      "pending": { "via": "webhook", "release": "rel_7a15", "event": "remove", "sent_at": "2026-09-02T11:30:00Z", "state": "accepted" },
+      "seen_at": "2026-09-02T11:29:12Z",
+      "promoted_by": { "kind": "person", "subject": "tomas@meridian.example", "display": "Tomas Neri" }
+    }
+  },
+  "last_run": "gr_2e88",
+  "promote_run": "gr_2e88",
+  "receipt": {
+    "org": "Meridian",
+    "blocked_by": [],
+    "rules": [],
+    "waiting": "Deploy a new version to preview to promote it."
+  },
+  "earlier": [],
+  "needs": []
+}

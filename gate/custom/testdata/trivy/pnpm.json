@@ -1,0 +1,45 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a627-c9fd-7a20-a687-5675f03eadd4",
+  "CreatedAt": "2026-11-04T10:43:07.901664646Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "pnpm-lock.yaml",
+      "Class": "lang-pkgs",
+      "Type": "pnpm",
+      "Packages": [
+        {
+          "ID": "express@4.21.2",
+          "Name": "express",
+          "Identifier": {
+            "PURL": "pkg:npm/express@4.21.2",
+            "UID": "868bb6b32a2723e6"
+          },
+          "Version": "4.21.2",
+          "Relationship": "direct",
+          "DependsOn": [
+            "debug@2.6.9"
+          ],
+          "AnalyzedBy": "pnpm"
+        },
+        {
+          "ID": "debug@2.6.9",
+          "Name": "debug",
+          "Identifier": {
+            "PURL": "pkg:npm/debug@2.6.9",
+            "UID": "938088d0e172dddd"
+          },
+          "Version": "2.6.9",
+          "Indirect": true,
+          "Relationship": "indirect",
+          "AnalyzedBy": "pnpm"
+        }
+      ]
+    }
+  ]
+}

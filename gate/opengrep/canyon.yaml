@@ -1,0 +1,126 @@
+# Canyon's own Opengrep rule, the one detection rule Canyon writes (#1418). No open-source ruleset
+# catches SQL built from a Next.js request — GitLab's sast-rules, njsscan's and the SIG community
+# rules each miss F-sql (measured on #1365) — so this one does. Delete it the day an upstream
+# ruleset does. It runs beside the vendored bundle (sast-rules.tar) in every opengrep scan, and its
+# CWE-89 tag maps it to sql.string-concat (contracts/snapshot.md, the policy table). Its cases are
+# testdata/canyon: every entry of flagged/ reports, nothing in clean/ does (make opengrep-rules-test).
+rules:
+- id: "canyon_sql_rule-request-in-sql-text"
+  languages:
+  - "typescript"
+  - "javascript"
+  message: |
+    A value from the request reaches the text of a SQL statement, so whoever sends the request can
+    rewrite the statement: read other rows, change them or drop the table.
+
+    Pass the value as a bound parameter, beside the statement text and never inside it, or build the
+    statement with a tag that binds its substitutions (`sql`, `Prisma.sql`, `prisma.$queryRaw`) —
+    never by concatenation or an untagged template literal.
+  severity: "ERROR"
+  metadata:
+    cwe: "CWE-89"
+    category: "security"
+    shortDescription: "Improper neutralization of special elements used in an SQL command ('SQL Injection')"
+    security-severity: "Critical"
+  mode: taint
+  pattern-sources:
+  # A Next.js route handler's request and params.
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          export function $M($REQ, ...) { ... }
+      - pattern-inside: |
+          export async function $M($REQ, ...) { ... }
+      - pattern-inside: |
+          export const $M = ($REQ, ...) => { ... }
+      - pattern-inside: |
+          export const $M = async ($REQ, ...) => { ... }
+      - pattern-inside: |
+          export const $M = ($REQ, ...) => $BODY
+      - pattern-inside: |
+          export const $M = async ($REQ, ...) => $BODY
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$
+    - pattern: $REQ
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          export function $M($REQ, $CTX, ...) { ... }
+      - pattern-inside: |
+          export async function $M($REQ, $CTX, ...) { ... }
+    - metavariable-regex:
+        metavariable: $M
+        regex: ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$
+    - pattern-either:
+      - pattern: params
+      - pattern: $CTX.params
+  # A page's searchParams and params.
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          export default function $P(...) { ... }
+      - pattern-inside: |
+          export default async function $P(...) { ... }
+    - pattern-either:
+      - pattern: searchParams
+      - pattern: params
+      - pattern: $PROPS.searchParams
+      - pattern: $PROPS.params
+  # A Pages Router API route's query and body.
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          export default function $H($REQ, $RES) { ... }
+      - pattern-inside: |
+          export default async function $H($REQ, $RES) { ... }
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+  # A server action's form data.
+  - patterns:
+    - pattern-inside: |
+        function $F(..., $FD: FormData, ...) { ... }
+    - pattern: $FD
+  # An Express handler's query, body and route params.
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $APP.$VERB($PATH, ..., ($REQ, $RES, ...) => { ... })
+      - pattern-inside: |
+          $APP.$VERB($PATH, ..., function ($REQ, $RES, ...) { ... })
+    - metavariable-regex:
+        metavariable: $VERB
+        regex: ^(?:get|head|post|put|patch|delete|options|all|use)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+  # Tags that bind their substitutions as parameters: postgres.js, @vercel/postgres, drizzle-orm and
+  # slonik's sql, and Prisma's. Exact, so an untagged statement inside one (sql.unsafe) still reports.
+  pattern-sanitizers:
+  - exact: true
+    pattern-either:
+    - pattern: sql`...`
+    - pattern: Prisma.sql`...`
+  # A number is no SQL.
+  - pattern-either:
+    - pattern: Number(...)
+    - pattern: parseInt(...)
+  # The statement text a driver or query builder runs: the first argument, whatever builds it, or
+  # its text or sql when it is an object (pg, mysql2), whose values are bound.
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern: $DB.$METHOD($Q, ...)
+          - pattern: $METHOD($Q, ...)
+        - pattern-not: $DB.$METHOD({...}, ...)
+        - pattern-not: $METHOD({...}, ...)
+      - pattern: "$DB.$METHOD({..., text: $Q, ...}, ...)"
+      - pattern: "$DB.$METHOD({..., sql: $Q, ...}, ...)"
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(?:query|execute|raw|unsafe|prepare|exec|\$queryRawUnsafe|\$executeRawUnsafe)$
+    - focus-metavariable: $Q

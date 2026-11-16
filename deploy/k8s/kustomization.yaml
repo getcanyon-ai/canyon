@@ -1,0 +1,12 @@
+# Canyon on Kubernetes, the base every cluster's overlay builds on (https://www.getcanyon.ai/docs/self-host/kubernetes/).
+# kpack must be installed first: builds.yaml is its objects.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - rbac.yaml
+  - executor.yaml
+  - server.yaml
+  - router.yaml
+  - egress.yaml
+  - builds.yaml

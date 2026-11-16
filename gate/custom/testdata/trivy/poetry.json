@@ -1,0 +1,45 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a627-ca80-7cc4-add8-b16d7d3d2fb8",
+  "CreatedAt": "2026-11-04T10:43:08.032837646Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "poetry.lock",
+      "Class": "lang-pkgs",
+      "Type": "poetry",
+      "Packages": [
+        {
+          "ID": "flask@3.1.0",
+          "Name": "flask",
+          "Identifier": {
+            "PURL": "pkg:pypi/flask@3.1.0",
+            "UID": "3a1206670bf9c34d"
+          },
+          "Version": "3.1.0",
+          "Relationship": "direct",
+          "DependsOn": [
+            "werkzeug@3.1.3"
+          ],
+          "AnalyzedBy": "poetry"
+        },
+        {
+          "ID": "werkzeug@3.1.3",
+          "Name": "werkzeug",
+          "Identifier": {
+            "PURL": "pkg:pypi/werkzeug@3.1.3",
+            "UID": "2764b11aceed9cf5"
+          },
+          "Version": "3.1.3",
+          "Indirect": true,
+          "Relationship": "indirect",
+          "AnalyzedBy": "poetry"
+        }
+      ]
+    }
+  ]
+}

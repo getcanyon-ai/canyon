@@ -1,0 +1,21 @@
+CANYON REVIEW — RESULT: FAILED
+
+app: claims-portal
+env: preview
+host: http://localhost:7777
+gate run: gr_8f2a (2026-09-02T09:31:04Z)
+reason: error — Canyon itself failed
+outcome: nothing was deployed.
+
+--- LAST LINES ---------------------------------------------------------------
+  Paketo Buildpack for Node Engine 1.2.3
+  No front door is set, so no app can run on this Canyon yet. An admin sets it in Settings › App hosting.
+
+NEXT STEPS:
+1. Stop. Tell the user Canyon itself failed, and quote the reason line and any last lines above.
+2. Do not change the app's code for this. The failure is Canyon's, not the app's.
+
+CANYON REVIEW — RESULT: FAILED
+reason: error — Canyon itself failed
+
+exit code: 1

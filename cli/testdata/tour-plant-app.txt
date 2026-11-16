@@ -1,0 +1,9 @@
+
+  ✓ Wrote 4 files into ./canyon-tour
+
+    canyon.toml
+    package.json
+    public/index.html
+    server.js
+
+  PLANTED: the tour wrote this app, so every visitor starts from the same code. It is the quick version a coding agent often writes: public/index.html has colours, fonts and a list of its own making, and nothing from the org's design system.

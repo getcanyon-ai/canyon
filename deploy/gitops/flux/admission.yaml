@@ -1,0 +1,156 @@
+# The bound on Flux's namespaces generator (design/HAND-OFF.md §10): what Argo CD's canyon-namespaces AppProject is to
+# its ApplicationSet, and more. The generator's account, canyon-namespaces in flux-system (rbac.yaml), may by RBAC
+# alone make or change any namespace and bind canyon-deploy in any namespace for any subject: RBAC scopes no create by
+# name, and Canyon's namespaces come and go with its apps. This policy holds every request that account makes to:
+#   - Namespaces named canyon-<app>-<preview|prod>, at most 63 characters, with Pod Security baseline,
+#     canyon.dev/managed "true" and canyon.dev/env the name's own environment; no other Pod Security or canyon.dev
+#     key, and no other label or annotation key but those Helm and Flux put on what they apply, unless the namespace
+#     already had it; a namespace changed or deleted only when it is already Canyon's (canyon.dev/managed).
+#   - RoleBindings named canyon-deploy, of the ClusterRole canyon-deploy, for the environment's own sync account
+#     (canyon-sync/canyon-<env>) alone, in such a namespace alone: never kube-system, flux-system or another team's.
+#   - Kustomizations in canyon-sync alone, named as the namespace they apply into, every reference and account
+#     pinned: their own environment's GitRepository and sync account, their own app's directory, prune with
+#     deletionPolicy Orphan; and no other field admitted (no postBuild, decryption, kubeConfig, patches, dependsOn,
+#     suspend, and none Flux adds later).
+# It fails closed: an expression that cannot be evaluated denies. Apply it once per cluster, with rbac.yaml, never from
+# the deploy repo; it needs Kubernetes 1.30 or later. The generator renders nothing while this policy or its binding
+# is missing (namespaces/templates/flux.yaml). ${ROOT} is the deploy repo's path root, as in sources.yaml.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: canyon-namespaces
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["namespaces"]
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["rolebindings"]
+      - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["kustomizations"]
+  matchConditions:
+    - name: canyon-namespaces-generator
+      expression: request.userInfo.username == 'system:serviceaccount:flux-system:canyon-namespaces'
+  variables:
+    - name: res
+      expression: request.resource.resource
+    - name: obj
+      expression: "request.operation == 'DELETE' ? oldObject : object"
+    # The app namespace a request is about: the Namespace itself, the RoleBinding's namespace, the Kustomization's name.
+    - name: name
+      expression: "variables.res == 'rolebindings' ? request.namespace : variables.obj.metadata.name"
+    - name: canyonName
+      expression: >-
+        variables.name.matches('^canyon-[a-z0-9]([-a-z0-9]*[a-z0-9])?-(preview|prod)$') && size(variables.name) <= 63
+    - name: env
+      expression: "variables.name.endsWith('-prod') ? 'prod' : 'preview'"
+    - name: app
+      expression: >-
+        variables.canyonName ? variables.name.substring(7, size(variables.name) - size(variables.env) - 1) : ''
+    - name: labelKeys
+      expression: >-
+        ['pod-security.kubernetes.io/enforce', 'canyon.dev/managed', 'canyon.dev/env', 'kubernetes.io/metadata.name',
+        'app.kubernetes.io/managed-by', 'helm.toolkit.fluxcd.io/name', 'helm.toolkit.fluxcd.io/namespace']
+    - name: annotationKeys
+      expression: "['meta.helm.sh/release-name', 'meta.helm.sh/release-namespace']"
+    - name: specKeys
+      expression: >-
+        ['interval', 'retryInterval', 'timeout', 'sourceRef', 'path', 'prune', 'wait', 'force', 'targetNamespace',
+        'serviceAccountName', 'deletionPolicy']
+  validations:
+    - expression: >-
+        variables.res != 'namespaces' || request.operation == 'CREATE' ||
+        (variables.canyonName && has(oldObject.metadata.labels) && 'canyon.dev/managed' in oldObject.metadata.labels &&
+        oldObject.metadata.labels['canyon.dev/managed'] == 'true')
+      reason: Forbidden
+      message: "Canyon's namespaces generator changes or deletes only Canyon's own namespaces:
+        canyon-<app>-<preview|prod>, already labelled canyon.dev/managed."
+    - expression: >-
+        variables.res != 'namespaces' || request.operation == 'DELETE' ||
+        (variables.canyonName && has(object.metadata.labels) &&
+        'pod-security.kubernetes.io/enforce' in object.metadata.labels &&
+        object.metadata.labels['pod-security.kubernetes.io/enforce'] == 'baseline' &&
+        'canyon.dev/managed' in object.metadata.labels && object.metadata.labels['canyon.dev/managed'] == 'true' &&
+        'canyon.dev/env' in object.metadata.labels && object.metadata.labels['canyon.dev/env'] == variables.env)
+      reason: Forbidden
+      message: "Canyon's namespaces generator makes namespaces named canyon-<app>-<preview|prod> alone, labelled Pod
+        Security baseline, canyon.dev/managed \"true\" and canyon.dev/env their own environment."
+    - expression: >-
+        variables.res != 'namespaces' || request.operation == 'DELETE' ||
+        ((!has(object.metadata.labels) || object.metadata.labels.all(k, k in variables.labelKeys ||
+        (!k.startsWith('pod-security.kubernetes.io/') && !k.startsWith('canyon.dev/') &&
+        request.operation == 'UPDATE' &&
+        has(oldObject.metadata.labels) && k in oldObject.metadata.labels &&
+        oldObject.metadata.labels[k] == object.metadata.labels[k]))) &&
+        (!has(object.metadata.annotations) || object.metadata.annotations.all(k, k in variables.annotationKeys ||
+        (request.operation == 'UPDATE' && has(oldObject.metadata.annotations) && k in oldObject.metadata.annotations &&
+        oldObject.metadata.annotations[k] == object.metadata.annotations[k]))))
+      reason: Forbidden
+      message: "Canyon's namespaces generator sets no label or annotation on a namespace but Canyon's three and
+        those Helm and Flux put on what they apply."
+    - expression: >-
+        variables.res != 'rolebindings' ||
+        (namespaceObject != null &&
+        namespaceObject.metadata.name.matches('^canyon-[a-z0-9]([-a-z0-9]*[a-z0-9])?-(preview|prod)$') &&
+        has(namespaceObject.metadata.labels) && 'canyon.dev/managed' in namespaceObject.metadata.labels &&
+        namespaceObject.metadata.labels['canyon.dev/managed'] == 'true' &&
+        'canyon.dev/env' in namespaceObject.metadata.labels &&
+        namespaceObject.metadata.labels['canyon.dev/env'] ==
+        (namespaceObject.metadata.name.endsWith('-prod') ? 'prod' : 'preview'))
+      reason: Forbidden
+      message: "Canyon's namespaces generator makes, changes and deletes RoleBindings in Canyon's own app namespaces
+        alone."
+    - expression: >-
+        variables.res != 'rolebindings' || (variables.obj.metadata.name == 'canyon-deploy' &&
+        (request.operation == 'DELETE' || (object.roleRef.apiGroup == 'rbac.authorization.k8s.io' &&
+        object.roleRef.kind == 'ClusterRole' && object.roleRef.name == 'canyon-deploy')))
+      reason: Forbidden
+      message: "Canyon's namespaces generator binds the ClusterRole canyon-deploy alone, in a RoleBinding named
+        canyon-deploy."
+    - expression: >-
+        variables.res != 'rolebindings' || request.operation == 'DELETE' ||
+        (has(object.subjects) && size(object.subjects) == 1 && object.subjects[0].kind == 'ServiceAccount' &&
+        object.subjects[0].name == 'canyon-' + variables.env && has(object.subjects[0].namespace) &&
+        object.subjects[0].namespace == 'canyon-sync')
+      reason: Forbidden
+      message: "Canyon's namespaces generator binds canyon-deploy for the namespace's own environment's sync account
+        alone, canyon-sync/canyon-<env>."
+    - expression: >-
+        variables.res != 'kustomizations' || (request.namespace == 'canyon-sync' && variables.canyonName)
+      reason: Forbidden
+      message: "Canyon's namespaces generator makes, changes and deletes Kustomizations in canyon-sync alone, each
+        named as its app namespace, canyon-<app>-<preview|prod>."
+    - expression: >-
+        variables.res != 'kustomizations' || request.operation == 'DELETE' ||
+        object.spec.all(k, k in variables.specKeys)
+      reason: Forbidden
+      message: "Canyon's namespaces generator sets no Kustomization field but interval, retryInterval, timeout,
+        sourceRef, path, prune, wait, force, targetNamespace, serviceAccountName and deletionPolicy."
+    - expression: >-
+        variables.res != 'kustomizations' || request.operation == 'DELETE' ||
+        (has(object.spec.targetNamespace) && object.spec.targetNamespace == variables.name &&
+        has(object.spec.serviceAccountName) && object.spec.serviceAccountName == 'canyon-' + variables.env &&
+        object.spec.sourceRef.all(k, k in ['kind', 'name']) && object.spec.sourceRef.kind == 'GitRepository' &&
+        object.spec.sourceRef.name == 'canyon-' + variables.env &&
+        object.spec.path == './${ROOT}/' + variables.app + '/' + variables.env &&
+        object.spec.prune == true && has(object.spec.deletionPolicy) && object.spec.deletionPolicy == 'Orphan' &&
+        (!has(object.spec.force) || object.spec.force == false))
+      reason: Forbidden
+      message: "Canyon's namespaces generator pins each Kustomization: its namespace as targetNamespace, its
+        environment's sync account and GitRepository, its app's directory, prune with deletionPolicy Orphan, and
+        force false."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: canyon-namespaces
+spec:
+  policyName: canyon-namespaces
+  validationActions: [Deny]

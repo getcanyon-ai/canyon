@@ -1,0 +1,1705 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/egress.schema.json",
+  "title": "Canyon egress records (seam 3)",
+  "description": "What Canyon keeps of an app's calls out (the egress design §2.4): one row per destination an app env calls — when it was first and last seen, how many calls, and the last call's result — never a time series, and never a path, a query, a header value, a body or a resolved address: the receiver drops every field of Envoy's access-log entry outside this schema on receipt. Beside them, the gaps the rows are missing calls in, an app's read (GET /api/v1/projects/:id/egress) and the host's setting (GET and PUT /api/v1/egress). The fixture under contracts/testdata/egress/ carries each; contracts/validate.py checks them here and then what the schema cannot say. Layer 2 (#2104) adds each app env's mode, allowlist and egress requests, the org's default mode and the policy egress-control pulls. Layer 3 (#2135) adds value routes: an env's routes, never a value, on the app's read and the policy; the bodies that set one; and what the internal fetch answers, the one shape that carries a value out of the vault.",
+  "definitions": {
+    "destination": {
+      "description": "The name dialled as the check canonicalises it (the egress design §3.3: lower-case A-labels without the trailing dot), or a dotted IPv4 literal; invalid, on port 443, for any other IP-literal encoding, a host UTS 46 maps to another name, userinfo, a label over 63 characters, a name over 253, a single label, or one that is no host name. Its port is the one called, whatever it is.",
+      "oneOf": [
+        {
+          "enum": [
+            "invalid"
+          ]
+        },
+        {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+        }
+      ]
+    },
+    "name": {
+      "description": "A destination as the canonicalisation leaves it (the egress design §3.3): lower-case A-labels (UTS 46) without the trailing dot, two labels or more, each of 1 to 63 characters, 253 in all; never an IP literal in any encoding — no name whose last label is a number, decimal or 0x and hex digits, which a client reads as an IPv4 address; and no line break, which a pattern's $ lets through before the end in some engines.",
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+      "not": {
+        "pattern": "\n|(^|\\.)([0-9]+|0x[0-9a-f]*)$"
+      }
+    },
+    "allowed": {
+      "description": "One entry of an app env's allowlist: a name, which allows that name alone, or *. and a name, which allows every name any depth below it and never the name itself (*.stripe.com allows api.stripe.com and a.b.stripe.com, never stripe.com). An entry allows both ports, 80 and 443.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/name"
+        },
+        {
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^\\*\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+          "not": {
+            "pattern": "\n|(^|\\.)([0-9]+|0x[0-9a-f]*)$"
+          }
+        }
+      ]
+    },
+    "mode": {
+      "description": "observe: every call allowed and recorded; allowlist: only what the env's allowlist and the platform destinations name, everything else refused and recorded. In either, an IP literal, a single label, an over-long name, a port other than 80 and 443, and a name past the rate limit are refused.",
+      "enum": [
+        "observe",
+        "allowlist"
+      ]
+    },
+    "request": {
+      "description": "An egress request (the egress design §3.4): the first not_allowed refusal of (app, env, destination) files one, pending, by canyon; allowing an entry that matches the destination closes it, and Dismiss makes it dismissed, after which the destination files no new one. refusals counts every not_allowed refusal of the destination since it was filed, dismissed or not; at most 50 are pending an app env, and past them a refusal files none.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destination",
+        "state",
+        "first_refused_at",
+        "last_refused_at",
+        "refusals",
+        "refusing"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/name"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "dismissed"
+          ]
+        },
+        "first_refused_at": {
+          "$ref": "#/definitions/destination_read/properties/first_seen_at"
+        },
+        "last_refused_at": {
+          "$ref": "#/definitions/destination_read/properties/first_seen_at"
+        },
+        "refusals": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "refusing": {
+          "description": "Whether the env refuses the destination now, as the fleet read's refused tile counts it (contracts/routes.md): pending, refused by the env's mode as the check decides, and refused since the env's running deployment went live. false on a dismissed request.",
+          "type": "boolean"
+        }
+      }
+    },
+    "allow": {
+      "description": "Who allowed one entry of an app env's allowlist, and when (#2722): the actor of the PUT that put it there, a person's alone, as the route refuses every other actor; the time; and last_refused_at, the latest refusal of the requests that PUT closed, null when it closed none. An entry allowed before #2722 has none.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry",
+        "by",
+        "at",
+        "last_refused_at"
+      ],
+      "properties": {
+        "entry": {
+          "$ref": "#/definitions/allowed"
+        },
+        "by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "subject",
+            "display"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "person"
+              ]
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1
+            },
+            "display": {
+              "type": "string"
+            }
+          }
+        },
+        "at": {
+          "$ref": "#/definitions/destination_read/properties/first_seen_at"
+        },
+        "last_refused_at": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/destination_read/properties/first_seen_at"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "destination_read": {
+      "description": "One destination an app env called, as the app's read carries it: its row without the app and env.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destination",
+        "port",
+        "first_seen_at",
+        "last_seen_at",
+        "calls",
+        "last_outcome",
+        "last_status_class",
+        "last_protocol",
+        "last_response_flags",
+        "last_credential_refusal"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/destination"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "first_seen_at": {
+          "description": "When the receiver took the first call's entry, UTC, to the second: the first since the destination was last aged out (30 days unseen).",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "last_seen_at": {
+          "description": "When the receiver took the latest call's entry, a periodic entry of a tunnel that runs on among them, UTC, to the second; never before first_seen_at.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "calls": {
+          "description": "The calls since first_seen_at, counted: a tunnel once, as it opens, its last entry adding none.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "last_outcome": {
+          "description": "The last ended call's, or an open tunnel's on the row it created: allowed in layer 1, where nothing refuses; refused arrives with layer 2's check.",
+          "enum": [
+            "allowed",
+            "refused"
+          ]
+        },
+        "last_status_class": {
+          "description": "The last call's answer's class; none when it got no answer. A tunnel's is its CONNECT's own.",
+          "enum": [
+            "1xx",
+            "2xx",
+            "3xx",
+            "4xx",
+            "5xx",
+            "none"
+          ]
+        },
+        "last_protocol": {
+          "description": "How the last call went through Envoy: connect, a tunnel whose bytes Envoy splices and never reads; http, a plain request; https, an absolute-form https:// request Envoy sends on in TLS it originates; intercepted, from layer 3, one request inside a tunnel Envoy ended to add a route's credential.",
+          "enum": [
+            "connect",
+            "http",
+            "https",
+            "intercepted"
+          ]
+        },
+        "last_response_flags": {
+          "description": "Envoy's own response flags on the last call, sorted, each once.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "DC",
+              "DF",
+              "DI",
+              "DPE",
+              "DR",
+              "DT",
+              "FI",
+              "IH",
+              "LH",
+              "LR",
+              "NC",
+              "NFCF",
+              "NR",
+              "OM",
+              "RFCF",
+              "RL",
+              "RLSE",
+              "SI",
+              "UAEX",
+              "UC",
+              "UF",
+              "UH",
+              "UMSDR",
+              "UO",
+              "UPE",
+              "UR",
+              "URX",
+              "UT"
+            ]
+          }
+        },
+        "last_credential_refusal": {
+          "description": "The row's latest call Canyon refused while adding a route's credential (#2692), null for none since first_seen_at: reason the check's inject_requires_tls, inject_unavailable or misdirected, misdirected for an inner request the internal listener answered 421 itself, and upstream_failed for an intercepted call Envoy flagged UF, DF or UH, never a request on :3128 that is no CONNECT; at when the receiver took its entry, UTC, to the second.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "reason",
+                "at"
+              ],
+              "properties": {
+                "reason": {
+                  "enum": [
+                    "inject_requires_tls",
+                    "inject_unavailable",
+                    "misdirected",
+                    "upstream_failed"
+                  ]
+                },
+                "at": {
+                  "$ref": "#/definitions/destination_read/properties/last_seen_at"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "row": {
+      "description": "One row of egress_destinations: key (app, env, destination, port), at most 500 an app env, invalid not among them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "env",
+        "destination",
+        "port",
+        "first_seen_at",
+        "last_seen_at",
+        "calls",
+        "last_outcome",
+        "last_status_class",
+        "last_protocol",
+        "last_response_flags",
+        "last_credential_refusal"
+      ],
+      "properties": {
+        "app": {
+          "description": "The app whose caller the attribution step named (the egress design §2.3); a call no one holds is no row, only an unattributed gap.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+        },
+        "env": {
+          "enum": [
+            "preview",
+            "prod"
+          ]
+        },
+        "destination": {
+          "$ref": "#/definitions/destination_read/properties/destination"
+        },
+        "port": {
+          "$ref": "#/definitions/destination_read/properties/port"
+        },
+        "first_seen_at": {
+          "$ref": "#/definitions/destination_read/properties/first_seen_at"
+        },
+        "last_seen_at": {
+          "$ref": "#/definitions/destination_read/properties/last_seen_at"
+        },
+        "calls": {
+          "$ref": "#/definitions/destination_read/properties/calls"
+        },
+        "last_outcome": {
+          "$ref": "#/definitions/destination_read/properties/last_outcome"
+        },
+        "last_status_class": {
+          "$ref": "#/definitions/destination_read/properties/last_status_class"
+        },
+        "last_protocol": {
+          "$ref": "#/definitions/destination_read/properties/last_protocol"
+        },
+        "last_response_flags": {
+          "$ref": "#/definitions/destination_read/properties/last_response_flags"
+        },
+        "last_credential_refusal": {
+          "$ref": "#/definitions/destination_read/properties/last_credential_refusal"
+        }
+      }
+    },
+    "gap": {
+      "description": "A span the rows are missing calls in, and why: dropped (the receiver's buffer was full, an entry was over 16 KiB, or — with calls null, no one counted — a message was over 4 MiB), not_recorded (a batch could not be written), unattributed (every call no app was named for: no one held its address, more than one claimed it, it was no IPv4 address, or the executor did not answer in time), envoy_dropped (calls Envoy dropped before sending, by its own count, or — with calls null, no one counted — lost around a restart of Envoy, on a stream to the receiver that failed to open, or while its count could not be read), over_cap (calls to destinations new to an app env already holding 500), each with the calls lost — a dropped or envoy_dropped gap no one counted is its own row beside a counted one; receiver_down, the time no receiver took Envoy's records, whose calls no one counted. over_cap alone names its app and env; every other gap names none, as a lost call names no app, so every app's read carries each of them in its window and only its own over_cap gaps. An app env's over_cap is one row, extended by each burst past the cap; a gap that names no app and continues the last one written of its reason, counted alike, extends that one row.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "reason",
+        "calls",
+        "app",
+        "env"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "enum": [
+            "receiver_down",
+            "dropped",
+            "not_recorded",
+            "unattributed",
+            "envoy_dropped",
+            "over_cap"
+          ]
+        },
+        "calls": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "app": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "enum": [
+            "preview",
+            "prod",
+            null
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "receiver_down"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "calls": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "not_recorded",
+                  "unattributed",
+                  "over_cap"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "calls": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "over_cap"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "app": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "app": {
+                "type": "null"
+              },
+              "env": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "env_read": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via",
+        "destinations",
+        "mode",
+        "app_mode",
+        "allowed",
+        "allows",
+        "requests"
+      ],
+      "properties": {
+        "via": {
+          "description": "The egress spec the env's running version was deployed under; null when nothing is deployed there.",
+          "enum": [
+            "off",
+            "canyon",
+            null
+          ]
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/destination_read"
+          }
+        },
+        "mode": {
+          "$ref": "#/definitions/mode"
+        },
+        "app_mode": {
+          "description": "The env's own mode, which an owner sets stricter than the org's and an admin either way; null when it follows the org's.",
+          "enum": [
+            "observe",
+            "allowlist",
+            null
+          ]
+        },
+        "allowed": {
+          "description": "The env's allowlist, sorted, each entry once.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/allowed"
+          }
+        },
+        "allows": {
+          "description": "#2722's: who allowed each entry of allowed and when, one for each entry an Allow recorded, sorted by entry as allowed is.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/allow"
+          }
+        },
+        "requests": {
+          "description": "The env's egress requests: pending first, then dismissed, each the latest refused first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/request"
+          }
+        },
+        "routes": {
+          "description": "Layer 3's (#2135), served from #2137 on, which makes it required: until then no route exists. The env's value routes, sorted by destination, each destination once.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/route_read"
+          }
+        }
+      },
+      "description": "One env of the app's read. mode, app_mode, allowed and requests are layer 2's (#2104), served from #2110 on, which makes them required: until then a reader finds them absent, and absent is not read, never allowed — a reader fails closed."
+    },
+    "project_read": {
+      "description": "GET /api/v1/projects/:id/egress: per env, every destination the app env called in the last 30 days (since), the latest seen first; and every gap ending since then that names no app, with the app's own over_cap gaps. Contributor and up (the permissions design, Outbound). From layer 2 (#2104; served from #2110 on, which makes it required; absent is not read, never allowed), platform: the platform destinations, the same for every app, sorted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "since",
+        "floor",
+        "envs",
+        "gaps",
+        "platform"
+      ],
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "floor": {
+          "description": "The app's network (the egress design §2.2), as its last start or recreation recorded it, no record reading open: enforced while internal, its calls out leaving through Envoy alone; not_enforced while open or unknown, the host's via canyon and an env of it Canyon runs — its calls may reach past Envoy until an admin recreates the network; null otherwise. On Kubernetes, which has no app network, read from the deploy rows, per env: enforced when every env Canyon runs ran under canyon; not_enforced when the host's via is canyon and an env Canyon runs ran off; null otherwise.",
+          "oneOf": [
+            {
+              "enum": [
+                "enforced",
+                "not_enforced"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "envs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "preview",
+            "prod"
+          ],
+          "properties": {
+            "preview": {
+              "$ref": "#/definitions/env_read"
+            },
+            "prod": {
+              "$ref": "#/definitions/env_read"
+            }
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/gap"
+          }
+        },
+        "platform": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/name"
+          }
+        }
+      }
+    },
+    "via": {
+      "enum": [
+        "off",
+        "canyon"
+      ]
+    },
+    "setting_member": {
+      "description": "GET /api/v1/egress as a member reads it: via, and from layer 2 the org's default mode (#2104; served from #2110 on, which makes it required; absent is not read, never allowed). From #2143, credential_routes: whether Canyon adds credentials to apps' calls (Settings › Outbound, Credentials), false until an admin turns it on; while false no /run carries egress.ca, the policy names no route and a route's write is 409 credential_routes_off.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via",
+        "mode",
+        "credential_routes"
+      ],
+      "properties": {
+        "via": {
+          "$ref": "#/definitions/via"
+        },
+        "mode": {
+          "$ref": "#/definitions/mode"
+        },
+        "credential_routes": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setting_admin": {
+      "description": "GET /api/v1/egress as an admin reads it, and PUT's answer: via; the proxy a /run under via canyon names (CANYON_EGRESS_PROXY, null when unset); whether this server takes Envoy's records; how many of Envoy's streams are open now; when the last entry arrived, null before any; the apps whose network is not what via makes it, which an admin's Recreate networks moves (the egress design §2.2), null on Kubernetes; and the message PUT canyon's 409 would answer now, null when it would be taken. From layer 2 (#2104; served from #2110 on, which makes it required; absent is not read, never allowed), mode: the org's default, observe until an admin sets it. From #2113, replicas: each egress-control replica that asked for the policy in the last day, by name — on Kubernetes the pod its token names, on Docker its address on canyon-egress-ctl — the version it last said it holds (null: none, or out of shape), when it last asked, and current_at, the last time that version was the current one (null: never); its policy's age is now minus current_at, which Settings › Outbound shows. From #2704, ca: the interception roots' key dates (ca_read), which Settings › Outbound shows and warns ahead of an admin's sub-CA's end with. From #2691, caps: the three egress caps, an admin's to set. From #2143, credential_routes: whether Canyon adds credentials to apps' calls (Settings › Outbound, Credentials), false until an admin turns it on; while false no /run carries egress.ca, the policy names no route and a route's write is 409 credential_routes_off.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via",
+        "proxy",
+        "receiver",
+        "streams",
+        "last_entry_at",
+        "networks_to_recreate",
+        "networks",
+        "canyon_refused",
+        "mode",
+        "replicas",
+        "ca",
+        "caps",
+        "credential_routes"
+      ],
+      "properties": {
+        "via": {
+          "$ref": "#/definitions/via"
+        },
+        "proxy": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^http://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?:3128$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "receiver": {
+          "type": "boolean"
+        },
+        "streams": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "last_entry_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "networks": {
+          "description": "Added 2026-11-12 (#2767): each app networks_to_recreate lists, by id, with its network now: internal, open, or unknown (a recreation under way, or one that failed). Settings › Outbound reads them here in one call. null on Kubernetes, as networks_to_recreate is.",
+          "oneOf": [
+            {
+              "type": "object",
+              "propertyNames": { "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$" },
+              "additionalProperties": { "enum": ["internal", "open", "unknown"] }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "networks_to_recreate": {
+          "description": "By app id, sorted, each once: each app Canyon runs an env of whose network is open under via canyon, internal under via off, or unknown after a recreation that failed — the network its last start or recreation recorded, an app with no record reading open. Settings › Outbound lists them, each with its Recreate. null on Kubernetes, which has no app network to recreate.",
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "canyon_refused": {
+          "description": "The message of the 409 egress_not_ready a PUT {via: canyon} would answer now, null when it would be taken: Settings › Outbound says it above the choice and turns Through Canyon off.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "$ref": "#/definitions/mode"
+        },
+        "replicas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "replica",
+              "have",
+              "seen_at",
+              "current_at"
+            ],
+            "properties": {
+              "replica": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "have": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}:[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "seen_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "current_at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "ca": {
+          "$ref": "#/definitions/ca_read"
+        },
+        "caps": {
+          "$ref": "#/definitions/caps"
+        },
+        "credential_routes": {
+          "type": "boolean"
+        }
+      }
+    },
+    "caps": {
+      "description": "The admin's three egress caps (the egress design §3.3, the owner's decision 2026-11-05; #2691), each in its range: never missing, never one that means no cap.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destinations",
+        "new_names",
+        "pending"
+      ],
+      "properties": {
+        "destinations": {
+          "description": "Rows (destination, port) an app env keeps, invalid not among them; a call to a new one past them is its over_cap gap. 500 by default.",
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 5000
+        },
+        "new_names": {
+          "description": "New names an app env may call a minute, across every egress-control replica, each letting through its share rounded down; past them 403 rate_limited. 30 by default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "pending": {
+          "description": "Pending egress requests an app env may hold; past them a refusal files none, and its row still records it. 50 by default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    },
+    "caps_put": {
+      "description": "PUT /api/v1/egress's caps: one key of caps at least, each in its range; a key left out keeps its value (#2691).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "destinations": {
+          "description": "Rows (destination, port) an app env keeps, invalid not among them; a call to a new one past them is its over_cap gap. 500 by default.",
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 5000
+        },
+        "new_names": {
+          "description": "New names an app env may call a minute, across every egress-control replica, each letting through its share rounded down; past them 403 rate_limited. 30 by default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "pending": {
+          "description": "Pending egress requests an app env may hold; past them a refusal files none, and its row still records it. 50 by default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "minProperties": 1
+    },
+    "setting_put": {
+      "description": "PUT /api/v1/egress's body: via, the org's default mode, the caps (#2691), credential_routes (#2143), or any of them together; a key left out keeps its value. mode is taken from #2110 on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "via": {
+          "$ref": "#/definitions/via"
+        },
+        "mode": {
+          "$ref": "#/definitions/mode"
+        },
+        "caps": {
+          "$ref": "#/definitions/caps_put"
+        },
+        "credential_routes": {
+          "type": "boolean"
+        }
+      },
+      "minProperties": 1
+    },
+    "dropped_report": {
+      "description": "POST /egress/dropped's body: what egress-control read of what Envoy lost on its way to the receiver. calls is the entries Envoy's own counter rose by; null says entries were lost and no one counted them, never that none were.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calls"
+      ],
+      "properties": {
+        "calls": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1099511627776
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "mode_put": {
+      "description": "PUT /api/v1/projects/:id/egress/:env/mode's body: the env's own mode, or null to follow the org's.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "observe",
+            "allowlist",
+            null
+          ]
+        }
+      }
+    },
+    "fleet_read": {
+      "description": "GET /api/v1/egress/destinations, an admin's: every app's rows last seen at or after since, 30 days ago, the latest seen first, then by app, env, destination and port; and every gap ending at or after since, the oldest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "since",
+        "destinations",
+        "gaps"
+      ],
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/row"
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/gap"
+          }
+        }
+      }
+    },
+    "route_header": {
+      "description": "The header a route sets, as stored: lower-case, as HTTP/2 sends it. Never one that frames or routes the request, one that lives between two hops, or Canyon's or Envoy's own (contracts/routes.md, Egress control).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "\n"
+          },
+          {
+            "pattern": "^(canyon-|x-canyon-|x-envoy-)"
+          },
+          {
+            "enum": [
+              "connection",
+              "content-length",
+              "host",
+              "keep-alive",
+              "proxy-authenticate",
+              "proxy-authorization",
+              "proxy-connection",
+              "te",
+              "trailer",
+              "transfer-encoding",
+              "upgrade"
+            ]
+          }
+        ]
+      }
+    },
+    "route_scheme": {
+      "description": "How a route's value becomes its header: bearer, Bearer and the value; basic, Basic and the value, <user>:<password>, in base64; raw, the value as it is.",
+      "enum": [
+        "bearer",
+        "basic",
+        "raw"
+      ]
+    },
+    "route_placeholder_env": {
+      "description": "The variable the app's next /run gives canyon-adds-the-real-key, so an SDK that needs a key starts. A placeholder carries no authority. Never a name a runtime secret may not take (the secrets row: PORT, CANYON_IDENTITY_*, PATH, LD_PRELOAD, LD_LIBRARY_PATH, CNB_*, and on a Docker host its own list, which the server holds) nor one the executor sets with egress or egress.ca. Absent or null: none.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "\n"
+              },
+              {
+                "pattern": "^(CANYON_IDENTITY_|CNB_)"
+              },
+              {
+                "enum": [
+                  "PORT",
+                  "PATH",
+                  "LD_PRELOAD",
+                  "LD_LIBRARY_PATH",
+                  "HTTPS_PROXY",
+                  "HTTP_PROXY",
+                  "https_proxy",
+                  "http_proxy",
+                  "NO_PROXY",
+                  "no_proxy",
+                  "NODE_USE_ENV_PROXY",
+                  "JDK_JAVA_OPTIONS",
+                  "SSL_CERT_DIR",
+                  "NODE_EXTRA_CA_CERTS",
+                  "REQUESTS_CA_BUNDLE"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "route_read": {
+      "description": "One value route of an app env, as GET /api/v1/projects/:id/egress reads it, to a contributor and up: never its value, to any level (the permissions design, Outbound). from_secret: what the route's last write says, true after a from-secret and false after a PUT, so only an owner or an admin replaces or deletes a route a secret placed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destination",
+        "header",
+        "scheme",
+        "placeholder_env",
+        "from_secret",
+        "waiting"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/name"
+        },
+        "header": {
+          "$ref": "#/definitions/route_header"
+        },
+        "scheme": {
+          "$ref": "#/definitions/route_scheme"
+        },
+        "placeholder_env": {
+          "$ref": "#/definitions/route_placeholder_env"
+        },
+        "from_secret": {
+          "type": "boolean"
+        },
+        "waiting": {
+          "description": "null while the policy names the route. Else why not, the first that holds (contracts/routes.md, Interception, Trust): host, the host's via is off, its credential_routes false (#2143) or its run_by org; secret, the env's runtime secret of that name sets a trust variable; redeploy, the env's trusted roots lack the signing root.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "reason",
+                "secret"
+              ],
+              "properties": {
+                "reason": {
+                  "enum": [
+                    "host",
+                    "redeploy"
+                  ]
+                },
+                "secret": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "reason",
+                "secret"
+              ],
+              "properties": {
+                "reason": {
+                  "const": "secret"
+                },
+                "secret": {
+                  "enum": [
+                    "SSL_CERT_DIR",
+                    "NODE_EXTRA_CA_CERTS",
+                    "REQUESTS_CA_BUNDLE"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "policy_route": {
+      "description": "One value route as the policy names it (the egress design §4.1): what egress-control needs to choose it, never its value. rev: drawn for each write of a route from one sequence over every route write, so it never repeats for an app env and destination, a route deleted and set again included; a value egress-control holds under another rev is dropped.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "destination",
+        "header",
+        "scheme",
+        "rev"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/name"
+        },
+        "header": {
+          "$ref": "#/definitions/route_header"
+        },
+        "scheme": {
+          "$ref": "#/definitions/route_scheme"
+        },
+        "rev": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "route_put": {
+      "description": "PUT /api/v1/projects/:id/egress/:env/routes/:destination: a route set whole, its value entered with it, so a value is never re-pointed at another destination. header is taken in any case and stored lower-case.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "scheme",
+        "value"
+      ],
+      "properties": {
+        "header": {
+          "description": "Taken in any case and stored lower-case, so what the stored form refuses is refused here in any case: the server answers 400 invalid_route, field header, for a header whose lower-case form is no route_header.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9-]{0,63}$",
+          "not": {
+            "anyOf": [
+              {
+                "pattern": "\n"
+              },
+              {
+                "pattern": "^([cC][aA][nN][yY][oO][nN]-|[xX]-[cC][aA][nN][yY][oO][nN]-|[xX]-[eE][nN][vV][oO][yY]-)"
+              },
+              {
+                "pattern": "^([cC][oO][nN][nN][eE][cC][tT][iI][oO][nN]|[cC][oO][nN][tT][eE][nN][tT]-[lL][eE][nN][gG][tT][hH]|[hH][oO][sS][tT]|[kK][eE][eE][pP]-[aA][lL][iI][vV][eE]|[pP][rR][oO][xX][yY]-[aA][uU][tT][hH][eE][nN][tT][iI][cC][aA][tT][eE]|[pP][rR][oO][xX][yY]-[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[pP][rR][oO][xX][yY]-[cC][oO][nN][nN][eE][cC][tT][iI][oO][nN]|[tT][eE]|[tT][rR][aA][iI][lL][eE][rR]|[tT][rR][aA][nN][sS][fF][eE][rR]-[eE][nN][cC][oO][dD][iI][nN][gG]|[uU][pP][gG][rR][aA][dD][eE])$"
+              }
+            ]
+          }
+        },
+        "scheme": {
+          "$ref": "#/definitions/route_scheme"
+        },
+        "value": {
+          "$ref": "#/definitions/route_value/properties/value"
+        },
+        "placeholder_env": {
+          "$ref": "#/definitions/route_placeholder_env"
+        }
+      }
+    },
+    "route_from_secret": {
+      "description": "POST .../routes/:destination/from-secret, an owner's or an admin's: a runtime secret of the env moved into the route, by its name. Never a value in the body.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "secret",
+        "header",
+        "scheme"
+      ],
+      "properties": {
+        "secret": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+          "not": {
+            "pattern": "\n"
+          }
+        },
+        "header": {
+          "$ref": "#/definitions/route_put/properties/header"
+        },
+        "scheme": {
+          "$ref": "#/definitions/route_scheme"
+        },
+        "placeholder_env": {
+          "description": "Omitted, the secret's own name, checked as a given one is, so an app that reads that variable still starts; null, none.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/route_placeholder_env"
+            }
+          ]
+        }
+      }
+    },
+    "route_value": {
+      "description": "GET /egress/route-value's 200, to egress-control alone: the one shape that carries a route's value out of the vault. rev: the write this value was sealed under, which must be the policy's for the route, and which no other write of any route shares.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rev",
+        "value"
+      ],
+      "properties": {
+        "rev": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "value": {
+          "description": "1 to 8,192 characters, and no control character but a tab: it goes into a header.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "not": {
+            "pattern": "[\\x00-\\x08\\x0a-\\x1f\\x7f]"
+          }
+        }
+      }
+    },
+    "policy": {
+      "description": "GET /egress/policy's 200 (the egress design §3.2): all egress-control decides with, and never a credential. Its version is epoch:seq: seq grows with every change, epoch is 128 random bits the server draws at each start, so a restored database never brings an old version back under its old epoch. callers: who holds each source address — each address egress-control's refetch asked of the executor's POST /callers that an app env Canyon runs holds, Docker and Kubernetes alike (the server knows no app network's /24), and stays while the executor names it so, confirmed every 15 s. envs: each app env Canyon runs under via canyon, named before its /run. Each env carries its mode and allowlist, and known: the names a call of it went through to in the last 30 days (never one only refused), at most 500 — names the rate limit counts as no new one; known moves no version, being read at each 200. platform: the platform destinations, allowed for every caller of every env. public_url: the host's, which a not_allowed body links to. format: 1; a server raises it only for a change an older egress-control must not read as it reads 1, and egress-control refuses a format higher than it knows and ignores fields it does not know, so a field added takes no egress down (#2116). signing_root (#2704; served from #2704 on): the fingerprint of the root signing the current leaves, null while none is live — every leaf egress-control serves must chain to it (GET /egress/leaf); seq moves when it changes, a root passing its end included. caps (#2691): the caps the check enforces, new_names; absent from a server from before it, which egress-control reads as 30.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "epoch",
+        "seq",
+        "public_url",
+        "callers",
+        "envs",
+        "platform"
+      ],
+      "properties": {
+        "format": {
+          "description": "1, and 2 whenever the policy carries kubernetes (#2142): an egress-control from before #2142 reads 1 alone and refuses 2 whole, so it fails closed on a Kubernetes policy rather than ignore token_only.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "epoch": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "public_url": {
+          "type": "string",
+          "pattern": "^https?://[^/?#@\\s]+$"
+        },
+        "callers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "address",
+              "app",
+              "env"
+            ],
+            "properties": {
+              "address": {
+                "type": "string",
+                "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+              },
+              "app": {
+                "$ref": "#/definitions/row/properties/app"
+              },
+              "env": {
+                "$ref": "#/definitions/row/properties/env"
+              }
+            }
+          }
+        },
+        "envs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "app",
+              "env",
+              "mode",
+              "allowed",
+              "known"
+            ],
+            "properties": {
+              "app": {
+                "$ref": "#/definitions/row/properties/app"
+              },
+              "env": {
+                "$ref": "#/definitions/row/properties/env"
+              },
+              "mode": {
+                "$ref": "#/definitions/mode"
+              },
+              "allowed": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/definitions/allowed"
+                }
+              },
+              "known": {
+                "type": "array",
+                "uniqueItems": true,
+                "maxItems": 500,
+                "items": {
+                  "$ref": "#/definitions/name"
+                }
+              },
+              "routes": {
+                "description": "Layer 3's (#2135), served from #2137 on, which makes it required: until then no route exists. The env's value routes, sorted by destination, each destination once. Policy, never secrets: no route here carries a value. Named only while the signing root is among the env's trusted roots (egress_roots on its deploy row), else empty.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/policy_route"
+                }
+              },
+              "account": {
+                "description": "Kubernetes, layer 3 (#2142; the egress design §4.3): the env's ServiceAccount canyon-app-<app>-<env> of canyon-apps, the executor's name for it, named for every env on a Kubernetes host from before its first /run, so the check knows it before the env's new pod first calls out. A valid projected token of it names this env from any address. Never present on Docker.",
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^canyon-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-(preview|prod)$"
+              },
+              "token_only": {
+                "description": "Kubernetes, layer 3 (#2142; the egress design §4.3): the server's mark, from the env's deploy row, set once a /run whose pods carry canyon-identity's forwarder succeeded, its earlier pods gone; no pod and no POST /callers answer sets it, and a failed /run never does. With it the env's pods are named by their token alone and never by their address, a matching one included (no downgrade). Without it the env is also its pods' address's, as before layer 3, but a call named so is never intercepted. Only with account.",
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "platform": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/name"
+          }
+        },
+        "signing_root": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/root_fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kubernetes": {
+          "description": "Kubernetes, layer 3 (#2142; the egress design §4.3, §14 decision 1): present only on a host whose apps run on Kubernetes. issuer and keys are the cluster's service-account issuer and key set as the server last read them (GET /.well-known/openid-configuration, GET /openid/v1/jwks), within 10 minutes, else null and empty: then no token verifies, and an env with token_only is unknown_caller, never its address's. egress-control verifies a pod's projected token against these alone, offline, and names a token's caller no longer than an address's: while the server's last answer that the policy is current is at most 30 s old and the key set at most 10 minutes.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "issuer",
+            "keys"
+          ],
+          "properties": {
+            "issuer": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kty"
+                ]
+              }
+            }
+          }
+        },
+        "caps": {
+          "description": "The caps the check enforces (#2691): new_names, which each replica shares by CANYON_EGRESS_REPLICAS, rounded down. Absent from a server from before #2691: egress-control reads the default, 30.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "new_names"
+          ],
+          "properties": {
+            "new_names": {
+              "description": "New names an app env may call a minute, across every egress-control replica, each letting through its share rounded down; past them 403 rate_limited. 30 by default.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            }
+          }
+        }
+      }
+    },
+    "root_fingerprint": {
+      "description": "A root certificate's SHA-256 fingerprint, of its DER, lower-case hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "trust_state": {
+      "description": "Not served: what the server decides interception from (contracts/routes.md, Interception, Trust), so contracts/validate.py can hold the policy and the read to it. signing_root: the root signing the current leaves. envs: each env's trusted roots as its deploy row records them, egress_roots, and the first runtime secret of the env naming a trust variable, or null. rollout: one /run's records, the trusted roots before it, the roots it carried, what is written before it, and what is written once the executor answers that the new version is up and the previous instance is gone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signing_root",
+        "via",
+        "run_by",
+        "envs",
+        "rollout"
+      ],
+      "properties": {
+        "signing_root": {
+          "$ref": "#/definitions/root_fingerprint"
+        },
+        "via": {
+          "enum": [
+            "off",
+            "canyon"
+          ]
+        },
+        "run_by": {
+          "enum": [
+            "canyon",
+            "org"
+          ]
+        },
+        "envs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "app",
+              "env",
+              "egress_roots",
+              "trust_secret"
+            ],
+            "properties": {
+              "app": {
+                "$ref": "#/definitions/row/properties/app"
+              },
+              "env": {
+                "$ref": "#/definitions/row/properties/env"
+              },
+              "egress_roots": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/definitions/root_fingerprint"
+                }
+              },
+              "trust_secret": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "SSL_CERT_DIR",
+                      "NODE_EXTRA_CA_CERTS",
+                      "REQUESTS_CA_BUNDLE"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "rollout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "before",
+            "carried",
+            "pre_run",
+            "settled"
+          ],
+          "properties": {
+            "before": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/root_fingerprint"
+              }
+            },
+            "carried": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/root_fingerprint"
+              }
+            },
+            "pre_run": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/root_fingerprint"
+              }
+            },
+            "settled": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/root_fingerprint"
+              }
+            }
+          }
+        }
+      }
+    },
+    "ca_read": {
+      "description": "setting_admin's ca (design/EGRESS.md §4.5; #2704): the interception roots and their key dates, never a key. signing: the root signing the current leaves, null while none is live. roots: each root whose end has not passed, the newest first, at most two — one rotation at a time: byo, an admin's sub-CA rather than Canyon's own root; not_after, its certificate's end (a sub-CA's, the earliest of the certificates it was given with); ends_at, when Canyon stops using it, its not_after or 60 days after the rotation that replaced it began, the sooner. rotates_at: when Canyon starts the next rotation itself, 60 days before the newest root's ends_at, while that root is Canyon's own; null while it is an admin's sub-CA, which never rotates by itself, or while no root is live.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signing",
+        "roots",
+        "rotates_at"
+      ],
+      "properties": {
+        "signing": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/root_fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "fingerprint",
+              "byo",
+              "created_at",
+              "not_after",
+              "ends_at"
+            ],
+            "properties": {
+              "fingerprint": {
+                "$ref": "#/definitions/root_fingerprint"
+              },
+              "byo": {
+                "type": "boolean"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "not_after": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "ends_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "rotates_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ca_rotate": {
+      "description": "POST /api/v1/egress/ca/rotate's body (design/EGRESS.md §4.5; #2704): {} for a root Canyon mints, or exactly {cert, key} for an admin's sub-CA (BYO). cert: the sub-CA's certificate, then each certificate above it in order, ending at a self-signed root, PEM as Go's encoding/pem writes it, one to four. key: the sub-CA's private key, PKCS #8, PEM. The key is never read back: no read, log line, error or audit row carries it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "maxProperties": 0
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cert",
+            "key"
+          ],
+          "properties": {
+            "cert": {
+              "type": "string",
+              "maxLength": 32768,
+              "pattern": "^(-----BEGIN CERTIFICATE-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END CERTIFICATE-----\\n){1,4}$"
+            },
+            "key": {
+              "type": "string",
+              "maxLength": 8192,
+              "pattern": "^-----BEGIN PRIVATE KEY-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END PRIVATE KEY-----\\n$"
+            }
+          }
+        }
+      ]
+    },
+    "leaf": {
+      "description": "GET /egress/leaf's 200, to egress-control alone (design/EGRESS.md §4.5; #2704): one inject destination's leaf for SDS, minted for this answer and kept nowhere. cert: the leaf, PEM, one SAN, the destination, valid from 5 minutes before it was minted to 24 hours after, or to the intermediate's end when sooner. key: its private key, PKCS #8, PEM: the one answer that carries a key. chain: what Envoy sends after the leaf, PEM — the 7-day intermediate, name-constrained to the inject destinations, then, under an admin's sub-CA, the sub-CA and the certificates above it but the self-signed root. root: the fingerprint of the root the chain ends at, the policy's signing_root when it was minted. not_after: the leaf's end.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "cert",
+        "key",
+        "chain",
+        "not_after"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/definitions/root_fingerprint"
+        },
+        "cert": {
+          "type": "string",
+          "maxLength": 8192,
+          "pattern": "^-----BEGIN CERTIFICATE-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END CERTIFICATE-----\\n$"
+        },
+        "key": {
+          "type": "string",
+          "maxLength": 8192,
+          "pattern": "^-----BEGIN PRIVATE KEY-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END PRIVATE KEY-----\\n$"
+        },
+        "chain": {
+          "type": "string",
+          "maxLength": 32768,
+          "pattern": "^(-----BEGIN CERTIFICATE-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END CERTIFICATE-----\\n){1,4}$"
+        },
+        "not_after": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "destinations",
+    "gaps",
+    "project_read",
+    "setting_member",
+    "setting_admin",
+    "setting_put",
+    "fleet_read",
+    "mode_put",
+    "dropped_report",
+    "policy",
+    "route_put",
+    "route_from_secret",
+    "route_value",
+    "trust_state",
+    "ca_rotate",
+    "leaf"
+  ],
+  "properties": {
+    "destinations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/row"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/gap"
+      }
+    },
+    "project_read": {
+      "$ref": "#/definitions/project_read"
+    },
+    "setting_member": {
+      "$ref": "#/definitions/setting_member"
+    },
+    "setting_admin": {
+      "$ref": "#/definitions/setting_admin"
+    },
+    "setting_put": {
+      "$ref": "#/definitions/setting_put"
+    },
+    "fleet_read": {
+      "$ref": "#/definitions/fleet_read"
+    },
+    "mode_put": {
+      "$ref": "#/definitions/mode_put"
+    },
+    "dropped_report": {
+      "$ref": "#/definitions/dropped_report"
+    },
+    "policy": {
+      "$ref": "#/definitions/policy"
+    },
+    "route_put": {
+      "$ref": "#/definitions/route_put"
+    },
+    "route_from_secret": {
+      "$ref": "#/definitions/route_from_secret"
+    },
+    "route_value": {
+      "$ref": "#/definitions/route_value"
+    },
+    "trust_state": {
+      "$ref": "#/definitions/trust_state"
+    },
+    "ca_rotate": {
+      "$ref": "#/definitions/ca_rotate"
+    },
+    "leaf": {
+      "$ref": "#/definitions/leaf"
+    }
+  }
+}

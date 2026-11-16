@@ -1,0 +1,127 @@
+{
+  "project": "claims-portal",
+  "envs": {
+    "preview": {
+      "url": "http://claims-portal.preview.localhost:7777",
+      "package": "pkg_7a1c",
+      "label": "v1.3",
+      "image_digest": "sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d",
+      "deployed_at": "2026-09-01T11:26:40Z",
+      "gate_run": "gr_6c12",
+      "deployed_by": {
+        "kind": "agent",
+        "subject": "agent:claude-code/dana",
+        "display": "Dana's agent"
+      },
+      "run_by": "canyon",
+      "state": "running"
+    },
+    "prod": {
+      "url": "http://claims-portal.prod.localhost:7777",
+      "package": "pkg_9e40",
+      "label": "v1.4",
+      "image_digest": "sha256:4b8e2d61a07c95f3e1d2c8b7a6f5e4d3c2b1a09f8e7d6c5b4a3928170f6e5d4c",
+      "deployed_at": "2026-10-04T09:12:00Z",
+      "gate_run": "gr_7e31",
+      "deployed_by": {
+        "kind": "agent",
+        "subject": "agent:claude-code/dana",
+        "display": "Dana's agent"
+      },
+      "promoted_by": {
+        "kind": "person",
+        "subject": "dana@meridian.example",
+        "display": "Dana Whitfield"
+      },
+      "run_by": "canyon",
+      "state": "running"
+    }
+  },
+  "last_run": "gr_9d41",
+  "promote_run": "gr_9d41",
+  "receipt": {
+    "org": "Meridian",
+    "blocked_by": [],
+    "rules": [
+      {
+        "id": "prod.clean-gate",
+        "name": "Production needs a passing review",
+        "blocks": true,
+        "passed": true,
+        "why": "v1.3 passed review: no blocking finding"
+      },
+      {
+        "id": "prod.human-approval",
+        "name": "A person promotes",
+        "blocks": true,
+        "passed": true,
+        "why": "a person promotes, or an agent they ask, with their CLI sign-in"
+      },
+      {
+        "id": "stack.blessed",
+        "name": "Approved stacks only",
+        "blocks": false,
+        "passed": false,
+        "why": "no approved stacks set",
+        "unset": true
+      },
+      {
+        "id": "owner.required",
+        "name": "Every app has an owner",
+        "blocks": false,
+        "passed": true,
+        "why": "owned by Dana Whitfield"
+      }
+    ],
+    "ships": {
+      "version": "v1.3",
+      "image_digest": "sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d"
+    }
+  },
+  "earlier": [
+    {
+      "package": "pkg_7a1c",
+      "version": "v1.3",
+      "image_digest": "sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d",
+      "deployed_at": "2026-10-02T14:40:00Z",
+      "promoted_by": {
+        "kind": "person",
+        "subject": "dana@meridian.example",
+        "display": "Dana Whitfield"
+      },
+      "kept": true
+    },
+    {
+      "package": "pkg_9e40",
+      "version": "v1.4",
+      "image_digest": "sha256:9a7c3e5b1d0f2e4a6c8b0d2f4e6a8c0b2d4f6e8a0c2b4d6f8e0a2c4b6d8f0e2a",
+      "deployed_at": "2026-09-30T16:05:00Z",
+      "promoted_by": {
+        "kind": "person",
+        "subject": "dana@meridian.example",
+        "display": "Dana Whitfield"
+      },
+      "patched": true,
+      "kept": false
+    },
+    {
+      "package": "pkg_5b20",
+      "version": "v1.2",
+      "image_digest": "sha256:1f3e5d7c9b0a2e4d6c8b0a1f3e5d7c9b2a4e6d8c0b1a3f5e7d9c1b3a5e7d9c0b",
+      "deployed_at": "2026-09-28T11:20:00Z",
+      "promoted_by": null,
+      "kept": false
+    }
+  ],
+  "needs": [
+    {
+      "kind": "secret",
+      "env": null,
+      "rank": 4,
+      "since": null,
+      "you": true,
+      "ask": [],
+      "version": "v1.4"
+    }
+  ]
+}

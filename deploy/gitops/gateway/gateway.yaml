@@ -1,0 +1,45 @@
+# The listeners the apps' routes attach to (design/HAND-OFF.md §10): an example of your own Gateway, not a file to
+# apply as it is. Keep one listener per environment, each taking its own environment's hostnames, and only routes
+# from namespaces the namespaces chart labelled with that environment. Preview takes unreviewed pushes: a listener
+# shared by both environments would let a preview route claim a production hostname with a more specific match.
+# Set the class, the domain and the certificates to your own.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: apps
+  namespace: gateway
+spec:
+  gatewayClassName: example
+  listeners:
+    - name: preview
+      protocol: HTTPS
+      port: 443
+      hostname: "*.preview.apps.example.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: apps-preview-tls
+      allowedRoutes:
+        kinds:
+          - kind: HTTPRoute
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              canyon.dev/env: preview
+    - name: prod
+      protocol: HTTPS
+      port: 443
+      hostname: "*.prod.apps.example.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: apps-prod-tls
+      allowedRoutes:
+        kinds:
+          - kind: HTTPRoute
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              canyon.dev/env: prod

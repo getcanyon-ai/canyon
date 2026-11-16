@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims tracker</title>
+<link rel="stylesheet" href="canyon.css">
+<h1>Claims tracker</h1>
+<p>Motor claims. Search by policy number, or leave it empty to list them all.</p>
+<form>
+  <input name="policy" placeholder="MRD-1001" aria-label="Policy number">
+  <button>Search</button>
+</form>
+<ul></ul>
+<p id="none" hidden>No claims on that policy.</p>
+<script>
+  const form = document.querySelector("form");
+  const list = document.querySelector("ul");
+  const none = document.querySelector("#none");
+  async function show() {
+    const query = form.policy.value ? "?" + new URLSearchParams({ policy: form.policy.value }) : "";
+    const claims = await (await fetch("/claims" + query)).json();
+    list.replaceChildren(...claims.map((c) => {
+      const item = document.createElement("li");
+      item.textContent = `${c.policy_number}: ${c.claim} (${c.status})`;
+      return item;
+    }));
+    none.hidden = claims.length > 0;
+  }
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    show();
+  });
+  show();
+</script>

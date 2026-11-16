@@ -1,0 +1,48 @@
+name: Canyon missed something it should have caught
+description: Code Canyon passed that it should have flagged.
+labels: [missed]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These are the issues we want most. Remove every real secret, customer name and private URL before you paste anything.
+  - type: input
+    id: rule
+    attributes:
+      label: The rule you expected
+      description: A rule id, such as sql.string-concat, or what it should check in your words.
+  - type: textarea
+    id: code
+    attributes:
+      label: The smallest code that shows it
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: What Canyon printed
+      description: The review from canyon check or canyon deploy.
+      render: text
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where Canyon runs
+      options:
+        - The demo on a laptop (docker compose)
+        - Kubernetes
+        - The demo Helm chart
+        - Somewhere else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Canyon version
+      description: The output of `canyon --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system

@@ -1,0 +1,486 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/executor.schema.json",
+  "title": "Canyon executor calls (seam 4)",
+  "description": "The shapes of contracts/executor.md: /build request and result, /build's failure line for a tree no buildpack detects, /run request and result, /run's 502 for an app that did not stay up or answer on port 3000, /stop request, /forget request, /running result, POST /running request and result, PUT /access request (Kubernetes only), /scan request and result, and on Kubernetes /run request and result again, the Service and NetworkPolicy /run writes, /probe request and result, POST /callers request and result, POST /sidecars result (Kubernetes only), and POST /networks/recreate request (Docker only). The fixture under contracts/testdata/executor/ carries one example of each; contracts/validate.py checks them here and then the invariants the prose states.",
+  "definitions": {
+    "answered": {"description": "What the app answered its sidecar (app-page.schema.json's env.answered, the same shape: validate.py checks the copies are one).", "oneOf": [{"type": "object", "additionalProperties": false, "required": ["status", "said"], "properties": {"status": {"type": "integer", "minimum": 100, "maximum": 599}, "said": {"type": "string", "maxLength": 200, "pattern": "^[^\\n]*$"}}}, {"type": "object", "additionalProperties": false, "required": ["error"], "properties": {"error": {"enum": ["no answer in 5 s", "refused", "unreachable", "not an HTTP answer"]}}}]},
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$" },
+    "image": { "type": "string", "pattern": "^([a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/)?canyon/[a-z0-9][a-z0-9_-]*@sha256:[0-9a-f]{64}$" },
+    "build_request": {
+      "type": "object", "additionalProperties": false, "required": ["app", "package", "build_values"],
+      "properties": {
+        "app": { "$ref": "#/definitions/name" },
+        "package": { "type": "string", "pattern": "^pkg_[a-z0-9]{4,}$" },
+        "build_values": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "build_result": {
+      "type": "object", "additionalProperties": false, "required": ["image", "duration_ms", "buildpacks"],
+      "properties": { "image": { "$ref": "#/definitions/image" }, "duration_ms": { "type": "integer", "minimum": 0 },
+        "buildpacks": { "type": "array", "maxItems": 64, "items": { "type": "object", "additionalProperties": false, "required": ["id"],
+          "properties": { "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9./-]{0,127}$" }, "name": { "type": "string", "pattern": "^[A-Za-z0-9][ -~]{0,127}$" } } } } }
+    },
+    "build_undetected": {
+      "type": "object", "additionalProperties": false, "required": ["error", "builds"],
+      "properties": { "error": { "const": "no buildpack group passed detection" }, "builds": { "type": "array", "uniqueItems": true, "maxItems": 64, "items": { "type": "string", "pattern": "^[A-Za-z0-9][ -~]{0,127}$" } }, "errored": { "const": true } }
+    },
+    "build_own": {
+      "description": "/build's failure line for the executor's own failure, never the package's, on Docker and on Kubernetes (contracts/executor.md, The executor's own failure; #2489, #2537).",
+      "type": "object", "additionalProperties": false, "required": ["error", "own"],
+      "properties": { "error": { "type": "string", "minLength": 1 }, "own": { "const": true } }
+    },
+    "run_request": {
+      "type": "object", "additionalProperties": false, "required": ["app", "target", "image", "env", "network", "identity"],
+      "properties": {
+        "app": { "$ref": "#/definitions/name" },
+        "target": { "enum": ["preview", "prod"] },
+        "image": { "$ref": "#/definitions/image" },
+        "env": { "description": "On Docker the executor also refuses PATH, HOME, TMPDIR, PACK_HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, PACK_VOLUME_KEY and any name starting DOCKER_, in any case (contracts/executor.md, /run); Kubernetes takes them.", "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "pattern": "^CANYON_IDENTITY_" } }, "additionalProperties": { "type": "string" } },
+        "network": { "type": "string", "pattern": "^canyon-app-[a-z0-9][a-z0-9_-]{0,127}$" },
+        "identity": {
+          "type": "object", "additionalProperties": false, "required": ["issuer", "audience", "jwks_url"],
+          "properties": { "issuer": { "$ref": "#/definitions/url" }, "audience": { "$ref": "#/definitions/name" }, "jwks_url": { "$ref": "#/definitions/url" } }
+        },
+        "run": { "description": "The server's id of the run that asked for this /run, written as the label canyon.gate_run on what it starts (contracts/executor.md, Egress).", "type": "string", "pattern": "^gr_[a-z0-9]{4,}$" },
+        "egress": { "$ref": "#/definitions/egress" },
+        "keep": { "description": "Images of this app the tag cleanup after this /run removes none of, on Docker or in the registry: each the digest an image's reference carries after @, exactly 71 characters, never a tag; at most 16, a sanity bound; a digest twice is the same as once, and [] the same as no keep (contracts/executor.md, What keep spares).", "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 71, "maxLength": 71, "pattern": "^sha256:[0-9a-f]{64}$" } },
+        "access": { "$ref": "#/definitions/access_file" },
+        "front_door": { "$ref": "#/definitions/front_door" },
+        "database_ca": { "description": "Kubernetes only: the apps database's CA bundle, PEM certificates and nothing else, mounted read-only at /etc/canyon-db/ca.pem in the app container.", "type": "string", "maxLength": 262144, "pattern": "^(-----BEGIN CERTIFICATE-----\\n([A-Za-z0-9+/=]{1,64}\\n)+-----END CERTIFICATE-----\\n)+$" }
+      },
+      "dependencies": { "access": ["front_door"], "front_door": ["access"], "database_ca": ["access", "front_door"] }
+    },
+    "https_url": { "type": "string", "maxLength": 2048, "pattern": "^https://[^@/?#\\s]+(/[^\\s]*)?$" },
+    "token": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^[\\x21-\\x7e]+$" },
+    "domain": { "type": "string", "maxLength": 189, "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$", "not": { "pattern": "^(preview|prod)\\." } },
+    "form": { "enum": ["app.env.domain", "app-env.domain"] },
+    "front_door": {
+      "type": "object", "additionalProperties": false, "required": ["choice", "domain", "form"],
+      "properties": {
+        "choice": { "enum": [1, 2] },
+        "gateway": { "enum": ["oidc", "alb"] },
+        "issuer": { "$ref": "#/definitions/https_url" },
+        "audience": { "$ref": "#/definitions/token" },
+        "jwks_url": { "$ref": "#/definitions/https_url" },
+        "alb_arn": { "type": "string", "pattern": "^arn:aws:elasticloadbalancing:[a-z]{2}-[a-z]+-[0-9]:[0-9]{12}:loadbalancer/app/[A-Za-z0-9-]{1,32}/[0-9a-f]{16}$" },
+        "cookie": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" },
+        "signin": {
+          "type": "object", "additionalProperties": false, "required": ["issuer", "client_id", "client_secret"],
+          "properties": { "issuer": { "$ref": "#/definitions/https_url" }, "client_id": { "$ref": "#/definitions/token" }, "client_secret": { "$ref": "#/definitions/token" } }
+        },
+        "domain": { "$ref": "#/definitions/domain" },
+        "form": { "$ref": "#/definitions/form" }
+      },
+      "oneOf": [
+        { "properties": { "choice": { "const": 1 }, "gateway": { "const": "oidc" } }, "required": ["gateway", "issuer", "audience", "jwks_url", "cookie"], "not": { "anyOf": [{ "required": ["alb_arn"] }, { "required": ["signin"] }] } },
+        { "properties": { "choice": { "const": 1 }, "gateway": { "const": "alb" } }, "required": ["gateway", "alb_arn"], "not": { "anyOf": [{ "required": ["issuer"] }, { "required": ["audience"] }, { "required": ["jwks_url"] }, { "required": ["signin"] }] } },
+        { "properties": { "choice": { "const": 2 } }, "required": ["signin"], "not": { "anyOf": [{ "required": ["gateway"] }, { "required": ["cookie"] }, { "required": ["issuer"] }, { "required": ["audience"] }, { "required": ["jwks_url"] }, { "required": ["alb_arn"] }] } }
+      ]
+    },
+    "probe_request": {
+      "type": "object", "additionalProperties": false, "required": ["domain", "form"],
+      "properties": { "domain": { "$ref": "#/definitions/domain" }, "form": { "$ref": "#/definitions/form" } }
+    },
+    "probe_result": {
+      "type": "object", "additionalProperties": false, "required": ["network_policy", "certificate", "fix", "warning"],
+      "properties": { "network_policy": { "enum": ["enforced", "not_enforced"] }, "certificate": { "enum": ["ok", "missing"] }, "fix": { "type": "string" }, "warning": { "type": "string" } },
+      "if": { "properties": { "network_policy": { "const": "enforced" }, "certificate": { "const": "ok" } } },
+      "then": { "properties": { "fix": { "const": "" } } },
+      "else": { "properties": { "fix": { "minLength": 1 } } }
+    },
+    "front_door_port": { "const": 4180 },
+    "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "kube_meta": {
+      "type": "object", "additionalProperties": false, "required": ["name", "namespace"],
+      "properties": { "name": { "type": "string" }, "namespace": { "const": "canyon-apps" } }
+    },
+    "kube_ports": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "additionalProperties": false, "required": ["protocol", "port"], "properties": { "protocol": { "enum": ["TCP", "UDP"] }, "port": { "type": "integer" } } }
+    },
+    "kube_objects": {
+      "description": "The Service and NetworkPolicy the Kubernetes /run writes for kube_run_request, as Kubernetes spells them: the fields the executor's test expects of what it renders.",
+      "type": "object", "additionalProperties": false, "required": ["service", "network_policy"],
+      "properties": {
+        "service": {
+          "type": "object", "additionalProperties": false, "required": ["apiVersion", "kind", "metadata", "spec"],
+          "properties": {
+            "apiVersion": { "const": "v1" }, "kind": { "const": "Service" }, "metadata": { "$ref": "#/definitions/kube_meta" },
+            "spec": {
+              "type": "object", "additionalProperties": false, "required": ["selector", "ports"],
+              "properties": {
+                "selector": { "$ref": "#/definitions/labels" },
+                "ports": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["port", "targetPort"], "properties": { "port": { "$ref": "#/definitions/front_door_port" }, "targetPort": { "$ref": "#/definitions/front_door_port" } } } }
+              }
+            }
+          }
+        },
+        "network_policy": {
+          "type": "object", "additionalProperties": false, "required": ["apiVersion", "kind", "metadata", "spec"],
+          "properties": {
+            "apiVersion": { "const": "networking.k8s.io/v1" }, "kind": { "const": "NetworkPolicy" }, "metadata": { "$ref": "#/definitions/kube_meta" },
+            "spec": {
+              "type": "object", "additionalProperties": false, "required": ["podSelector", "policyTypes", "ingress", "egress"],
+              "properties": {
+                "podSelector": { "type": "object", "additionalProperties": false, "required": ["matchLabels"], "properties": { "matchLabels": { "$ref": "#/definitions/labels" } } },
+                "policyTypes": { "const": ["Ingress", "Egress"] },
+                "ingress": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["from", "ports"], "properties": { "from": { "type": "array", "minItems": 1 }, "ports": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["protocol", "port"], "properties": { "protocol": { "const": "TCP" }, "port": { "enum": [4180, 4183] } } } } } } },
+                "egress": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["to", "ports"], "properties": { "to": { "type": "array", "minItems": 1 }, "ports": { "$ref": "#/definitions/kube_ports" } } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "url": { "type": "string", "maxLength": 2048, "pattern": "^https?://[^@/?#\\s]+(/[^\\s]*)?$" },
+    "access_file": {
+      "description": "The app's access file, /etc/canyon/access.json in its pod (Kubernetes): what the identity sidecar reads on every request.",
+      "type": "object", "additionalProperties": false, "required": ["updated_at", "groups_claim", "subject_issuer", "members", "admins", "roles", "entries"],
+      "properties": {
+        "updated_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+        "groups_claim": { "type": "string" },
+        "subject_issuer": { "description": "The issuer of Canyon's own sign-in, which recorded every entry's subject: an https URL without a / at its end; empty with sign-in off.", "type": "string", "pattern": "^(https://[^/\\s]+(/\\S*[^/\\s])?)?$" },
+        "members": { "type": "object", "additionalProperties": false, "required": ["domains", "emails"], "properties": { "domains": { "type": "array", "items": { "type": "string" } }, "emails": { "type": "array", "items": { "type": "string" } } } },
+        "admins": { "type": "object", "additionalProperties": false, "required": ["emails", "claim", "value"], "properties": { "emails": { "type": "array", "items": { "type": "string" } }, "claim": { "type": "string" }, "value": { "type": "string" } } },
+        "roles": { "type": "object", "maxProperties": 16, "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,39}$" }, "additionalProperties": { "type": "string", "maxLength": 120 } },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["kind", "grantee", "subject", "level", "roles"],
+            "properties": {
+              "kind": { "enum": ["email", "group", "everyone"] }, "grantee": { "type": "string" }, "subject": { "type": "string" },
+              "level": { "enum": ["owner", "contributor", "viewer"] }, "roles": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+            },
+            "if": { "properties": { "kind": { "const": "everyone" } } },
+            "then": { "properties": { "grantee": { "const": "" }, "level": { "const": "viewer" } } },
+            "else": { "properties": { "grantee": { "minLength": 1 } } }
+          }
+        }
+      }
+    },
+    "access_request": {
+      "type": "object", "additionalProperties": false, "required": ["app", "target", "access"],
+      "properties": { "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] }, "access": { "$ref": "#/definitions/access_file" } }
+    },
+    "ipv4": { "type": "string", "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$" },
+    "egress": {
+      "description": "Present when the run's recorded egress spec says via canyon (contracts/executor.md, Egress): proxy is http://<host>:3128; no_proxy the host of env's DATABASE_URL when it names one, the app's database inside the network; each a host name or an IPv4 address. ca, layer 3's (#2135): the roots an app trusts for a destination Canyon adds a credential to, read from #2143 on; name is the root's OpenSSL subject-hash file name.",
+      "type": "object", "additionalProperties": false, "required": ["proxy", "no_proxy"],
+      "properties": {
+        "proxy": { "type": "string", "pattern": "^http://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?:3128$" },
+        "no_proxy": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$" } },
+        "ca": { "type": "array", "minItems": 1, "maxItems": 8, "items": {
+          "type": "object", "additionalProperties": false, "required": ["name", "pem"],
+          "properties": {
+            "name": { "type": "string", "pattern": "^[0-9a-f]{8}\\.[0-9]$", "not": { "pattern": "\n" } },
+            "pem": { "type": "string", "maxLength": 8192, "pattern": "^-----BEGIN CERTIFICATE-----\n([A-Za-z0-9+/=]{1,64}\n)+-----END CERTIFICATE-----\n$" }
+          } } }
+      }
+    },
+    "callers_request": {
+      "type": "object", "additionalProperties": false, "required": ["addresses"],
+      "properties": { "addresses": { "type": "array", "minItems": 1, "maxItems": 1024, "uniqueItems": true, "items": { "$ref": "#/definitions/ipv4" } } }
+    },
+    "callers_result": {
+      "description": "Each address asked that exactly one app container or pod holds, once, in the order asked; one none holds, more than one claims, or a terminating pod holds is left out: unknown (contracts/executor.md, POST /callers).",
+      "type": "object", "additionalProperties": false, "required": ["callers"],
+      "properties": { "callers": { "type": "array", "maxItems": 1024, "items": {
+        "type": "object", "additionalProperties": false, "required": ["address", "app", "target", "kind", "run", "since"],
+        "properties": { "address": { "$ref": "#/definitions/ipv4" }, "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] }, "kind": { "enum": ["web", "job"] },
+          "run": { "oneOf": [{ "type": "string", "pattern": "^gr_[a-z0-9]{4,}$" }, { "type": "null" }] },
+          "since": { "description": "No earlier than when the holder took the address, in UTC: Docker's container State.StartedAt, Kubernetes' second past its earliest running container's startedAt (contracts/executor.md, POST /callers).", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$" } } } } }
+    },
+    "platform_result": {
+      "description": "Kubernetes only: the platform the image's config names, os and architecture, never the variant, read as a /run reads it (contracts/executor.md, GET /platform).",
+      "type": "object", "additionalProperties": false, "required": ["os", "architecture"],
+      "properties": { "os": { "const": "linux" }, "architecture": { "type": "string", "pattern": "^[a-z0-9]{1,16}$" } }
+    },
+    "platform_gone": {
+      "description": "Kubernetes only: GET /platform's 404 for an image the registry does not have, its reason image_gone; an executor from before the call answers 404 with no reason, never an image gone (contracts/executor.md, GET /platform).",
+      "type": "object", "additionalProperties": false, "required": ["error", "reason"],
+      "properties": { "error": { "type": "string", "minLength": 1 }, "reason": { "const": "image_gone" } }
+    },
+    "sidecars_result": {
+      "description": "Kubernetes only: the executor's CANYON_IMAGE_IDENTITY; each environment a roll moved onto it whose rollout is done, once, with the roll's name, answered on every call until the environment's next /run; and how many Deployments it left alone or could not move: not a /run's, unread or unwritten, or rolled and past their progress deadline (contracts/executor.md, POST /sidecars). validate.py holds each environment to once.",
+      "type": "object", "additionalProperties": false, "required": ["image", "rolled", "failed"],
+      "properties": {
+        "image": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$" },
+        "rolled": { "type": "array", "uniqueItems": true, "items": {
+          "type": "object", "additionalProperties": false, "required": ["app", "target", "roll"],
+          "properties": { "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] }, "roll": { "type": "string", "pattern": "^[0-9a-f]{8}$" } } } },
+        "failed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "published_result": {
+      "description": "Docker only: the running container canyon-server's Id, the port bindings it was created with (created) and those it holds now (held), each list's once, sorted; host_ip \"\" is every address and host_port \"\" a port Docker picks. The facts: the server judges them (contracts/executor.md, GET /published).",
+      "type": "object", "additionalProperties": false, "required": ["id", "created", "held"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "created": { "$ref": "#/definitions/port_bindings" },
+        "held": { "$ref": "#/definitions/port_bindings" }
+      }
+    },
+    "port_bindings": {
+      "type": "array", "uniqueItems": true, "items": {
+        "type": "object", "additionalProperties": false, "required": ["port", "host_ip", "host_port"],
+        "properties": { "port": { "type": "string", "pattern": "^[0-9]{1,5}/(tcp|udp|sctp)$" }, "host_ip": { "type": "string", "maxLength": 64 },
+          "host_port": { "type": "string", "pattern": "^([0-9]{1,5}(-[0-9]{1,5})?)?$" } } }
+    },
+    "recreate_request": {
+      "description": "Docker only: make canyon-app-<app> what a /run under the host's via would make it now, either way: --internal when internal is true, the host's via being canyon, open when false; the app's containers left stopped for the server to /run again (contracts/executor.md, POST /networks/recreate).",
+      "type": "object", "additionalProperties": false, "required": ["app", "internal"],
+      "properties": { "app": { "$ref": "#/definitions/name" }, "internal": { "type": "boolean" } }
+    },
+    "stop_request": {
+      "type": "object", "additionalProperties": false, "required": ["app", "target"],
+      "properties": { "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] } }
+    },
+    "forget_request": {
+      "type": "object", "additionalProperties": false, "required": ["app"],
+      "properties": { "app": { "$ref": "#/definitions/name" } }
+    },
+    "scandb_result": {
+      "description": "GET /scandb (executor.md; added 2026-11-09, #2743): each vulnerability database's age, in tool order; built_at and stale_at together, both absent while there is none.",
+      "type": "object", "additionalProperties": false, "required": ["databases"],
+      "properties": { "databases": { "type": "array", "items": {
+        "type": "object", "additionalProperties": false, "required": ["tool"],
+        "properties": { "tool": { "enum": ["grype", "trivy", "trivy-java"] }, "built_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }, "stale_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" } },
+        "dependencies": { "built_at": ["stale_at"], "stale_at": ["built_at"] } } } }
+    },
+    "builder_result": {
+      "description": "run_image (amended 2026-10-18, #2086): the run image the next /build builds onto and a /rebase rebases onto; an executor from before it answers builder alone. waited_ms (added 2026-11-08, #2711): how long this answer waited for Canyon's own images to be built first, absent when it did not wait.",
+      "type": "object", "additionalProperties": false, "required": ["builder"],
+      "properties": { "builder": { "type": "string", "minLength": 1, "maxLength": 512 }, "run_image": { "type": "string", "minLength": 1, "maxLength": 512 }, "waited_ms": { "type": "integer", "minimum": 1 } }
+    },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "rebase_request": {
+      "description": "POST /rebase (executor.md; design/PATCHING.md §4.3): the image an environment runs, by digest, onto the run image GET /builder answered.",
+      "type": "object", "additionalProperties": false, "required": ["app", "package", "image", "run_image"],
+      "properties": { "app": { "$ref": "#/definitions/name" }, "package": { "type": "string", "pattern": "^pkg_[a-z0-9]{4,}$" }, "image": { "$ref": "#/definitions/image" },
+        "run_image": { "type": "string", "minLength": 1, "maxLength": 512 } }
+    },
+    "rebase_facts": {
+      "description": "What the server compares to prove only the run image changed: the layers, bottom first, the run image's top layer, the run image the image is on (GET /builder's run_image's form: on Docker sha256:<64 hex>, on Kubernetes a reference by digest), the stack, and digests of the build metadata label and of the config's Entrypoint, Cmd, Env, WorkingDir and User — never their values.",
+      "type": "object", "additionalProperties": false, "required": ["diff_ids", "top_layer", "run_image", "stack_id", "build_metadata", "config"],
+      "properties": { "diff_ids": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/definitions/digest" } }, "top_layer": { "$ref": "#/definitions/digest" },
+        "run_image": { "type": "string", "minLength": 1, "maxLength": 512 }, "stack_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        "build_metadata": { "$ref": "#/definitions/digest" }, "config": { "$ref": "#/definitions/digest" } }
+    },
+    "rebase_result": {
+      "type": "object", "additionalProperties": false, "required": ["image", "before", "after", "duration_ms"],
+      "properties": { "image": { "$ref": "#/definitions/image" }, "before": { "$ref": "#/definitions/rebase_facts" }, "after": { "$ref": "#/definitions/rebase_facts" },
+        "duration_ms": { "type": "integer", "minimum": 0 } }
+    },
+    "rebase_failed": {
+      "description": "POST /rebase's 502: the error as the executor got it, and on Kubernetes no_room, the scheduler's own message, when its pod found no room by the deadline (the error then exactly the cluster had no room to run the rebase).",
+      "type": "object", "additionalProperties": false, "required": ["error"],
+      "if": { "required": ["no_room"] }, "then": { "properties": { "error": { "const": "the cluster had no room to run the rebase" } } },
+      "properties": { "error": { "type": "string", "minLength": 1 }, "no_room": { "type": "string", "minLength": 1 } }
+    },
+    "busy": {
+      "description": "503 from /build, /rebase or /scan past the executor's limit (executor.md, Busy), with Retry-After; reason database only on a scan.",
+      "type": "object", "additionalProperties": false, "required": ["error"],
+      "properties": { "error": { "const": "busy" }, "reason": { "const": "database" } }
+    },
+    "run_image": {
+      "description": "GET /builder's run_image as an image scan names it (executor.md, The run image; added 2026-10-19, #2375): on Docker the image ID, on Kubernetes kpack's copy by digest.",
+      "type": "string", "maxLength": 512, "pattern": "^(sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64})$"
+    },
+    "scan_refused": {
+      "description": "POST /scan's 409, for the run image alone (executor.md, The run image): not the run image GET /builder answers now.",
+      "type": "object", "additionalProperties": false, "required": ["error", "message"],
+      "properties": { "error": { "const": "run_image_moved" }, "message": { "type": "string", "minLength": 1 } }
+    },
+    "rebase_refused": {
+      "description": "POST /rebase's 409: refused, never forced; message names the label, run image or stack.",
+      "type": "object", "additionalProperties": false, "required": ["error", "message"],
+      "properties": { "error": { "enum": ["not_rebasable", "another_run_image", "another_stack", "run_image_moved"] }, "message": { "type": "string", "minLength": 1 } }
+    },
+    "running_result": {
+      "type": "object", "additionalProperties": false, "required": ["image"],
+      "properties": { "image": { "$ref": "#/definitions/image" } }
+    },
+    "container": {
+      "type": "object", "additionalProperties": false, "required": ["app", "target"],
+      "properties": { "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] } }
+    },
+    "running_batch_request": {
+      "type": "object", "additionalProperties": false, "required": ["containers"],
+      "properties": { "containers": { "type": "array", "minItems": 1, "maxItems": 400, "items": { "$ref": "#/definitions/container" } }, "why": { "type": "boolean" } }
+    },
+    "running_batch_result": {
+      "type": "object", "additionalProperties": false, "required": ["running", "stopped"],
+      "properties": {
+        "running": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/container" } },
+        "restarting": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/restarting" } },
+        "stopped": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/stopped" } }
+      }
+    },
+    "restarting": {
+      "description": "One asked whose container has been started again and is up or waiting to start (executor.md, POST /running, Restarting): never in running, even while it is up.",
+      "type": "object", "additionalProperties": false, "required": ["app", "target", "restarts"],
+      "properties": {
+        "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] },
+        "restarts": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stopped": {
+      "description": "One asked whose container is there and has exited — stopped, or restarting and down or on Kubernetes (executor.md, POST /running, Why it stopped): its last exit code and its last line, unmasked, to the server alone, which masks it.",
+      "type": "object", "additionalProperties": false, "required": ["app", "target", "exit_code", "said"],
+      "properties": {
+        "app": { "$ref": "#/definitions/name" }, "target": { "enum": ["preview", "prod"] },
+        "exit_code": { "type": "integer" },
+        "said": { "type": "string", "maxLength": 4096, "pattern": "^[^\\n]*$" }
+      }
+    },
+    "scan_request": {
+      "type": "object", "additionalProperties": false, "required": ["tool"],
+      "properties": {
+        "app": { "$ref": "#/definitions/name" },
+        "package": { "type": "string", "pattern": "^pkg_[a-z0-9]{4,}$" },
+        "tool": { "$ref": "#/definitions/tool" },
+        "settings": { "type": "object" },
+        "target": { "enum": ["tree", "image", "sbom", "packages"] },
+        "image": { "type": "string" }
+      },
+      "allOf": [
+        { "if": { "properties": { "target": { "const": "tree" } } }, "then": { "required": ["app", "package", "settings"], "not": { "required": ["image"] } } },
+        { "if": { "required": ["target"], "properties": { "target": { "const": "image" } } }, "then": { "required": ["image"], "properties": { "tool": { "const": "trivy" } }, "not": { "anyOf": [{ "required": ["package"] }, { "required": ["settings"] }] },
+          "if": { "required": ["app"] }, "then": { "properties": { "image": { "$ref": "#/definitions/image" } } }, "else": { "properties": { "image": { "$ref": "#/definitions/run_image" } } } } },
+        { "if": { "required": ["target"], "properties": { "target": { "const": "sbom" } } }, "then": { "properties": { "tool": { "const": "trivy" } }, "not": { "anyOf": [{ "required": ["app"] }, { "required": ["package"] }, { "required": ["settings"] }, { "required": ["image"] }] } } },
+        { "if": { "required": ["target"], "properties": { "target": { "const": "packages" } } }, "then": { "required": ["app", "package"], "properties": { "tool": { "const": "trivy" } }, "not": { "anyOf": [{ "required": ["settings"] }, { "required": ["image"] }] } } },
+        { "if": { "properties": { "tool": { "const": "trivy" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/trivy"}}} },
+        { "if": { "properties": { "tool": { "const": "opengrep" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/opengrep"}}} },
+        { "if": { "properties": { "tool": { "const": "grype" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/grype"}}} },
+        { "if": { "properties": { "tool": { "const": "eslint" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/eslint"}}} },
+        { "if": { "properties": { "tool": { "const": "checkov" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/checkov"}}} }
+      ]
+    },
+    "scan_result": {
+      "type": "object", "additionalProperties": false, "required": ["tool"],
+      "properties": {
+        "tool": { "$ref": "#/definitions/tool" },
+        "image": { "type": "string", "pattern": "^[a-z0-9][a-z0-9./_:-]*@sha256:[0-9a-f]{64}$" },
+        "db_built_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+        "sarif": { "type": "object", "required": ["version", "runs"] },
+        "sbom": { "type": "object", "required": ["bomFormat"], "properties": { "bomFormat": { "const": "CycloneDX" } } },
+        "lifecycle_metadata": { "type": "string", "minLength": 1, "maxLength": 1048576 },
+        "referrer": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "diff_ids": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" } },
+        "report": { "type": "object", "required": ["SchemaVersion", "Results"], "properties": { "SchemaVersion": { "const": 2 }, "Results": { "type": "array", "items": { "type": "object",
+          "properties": { "Vulnerabilities": { "type": "array", "items": { "type": "object", "required": ["Layer", "PkgIdentifier"], "properties": {
+            "Layer": { "type": "object", "required": ["DiffID"], "properties": { "DiffID": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" } } },
+            "PkgIdentifier": { "type": "object", "required": ["BOMRef"], "properties": { "BOMRef": { "type": "string", "minLength": 1 } } } } } } } } } } },
+        "packages": { "type": "object", "required": ["SchemaVersion"], "properties": { "SchemaVersion": { "const": 2 }, "Results": { "type": "array", "items": { "type": "object",
+          "properties": { "Vulnerabilities": { "type": "array", "maxItems": 0 } } } } } },
+        "unscanned": { "type": "array", "minItems": 1, "maxItems": 50000, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 2048 } },
+        "unloaded": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "unparsed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "not_finished": { "enum": ["no_image", "timeout", "killed", "not_sarif", "over_cap", "db_missing", "db_stale", "rules_error", "no_room"] },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [{ "required": ["sarif"] }, { "required": ["sbom"] }, { "required": ["report"] }, { "required": ["packages"] }, { "required": ["not_finished"] }],
+      "allOf": [
+        { "if": { "anyOf": [{ "required": ["sarif"] }, { "required": ["report"] }], "properties": { "tool": { "enum": ["trivy", "grype"] } } }, "then": { "required": ["db_built_at"] }, "else": { "not": { "required": ["db_built_at"] } } },
+        { "if": { "anyOf": [{ "required": ["sbom"] }, { "required": ["report"] }, { "required": ["packages"] }] }, "then": { "properties": { "tool": { "const": "trivy" } } } },
+        { "if": { "anyOf": [{ "required": ["lifecycle_metadata"] }, { "required": ["diff_ids"] }, { "required": ["referrer"] }] }, "then": { "required": ["sbom"] } },
+        { "if": { "required": ["unscanned"] }, "then": { "required": ["report"] } },
+        { "if": { "required": ["sbom"] }, "then": { "required": ["diff_ids"] } },
+        { "if": { "required": ["not_finished"], "properties": { "not_finished": { "const": "no_room" } } }, "then": { "required": ["reason"] } },
+        { "if": { "required": ["reason"] }, "then": { "required": ["not_finished"], "properties": { "not_finished": { "enum": ["no_room", "db_missing", "db_stale", "over_cap", "not_sarif"] } } } },
+        { "if": { "required": ["reason", "not_finished"], "properties": { "not_finished": { "const": "not_sarif" } } }, "then": { "properties": { "tool": { "const": "trivy" }, "reason": { "const": "unread" } } } },
+        { "if": { "required": ["reason", "not_finished"], "properties": { "not_finished": { "const": "over_cap" } } }, "then": { "properties": { "tool": { "const": "trivy" }, "reason": { "enum": ["image", "report"] } } } },
+        { "if": { "required": ["reason", "not_finished"], "properties": { "not_finished": { "enum": ["db_missing", "db_stale"] } } }, "then": { "properties": { "tool": { "const": "trivy" }, "reason": { "const": "java" } } } },
+        { "if": { "required": ["not_finished"], "properties": { "not_finished": { "const": "no_image" } } }, "then": { "not": { "required": ["image"] } }, "else": { "required": ["image"] } },
+        { "if": { "not": { "required": ["sarif"], "properties": { "tool": { "const": "opengrep" } } } }, "then": { "not": { "anyOf": [{ "required": ["unparsed"] }, { "required": ["unloaded"] }] } } }
+      ]
+    },
+    "scan_image_request": { "allOf": [{ "$ref": "#/definitions/scan_request" }, { "required": ["target"], "properties": { "target": { "const": "image" } } }] },
+    "scan_packages_request": { "allOf": [{ "$ref": "#/definitions/scan_request" }, { "required": ["target"], "properties": { "target": { "const": "packages" } } }] },
+    "scan_packages_result": { "allOf": [{ "$ref": "#/definitions/scan_result" }, { "properties": { "tool": { "const": "trivy" } },
+      "not": { "anyOf": [{ "required": ["sarif"] }, { "required": ["sbom"] }, { "required": ["report"] }, { "required": ["db_built_at"] }, { "required": ["lifecycle_metadata"] }, { "required": ["diff_ids"] }] } },
+      { "if": { "required": ["not_finished"], "properties": { "not_finished": { "const": "over_cap" } } }, "then": { "required": ["reason"] } },
+      { "if": { "required": ["reason"] }, "then": { "properties": { "not_finished": { "enum": ["no_room", "over_cap"] }, "reason": { "not": { "enum": ["java", "image", "unread"] } } } } }] },
+    "scan_sbom_request": { "allOf": [{ "$ref": "#/definitions/scan_request" }, { "required": ["target"], "properties": { "target": { "const": "sbom" } } }] },
+    "scan_image_result": { "allOf": [{ "$ref": "#/definitions/scan_result" }, { "properties": { "tool": { "const": "trivy" } },
+      "not": { "anyOf": [{ "required": ["sarif"] }, { "required": ["report"] }, { "required": ["db_built_at"] }] } },
+      { "if": { "required": ["not_finished"], "properties": { "not_finished": { "const": "over_cap" } } }, "then": { "required": ["reason"] } },
+      { "if": { "required": ["reason"] }, "then": { "properties": { "reason": { "not": { "const": "unread" } } } } }] },
+    "scan_sbom_result": { "allOf": [{ "$ref": "#/definitions/scan_result" }, { "properties": { "tool": { "const": "trivy" } },
+      "not": { "anyOf": [{ "required": ["sarif"] }, { "required": ["sbom"] }, { "required": ["lifecycle_metadata"] }, { "required": ["diff_ids"] }] } },
+      { "if": { "required": ["not_finished"], "properties": { "not_finished": { "const": "over_cap" } } }, "then": { "required": ["reason"] } },
+      { "if": { "required": ["reason"] }, "then": { "properties": { "not_finished": { "enum": ["no_room", "over_cap", "not_sarif"] }, "reason": { "not": { "enum": ["java", "image"] } } } } }] },
+    "tool": { "enum": ["trivy", "opengrep", "eslint", "grype", "checkov"] },
+    "toolSettings": {
+      "skip_paths": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "maxLength": 256, "pattern": "^([^-./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+)(/([^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.[^./\\\\\\x00-\\x1F][^/\\\\\\x00-\\x1F]*|\\.\\.[^/\\\\\\x00-\\x1F]+))*$"}},
+      "trivy": {"type": "object", "additionalProperties": false, "properties": {"scanners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["vuln", "misconfig", "secret"]}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "opengrep": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "grype": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "eslint": {"type": "object", "additionalProperties": false, "properties": {"skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}},
+      "checkov": {"type": "object", "additionalProperties": false, "properties": {"frameworks": {"type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"}}, "skip_checks": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$"}}, "skip_paths": {"$ref": "#/definitions/toolSettings/skip_paths"}}}
+    },
+    "run_exited": {
+      "type": "object", "additionalProperties": false, "required": ["error", "output"],
+      "properties": { "error": { "type": "string", "minLength": 1 }, "output": { "type": "string", "maxLength": 8192 } }
+    },
+    "run_result": {
+      "type": "object", "additionalProperties": false, "required": ["container", "addr"],
+      "properties": { "container": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*-(preview|prod)$" }, "addr": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*-(preview|prod)(:3000|\\.canyon-apps\\.svc:4180)$" },
+        "answered": { "$ref": "#/definitions/answered" },
+        "previous_gone": { "description": "Kubernetes only, from #2143 (contracts/executor.md, On Kubernetes): true once no pod of an earlier template remained, terminating ones included, before the answer; false when the bound passed first. Absent or false, the server leaves the env's trusted roots at the intersection.", "type": "boolean" },
+        "token_callers": { "description": "Kubernetes only, from #2142 (contracts/executor.md, On Kubernetes; the egress design §4.3): true when the pods this /run started run as the env's own ServiceAccount with its projected token and canyon-identity's forwarder, which a /run with egress does. Docker and an executor before #2142 leave it out. The server marks the env token_only only on an answer with it and previous_gone both true.", "type": "boolean" } }
+    }
+  },
+  "type": "object", "additionalProperties": false,
+  "required": ["build_request", "build_result", "build_undetected", "build_own", "run_request", "egress_with_ca", "run_result", "run_exited", "stop_request", "forget_request", "builder_result", "scandb_result", "running_result", "running_batch_request", "running_batch_result", "access_request", "scan_request", "scan_result", "scan_image_request", "scan_image_result", "scan_run_image_request", "scan_run_image_result", "scan_refused", "scan_sbom_request", "scan_sbom_result", "scan_packages_request", "scan_packages_result", "kube_run_request", "kube_run_result", "kube_objects", "kube_egress", "kube_egress_policy", "kube_signin_policy", "probe_request", "probe_result", "callers_request", "callers_result", "sidecars_result", "platform_result", "platform_gone", "recreate_request", "published_result", "rebase_request", "rebase_result", "rebase_refused", "rebase_failed", "rebase_busy"],
+  "properties": {
+    "build_request": { "$ref": "#/definitions/build_request" },
+    "build_result": { "$ref": "#/definitions/build_result" },
+    "build_undetected": { "$ref": "#/definitions/build_undetected" },
+    "build_own": { "$ref": "#/definitions/build_own" },
+    "run_request": { "$ref": "#/definitions/run_request" },
+    "egress_with_ca": { "$ref": "#/definitions/egress" },
+    "run_result": { "$ref": "#/definitions/run_result" },
+    "run_exited": { "$ref": "#/definitions/run_exited" },
+    "stop_request": { "$ref": "#/definitions/stop_request" },
+    "forget_request": { "$ref": "#/definitions/forget_request" },
+    "builder_result": { "$ref": "#/definitions/builder_result" },
+    "scandb_result": { "$ref": "#/definitions/scandb_result" },
+    "rebase_request": { "$ref": "#/definitions/rebase_request" },
+    "rebase_result": { "$ref": "#/definitions/rebase_result" },
+    "rebase_refused": { "$ref": "#/definitions/rebase_refused" },
+    "rebase_failed": { "$ref": "#/definitions/rebase_failed" },
+    "rebase_busy": { "allOf": [{ "$ref": "#/definitions/busy" }, { "not": { "required": ["reason"] } }] },
+    "running_result": { "$ref": "#/definitions/running_result" },
+    "running_batch_request": { "$ref": "#/definitions/running_batch_request" },
+    "running_batch_result": { "$ref": "#/definitions/running_batch_result" },
+    "access_request": { "$ref": "#/definitions/access_request" },
+    "scan_request": { "$ref": "#/definitions/scan_request" },
+    "scan_result": { "$ref": "#/definitions/scan_result" },
+    "scan_image_request": { "$ref": "#/definitions/scan_image_request" },
+    "scan_image_result": { "$ref": "#/definitions/scan_image_result" },
+    "scan_run_image_request": { "allOf": [{ "$ref": "#/definitions/scan_image_request" }, { "not": { "required": ["app"] } }] },
+    "scan_run_image_result": { "$ref": "#/definitions/scan_image_result" },
+    "scan_refused": { "$ref": "#/definitions/scan_refused" },
+    "scan_sbom_request": { "$ref": "#/definitions/scan_sbom_request" },
+    "scan_sbom_result": { "$ref": "#/definitions/scan_sbom_result" },
+    "scan_packages_request": { "$ref": "#/definitions/scan_packages_request" },
+    "scan_packages_result": { "$ref": "#/definitions/scan_packages_result" },
+    "kube_run_request": { "$ref": "#/definitions/run_request" },
+    "kube_run_result": { "$ref": "#/definitions/run_result" },
+    "kube_objects": { "$ref": "#/definitions/kube_objects" },
+    "kube_egress": { "$ref": "#/definitions/egress" },
+    "kube_egress_policy": { "$ref": "#/definitions/kube_objects/properties/network_policy" },
+    "kube_signin_policy": { "$ref": "#/definitions/kube_objects/properties/network_policy" },
+    "probe_request": { "$ref": "#/definitions/probe_request" },
+    "probe_result": { "$ref": "#/definitions/probe_result" },
+    "callers_request": { "$ref": "#/definitions/callers_request" },
+    "callers_result": { "$ref": "#/definitions/callers_result" },
+    "sidecars_result": { "$ref": "#/definitions/sidecars_result" },
+    "platform_result": { "$ref": "#/definitions/platform_result" },
+    "platform_gone": { "$ref": "#/definitions/platform_gone" },
+    "recreate_request": { "$ref": "#/definitions/recreate_request" },
+    "published_result": { "$ref": "#/definitions/published_result" }
+  }
+}

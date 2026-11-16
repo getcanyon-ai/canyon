@@ -1,0 +1,109 @@
+CANYON REVIEW — RESULT: BLOCKED
+
+app: claims-portal
+env: prod
+host: http://localhost:7777
+gate run: gr_rb01 (2026-10-11T09:00:00Z)
+findings: 4 · blocking: 1
+outcome: nothing was built and nothing was deployed.
+
+--- FINDING 1 of 4 -----------------------------------------------------------
+title: Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data
+severity: critical
+blocks: yes
+rule: secrets.client-bundle
+found by: gitleaks's rule stripe-access-token
+file: apps/web/src/lib/payments.ts
+line: 14
+column: 1
+source: ••••
+note: the secret value is redacted here. Canyon never prints it.
+
+problem:
+  Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data. stripe-access-token has detected secret for file apps/web/src/lib/payments.ts.
+
+required end state:
+  gitleaks no longer reports stripe-access-token for this code when it runs again, and the app still does what it did.
+
+suggested fix:
+  Rotate this credential — it has been in your code. If nothing reads it, delete it from the code; otherwise store the new one with canyon secret set STRIPE_ACCESS_TOKEN and read it from the environment.
+
+do not:
+  - Silence it in gitleaks's settings or with an ignore comment — Canyon does not read those.
+  - Remove or rename the flagged code just so the tool stops matching it.
+  Each of these produces the same finding on the next run.
+
+--- FINDING 2 of 4 -----------------------------------------------------------
+title: /api/admin/policies is reachable without a session
+severity: high
+blocks: no
+rule: auth.unauthenticated-route
+file: apps/web/src/app/api/admin/policies/route.ts
+line: 8
+column: 3
+source:   return NextResponse.json(await db.policies.forOrg(params.orgId));
+
+problem:
+  There's no session check in the handler, and middleware.ts:22 leaves /api/admin/policies out of the matcher — so nothing upstream is checking either. Any caller without a session gets what this handler returns.
+
+required end state:
+  Not required. This severity does not block deployment.
+
+suggested fix:
+  Either add /api/admin/policies to the middleware matcher, or return early from the handler when the request has no cp_session cookie. The matcher is the safer of the two — it covers routes nobody's written yet.
+
+--- FINDING 3 of 4 -----------------------------------------------------------
+title: /api/session starts a session without checking one
+severity: high
+blocks: no
+rule: auth.unauthenticated-route
+file: apps/web/src/app/api/session/route.ts
+line: 8
+column: 3
+source:   res.cookies.set("cp_session", String(form.get("email") ?? "adjuster"), { httpOnly: true, sameSite: "lax", path: "/" });
+
+problem:
+  It sets the cp_session cookie, so whoever it lets through gets a session. A sign-in that verifies who is signing in first has to work this way; a dev login, an impersonation route, or a password check a flag switches off lets anyone in as anyone.
+
+required end state:
+  Not required. This severity does not block deployment.
+
+suggested fix:
+  Set the cp_session cookie only after the handler has verified the caller's credentials with your identity provider or user store, and remove any path that sets it without that check. If it already does, this is your sign-in: approve it with that reason.
+
+--- FINDING 4 of 4 -----------------------------------------------------------
+title: ClaimsTable refetches every claim on each keystroke
+severity: medium
+blocks: no
+rule: perf.unbounded-refetch
+file: apps/web/src/components/ClaimsTable.tsx
+line: 61
+column: 3
+source:   useEffect(() => { refetch(); }, [query]);
+
+problem:
+  The useEffect depends on query with no debounce, and the endpoint has no pagination. Meridian's claims table is 12,400 rows — that's a full scan per character typed. It's fine in the demo dataset and will be slow in production.
+
+required end state:
+  Not required. This severity does not block deployment.
+
+suggested fix:
+  Debounce to ~250ms, or move the filter server-side. Neither is urgent.
+
+--- END OF FINDINGS ----------------------------------------------------------
+
+rollback: v1.3 → prod; production still runs v1.4
+NEXT STEPS:
+1. Tell the user today's review blocks v1.3: each blocking line above, in its own words.
+2. Do not change v1.3's code to get it through: a fix is a new version, shipped with canyon deploy.
+3. An admin or a security responder who didn't start this review may approve each blocking finding in Canyon's dashboard; neither you nor the user can. Then run this command again.
+
+A blocking finding is a secret that was in the code, so it has leaked: apps/web/src/lib/payments.ts:14.
+Ask the user to revoke it. If nothing reads it, delete it from the code in a new
+version shipped with canyon deploy, never in v1.3; otherwise make a new value and
+store it with canyon secret set NAME, NAME being the variable the code reads.
+
+CANYON REVIEW — RESULT: BLOCKED
+blocking: secrets.client-bundle · apps/web/src/lib/payments.ts:14
+
+exit code: 2

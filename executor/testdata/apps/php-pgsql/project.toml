@@ -1,0 +1,7 @@
+[_]
+schema-version = "0.2"
+
+# Paketo's PHP serves htdocs/ unless told: this app's index.php is at its root
+[[io.buildpacks.build.env]]
+name = "BP_PHP_WEB_DIR"
+value = "."

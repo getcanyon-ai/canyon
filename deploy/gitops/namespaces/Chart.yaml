@@ -1,0 +1,6 @@
+# App environments' namespaces, from the platform's own repo (argocd/namespaces.yaml, flux/generator.yaml): never from
+# the deploy repo, so a token that can write the deploy repo can never choose a namespace's pod security.
+apiVersion: v2
+name: canyon-namespace
+description: The namespaces canyon-<app>-<env>, Pod Security baseline, labelled canyon.dev/env for the gateway
+version: 1.2.0

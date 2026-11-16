@@ -1,0 +1,8 @@
+
+  ✗ The current package of claims-portal is not the one this copy started from.
+
+    Theirs   pkg_9f2a1c   ada@meridian.example, 14m ago
+    Yours    pkg_3b7e40
+
+    Take their work:     canyon pull --force   (writes their files over yours, deletes nothing)
+    Send yours anyway:   canyon deploy --force

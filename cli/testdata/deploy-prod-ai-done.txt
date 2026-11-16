@@ -1,0 +1,18 @@
+CANYON PROMOTE — RESULT: PROMOTED
+
+app: claims-portal
+env: prod
+host: http://localhost:7777
+run: gr_9c41
+version: v1.3 (passed review)
+replaced: nothing, production ran nothing yet
+live url: http://claims-portal.prod.localhost:7777
+fleet url: http://localhost:7777/#/apps/claims-portal
+access: private · you are an owner
+not set for production: STRIPE_KEY
+
+NEXT STEPS:
+1. Report the live url to the user and say who can open it (the access line). Do not share it unless the user asks.
+2. The names on the not set for production line are set for preview only. If the app needs one, ask the user to run canyon secret set NAME --env prod in their own terminal. Never ask for the value in the chat.
+
+exit code: 0

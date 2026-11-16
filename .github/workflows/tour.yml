@@ -1,0 +1,50 @@
+# The docs' Take the tour on the laptop demo built from the tree (make tour-check): the chapters canyon demo tour has a new
+# visitor's agent run, and the outputs its page pastes. It builds the demo and four sample apps, so a pull request pays
+# for it only when it changes the sample, the tour, the page or the words the page pastes. journeys.yml calls it nightly on main, whatever
+# the paths, for a change elsewhere that moves those words.
+name: tour
+
+on:
+  pull_request:
+    paths:
+      - 'demo/apps/**'
+      - 'docs/src/content/docs/start/take-the-tour.md'
+      - 'docs/src/content/docs/start/try-it-on-your-laptop.md'
+      - 'cli/ai.go'
+      - 'cli/promote_ai.go'
+      - 'cli/deploy_prod.go'
+      - 'cli/cmd_tour.go'
+      - 'cli/cmd_demo.go'
+      - 'cli/demo_up.go'
+      - 'scripts/deploy-bundle.sh'
+      - 'cli/tour_text.go'
+      - 'cli/testdata/tour/**'
+      - 'gate/design.go'
+      - 'gate/opengrep/**'
+      - 'scripts/tour-check.sh'
+      - '.github/workflows/tour.yml'
+  workflow_call: # journeys.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tour-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tour:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the demo builds or pulls is multi-arch
+    timeout-minutes: 45 # the stack's images, the four sample apps' builds and two tours
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: tour
+          build: 'false' # one binary, the CLI: the module cache alone
+          save: 'false' # main's jobs write it
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - run: make tour-check

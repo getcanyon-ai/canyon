@@ -1,0 +1,68 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a1a627-cb0b-7528-9d0c-cf3abe30a749",
+  "CreatedAt": "2026-11-04T10:43:08.171338575Z",
+  "ArtifactName": "/scan/tree",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "pom.xml",
+      "Class": "lang-pkgs",
+      "Type": "pom",
+      "Packages": [
+        {
+          "ID": "com.example:shop:1.0.0::ef91b965",
+          "Name": "com.example:shop",
+          "Identifier": {
+            "PURL": "pkg:maven/com.example/shop@1.0.0",
+            "UID": "f0db42f3d56f9d76"
+          },
+          "Version": "1.0.0",
+          "Relationship": "root",
+          "DependsOn": [
+            "com.fasterxml.jackson.core:jackson-databind:2.18.2::3165fa4d",
+            "org.apache.commons:commons-lang3:3.17.0::2a789210"
+          ],
+          "AnalyzedBy": "pom"
+        },
+        {
+          "ID": "com.fasterxml.jackson.core:jackson-databind:2.18.2::3165fa4d",
+          "Name": "com.fasterxml.jackson.core:jackson-databind",
+          "Identifier": {
+            "PURL": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.2",
+            "UID": "5ee421c3e6306254"
+          },
+          "Version": "2.18.2",
+          "Relationship": "direct",
+          "Locations": [
+            {
+              "StartLine": 11,
+              "EndLine": 15
+            }
+          ],
+          "AnalyzedBy": "pom"
+        },
+        {
+          "ID": "org.apache.commons:commons-lang3:3.17.0::2a789210",
+          "Name": "org.apache.commons:commons-lang3",
+          "Identifier": {
+            "PURL": "pkg:maven/org.apache.commons/commons-lang3@3.17.0",
+            "UID": "f1102cf24393ed30"
+          },
+          "Version": "3.17.0",
+          "Relationship": "direct",
+          "Locations": [
+            {
+              "StartLine": 16,
+              "EndLine": 20
+            }
+          ],
+          "AnalyzedBy": "pom"
+        }
+      ]
+    }
+  ]
+}

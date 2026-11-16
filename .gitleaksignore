@@ -1,0 +1,14 @@
+# Verified false positives. One line per finding, each with the reason it is not
+# a secret. Never add a line here without reading the flagged content first.
+
+# design/canyon-architecture.html:470 — prose describing the storage provisioner
+# ("bucket + scoped credential; a seeded app demonstrates it with a real upload").
+# The generic-api-key rule matches high-entropy prose; there is no credential here.
+a5d68327d42b284f6f90a13d7cd11ea719130e5e:design/canyon-architecture.html:generic-api-key:470
+
+# contracts/testdata/release/meridian.json:7,8 at f9cc7b7 — #477's pre-squash contract commit, still
+# reachable from this branch (it was cut from contracts/hand-off before #477 squashed). The values
+# were shaped fixtures, replaced by "redacted" within #477; main never carries f9cc7b7, so these
+# two lines die with this branch's squash.
+f9cc7b7cdb2a9c2260e4e0205bd098eb14cba409:contracts/testdata/release/meridian.json:generic-api-key:7
+f9cc7b7cdb2a9c2260e4e0205bd098eb14cba409:contracts/testdata/release/meridian.json:generic-api-key:8

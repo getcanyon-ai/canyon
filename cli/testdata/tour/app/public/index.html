@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims tracker</title>
+<style>
+  /* The quick version: its own colours, fonts and list, written for this page alone. */
+  body { font: 1rem/1.5 Georgia, serif; max-width: 32rem; margin: 3rem auto; padding: 0 1rem; background: #fdf6e3; color: #333; }
+  h1 { color: #6b21a8; }
+  li { margin: 0.4rem 0; padding: 0.4rem 0.6rem; background: #fff; border: 2px dashed #6b21a8; }
+</style>
+<h1>Claims tracker</h1>
+<p>Motor claims.</p>
+<ul></ul>
+<script>
+  const list = document.querySelector("ul");
+  (async () => {
+    const claims = await (await fetch("/claims")).json();
+    list.replaceChildren(...claims.map((c) => {
+      const item = document.createElement("li");
+      item.textContent = `${c.policy_number}: ${c.claim} (${c.status})`;
+      return item;
+    }));
+  })();
+</script>

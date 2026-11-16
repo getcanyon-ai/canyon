@@ -1,0 +1,258 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "columnKind": "unicodeCodePoints",
+      "tool": {
+        "driver": {
+          "name": "canyon/scanners",
+          "version": "0.1.0",
+          "rules": []
+        }
+      },
+      "results": []
+    },
+    {
+      "columnKind": "unicodeCodePoints",
+      "tool": {
+        "driver": {
+          "name": "canyon-review",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "auth.unauthenticated-route",
+              "name": "Every route needs sign-in"
+            },
+            {
+              "id": "perf.unbounded-refetch",
+              "name": "No unbounded refetch on user input"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "ai review · a model's second opinion: another review, even of a small change, may find different things"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "auth.unauthenticated-route",
+          "level": "error",
+          "message": {
+            "text": "/api/admin/policies is reachable without a session"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/admin/policies/route.ts"
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 3,
+                  "endLine": 8,
+                  "endColumn": 68,
+                  "snippet": {
+                    "text": "  return NextResponse.json(await db.policies.forOrg(params.orgId));"
+                  }
+                }
+              }
+            }
+          ],
+          "relatedLocations": [],
+          "partialFingerprints": {
+            "canyon/v1": "f_1ddb72ad9a5d06de4d2cb9c67e3fb584437c9f58dcc7f33b4f026c8fc7484dbf"
+          },
+          "properties": {
+            "canyon": {
+              "severity": "high",
+              "blocks": false,
+              "title": "/api/admin/policies is reachable without a session",
+              "problem": "There's no session check in the handler, and middleware.ts:22 leaves /api/admin/policies out of the matcher — so nothing upstream is checking either. Any caller without a session gets what this handler returns.",
+              "fix": "Either add /api/admin/policies to the middleware matcher, or return early from the handler when the request has no cp_session cookie. The matcher is the safer of the two — it covers routes nobody's written yet.",
+              "policy_name": "Every route needs sign-in",
+              "required_end_state": "/api/admin/policies answers only a request that carries a session: the middleware matcher covers it, or the handler returns before anything else when the session cookie is missing.",
+              "do_not": [
+                "check a query parameter or header the caller sets instead of the session cookie",
+                "move the handler's logic to another route outside the matcher",
+                "add an ignore comment or suppression pragma"
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "auth.unauthenticated-route",
+          "level": "error",
+          "message": {
+            "text": "/api/session starts a session without checking one"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/session/route.ts"
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 3,
+                  "endLine": 8,
+                  "endColumn": 122,
+                  "snippet": {
+                    "text": "  res.cookies.set(\"cp_session\", String(form.get(\"email\") ?? \"adjuster\"), { httpOnly: true, sameSite: \"lax\", path: \"/\" });"
+                  }
+                }
+              }
+            }
+          ],
+          "relatedLocations": [],
+          "partialFingerprints": {
+            "canyon/v1": "f_11ac048e05cc970a7bcc104b494241ebe8e13d5b18570a6d094ed860f062ebfe"
+          },
+          "properties": {
+            "canyon": {
+              "severity": "high",
+              "blocks": false,
+              "title": "/api/session starts a session without checking one",
+              "problem": "It sets the cp_session cookie, so whoever it lets through gets a session. A sign-in that verifies who is signing in first has to work this way; a dev login, an impersonation route, or a password check a flag switches off lets anyone in as anyone.",
+              "fix": "Set the cp_session cookie only after the handler has verified the caller's credentials with your identity provider or user store, and remove any path that sets it without that check. If it already does, this is your sign-in: approve it with that reason.",
+              "policy_name": "Every route needs sign-in",
+              "required_end_state": "/api/session sets the cp_session cookie only after verifying who the caller is, on every path through the handler.",
+              "do_not": [
+                "add a session check to the sign-in route: then nobody can sign in",
+                "set the session cookie when a flag, header or query parameter skips the credential check",
+                "add an ignore comment or suppression pragma"
+              ]
+            }
+          }
+        },
+        {
+          "ruleId": "perf.unbounded-refetch",
+          "level": "warning",
+          "message": {
+            "text": "ClaimsTable refetches every claim on each keystroke"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/components/ClaimsTable.tsx"
+                },
+                "region": {
+                  "startLine": 61,
+                  "startColumn": 3,
+                  "endLine": 61,
+                  "endColumn": 44,
+                  "snippet": {
+                    "text": "  useEffect(() => { refetch(); }, [query]);"
+                  }
+                }
+              }
+            }
+          ],
+          "relatedLocations": [],
+          "partialFingerprints": {
+            "canyon/v1": "f_16a56acace1933de91048f19fd6a0e523103d6c97ba0955e887d1cdbd32366b7"
+          },
+          "properties": {
+            "canyon": {
+              "severity": "medium",
+              "blocks": false,
+              "title": "ClaimsTable refetches every claim on each keystroke",
+              "problem": "The useEffect depends on query with no debounce, and the endpoint has no pagination. Meridian's claims table is 12,400 rows — that's a full scan per character typed. It's fine in the demo dataset and will be slow in production.",
+              "fix": "Debounce to ~250ms, or move the filter server-side. Neither is urgent.",
+              "policy_name": "No unbounded refetch on user input"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "columnKind": "unicodeCodePoints",
+      "tool": {
+        "driver": {
+          "name": "sarif/gitleaks",
+          "version": "unknown",
+          "rules": [
+            {
+              "id": "secrets.client-bundle.gitleaks.stripe-access-token",
+              "name": "No secrets in the code"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "gitleaks · report attached by Canyon"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "secrets.client-bundle.gitleaks.stripe-access-token",
+          "level": "error",
+          "message": {
+            "text": "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/lib/payments.ts"
+                },
+                "region": {
+                  "startLine": 14,
+                  "startColumn": 1,
+                  "endLine": 14,
+                  "endColumn": 65,
+                  "snippet": {
+                    "text": "••••"
+                  }
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "canyon/v1": "f_c351cc0ee0961d1358536ca1d3a581a2853f97607b3887a60eeebfaccc751d75"
+          },
+          "properties": {
+            "canyon": {
+              "severity": "critical",
+              "blocks": true,
+              "title": "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data",
+              "problem": "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data. stripe-access-token has detected secret for file apps/web/src/lib/payments.ts.",
+              "fix": "Rotate this credential — it has been in your code. If nothing reads it, delete it from the code; otherwise store the new one with canyon secret set STRIPE_ACCESS_TOKEN and read it from the environment.",
+              "policy_name": "No secrets in the code",
+              "secret_name": "STRIPE_ACCESS_TOKEN",
+              "shown": {
+                "startColumn": 1,
+                "endColumn": 5
+              },
+              "required_end_state": "gitleaks no longer reports stripe-access-token for this code when it runs again, and the app still does what it did.",
+              "do_not": [
+                "Silence it in gitleaks's settings or with an ignore comment — Canyon does not read those.",
+                "Remove or rename the flagged code just so the tool stops matching it."
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

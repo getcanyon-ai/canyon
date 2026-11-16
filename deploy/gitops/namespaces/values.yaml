@@ -1,0 +1,9 @@
+# Set as structured values, never --set, by one of the two generators, and checked by the chart:
+# - Argo CD's ApplicationSet (argocd/namespaces.yaml): app, the app's directory in the deploy repo, and env, the
+#   generator's own (preview or prod). The chart makes canyon-<app>-<env>.
+# - Flux's HelmRelease (flux/generator.yaml): root, the deploy repo's path root, env, the release's own, and interval,
+#   each app's Kustomization's. The chart makes a namespace per <root>/<app>/<env>/canyon.json on env's branch.
+app: ""
+env: ""
+root: ""
+interval: ""

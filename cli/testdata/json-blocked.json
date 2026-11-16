@@ -1,0 +1,80 @@
+{
+  "result": "blocked",
+  "app": "claims-portal",
+  "gate_run": "gr_8f2a",
+  "started_at": "2026-09-02T09:31:04Z",
+  "duration_ms": 14700,
+  "counts": {
+    "findings": 4,
+    "blocking": 1
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "blocks": false,
+      "rule": "auth.unauthenticated-route",
+      "file": "apps/web/src/app/api/admin/policies/route.ts",
+      "line": 8,
+      "column": 3,
+      "problem": "There's no session check in the handler, and middleware.ts:22 leaves /api/admin/policies out of the matcher — so nothing upstream is checking either. Any caller without a session gets what this handler returns.",
+      "fix": "Either add /api/admin/policies to the middleware matcher, or return early from the handler when the request has no cp_session cookie. The matcher is the safer of the two — it covers routes nobody's written yet.",
+      "policy_name": "Every route needs sign-in",
+      "required_end_state": "/api/admin/policies answers only a request that carries a session: the middleware matcher covers it, or the handler returns before anything else when the session cookie is missing.",
+      "do_not": [
+        "check a query parameter or header the caller sets instead of the session cookie",
+        "move the handler's logic to another route outside the matcher",
+        "add an ignore comment or suppression pragma"
+      ]
+    },
+    {
+      "severity": "high",
+      "blocks": false,
+      "rule": "auth.unauthenticated-route",
+      "file": "apps/web/src/app/api/session/route.ts",
+      "line": 8,
+      "column": 3,
+      "problem": "It sets the cp_session cookie, so whoever it lets through gets a session. A sign-in that verifies who is signing in first has to work this way; a dev login, an impersonation route, or a password check a flag switches off lets anyone in as anyone.",
+      "fix": "Set the cp_session cookie only after the handler has verified the caller's credentials with your identity provider or user store, and remove any path that sets it without that check. If it already does, this is your sign-in: approve it with that reason.",
+      "policy_name": "Every route needs sign-in",
+      "required_end_state": "/api/session sets the cp_session cookie only after verifying who the caller is, on every path through the handler.",
+      "do_not": [
+        "add a session check to the sign-in route: then nobody can sign in",
+        "set the session cookie when a flag, header or query parameter skips the credential check",
+        "add an ignore comment or suppression pragma"
+      ]
+    },
+    {
+      "severity": "medium",
+      "blocks": false,
+      "rule": "perf.unbounded-refetch",
+      "file": "apps/web/src/components/ClaimsTable.tsx",
+      "line": 61,
+      "column": 3,
+      "problem": "The useEffect depends on query with no debounce, and the endpoint has no pagination. Meridian's claims table is 12,400 rows — that's a full scan per character typed. It's fine in the demo dataset and will be slow in production.",
+      "fix": "Debounce to ~250ms, or move the filter server-side. Neither is urgent.",
+      "policy_name": "No unbounded refetch on user input"
+    },
+    {
+      "severity": "critical",
+      "blocks": true,
+      "rule": "secrets.client-bundle.gitleaks.stripe-access-token",
+      "file": "apps/web/src/lib/payments.ts",
+      "line": 14,
+      "column": 1,
+      "problem": "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data. stripe-access-token has detected secret for file apps/web/src/lib/payments.ts.",
+      "fix": "Rotate this credential — it has been in your code. If nothing reads it, delete it from the code; otherwise store the new one with canyon secret set STRIPE_ACCESS_TOKEN and read it from the environment.",
+      "policy_name": "No secrets in the code",
+      "secret_name": "STRIPE_ACCESS_TOKEN",
+      "required_end_state": "gitleaks no longer reports stripe-access-token for this code when it runs again, and the app still does what it did.",
+      "do_not": [
+        "Silence it in gitleaks's settings or with an ignore comment — Canyon does not read those.",
+        "Remove or rename the flagged code just so the tool stops matching it."
+      ]
+    }
+  ],
+  "notes": [],
+  "urls": {
+    "app": "http://localhost:7777/#/apps/claims-portal"
+  },
+  "exit_code": 2
+}

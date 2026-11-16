@@ -1,0 +1,884 @@
+{
+  "env": "preview",
+  "image_digest": "sha256:4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c",
+  "scanned_at": "2026-10-12T14:02:11Z",
+  "rule_name": "No known-vulnerable system libraries or build tools",
+  "rule_state": "blocking",
+  "read_at": "2026-10-15T09:00:00Z",
+  "image": {
+    "tool": "trivy",
+    "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+    "sbom": {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.6",
+      "version": 1,
+      "metadata": {
+        "component": {
+          "bom-ref": "image",
+          "type": "container",
+          "name": "/scan/image.tar",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            },
+            {
+              "name": "aquasecurity:trivy:DiffID",
+              "value": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "bom-ref": "os",
+          "type": "operating-system",
+          "name": "ubuntu",
+          "version": "24.04",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:Class",
+              "value": "os-pkgs"
+            },
+            {
+              "name": "aquasecurity:trivy:Type",
+              "value": "ubuntu"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04",
+          "type": "library",
+          "name": "libc6",
+          "version": "2.39-0ubuntu8.4",
+          "purl": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "ubuntu"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+          "type": "library",
+          "name": "libssl3",
+          "version": "3.0.13-0ubuntu3.4",
+          "purl": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "ubuntu"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:npm/cross-spawn@7.0.3",
+          "type": "library",
+          "name": "cross-spawn",
+          "version": "7.0.3",
+          "purl": "pkg:npm/cross-spawn@7.0.3",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "layers/paketo-buildpacks_node-engine/node/lib/node_modules/npm/node_modules/cross-spawn/package.json"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "node-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "3e671687-395b-41f5-a30f-a58921a69b79",
+          "type": "library",
+          "name": "undici-types",
+          "version": "6.19.8",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "layers/paketo-buildpacks_node-engine/node/lib/node_modules/npm/node_modules/undici-types/package.json"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "node-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:npm/express@4.19.2",
+          "type": "library",
+          "name": "express",
+          "version": "4.19.2",
+          "purl": "pkg:npm/express@4.19.2",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "layers/paketo-buildpacks_npm-install/launch-modules/node_modules/express/package.json"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "node-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:pypi/certifi@2023.7.22",
+          "type": "library",
+          "name": "certifi",
+          "version": "2023.7.22",
+          "purl": "pkg:pypi/certifi@2023.7.22",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "layers/acme_certificates/certs/lib/python3.12/site-packages/certifi-2023.7.22.dist-info/METADATA"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "python-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:conda/openssl@3.0.13",
+          "type": "library",
+          "name": "openssl",
+          "version": "3.0.13",
+          "purl": "pkg:conda/openssl@3.0.13",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "layers/acme_certificates/certs/conda-meta/openssl-3.0.13.json"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "conda-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:npm/claims-portal@1.4.0",
+          "type": "library",
+          "name": "claims-portal",
+          "version": "1.4.0",
+          "purl": "pkg:npm/claims-portal@1.4.0",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "workspace/package.json"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "node-pkg"
+            }
+          ]
+        },
+        {
+          "bom-ref": "pkg:golang/stdlib@v1.22.5",
+          "type": "library",
+          "name": "stdlib",
+          "version": "v1.22.5",
+          "purl": "pkg:golang/stdlib@v1.22.5",
+          "properties": [
+            {
+              "name": "aquasecurity:trivy:FilePath",
+              "value": "cnb/lifecycle/launcher"
+            },
+            {
+              "name": "aquasecurity:trivy:LayerDiffID",
+              "value": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            },
+            {
+              "name": "aquasecurity:trivy:PkgType",
+              "value": "gobinary"
+            }
+          ]
+        }
+      ]
+    },
+    "diff_ids": [
+      "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+    ],
+    "lifecycle_metadata": "{\"app\":[{\"sha\":\"sha256:6666666666666666666666666666666666666666666666666666666666666666\"}],\"buildpacks\":[{\"key\":\"paketo-buildpacks/node-engine\",\"version\":\"7.1.0\",\"layers\":{\"node\":{\"sha\":\"sha256:3333333333333333333333333333333333333333333333333333333333333333\",\"launch\":true}}},{\"key\":\"paketo-buildpacks/npm-install\",\"version\":\"2.1.0\",\"layers\":{\"launch-modules\":{\"sha\":\"sha256:4444444444444444444444444444444444444444444444444444444444444444\",\"launch\":true}}},{\"key\":\"acme/certificates\",\"version\":\"1.0.0\",\"layers\":{\"certs\":{\"sha\":\"sha256:5555555555555555555555555555555555555555555555555555555555555555\",\"launch\":true}}}],\"config\":{\"sha\":\"sha256:8888888888888888888888888888888888888888888888888888888888888888\"},\"launcher\":{\"sha\":\"sha256:7777777777777777777777777777777777777777777777777777777777777777\"},\"runImage\":{\"topLayer\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"reference\":\"canyon-run@sha256:4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d\"}}"
+  },
+  "matches": [
+    {
+      "diff_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-13T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "/scan/sbom.cdx.json (ubuntu 24.04)",
+              "Class": "os-pkgs",
+              "Type": "ubuntu",
+              "Packages": [
+                {
+                  "Name": "libc6",
+                  "Version": "2.39-0ubuntu8.4",
+                  "Identifier": {
+                    "PURL": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2016-20013",
+                  "PkgName": "libc6",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libc6@2.39-0ubuntu8.4?arch=amd64&distro=ubuntu-24.04"
+                  },
+                  "InstalledVersion": "2.39-0ubuntu8.4",
+                  "Layer": {
+                    "DiffID": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "Severity": "LOW",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2016-20013"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "diff_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-08T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "/scan/sbom.cdx.json (ubuntu 24.04)",
+              "Class": "os-pkgs",
+              "Type": "ubuntu",
+              "Packages": [
+                {
+                  "Name": "libssl3",
+                  "Version": "3.0.13-0ubuntu3.4",
+                  "Identifier": {
+                    "PURL": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2024-5535",
+                  "PkgName": "libssl3",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04"
+                  },
+                  "InstalledVersion": "3.0.13-0ubuntu3.4",
+                  "FixedVersion": "3.0.13-0ubuntu3.2",
+                  "Layer": {
+                    "DiffID": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                  },
+                  "Severity": "MEDIUM",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-5535"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "diff_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-14T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "/scan/sbom.cdx.json (ubuntu 24.04)",
+              "Class": "os-pkgs",
+              "Type": "ubuntu",
+              "Packages": [
+                {
+                  "Name": "libssl3",
+                  "Version": "3.0.13-0ubuntu3.4",
+                  "Identifier": {
+                    "PURL": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2024-6119",
+                  "PkgName": "libssl3",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04",
+                    "BOMRef": "pkg:deb/ubuntu/libssl3@3.0.13-0ubuntu3.4?arch=amd64&distro=ubuntu-24.04"
+                  },
+                  "InstalledVersion": "3.0.13-0ubuntu3.4",
+                  "FixedVersion": "3.0.13-0ubuntu3.5",
+                  "Layer": {
+                    "DiffID": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                  },
+                  "Severity": "HIGH",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-6119"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "diff_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-14T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "Node.js",
+              "Class": "lang-pkgs",
+              "Type": "node-pkg",
+              "Packages": [
+                {
+                  "Name": "cross-spawn",
+                  "Version": "7.0.3",
+                  "Identifier": {
+                    "PURL": "pkg:npm/cross-spawn@7.0.3",
+                    "BOMRef": "pkg:npm/cross-spawn@7.0.3"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2024-21538",
+                  "PkgName": "cross-spawn",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:npm/cross-spawn@7.0.3",
+                    "BOMRef": "pkg:npm/cross-spawn@7.0.3"
+                  },
+                  "InstalledVersion": "7.0.3",
+                  "FixedVersion": "7.0.5, 6.0.6",
+                  "Layer": {
+                    "DiffID": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                  },
+                  "Severity": "HIGH",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-21538"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "diff_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-13T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "Python",
+              "Class": "lang-pkgs",
+              "Type": "python-pkg",
+              "Packages": [
+                {
+                  "Name": "certifi",
+                  "Version": "2023.7.22",
+                  "Identifier": {
+                    "PURL": "pkg:pypi/certifi@2023.7.22",
+                    "BOMRef": "pkg:pypi/certifi@2023.7.22"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2024-39689",
+                  "PkgName": "certifi",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:pypi/certifi@2023.7.22",
+                    "BOMRef": "pkg:pypi/certifi@2023.7.22"
+                  },
+                  "InstalledVersion": "2023.7.22",
+                  "FixedVersion": "2024.7.4",
+                  "Layer": {
+                    "DiffID": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+                  },
+                  "Severity": "LOW",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-39689"
+                }
+              ]
+            },
+            {
+              "Target": "Conda",
+              "Class": "lang-pkgs",
+              "Type": "conda-pkg",
+              "Packages": [
+                {
+                  "Name": "openssl",
+                  "Version": "3.0.13",
+                  "Identifier": {
+                    "PURL": "pkg:conda/openssl@3.0.13",
+                    "BOMRef": "pkg:conda/openssl@3.0.13"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "unscanned": [
+          "pkg:conda/openssl@3.0.13"
+        ]
+      }
+    },
+    {
+      "diff_id": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "answer": {
+        "tool": "trivy",
+        "image": "ghcr.io/aquasecurity/trivy@sha256:9b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e89b3e61c0a4d7f2e8",
+        "db_built_at": "2026-10-14T09:00:00Z",
+        "report": {
+          "SchemaVersion": 2,
+          "ArtifactName": "/scan/sbom.cdx.json",
+          "ArtifactType": "cyclonedx",
+          "Results": [
+            {
+              "Target": "cnb/lifecycle/launcher",
+              "Class": "lang-pkgs",
+              "Type": "gobinary",
+              "Packages": [
+                {
+                  "Name": "stdlib",
+                  "Version": "v1.22.5",
+                  "Identifier": {
+                    "PURL": "pkg:golang/stdlib@v1.22.5",
+                    "BOMRef": "pkg:golang/stdlib@v1.22.5"
+                  }
+                }
+              ],
+              "Vulnerabilities": [
+                {
+                  "VulnerabilityID": "CVE-2024-34155",
+                  "PkgName": "stdlib",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:golang/stdlib@v1.22.5",
+                    "BOMRef": "pkg:golang/stdlib@v1.22.5"
+                  },
+                  "InstalledVersion": "v1.22.5",
+                  "FixedVersion": "1.22.7, 1.23.1",
+                  "Layer": {
+                    "DiffID": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                  },
+                  "Severity": "MEDIUM",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-34155"
+                },
+                {
+                  "VulnerabilityID": "CVE-2024-34156",
+                  "PkgName": "stdlib",
+                  "PkgIdentifier": {
+                    "PURL": "pkg:golang/stdlib@v1.22.5",
+                    "BOMRef": "pkg:golang/stdlib@v1.22.5"
+                  },
+                  "InstalledVersion": "v1.22.5",
+                  "FixedVersion": "1.22.7, 1.23.1",
+                  "Layer": {
+                    "DiffID": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                  },
+                  "Severity": "HIGH",
+                  "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-34156"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "image_read": {
+    "env": "preview",
+    "image_digest": "sha256:4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c",
+    "state": "checked",
+    "why": "3 known-vulnerable packages with a published fix, in the system libraries and build tools Canyon adds; 4 notes: no fix published, or Canyon can't tell what put it there",
+    "scanned_at": "2026-10-12T14:02:11Z",
+    "db_built_at": "2026-10-13T09:00:00Z",
+    "read_at": "2026-10-15T09:00:00Z",
+    "layers": [
+      {
+        "diff_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "owner": "run-image"
+      },
+      {
+        "diff_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "owner": "run-image"
+      },
+      {
+        "diff_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "owner": "paketo-buildpacks/node-engine"
+      },
+      {
+        "diff_id": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "owner": "paketo-buildpacks/npm-install"
+      },
+      {
+        "diff_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "owner": "acme/certificates"
+      },
+      {
+        "diff_id": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "owner": "app"
+      },
+      {
+        "diff_id": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "owner": "lifecycle"
+      },
+      {
+        "diff_id": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "owner": "lifecycle"
+      }
+    ],
+    "findings": [
+      {
+        "ruleId": "platform.known-vuln",
+        "level": "error",
+        "message": {
+          "text": "CVE-2024-21538 in cross-spawn 7.0.3"
+        },
+        "locations": [
+          {
+            "physicalLocation": {
+              "artifactLocation": {
+                "uri": "layers/paketo-buildpacks_node-engine/node/lib/node_modules/npm/node_modules/cross-spawn/package.json",
+                "uriBaseId": "IMAGE"
+              },
+              "region": {
+                "startLine": 1,
+                "startColumn": 1,
+                "endLine": 1,
+                "endColumn": 18,
+                "snippet": {
+                  "text": "cross-spawn 7.0.3"
+                }
+              }
+            }
+          }
+        ],
+        "partialFingerprints": {
+          "canyon/v1": "f_ed815095914c54f1a3cffb7056ec5b4aa27de9cdc2b89aa409c693ef6f70d671"
+        },
+        "properties": {
+          "canyon": {
+            "severity": "high",
+            "blocks": true,
+            "title": "CVE-2024-21538 in cross-spawn 7.0.3",
+            "problem": "CVE-2024-21538 is published against cross-spawn 7.0.3, which Canyon put in this app's build tools. 7.0.5, 6.0.6 fix it.",
+            "fix": "Canyon fixes this in its next build tools update, with a newer paketo-buildpacks/node-engine.",
+            "policy_name": "No known-vulnerable system libraries or build tools",
+            "required_end_state": "The image preview runs holds cross-spawn at a version that fixes CVE-2024-21538.",
+            "do_not": [
+              "change the app's code or dependencies for it"
+            ]
+          }
+        },
+        "tool": "canyon/promote-gate",
+        "class": "runtime",
+        "dependency": {
+          "name": "cross-spawn",
+          "version": "7.0.3",
+          "vulnerability": "CVE-2024-21538",
+          "fixed": "7.0.5, 6.0.6",
+          "link": "https://avd.aquasec.com/nvd/cve-2024-21538",
+          "layer": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      },
+      {
+        "ruleId": "platform.known-vuln",
+        "level": "error",
+        "message": {
+          "text": "CVE-2024-6119 in libssl3 3.0.13-0ubuntu3.4"
+        },
+        "locations": [
+          {
+            "physicalLocation": {
+              "artifactLocation": {
+                "uri": "var/lib/dpkg/status",
+                "uriBaseId": "IMAGE"
+              },
+              "region": {
+                "startLine": 1,
+                "startColumn": 1,
+                "endLine": 1,
+                "endColumn": 26,
+                "snippet": {
+                  "text": "libssl3 3.0.13-0ubuntu3.4"
+                }
+              }
+            }
+          }
+        ],
+        "partialFingerprints": {
+          "canyon/v1": "f_07ea2eb254ca7844fd8d5f24a16fadfd15efaff58e8c4ebc4b7037e7be8829cb"
+        },
+        "properties": {
+          "canyon": {
+            "severity": "high",
+            "blocks": true,
+            "title": "CVE-2024-6119 in libssl3 3.0.13-0ubuntu3.4",
+            "problem": "CVE-2024-6119 is published against libssl3 3.0.13-0ubuntu3.4, which Canyon put in this app's system libraries. 3.0.13-0ubuntu3.5 fixes it.",
+            "fix": "Canyon fixes this: it updates libssl3 to 3.0.13-0ubuntu3.5 under the app. The app is not rebuilt.",
+            "policy_name": "No known-vulnerable system libraries or build tools",
+            "required_end_state": "The image preview runs holds libssl3 at a version that fixes CVE-2024-6119.",
+            "do_not": [
+              "change the app's code or dependencies for it"
+            ]
+          }
+        },
+        "tool": "canyon/promote-gate",
+        "class": "os",
+        "dependency": {
+          "name": "libssl3",
+          "version": "3.0.13-0ubuntu3.4",
+          "vulnerability": "CVE-2024-6119",
+          "fixed": "3.0.13-0ubuntu3.5",
+          "link": "https://avd.aquasec.com/nvd/cve-2024-6119",
+          "layer": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      {
+        "ruleId": "platform.known-vuln",
+        "level": "error",
+        "message": {
+          "text": "CVE-2024-34156 in stdlib v1.22.5"
+        },
+        "locations": [
+          {
+            "physicalLocation": {
+              "artifactLocation": {
+                "uri": "cnb/lifecycle/launcher",
+                "uriBaseId": "IMAGE"
+              },
+              "region": {
+                "startLine": 1,
+                "startColumn": 1,
+                "endLine": 1,
+                "endColumn": 15,
+                "snippet": {
+                  "text": "stdlib v1.22.5"
+                }
+              }
+            }
+          }
+        ],
+        "partialFingerprints": {
+          "canyon/v1": "f_e8d3ac857c71bdd162662077359a2e7ca5a112873cb8c0bd49e6b86156b103db"
+        },
+        "properties": {
+          "canyon": {
+            "severity": "high",
+            "blocks": true,
+            "title": "CVE-2024-34156 in stdlib v1.22.5",
+            "problem": "CVE-2024-34156 is published against stdlib v1.22.5, which Canyon put in this app's build tools. 1.22.7, 1.23.1 fix it.",
+            "fix": "Canyon fixes this in its next build tools update, with a newer app launcher.",
+            "policy_name": "No known-vulnerable system libraries or build tools",
+            "required_end_state": "The image preview runs holds stdlib at a version that fixes CVE-2024-34156.",
+            "do_not": [
+              "change the app's code or dependencies for it"
+            ]
+          }
+        },
+        "tool": "canyon/promote-gate",
+        "class": "lifecycle",
+        "dependency": {
+          "name": "stdlib",
+          "version": "v1.22.5",
+          "vulnerability": "CVE-2024-34156",
+          "fixed": "1.22.7, 1.23.1",
+          "link": "https://avd.aquasec.com/nvd/cve-2024-34156",
+          "layer": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+        }
+      },
+      {
+        "ruleId": "platform.known-vuln",
+        "level": "warning",
+        "message": {
+          "text": "CVE-2024-34155 in stdlib v1.22.5"
+        },
+        "locations": [
+          {
+            "physicalLocation": {
+              "artifactLocation": {
+                "uri": "cnb/lifecycle/launcher",
+                "uriBaseId": "IMAGE"
+              },
+              "region": {
+                "startLine": 1,
+                "startColumn": 1,
+                "endLine": 1,
+                "endColumn": 15,
+                "snippet": {
+                  "text": "stdlib v1.22.5"
+                }
+              }
+            }
+          }
+        ],
+        "partialFingerprints": {
+          "canyon/v1": "f_80e570fc716be3695310e11c384de2cc1f82e28c7123f96e7064ec235f3371aa"
+        },
+        "properties": {
+          "canyon": {
+            "severity": "medium",
+            "blocks": false,
+            "title": "CVE-2024-34155 in stdlib v1.22.5",
+            "problem": "CVE-2024-34155 is published against stdlib v1.22.5, which Canyon put in this app's build tools. 1.22.7, 1.23.1 fix it.",
+            "fix": "Canyon fixes this in its next build tools update, with a newer app launcher.",
+            "policy_name": "No known-vulnerable system libraries or build tools"
+          }
+        },
+        "tool": "canyon/promote-gate",
+        "class": "lifecycle",
+        "dependency": {
+          "name": "stdlib",
+          "version": "v1.22.5",
+          "vulnerability": "CVE-2024-34155",
+          "fixed": "1.22.7, 1.23.1",
+          "link": "https://avd.aquasec.com/nvd/cve-2024-34155",
+          "layer": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+        }
+      }
+    ],
+    "notes": [
+      {
+        "name": "libc6",
+        "version": "2.39-0ubuntu8.4",
+        "layer": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "class": "os",
+        "why": "no_fix"
+      },
+      {
+        "name": "undici-types",
+        "version": "6.19.8",
+        "layer": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "class": "runtime",
+        "why": "not_checked"
+      },
+      {
+        "name": "certifi",
+        "version": "2023.7.22",
+        "layer": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "class": "unknown",
+        "why": "unknown"
+      },
+      {
+        "name": "openssl",
+        "version": "3.0.13",
+        "layer": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "class": "unknown",
+        "why": "not_checked"
+      }
+    ]
+  },
+  "receipt_row": {
+    "id": "platform.known-vuln",
+    "name": "No known-vulnerable system libraries or build tools",
+    "blocks": true,
+    "passed": false,
+    "why": "3 known-vulnerable packages with a published fix, in the system libraries and build tools Canyon adds; 4 notes: no fix published, or Canyon can't tell what put it there",
+    "db_built_at": "2026-10-13T09:00:00Z",
+    "read_at": "2026-10-15T09:00:00Z",
+    "notes": 4,
+    "packages": [
+      { "name": "cross-spawn", "version": "7.0.3", "advisories": [{ "id": "CVE-2024-21538", "fixed": "7.0.5, 6.0.6" }],
+        "layers": [{ "owner": "paketo-buildpacks/node-engine", "class": "runtime" }] },
+      { "name": "libssl3", "version": "3.0.13-0ubuntu3.4", "advisories": [{ "id": "CVE-2024-6119", "fixed": "3.0.13-0ubuntu3.5" }],
+        "layers": [{ "owner": "run-image", "class": "os" }] },
+      { "name": "stdlib", "version": "v1.22.5", "advisories": [{ "id": "CVE-2024-34156", "fixed": "1.22.7, 1.23.1" }],
+        "go_stdlib": true, "layers": [{ "owner": "lifecycle", "class": "lifecycle" }] }
+    ]
+  }
+}

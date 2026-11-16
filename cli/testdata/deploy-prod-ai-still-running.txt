@@ -1,0 +1,16 @@
+CANYON PROMOTE — RESULT: STILL RUNNING
+
+app: claims-portal
+env: prod
+host: http://localhost:7777
+run: gr_9c41
+reason: Canyon didn't answer for 2 minutes (can't reach a Canyon host at http://localhost:7777).
+outcome: the promotion was still running when Canyon last answered. This command stopped following it.
+fleet url: http://localhost:7777/#/apps/claims-portal
+
+NEXT STEPS:
+1. Tell the user the promotion was still running when Canyon last answered, and this command stopped following it.
+2. Run canyon status in a minute: its production line says what production runs. If canyon status can't reach Canyon either, tell the user and stop.
+3. Do not promote again or take production offline for this. This command did not see it fail.
+
+exit code: 3

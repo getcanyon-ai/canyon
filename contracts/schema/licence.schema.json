@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/licence.schema.json",
+  "title": "Canyon Enterprise licence",
+  "description": "The licence that unlocks Canyon Enterprise's features (#2879; contracts/routes.md, Licence). The root is the licence file, as CANYON_LICENSE holds it (its content, or the path of a file holding it) and as an admin pastes it: payload is the standard base64 of the payload's JSON bytes and signature the standard base64 of Canyon's 64-byte Ed25519 signature over those exact bytes, so no re-encoding can change what was signed. It is verified offline against the public keys compiled into the server. A missing, lapsed or unreadable licence never weakens the review and never stops what runs: it locks adding or changing an Enterprise feature, nothing else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "signature"],
+  "properties": {
+    "payload": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[A-Za-z0-9+/]+={0,2}$" },
+    "signature": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" }
+  },
+  "definitions": {
+    "payload": {
+      "description": "What Canyon signed: who it is for, when it was issued and until when it holds, how many seats, and which features it unlocks. A feature name this server does not know unlocks nothing here and is still shown.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["customer", "issued", "expires", "seats", "features"],
+      "properties": {
+        "customer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "issued": { "$ref": "#/definitions/ts" },
+        "expires": { "$ref": "#/definitions/ts" },
+        "seats": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "features": { "type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": true, "items": { "$ref": "#/definitions/name" } }
+      }
+    },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+    "feature": {
+      "description": "The Enterprise features this server gates, in its order: credentials Canyon adds to apps' calls (credential routes), platform patching (patching and rebuilds), and access by sign-in group (groups_claim and group grants).",
+      "enum": ["outbound_keys", "platform_patching", "group_sync"]
+    },
+    "state": {
+      "description": "GET /api/v1/licence. state: none (no licence), valid (before expires), grace (expires passed less than 30 days ago), lapsed (30 days or more ago), invalid (a licence is set, but it is not a licence file or no key this server holds verifies it). allows: the features this Canyon unlocks now, the known features the licence names while valid or grace, [] otherwise. A member is answered those two alone; an admin also where the licence came from and, for one that verifies, what it says, for an invalid one why.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "allows"],
+      "properties": {
+        "state": { "enum": ["none", "valid", "grace", "lapsed", "invalid"] },
+        "allows": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/feature" } },
+        "source": { "description": "env: CANYON_LICENSE sets it, and no route changes it; dashboard: an admin pasted it.", "enum": ["env", "dashboard"] },
+        "customer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "seats": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "issued": { "$ref": "#/definitions/ts" },
+        "expires": { "$ref": "#/definitions/ts" },
+        "grace_until": { "description": "expires plus 30 days: when grace ends and the licence lapses.", "$ref": "#/definitions/ts" },
+        "features": { "description": "Every feature the licence names, known here or not, in its order.", "type": "array", "items": { "$ref": "#/definitions/name" } },
+        "problem": { "description": "Why a licence is invalid: unreadable (not a licence file, or CANYON_LICENSE names a file the server can't read), unsigned (no key this server holds verifies it).", "enum": ["unreadable", "unsigned"] }
+      },
+      "allOf": [
+        { "description": "Only a licence in force unlocks anything.", "if": { "properties": { "state": { "enum": ["valid", "grace"] } } }, "then": {}, "else": { "properties": { "allows": { "maxItems": 0 } } } },
+        { "description": "No licence comes from nowhere.", "if": { "properties": { "state": { "const": "none" } } }, "then": { "not": { "required": ["source"] } } },
+        { "description": "An admin's read of a licence that verifies says all of it.", "if": { "required": ["source"], "properties": { "state": { "enum": ["valid", "grace", "lapsed"] } } }, "then": { "required": ["customer", "seats", "issued", "expires", "grace_until", "features"], "not": { "required": ["problem"] } } },
+        { "description": "An admin's read of an invalid licence says why, and nothing a licence would say.", "if": { "required": ["source"], "properties": { "state": { "const": "invalid" } } }, "then": { "required": ["problem"], "not": { "anyOf": [{ "required": ["customer"] }, { "required": ["seats"] }, { "required": ["issued"] }, { "required": ["expires"] }, { "required": ["grace_until"] }, { "required": ["features"] }] } } },
+        { "description": "A read with no source, a member's or no licence's, says nothing of a licence.", "if": { "not": { "required": ["source"] } }, "then": { "not": { "anyOf": [{ "required": ["customer"] }, { "required": ["seats"] }, { "required": ["issued"] }, { "required": ["expires"] }, { "required": ["grace_until"] }, { "required": ["features"] }, { "required": ["problem"] }] } } }
+      ]
+    },
+    "set": {
+      "description": "PUT /api/v1/licence: the licence file's text, exactly as issued.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["licence"],
+      "properties": { "licence": { "type": "string", "minLength": 1, "maxLength": 8192 } }
+    },
+    "refused": {
+      "description": "409 licence_required: adding or changing an Enterprise feature while no valid or grace licence names it. feature names which; message says it needs Canyon Enterprise, that what is set keeps working, and where an admin adds a licence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error", "message", "feature"],
+      "properties": {
+        "error": { "const": "licence_required" },
+        "message": { "type": "string", "minLength": 1 },
+        "feature": { "$ref": "#/definitions/feature" }
+      }
+    },
+    "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+  }
+}

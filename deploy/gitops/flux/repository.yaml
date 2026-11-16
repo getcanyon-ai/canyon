@@ -1,0 +1,32 @@
+# Flux's credentials for the repos it reads: read-only, and never Canyon's token, which can write. On GitHub, a
+# fine-grained token with Contents read; on Gitea or Forgejo, an access token with read:repository; on GitLab, a
+# project access token with the Reporter role and read_repository, or a deploy token with read_repository alone.
+# The deploy repo's is in canyon-sync, for the sync's GitRepositories, and in flux-system, for the generator's: two
+# copies of one read-only credential. canyon-platform-repo reads your platform repo: drop its username and password
+# if that repo is public. When a private CA signs a repo's address, add the CA's certificate to its Secret as ca.crt.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: canyon-deploy-repo
+  namespace: canyon-sync
+stringData:
+  username: ${READ_USER}
+  password: ${READ_TOKEN}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: canyon-deploy-repo
+  namespace: flux-system
+stringData:
+  username: ${READ_USER}
+  password: ${READ_TOKEN}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: canyon-platform-repo
+  namespace: flux-system
+stringData:
+  username: ${PLATFORM_READ_USER}
+  password: ${PLATFORM_READ_TOKEN}

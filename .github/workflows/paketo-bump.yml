@@ -1,0 +1,107 @@
+# Paketo pin bumps (design/PATCHING.md §5, #2114): Paketo's newest builder, build and run images and the
+# ClusterStore's buildpacks at the versions that builder carries, pushed to the branch
+# ci/paketo-bump-<12 hex of the new pins>, and one issue labelled patching whose body is the scan diff of the fixture apps' images built on the old
+# pins and on the new, with the compare link a person opens the pull request from: Actions cannot open
+# pull requests in this repository, and a person's pull request runs its checks as any other
+# (internal/tools/paketobump). The open issue this workflow filed for the same pins, or for older ones,
+# is updated: never a second. The branch is the pins' own, never read from an issue. This is how a Node or Python security
+# release, which trivy cannot see, still reaches Canyon on a schedule. Fail closed: a digest that does
+# not resolve, a builder whose buildpacks are not the ClusterStore's, or an image that does not build or
+# scan reds the run, and nothing is pushed or filed. By hand (Actions -> paketo-bump -> Run workflow)
+# with dry_run, the default, it prints the issue and pushes nothing; a pull request that changes the
+# bump runs that dry run too.
+name: paketo-bump
+
+on:
+  schedule:
+    - cron: '17 3 * * 1' # Mondays: Paketo's run image moves weekly with Ubuntu's security pocket
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the pull request's body and open nothing
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - 'internal/tools/paketobump/**'
+      - '.github/workflows/paketo-bump.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paketo-bump-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; Paketo's images are multi-arch
+    timeout-minutes: 75 # six real buildpack builds and their image scans, two builders and two run images built
+    outputs:
+      moved: ${{ steps.bump.outputs.moved }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker's classic image store — pack's builds ran ~2x slower into Docker 29's containerd store (#2609)
+        if: runner.environment == 'self-hosted' # GitHub's runners are on it already
+        run: |
+          echo '{"features":{"containerd-snapshotter":false}}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          test "$(docker info --format '{{.Driver}}')" = overlay2
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: paketo-bump
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - run: make pack-install
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (#2755)
+      - id: bump
+        name: resolve Paketo's newest, build and scan the fixture apps on both, print the issue
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/paketo-bump"
+          mkdir -p "$out"
+          go run ./internal/tools/paketobump -out "$out" | tee "$RUNNER_TEMP/printed.md"
+          cat "$RUNNER_TEMP/printed.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s "$out/bump.json" ]; then
+            git diff > "$out/pins.patch"
+            echo moved=true >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.bump.outputs.moved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: paketo-bump
+          path: ${{ runner.temp }}/paketo-bump
+          retention-days: 7
+
+  file:
+    needs: bump
+    if: needs.bump.outputs.moved == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run))
+    runs-on: ${{ vars.CANYON_RUNNERS == 'self-hosted' && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # our own runners where the repository's CANYON_RUNNERS variable says so; anywhere else, GitHub's
+    timeout-minutes: 15
+    permissions:
+      contents: write # the bump's branch
+      issues: write # its issue
+    steps:
+      - uses: actions/checkout@v4 # the commit the bump ran on
+      - uses: ./.github/actions/go-cache
+        with:
+          job: paketo-bump
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: paketo-bump
+          path: ${{ runner.temp }}/paketo-bump
+      - name: push the branch and open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          go run ./internal/tools/paketobump -out "$RUNNER_TEMP/paketo-bump" issue

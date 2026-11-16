@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/db-query.schema.json",
+  "title": "Canyon database query (seam 3)",
+  "description": "POST /api/v1/projects/:id/db/query: one statement run as the person, in a database session the route opens or attaches to (contracts/routes.md, Database sessions; design/DATABASE-SESSIONS.md §8). The routes.md row is canonical; this schema pins the body, the answer and the query's own refusals. The golden is contracts/testdata/db-session/meridian.json, checked against db-session.schema.json, which refers here.",
+  "definitions": {
+    "request": {
+      "type": "object", "additionalProperties": false, "required": ["env", "mode", "sql"],
+      "properties": {
+        "env": { "$ref": "db-session.schema.json#/definitions/env" },
+        "mode": { "$ref": "db-session.schema.json#/definitions/mode" },
+        "sql": { "description": "One statement, at most 64 KiB; more than one is the database's refusal (400 invalid_sql), never a parse of Canyon's.", "type": "string", "minLength": 1, "maxLength": 65536 },
+        "resource": { "$ref": "db-session.schema.json#/definitions/resource" },
+        "reason": { "description": "Required in prod when the query opens a database session or is its sign-in's first attach; later ones need none.", "$ref": "db-session.schema.json#/definitions/reason" },
+        "limit": { "description": "Rows at most; 500 when absent.", "type": "integer", "minimum": 1, "maximum": 10000 },
+        "timeout": { "description": "The statement's timeout as Go's time.ParseDuration reads it (30s, 1.5s, 5m0s), 1s to 5m; 30s when absent.", "type": "string", "maxLength": 64, "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|\u00b5s|\u03bcs|ms|s|m|h))+$" },
+        "replace": { "type": "boolean" }
+      }
+    },
+    "column": {
+      "type": "object", "additionalProperties": false, "required": ["name", "type"],
+      "properties": { "name": { "type": "string" }, "type": { "description": "The column's type as Postgres's format_type names it: bigint, character varying(80).", "type": "string", "minLength": 1 } }
+    },
+    "answer": {
+      "type": "object", "additionalProperties": false, "required": ["db_session", "columns", "rows", "row_count", "truncated", "command", "duration_ms"],
+      "properties": {
+        "db_session": { "$ref": "db-session.schema.json#/definitions/db_session" },
+        "columns": { "type": "array", "items": { "$ref": "#/definitions/column" } },
+        "rows": { "description": "Postgres's text output, NULL as null, in the columns' order.", "type": "array", "items": { "type": "array", "items": { "type": ["string", "null"] } } },
+        "row_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "truncated": { "description": "Cut at a row boundary at the limit or at 10 MiB.", "type": "boolean" },
+        "command": { "description": "The statement's command tag's verb.", "type": "string", "pattern": "^[A-Z]+( [A-Z]+)*$" },
+        "rows_affected": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "refusal": {
+      "type": "object", "required": ["error", "message"],
+      "properties": {
+        "error": { "enum": ["invalid_sql", "invalid_limit", "invalid_timeout", "statement_timeout", "query_failed"] },
+        "message": { "type": "string", "minLength": 1 },
+        "sqlstate": { "type": "string", "pattern": "^[0-9A-Z]{5}$" }
+      },
+      "if": { "properties": { "error": { "const": "query_failed" } } },
+      "then": { "required": ["sqlstate"] },
+      "else": { "not": { "required": ["sqlstate"] } }
+    }
+  }
+}

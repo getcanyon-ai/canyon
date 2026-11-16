@@ -1,0 +1,63 @@
+# The executor, canyon-executor-kube (https://www.getcanyon.ai/docs/self-host/kubernetes/). One replica, and a
+# redeploy stops the old pod before the new one starts: its locks (one probe, one scan per tool) and its
+# start-up sweeps assume it is alone. The overlay names the image by digest and sets the environment;
+# left empty, the executor refuses to start and names what is missing.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: canyon-executor, namespace: canyon}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: canyon-executor}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: canyon-executor}}
+    spec:
+      serviceAccountName: canyon-executor
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: executor
+          image: canyon-executor-kube@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          env:
+            - {name: CANYON_KUBE_REGISTRY, value: ""}       # the registry host every image lives under
+            - {name: CANYON_IMAGE_IDENTITY, value: ""}      # canyon-identity, by digest
+            - {name: CANYON_IMAGE_OPENGREP, value: ""}      # Canyon's opengrep, canyon-opengrep by the digest in the release's images.txt; empty answers no_image, which blocks a review with Opengrep on
+            - {name: CANYON_IMAGE_ESLINT, value: ""}        # Canyon's ESLint, canyon-eslint by the digest in the release's images.txt; empty answers no_image, which blocks a review with ESLint on
+            - {name: CANYON_KUBE_DB_CIDRS, value: ""}       # where the apps database listens on 5433
+          ports: [{name: http, containerPort: 7778}]
+          readinessProbe: {tcpSocket: {port: 7778}} # it listens once the Build informer has synced
+          # It streams trees and logs through; the most it holds is a scan's stdout, 10 MiB per tool.
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "1", memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: canyon-executor, namespace: canyon}
+spec:
+  selector: {app.kubernetes.io/name: canyon-executor}
+  ports: [{name: http, port: 7778, targetPort: 7778}]
+---
+# The single enforcement point of who may call the executor — no token, by design:
+# the server's pods, and nothing else. Out: DNS, and TCP 443 — the API server (on EKS its endpoints
+# answer 443), the registry and ECR's and STS's APIs, and /probe's TLS handshakes — the apps' sidecars on
+# 4183, Canyon's egress gateway on 3128, which a /run carrying egress dials first, and trivy's server on 4954.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: canyon-executor, namespace: canyon}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: canyon-executor}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-server}}}]
+      ports: [{protocol: TCP, port: 7778}]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to: [{ipBlock: {cidr: 0.0.0.0/0}}]
+      ports: [{protocol: TCP, port: 443}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: canyon-apps}}}] # canyon-identity's /answered, after each run
+      ports: [{protocol: TCP, port: 4183}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}}] # the gateway check
+      ports: [{protocol: TCP, port: 3128}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: canyon-scans}}, podSelector: {matchLabels: {canyon.trivy: "true"}}}] # trivy's server's /version: how old its database is (#2743)
+      ports: [{protocol: TCP, port: 4954}]

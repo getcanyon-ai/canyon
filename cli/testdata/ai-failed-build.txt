@@ -1,0 +1,58 @@
+CANYON REVIEW — RESULT: FAILED
+
+app: claims-portal
+env: preview
+host: http://localhost:7777
+gate run: gr_8f2a (2026-09-02T09:31:04Z)
+review: passed · 0 blocking, 3 warnings
+reason: build — the package did not build
+outcome: nothing was deployed.
+
+advisory 1 of 3 (high): auth.unauthenticated-route at apps/web/src/app/api/admin/policies/route.ts:8
+  /api/admin/policies is reachable without a session
+  problem: There's no session check in the handler, and middleware.ts:22 leaves /api/admin/policies out of the matcher — so nothing upstream is checking either. Any caller without a session gets what this handler returns.
+  fix: Either add /api/admin/policies to the middleware matcher, or return early from the handler when the request has no cp_session cookie. The matcher is the safer of the two — it covers routes nobody's written yet.
+  This does not block. Mention it to the user; fix only if asked.
+
+advisory 2 of 3 (high): auth.unauthenticated-route at apps/web/src/app/api/session/route.ts:8
+  /api/session starts a session without checking one
+  problem: It sets the cp_session cookie, so whoever it lets through gets a session. A sign-in that verifies who is signing in first has to work this way; a dev login, an impersonation route, or a password check a flag switches off lets anyone in as anyone.
+  fix: Set the cp_session cookie only after the handler has verified the caller's credentials with your identity provider or user store, and remove any path that sets it without that check. If it already does, this is your sign-in: approve it with that reason.
+  This does not block. Mention it to the user; fix only if asked.
+
+advisory 3 of 3 (medium): perf.unbounded-refetch at apps/web/src/components/ClaimsTable.tsx:61
+  ClaimsTable refetches every claim on each keystroke
+  problem: The useEffect depends on query with no debounce, and the endpoint has no pagination. Meridian's claims table is 12,400 rows — that's a full scan per character typed. It's fine in the demo dataset and will be slow in production.
+  fix: Debounce to ~250ms, or move the filter server-side. Neither is urgent.
+  This does not block. Mention it to the user; fix only if asked.
+
+--- LAST LINES ---------------------------------------------------------------
+    compiling module 05
+    compiling module 06
+    compiling module 07
+    compiling module 08
+    compiling module 09
+    compiling module 10
+    compiling module 11
+    compiling module 12
+    compiling module 13
+    compiling module 14
+    compiling module 15
+    compiling module 16
+    compiling module 17
+    compiling module 18
+    compiling module 19
+    compiling module 20
+    compiling module 21
+  Paketo Buildpack for CA Certificates 3.14.0
+  ERROR: failed to build: src/app/page.tsx:14:8 - Type error: Property 'total' does not exist on type 'Expense[]'.
+  the build step exited 51
+
+NEXT STEPS:
+1. Read the last lines above: they are the build's own and say what failed. Fix the app's code if the error is in it; if the build lacked a library or tool, tell the user, since the host may have to add it. It is not a policy block.
+2. Run: canyon deploy
+
+CANYON REVIEW — RESULT: FAILED
+reason: build — the package did not build
+
+exit code: 1

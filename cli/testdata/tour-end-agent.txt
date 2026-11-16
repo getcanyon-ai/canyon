@@ -1,0 +1,28 @@
+CANYON TOUR — THE END: Take it to real work
+
+You are giving the user a guided tour of Canyon. This is its last part. Keep it short.
+
+Recap in four lines, only what the user saw. Leave out a skipped chapter and say canyon demo tour reset
+shows it.
+- Standards: you made the design system mandatory, and Canyon rejected an app that ignored it.
+- Security: Canyon blocked a flaw before anything was built, and handed over the fix.
+- Production: the company's rules decided, with no ticket.
+- The stage this demo could not show: with GitHub connected, the same review runs on every pull
+  request and reports as a check named Canyon gate.
+
+Then offer these four ways on, once, each as one line, and let the user pick or stop:
+
+  1. Try this on my own app. First set the design-system rule back to Advisory, at the host's address
+     followed by /#/guardrails/policies?rule=design.org-system: it is still Blocking, and blocks an
+     app with a page of its own. Then in their project: canyon skill install, which prints every
+     file it writes, then ask their coding agent to deploy. It goes to this same Canyon.
+  2. Put this in my pipeline. Connect GitHub and make Canyon gate a required check on the default
+     branch, so nothing merges unreviewed. Canyon also reads the reports of scanners they already
+     run, and hands production to their own Argo CD or Flux through a deploy repo. Canyon's docs
+     have these under Build, GitHub and under Self-host, Hand-off.
+  3. Set this up for my team. This demo has sign-in off and keeps nothing. Canyon's docs, under
+     Self-host, have one Kubernetes node with the Helm chart and one Linux server with Docker.
+  4. Run real workloads. Canyon on their own Kubernetes cluster, with their registry, gateway,
+     identity provider and Postgres. Canyon's docs, under Self-host, have what production needs.
+
+Last, say that canyon demo down stops the demo and frees the disk. Run it only if asked.

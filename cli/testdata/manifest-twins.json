@@ -1,0 +1,91 @@
+{
+  "about": "How an agent's manifest says an AI twin's policy (design/specs/cli.md §7.4, #2694): each case's manifest, and its policy sections as `canyon manifest --format ai` and the dashboard's What agents are told both print them. cli/manifest_test.go and web/src/screens/Guardrails.test.tsx read this one table, so the two renderings cannot drift.",
+  "cases": [
+    {
+      "name": "the scanner rule blocks and its twin only warns",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}]},
+      "agent": "Policies that block:\n- No hand-built SQL\n  To pass: Bind it.\n  In languages Canyon's scanners cover, it blocks; in the rest only the AI review checks it, if one is set up, and it only warns."
+    },
+    {
+      "name": "both only warn",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "code.injection", "name": "No user input in commands", "state": "advisory"},
+        {"id": "ai.code-injection", "name": "No user input in commands (AI review)", "state": "advisory"}]},
+      "agent": "Policies that only warn:\n- No user input in commands"
+    },
+    {
+      "name": "the twin blocks and its scanner rule only warns",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "blocking", "how": "Bind it, says the twin."},
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "advisory"}]},
+      "agent": "Policies that block:\n- No hand-built SQL\n  To pass: Bind it, says the twin.\n  In languages Canyon's scanners cover, it only warns; in the rest only the AI review checks it, if one is set up, and it blocks."
+    },
+    {
+      "name": "the scanner rule blocks production",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "advisory", "production": "blocking", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}]},
+      "agent": "Policies that only warn:\n- No hand-built SQL (blocks production)\n  To pass: Bind it.\n  In languages Canyon's scanners cover, it only warns, and blocks production; in the rest only the AI review checks it, if one is set up, and it only warns."
+    },
+    {
+      "name": "the scanner rule only warns before production",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "production": "advisory", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "blocking", "how": "Bind it, says the twin."}]},
+      "agent": "Policies that block:\n- No hand-built SQL (only warns before production)\n  To pass: Bind it.\n  In languages Canyon's scanners cover, it blocks, and only warns before production; in the rest only the AI review checks it, if one is set up, and it blocks."
+    },
+    {
+      "name": "the twin alone, its scanner rule not handed out",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}]},
+      "agent": "Policies that only warn:\n- No hand-built SQL (AI review)"
+    },
+    {
+      "name": "a state this build does not know is not folded",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "staged"}]},
+      "agent": "Policies that block:\n- No hand-built SQL\n  To pass: Bind it.\n\nPolicies (staged):\n- No hand-built SQL (AI review)"
+    },
+    {
+      "name": "a rule off before preview is not folded",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "off", "production": "blocking", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}]},
+      "agent": "Policies that only warn:\n- No hand-built SQL (AI review)\n\nPolicies for production only:\n- No hand-built SQL (blocks)\n  To pass: Bind it."
+    },
+    {
+      "name": "a production state outside the contract is not folded",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "production": "off", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}]},
+      "agent": "Policies that block:\n- No hand-built SQL (off before production)\n  To pass: Bind it.\n\nPolicies that only warn:\n- No hand-built SQL (AI review)"
+    },
+    {
+      "name": "the app holds the twin blocking, so both block for it",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "how": "Bind it."},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}],
+        "app_additions": [{"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "blocking", "set_by": {"display": "Olive"}, "how": "Bind it, says the twin."}]},
+      "agent": "Policies that block:\n- No hand-built SQL\n  To pass: Bind it."
+    },
+    {
+      "name": "the app holds the scanner rule blocking before production",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "advisory"},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}],
+        "app_additions": [{"id": "sql.string-concat", "name": "No hand-built SQL", "production": "blocking", "set_by": {"display": "Olive"}, "how": "Bind it."}]},
+      "agent": "Policies that only warn:\n- No hand-built SQL (blocks production)\n  To pass: Bind it.\n  In languages Canyon's scanners cover, it only warns, and blocks production; in the rest only the AI review checks it, if one is set up, and it only warns."
+    },
+    {
+      "name": "the app holds the scanner rule blocking",
+      "manifest": {"host": "http://h", "policies": [
+        {"id": "sql.string-concat", "name": "No hand-built SQL", "state": "advisory"},
+        {"id": "ai.sql-string-concat", "name": "No hand-built SQL (AI review)", "state": "advisory"}],
+        "app_additions": [{"id": "sql.string-concat", "name": "No hand-built SQL", "state": "blocking", "set_by": {"display": "Olive"}, "how": "Bind it."}]},
+      "agent": "Policies that block:\n- No hand-built SQL\n  To pass: Bind it.\n  In languages Canyon's scanners cover, it blocks; in the rest only the AI review checks it, if one is set up, and it only warns."
+    }
+  ]
+}

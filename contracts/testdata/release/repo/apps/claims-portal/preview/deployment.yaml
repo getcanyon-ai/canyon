@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    canyon.app: claims-portal
+    canyon.target: preview
+  name: claims-portal-preview
+  namespace: canyon-claims-portal-preview
+spec:
+  minReadySeconds: 10
+  progressDeadlineSeconds: 300
+  replicas: 1
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      canyon.app: claims-portal
+      canyon.target: preview
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        canyon.dev/gate-run: gr_8f2a
+        canyon.dev/package: pkg_9e40
+        canyon.dev/release: rel_8f2a
+      labels:
+        canyon.app: claims-portal
+        canyon.target: preview
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: PORT
+          value: "3000"
+        - name: CANYON_IDENTITY_ISSUER
+          value: https://canyon.meridian.example
+        - name: CANYON_IDENTITY_AUDIENCE
+          value: claims-portal
+        - name: CANYON_IDENTITY_JWKS_URL
+          value: http://127.0.0.1:4182/.well-known/jwks.json
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: STRIPE_SECRET_KEY
+              name: claims-portal-preview-vars
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: DATABASE_URL
+              name: claims-portal-preview-res-db
+        image: 123456789012.dkr.ecr.eu-central-1.amazonaws.com/canyon/claims-portal@sha256:cfd86d789f71ac8e8eb75d90a61aedbcc2767236bc29255ecf3395c1886bd93d
+        name: app
+        readinessProbe:
+          periodSeconds: 1
+          tcpSocket:
+            port: 3000
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        terminationMessagePolicy: FallbackToLogsOnError
+      enableServiceLinks: false
+      initContainers:
+      - env:
+        - name: CANYON_ACCESS_GRACE
+          value: 1h
+        - name: CANYON_ACCESS_URL
+          value: https://canyon.meridian.example/access/claims-portal/preview
+        - name: CANYON_FRONT_DOOR
+          value: '{"choice":1,"gateway":"oidc","issuer":"https://login.meridian.example","audience":"canyon-gateway","jwks_url":"https://login.meridian.example/keys","cookie":"_pomerium","domain":"canyon.meridian.example","form":"app.env.domain"}'
+        - name: CANYON_IDENTITY_AUDIENCE
+          value: claims-portal
+        - name: CANYON_IDENTITY_ISSUER
+          value: https://canyon.meridian.example
+        - name: CANYON_TARGET
+          value: preview
+        - name: CANYON_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: CANYON_ACCESS_TOKEN
+              name: claims-portal-preview-access-8f2a
+        image: 123456789012.dkr.ecr.eu-central-1.amazonaws.com/canyon-identity@sha256:9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b
+        name: canyon-identity
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        restartPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /var/cache/canyon
+          name: access-cache
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      volumes:
+      - emptyDir: {}
+        name: access-cache

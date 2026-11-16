@@ -1,0 +1,59 @@
+{{- /* An anonymous OCI registry at a pinned ClusterIP, plain http (RFC 1918): the executor and kpack push
+     to it and containerd pulls from it (on k3s: /etc/rancher/k3s/registries.yaml mirrors <clusterIP>:5000).
+     Any pod may reach 5000; apps, builds and scans are kept off it by the egress policies Canyon writes. */}}
+{{- with .Values.infra.registry }}{{ if .enabled }}
+{{ include "canyon.pvc" (dict "root" $ "ns" "canyon-infra" "name" "registry" "size" .storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: registry}}
+  template:
+    metadata: {labels: {app: registry}}
+    spec:
+      # Pod Security restricted (#2772): any user serves it; one the image ran as root before wrote its volume as root, so
+      # an upgrade chowns it to 65532 first (docs: self-host/backup-and-upgrade.md), and it never starts until it has.
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      initContainers: {{- include "canyon.ownedOrExit" (dict "root" $ "image" "registry" "dir" "/var/lib/registry") | nindent 8 }}
+      containers:
+        - name: registry
+          image: {{ include "canyon.image" (dict "root" $ "name" "registry") }}
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: ":5000"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"} # the executor deletes a forgotten app's images
+          volumeMounts: [{name: data, mountPath: /var/lib/registry}]
+          readinessProbe: {httpGet: {path: /v2/, port: 5000}}
+          resources: {requests: {cpu: 20m, memory: 32Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: registry}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  clusterIP: {{ .clusterIP }}
+  selector: {app: registry}
+  ports: [{name: http, port: 5000, targetPort: 5000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry
+  namespace: canyon-infra
+  labels: {{- include "canyon.labels" $ | nindent 4 }}
+spec:
+  podSelector: {matchLabels: {app: registry}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ipBlock: {cidr: {{ $.Values.global.podCIDR }}}}]
+      ports: [{protocol: TCP, port: 5000}]
+{{- end }}{{ end }}

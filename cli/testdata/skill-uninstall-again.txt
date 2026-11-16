@@ -1,0 +1,9 @@
+
+  Removing Canyon from the coding agents in this environment…
+
+  · Claude Code    ~/.claude/skills/canyon/SKILL.md          not installed
+  · Claude Code    ~/.claude/settings.json                   not installed
+  · Codex          ~/.agents/skills/canyon/SKILL.md          not installed
+  · Codex          ~/.codex/hooks.json                       not installed
+  · Cursor         ./.cursor/rules/canyon.mdc                not installed
+  · Cursor         ./.cursor/hooks.json                      not installed

@@ -1,0 +1,193 @@
+{{- /* deploy/k8s/server.yaml with values. One replica, Recreate: the volume is one ReadWriteOnce mount (its runs no longer need one replica). It holds
+     the key every secret is sealed under and the package store; it is kept on uninstall. */}}
+{{- $c := .Values.canyon }}
+{{- define "canyon.serverEnv" }}
+CANYON_PUBLIC_URL: {{ include "canyon.publicURL" . | quote }}
+CANYON_DATABASE_URL: {{ include "canyon.databaseURL" . | quote }}
+{{- if ne .Values.canyon.auth.mode "oidc" }}{{ fail (printf "canyon.auth.mode is %q: the chart runs oidc only (off and demo have no sign-in and are for a laptop and the Docker demo)" .Values.canyon.auth.mode) }}{{ end }}
+CANYON_OIDC_ISSUER: {{ required "canyon.oidc.issuer (or auth.pocketId.enabled) is required under oidc" (include "canyon.oidcIssuer" .) | quote }}
+CANYON_OIDC_CLIENT_ID: {{ required "canyon.oidc.clientId is required" (include "canyon.oidcClientId" .) | quote }}
+{{- with include "canyon.oidcClientSecret" . }}
+CANYON_OIDC_CLIENT_SECRET: {{ . | quote }}
+{{- end }}
+CANYON_ADMINS: {{ required "canyon.auth.admins is required under oidc" (join "," .Values.canyon.auth.admins) | quote }}
+{{- with .Values.canyon.auth.allowedEmails }}
+CANYON_OIDC_ALLOWED_EMAILS: {{ join "," . | quote }}
+{{- end }}
+{{- with .Values.canyon.auth.allowedDomains }}
+CANYON_OIDC_ALLOWED_DOMAINS: {{ join "," . | quote }}
+{{- end }}
+{{- if or .Values.canyon.auth.adminClaim .Values.canyon.auth.adminValue }}
+CANYON_ADMIN_CLAIM: {{ required "canyon.auth.adminClaim and adminValue go together" .Values.canyon.auth.adminClaim | quote }}
+CANYON_ADMIN_VALUE: {{ required "canyon.auth.adminClaim and adminValue go together" .Values.canyon.auth.adminValue | quote }}
+{{- end }}
+{{- if or .Values.canyon.auth.responderClaim .Values.canyon.auth.responderValue }}
+CANYON_RESPONDER_CLAIM: {{ required "canyon.auth.responderClaim and responderValue go together" .Values.canyon.auth.responderClaim | quote }}
+CANYON_RESPONDER_VALUE: {{ required "canyon.auth.responderClaim and responderValue go together" .Values.canyon.auth.responderValue | quote }}
+{{- end }}
+{{- with .Values.canyon.auth.groupsClaim }}
+CANYON_GROUPS_CLAIM: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.org }}
+CANYON_ORG: {{ . | quote }}
+{{- end }}
+CANYON_INSTALL_MODE: "helm_one_node"
+{{- if not .Values.telemetry.enabled }}
+CANYON_TELEMETRY: "0"
+{{- end }}
+{{- if .Values.canyon.appDatabase.enabled }}
+CANYON_APP_DATABASE_URL: {{ required "canyon.appDatabase.url is required without infra.appPostgres" (include "canyon.appDatabaseURL" .) | quote }}
+{{- if .Values.canyon.appDatabase.caConfigMap }}
+CANYON_APP_DATABASE_CA_FILE: /etc/apps-db-ca/ca.crt
+{{- end }}
+{{- end }}
+{{- with .Values.canyon.model.provider }}
+CANYON_MODEL_PROVIDER: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.model.model }}
+CANYON_MODEL: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.model.url }}
+CANYON_MODEL_URL: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.model.anthropicApiKey }}
+ANTHROPIC_API_KEY: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.model.token }}
+CANYON_MODEL_TOKEN: {{ . | quote }}
+{{- end }}
+{{- with .Values.canyon.model.openaiApiKey }}
+OPENAI_API_KEY: {{ . | quote }}
+{{- end }}
+{{- range $k, $v := .Values.canyon.extraEnv }}
+{{ $k }}: {{ $v | toString | quote }}
+{{- end }}
+{{- end }}
+{{- if not $c.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: canyon-server
+  namespace: canyon
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- include "canyon.serverEnv" . | nindent 2 }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canyon-server
+  namespace: canyon
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: canyon-server}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: canyon-server}
+      annotations:
+        # restart on a configuration change; the env is read once at boot
+        canyon/config: {{ include "canyon.serverEnv" . | sha256sum | trunc 16 | quote }}
+        {{- with include "canyon.egressTokenSum" . }}
+        {{ . }} # the egress token it reads: a new one rolls it, as it does Envoy
+        {{- end }}
+        {{- with include "canyon.tlsAskTokenSum" . }}
+        {{ . }} # the token the bundled gateway asks /tls/ask with: a new one rolls it, as it does Caddy
+        {{- end }}
+    spec:
+      serviceAccountName: canyon-server
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: server
+          image: {{ include "canyon.image" (dict "root" . "name" "server") }}
+          env:
+            - {name: CANYON_AUTH, value: oidc} # here, not in the Secret: env wins over envFrom, so no Secret, existingSecret included, starts it without sign-in
+            - {name: CANYON_ADDR, value: ":7777"}
+            - {name: CANYON_RUNTIME, value: kubernetes}
+            - {name: CANYON_SCAN_CONCURRENCY, value: {{ $c.scanConcurrency | toString | quote }}}
+            - {name: CANYON_BUILD_CONCURRENCY, value: {{ $c.buildConcurrency | toString | quote }}}
+            - {name: CANYON_PATCH_CONCURRENCY, value: {{ $c.patchConcurrency | toString | quote }}}
+            - {name: CANYON_PATCHING, value: {{ $c.patching | toString | quote }}}
+            - {name: CANYON_EXECUTOR_URL, value: "http://canyon-executor.canyon.svc:7778"}
+            - {name: CANYON_IMAGE_IDENTITY, value: {{ include "canyon.image" (dict "root" . "name" "identity") | quote }}} # the executor's, the sidecar every release names
+            - {name: CANYON_EGRESS_PROXY, value: "http://canyon-egress.canyon.svc:3128"} # the gateway's Service, which a /run under via canyon names
+            - {name: CANYON_EGRESS_RECEIVER_ADDR, value: "0.0.0.0:7781"} # Envoy's records; the policy below admits the gateway's pods alone
+            - {name: CANYON_EGRESS_RECEIVER_TOKEN, valueFrom: {secretKeyRef: {name: canyon-egress, key: token}}}
+            - {name: CANYON_EGRESS_POLICY_ADDR, value: "0.0.0.0:7782"} # the policy egress-control pulls; the policy below admits the gateway's pods alone
+            {{- if .Values.gateway.enabled }}
+            - {name: CANYON_TLS_ASK_TOKEN, valueFrom: {secretKeyRef: {name: canyon-tls-ask, key: token}}} # the token the bundled gateway asks /tls/ask with (gateway/caddy.yaml)
+            {{- end }}
+            {{- if and .Values.platform.k3s.enabled .Values.gateway.enabled .Values.auth.pocketId.enabled }}
+            - {name: CANYON_KUBE_GATEWAY_SIGNIN, value: {{ include "canyon.pocketIdURL" . | quote }}} # Pocket ID behind Caddy, at the node's address no floored app reaches (#2316); no secret, so beside existingSecret too
+            {{- end }}
+          envFrom: [{secretRef: {name: {{ $c.existingSecret | default "canyon-server" }}}}]
+          ports: [{name: http, containerPort: 7777}, {name: receiver, containerPort: 7781}, {name: policy, containerPort: 7782}]
+          readinessProbe: {httpGet: {path: /ready, port: 7777}}
+          resources: {{- toYaml $c.server.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: state, mountPath: /var/lib/canyon}
+            - {name: tmp, mountPath: /tmp}
+            - {name: kube-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+            {{- if $c.appDatabase.caConfigMap }}
+            - {name: apps-db-ca, mountPath: /etc/apps-db-ca, readOnly: true}
+            {{- end }}
+      volumes:
+        - {name: state, persistentVolumeClaim: {claimName: canyon-server}}
+        - {name: tmp, emptyDir: {}}
+        - name: kube-api # the server's own token and the cluster's CA: the key set egress-control's tokens are checked against
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap: {name: kube-root-ca.crt, items: [{key: ca.crt, path: ca.crt}]}
+        {{- with $c.appDatabase.caConfigMap }}
+        - {name: apps-db-ca, configMap: {name: {{ . }}}}
+        {{- end }}
+---
+{{ include "canyon.pvc" (dict "root" . "ns" "canyon" "name" "canyon-server" "size" $c.server.storage) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: canyon-server
+  namespace: canyon
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+spec:
+  selector: {app.kubernetes.io/name: canyon-server}
+  ports: [{name: http, port: 7777, targetPort: 7777}, {name: receiver, port: 7781, targetPort: 7781}, {name: policy, port: 7782, targetPort: 7782}]
+---
+# The base's policy, rule for rule. egress[3] (Postgres, 5432), egress[4] (apps database, 5433) and egress[5]
+# (the API server) stay last and in this order; their CIDRs come from values, 0.0.0.0/32 when unused.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: canyon-server
+  namespace: canyon
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: canyon-server}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{protocol: TCP, port: 7777}]
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-egress}}}]
+      ports: [{protocol: TCP, port: 7781}, {protocol: TCP, port: 7782}]
+  egress:
+    {{- include "canyon.dnsEgress" . | nindent 4 }}
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: canyon-executor}}}]
+      ports: [{protocol: TCP, port: 7778}]
+    - to: [{ipBlock: {cidr: 0.0.0.0/0, except: {{ include "canyon.private" . }}}}]
+      ports: [{protocol: TCP, port: 443}]
+    - to: [{ipBlock: {cidr: {{ $c.database.cidr | default (ternary .Values.global.podCIDR "0.0.0.0/32" .Values.infra.canyonPostgres.enabled) }}}}]
+      ports: [{protocol: TCP, port: 5432}]
+    - to: [{ipBlock: {cidr: {{ $c.appDatabase.cidr | default (ternary .Values.global.podCIDR "0.0.0.0/32" (and $c.appDatabase.enabled .Values.infra.appPostgres.enabled)) }}}}]
+      ports: [{protocol: TCP, port: 5433}]
+    {{- if hasKey $c.kubeAPI "cidr" }}{{ fail "canyon.kubeAPI.cidr became canyon.kubeAPI.cidrs, a list, in Canyon v0.2.0's chart: move it there and add the kubernetes Service's cluster IP" }}{{ end }}
+    {{- $cidrs := $c.kubeAPI.cidrs | default list | compact }}
+    {{- if not (or $cidrs .Values.platform.k3s.enabled) }}{{ fail "canyon.kubeAPI.cidrs is empty: set your API server's endpoint addresses (kubectl get endpoints kubernetes) and the kubernetes Service's cluster IP, or the server never reads the key set the egress gateway's token is checked against, and the gateway is never ready" }}{{ end }}
+    - to: [{{ range $i, $cidr := $cidrs | default (list (printf "%s/32" .Values.platform.k3s.apiServer)) }}{{ if $i }}, {{ end }}{ipBlock: {cidr: {{ $cidr }}}}{{ end }}]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]

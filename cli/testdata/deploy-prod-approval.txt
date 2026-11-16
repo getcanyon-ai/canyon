@@ -1,0 +1,11 @@
+
+  canyon dev · claims-portal preview → prod · localhost:7777
+
+  Promoting v1.3 (passed review) from preview to production. Nothing runs in production yet.
+  Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
+
+  This org has a person approve production in Canyon.
+  Ask a person to approve: http://localhost:7777/#/approve?code=K7QP-4RXM
+  Code K7QP-4RXM · expires in 24 hours
+
+  Nothing was promoted yet. canyon deploy --env prod --wait waits here for the answer.

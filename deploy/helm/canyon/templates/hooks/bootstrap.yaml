@@ -1,0 +1,93 @@
+{{- /* The bootstrap Job (files/bootstrap.py): Pocket ID's users, group and clients, then Canyon's
+     preferences and, once setup is finished, its front door, from values. It signs in to Canyon as the first Pocket ID user, so it needs the
+     bundled Pocket ID; without it, set the front door on Settings › App hosting. */}}
+{{- if and .Values.bootstrap.enabled .Values.auth.pocketId.enabled }}
+{{- $p := .Values.auth.pocketId }}
+{{- $d := include "canyon.domain" . }}
+{{- if not $p.users }}{{ fail "auth.pocketId.users needs at least one user (the bootstrap signs in as the first)" }}{{ end }}
+{{- $fd := .Values.frontDoor }}
+{{- $form := $fd.form }}
+{{- $appCallbacks := ternary (list (printf "https://*.preview.%s/oauth2/callback" ($fd.domain | default $d)) (printf "https://*.prod.%s/oauth2/callback" ($fd.domain | default $d)))
+                             (list (printf "https://*-preview.%s/oauth2/callback" ($fd.domain | default $d)) (printf "https://*-prod.%s/oauth2/callback" ($fd.domain | default $d)))
+                             (eq $form "app.env.domain") }}
+{{- $clients := list
+      (dict "id" $p.clients.canyon.id "name" "canyon" "callbacks" (list (printf "%s/auth/callback" (include "canyon.publicURL" .))) "secretEnv" "CLIENT_SECRET_CANYON")
+      (dict "id" $p.clients.canyonApps.id "name" "canyon-apps" "callbacks" $appCallbacks "secretEnv" "CLIENT_SECRET_CANYON_APPS") }}
+{{- $door := dict }}
+{{- if $fd.enabled }}
+{{- $door = dict "choice" ($fd.choice | int) "domain" ($fd.domain | default $d) "form" $form }}
+{{- if eq ($fd.choice | int) 2 }}
+{{- $_ := set $door "signin" (dict "issuer" ($fd.signin.issuer | default (include "canyon.pocketIdURL" .)) "client_id" (ternary $fd.signin.clientId $p.clients.canyonApps.id (not (empty $fd.signin.issuer)))) }}
+{{- else if eq $fd.gateway.kind "alb" }}
+{{- $_ := set $door "gateway" "alb" }}{{ $_ := set $door "alb_arn" $fd.gateway.albArn }}
+{{- with $fd.gateway.cookie }}{{ $_ := set $door "cookie" . }}{{ end }}
+{{- else }}
+{{- $_ := merge $door (dict "gateway" "oidc" "issuer" $fd.gateway.issuer "audience" $fd.gateway.audience "jwks_url" $fd.gateway.jwksURL "cookie" $fd.gateway.cookie) }}
+{{- end }}
+{{- end }}
+{{- $config := dict
+      "pocketId" (dict "url" (include "canyon.pocketIdURL" .) "group" $p.group "users" $p.users "clients" $clients)
+      "canyon" (dict "url" (include "canyon.publicURL" .))
+      "frontDoor" (ternary $door nil $fd.enabled)
+      "forceFrontDoor" ($fd.forceUpdate | default false)
+      "preferences" .Values.preferences
+      "printLoginLink" .Values.bootstrap.printLoginLink
+      "completeSetup" .Values.bootstrap.completeSetup }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canyon-bootstrap
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+data:
+  config.json: {{ toJson $config | quote }}
+  bootstrap.py: {{ .Files.Get "files/bootstrap.py" | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: canyon-bootstrap
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  CLIENT_SECRET_CANYON: {{ include "canyon.clientSecret" (dict "root" . "client" "canyon") | quote }}
+  CLIENT_SECRET_CANYON_APPS: {{ include "canyon.clientSecret" (dict "root" . "client" "canyonApps") | quote }}
+  FRONT_DOOR_CLIENT_SECRET: {{ ternary $fd.signin.clientSecret (include "canyon.clientSecret" (dict "root" . "client" "canyonApps")) (not (empty $fd.signin.issuer)) | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: canyon-bootstrap
+  namespace: canyon-auth
+  labels: {{- include "canyon.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1500
+  ttlSecondsAfterFinished: 86400   # the log, with the sign-in link, stays a day
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: canyon-bootstrap}
+      annotations:
+        canyon/config: {{ toJson $config | sha256sum | trunc 16 | quote }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: bootstrap
+          image: {{ include "canyon.image" (dict "root" . "name" "python") }}
+          command: [python3, -u, /config/bootstrap.py]
+          env:
+            - {name: STATIC_API_KEY, valueFrom: {secretKeyRef: {name: {{ $p.existingSecret | default "pocket-id" }}, key: STATIC_API_KEY}}}
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+          envFrom: [{secretRef: {name: canyon-bootstrap}}]
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: config, mountPath: /config}]
+      volumes: [{name: config, configMap: {name: canyon-bootstrap}}]
+{{- end }}

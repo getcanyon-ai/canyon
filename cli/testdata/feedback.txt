@@ -1,0 +1,4 @@
+Ask for a feature: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missing-feature.yml&version=dev
+Canyon blocked something it shouldn't: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=blocked-wrongly.yml&version=dev
+Canyon missed something it should have caught: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=missed.yml&version=dev
+Canyon didn't install or start: https://github.com/getcanyon-ai/canyon/issues/new?os=linux&template=install-failed.yml&version=dev

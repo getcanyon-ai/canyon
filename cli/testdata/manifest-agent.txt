@@ -1,0 +1,45 @@
+Canyon's settings for this org, as canyon manifest prints them. They are in this session already: you need not run canyon manifest.
+
+Canyon host: http://localhost:7777
+
+Policies that block:
+- No secrets in the code
+  To pass: Read each secret from an environment variable and store it with canyon secret set NAME.
+- No hand-built SQL from user input
+  To pass: Pass the user's input to the query as a bound parameter; never build SQL text from it.
+  In languages Canyon's scanners cover, it blocks; in the rest only the AI review checks it, if one is set up, and it only warns.
+
+Policies that only warn:
+- Every route needs sign-in
+- No known-vulnerable dependencies
+- No unbounded refetch on user input
+- Apps use the org's design system
+- No user input reaching commands, files, pages or URLs
+- Infrastructure config passes its benchmark checks
+- Findings from checkov
+- Findings from eslint
+- Findings from gitleaks
+- Findings from opengrep
+- Findings from trivy
+
+Policies for production only:
+- Production needs a passing review (blocks)
+  To pass: Fix every finding that blocks, then deploy to preview again: production needs a passing review.
+- Approved stacks only (only warns)
+- Every app has an owner (only warns)
+
+Resources an app can declare in canyon.toml: postgres, s3
+
+Approved stacks:
+- TypeScript: React, Vite
+- Python: FastAPI
+
+Design system: Meridian UI (@meridian/ui)
+- registry: https://registry.meridian.example/ui
+- tokens: https://registry.meridian.example/ui/tokens.json
+
+Outbound: an app's environment may be under an allowlist, where Canyon refuses calls to any outside service not on it. Only a person on the app's team can allow a new one, in Canyon's dashboard; you cannot. Never try to reach a refused service another way. Canyon also refuses any call out to the internet to an IP address, a one-word host name or a port other than 80 and 443, and no one can allow it: call a host name on 80 or 443.
+
+Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there.
+
+Production: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it.

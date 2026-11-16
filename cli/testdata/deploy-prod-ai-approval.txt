@@ -1,0 +1,18 @@
+CANYON PROMOTE — RESULT: WAITING FOR APPROVAL
+
+app: claims-portal
+env: prod
+host: http://localhost:7777
+version: v1.3 (passed review)
+replaces: nothing, production ran nothing yet
+approval url: http://localhost:7777/#/approve?code=K7QP-4RXM
+code: K7QP-4RXM
+expires: 2026-09-03T12:00:00Z
+outcome: nothing was promoted. This org has a person approve production in Canyon's dashboard.
+
+NEXT STEPS:
+1. Stop. Give the user the approval url and say a person on the app's team approves it in Canyon, signed in.
+2. Never open, click or approve the approval url yourself, and do not try another way to promote: only a person approves production here.
+3. When the user says it is approved, run canyon status to see production.
+
+exit code: 2

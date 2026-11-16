@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docs.getcanyon.ai/contracts/schema/db-session.schema.json",
+  "title": "Canyon database sessions (seam 3)",
+  "description": "The database-sessions routes (contracts/routes.md, Database sessions; design/DATABASE-SESSIONS.md §5, §6, §10, §12): a person reaches an app's Canyon-provisioned Postgres as themselves. routes.md is canonical; this schema pins the database session read, the open's body and refusals, the list, the four audit actions, the relay's wire and the provisioner's optional /people call (contracts/provisioner.md, People). The read never carries a credential. The golden under contracts/testdata/db-session/ is one Meridian day told end to end: a preview query that opens a database session, a connect that attaches to it, a prod read with its reason, an owner's prod write opened in the dashboard under prod_approval and the CLI attaching to it, the list, every close reason on the trail, the open's refusals, the relay's wire and one /people answer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org", "team", "preview_query", "attach", "prod_read", "prod_write", "prod_write_attach", "list", "audit", "refusals", "relay", "people"],
+  "properties": {
+    "org": {
+      "description": "The org's settings as every open of the fixture read them.",
+      "type": "object", "additionalProperties": false, "required": ["db_prod", "prod_approval"],
+      "properties": { "db_prod": { "$ref": "#/definitions/db_prod" }, "prod_approval": { "type": "boolean" } }
+    },
+    "team": {
+      "description": "The app's grants and the org's admins as the fixture's subjects, so the validator can judge who opened and who ended what; reader is who reads the list.",
+      "type": "object", "additionalProperties": false, "required": ["app", "owners", "contributors", "admins", "reader"],
+      "properties": {
+        "app": { "$ref": "app-page.schema.json#/definitions/projectId" },
+        "owners": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "contributors": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "admins": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "reader": { "type": "string", "minLength": 1 }
+      }
+    },
+    "preview_query": {
+      "type": "object", "additionalProperties": false, "required": ["request", "status", "answer"],
+      "properties": { "request": { "$ref": "db-query.schema.json#/definitions/request" }, "status": { "const": 200 }, "answer": { "$ref": "db-query.schema.json#/definitions/answer" } }
+    },
+    "attach": { "$ref": "#/definitions/open_call" },
+    "prod_read": { "$ref": "#/definitions/open_call" },
+    "prod_write": { "$ref": "#/definitions/open_call" },
+    "prod_write_attach": { "$ref": "#/definitions/open_call" },
+    "list": { "$ref": "#/definitions/list" },
+    "audit": { "type": "array", "items": { "$ref": "#/definitions/audit_row" } },
+    "refusals": { "type": "array", "items": { "$ref": "#/definitions/refusal" } },
+    "relay": {
+      "type": "object", "additionalProperties": false, "required": ["startup", "cancel", "closes"],
+      "properties": {
+        "startup": { "$ref": "#/definitions/startup" },
+        "cancel": { "$ref": "#/definitions/cancel_request" },
+        "closes": { "type": "array", "items": { "$ref": "#/definitions/relay_close" } }
+      }
+    },
+    "people": {
+      "type": "object", "additionalProperties": false, "required": ["asked_at", "request", "answer"],
+      "properties": {
+        "asked_at": { "description": "When Canyon sent the request: the fixture's clock, not a field of the call.", "$ref": "#/definitions/ts" },
+        "request": { "$ref": "#/definitions/people_request" },
+        "answer": { "$ref": "#/definitions/people_answer" }
+      }
+    }
+  },
+  "definitions": {
+    "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "sid": { "type": "string", "pattern": "^dbs_[0-9a-f]{16}$" },
+    "env": { "enum": ["preview", "prod"] },
+    "mode": { "enum": ["read", "write"] },
+    "db_prod": { "enum": ["off", "read", "write"] },
+    "resource": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
+    "reason": { "description": "Why the person opens production: 1 to 500 characters, at least one visible, no control, format (Unicode Cf) or bidirectional character.", "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^(?=.*[^\\s\\u0000-\\u001f\\u007f-\\u009f\\u00ad\\u0600-\\u0605\\u061c\\u06dd\\u070f\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u206f\\ufeff\\ufff9-\\ufffb])[^\\u0000-\\u001f\\u007f-\\u009f\\u00ad\\u0600-\\u0605\\u061c\\u06dd\\u070f\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u206f\\ufeff\\ufff9-\\ufffb]+$" },
+    "role": { "description": "The login the database session runs as: the built-in driver's person role, p_ and 24 hex, or the user an adapter's /people answered. An identifier, never a URL or a credential.", "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_$.-]{0,62}$" },
+    "session": { "type": "string", "pattern": "^ses_[0-9a-f]{16}$" },
+    "close_reason": { "enum": ["signed_out", "access_changed", "setting_changed", "database_gone", "expired", "held", "idle", "turned_off", "closed", "ended", "replaced"] },
+    "via_tool": { "description": "query on the query route; dashboard on an open or attach from a browser sign-in; connect otherwise.", "enum": ["query", "connect", "dashboard"] },
+    "who": {
+      "type": "object", "additionalProperties": false, "required": ["subject", "display"],
+      "properties": { "subject": { "type": "string", "minLength": 1 }, "display": { "type": "string" } }
+    },
+    "email": { "type": "string", "maxLength": 254, "pattern": "^[^@\\s]+@[^@\\s]+$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "db_session": {
+      "description": "The database session read: never a credential.",
+      "type": "object", "additionalProperties": false,
+      "dependentRequired": { "closed_at": ["close_reason"], "close_reason": ["closed_at"] },
+      "required": ["id", "app", "env", "resource", "mode", "person", "role", "opened_at", "expires_at", "idle_timeout", "last_activity_at", "connections", "queries", "bytes_from_db", "bytes_to_db", "yours"],
+      "properties": {
+        "id": { "$ref": "#/definitions/sid" },
+        "app": { "$ref": "app-page.schema.json#/definitions/projectId" },
+        "env": { "$ref": "#/definitions/env" },
+        "resource": { "$ref": "#/definitions/resource" },
+        "mode": { "$ref": "#/definitions/mode" },
+        "person": {
+          "type": "object", "additionalProperties": false, "required": ["subject", "display", "email"],
+          "properties": { "subject": { "type": "string", "minLength": 1 }, "display": { "type": "string" }, "email": { "description": "The address the sign-in stores; \"\" on a host with sign-in off, whose anonymous admin (subject anonymous) has none (validate.py).", "anyOf": [{ "$ref": "#/definitions/email" }, { "const": "" }] } }
+        },
+        "role": { "$ref": "#/definitions/role" },
+        "reason": { "$ref": "#/definitions/reason" },
+        "opened_at": { "$ref": "#/definitions/ts" },
+        "expires_at": { "$ref": "#/definitions/ts" },
+        "idle_timeout": { "description": "Seconds without activity before the idle close.", "type": "integer" },
+        "last_activity_at": { "$ref": "#/definitions/ts" },
+        "connections": { "description": "The connections opened in the database session so far, a query's and each connect client's, open or closed: never how many are open now.", "$ref": "#/definitions/count" },
+        "queries": { "$ref": "#/definitions/count" },
+        "bytes_from_db": { "$ref": "#/definitions/count" },
+        "bytes_to_db": { "$ref": "#/definitions/count" },
+        "relayed_by": { "description": "The server (its durable_executors id) relaying a live connect, when one is.", "type": "string", "pattern": "^[A-Z2-7]{26}$" },
+        "closed_at": { "description": "GET /api/v1/db-sessions/:sid alone, once the database session has closed: when.", "$ref": "#/definitions/ts" },
+        "close_reason": { "description": "GET /api/v1/db-sessions/:sid alone, once closed: why, beside closed_at.", "$ref": "#/definitions/close_reason" },
+        "yours": { "description": "Whether the database session is the reader's own.", "type": "boolean" }
+      },
+      "if": { "properties": { "env": { "const": "prod" } } },
+      "then": { "required": ["reason"], "properties": { "idle_timeout": { "const": 900 } } },
+      "else": { "properties": { "idle_timeout": { "const": 1800 } } }
+    },
+    "open_request": {
+      "type": "object", "additionalProperties": false, "required": ["env", "mode"],
+      "properties": {
+        "env": { "$ref": "#/definitions/env" },
+        "mode": { "$ref": "#/definitions/mode" },
+        "resource": { "$ref": "#/definitions/resource" },
+        "reason": { "$ref": "#/definitions/reason" },
+        "replace": { "type": "boolean" }
+      }
+    },
+    "open_call": {
+      "description": "POST /api/v1/projects/:id/db-sessions: 201 a new database session, 200 one attached to. session and flow are the asking sign-in's. In prod the request carries a reason when it opens or is the first attach of a sign-in other than the opener's (validate.py).",
+      "type": "object", "additionalProperties": false, "required": ["session", "flow", "request", "status", "answer"],
+      "properties": { "session": { "$ref": "#/definitions/session" }, "flow": { "enum": ["browser", "device"] }, "request": { "$ref": "#/definitions/open_request" }, "status": { "enum": [200, 201] }, "answer": { "$ref": "#/definitions/db_session" } }
+    },
+    "list": {
+      "description": "GET /api/v1/projects/:id/db-sessions: the app's open database sessions, oldest first.",
+      "type": "object", "additionalProperties": false, "required": ["db_sessions"],
+      "properties": { "db_sessions": { "type": "array", "items": { "$ref": "#/definitions/db_session" } } }
+    },
+    "refusal": {
+      "description": "The open's refusals and the connect route's 400 invalid_startup, 403 cross_origin and 410 (routes.md, Database sessions): {error, message} and each code's context.",
+      "type": "object", "additionalProperties": false, "required": ["status", "body"],
+      "properties": {
+        "status": { "enum": [400, 403, 404, 409, 410, 429, 502, 503] },
+        "body": {
+          "type": "object", "required": ["error", "message"],
+          "properties": {
+            "error": { "enum": ["invalid_env", "invalid_mode", "reason_required", "invalid_startup", "team_required", "cross_origin", "person_required", "owner_required", "dashboard_required", "db_prod_off", "db_prod_read_only", "held", "no_database", "which_database", "database_not_ready", "driver_unsupported", "session_open", "unsafe_schema", "limits_unsupported", "not_as_made", "read_only_unsafe", "db_sessions_off", "busy", "database_unreachable", "not_found", "session_ended", "check_failed"] },
+            "message": { "type": "string", "minLength": 1 }
+          },
+          "allOf": [
+            { "if": { "properties": { "error": { "const": "which_database" } } }, "then": { "required": ["resources"], "properties": { "resources": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/definitions/resource" } } } } },
+            { "if": { "properties": { "error": { "const": "session_open" } } }, "then": { "required": ["mode"], "properties": { "mode": { "$ref": "#/definitions/mode" } } } },
+            { "if": { "properties": { "error": { "const": "session_ended" } } }, "then": { "required": ["reason"], "properties": { "reason": { "$ref": "#/definitions/close_reason" } } } }
+          ]
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "body": { "properties": { "error": { "enum": ["invalid_env", "invalid_mode", "reason_required", "invalid_startup"] } } } } }, "then": { "properties": { "status": { "const": 400 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "enum": ["team_required", "person_required", "owner_required", "dashboard_required", "cross_origin"] } } } } }, "then": { "properties": { "status": { "const": 403 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "enum": ["db_sessions_off", "db_prod_off", "db_prod_read_only", "held", "no_database", "which_database", "database_not_ready", "driver_unsupported", "session_open", "unsafe_schema", "limits_unsupported", "not_as_made", "read_only_unsafe"] } } } } }, "then": { "properties": { "status": { "const": 409 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "const": "not_found" } } } } }, "then": { "properties": { "status": { "const": 404 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "const": "session_ended" } } } } }, "then": { "properties": { "status": { "const": 410 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "const": "busy" } } } } }, "then": { "properties": { "status": { "const": 429 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "const": "database_unreachable" } } } } }, "then": { "properties": { "status": { "const": 502 } } } },
+        { "if": { "properties": { "body": { "properties": { "error": { "const": "check_failed" } } } } }, "then": { "properties": { "status": { "const": 503 } } } }
+      ]
+    },
+    "startup": {
+      "description": "GET /api/v1/db-sessions/:sid/connect?startup=: the client's StartupMessage parameters as base64url JSON, at most 4 KiB encoded; user, database and replication are never sent (the target is the database session's). Postgres reads a name in any case, so the server also refuses those three in any case, application_name in any case but lower (Canyon sets it), and two names the same but for case: rules JSON Schema cannot state (contracts/routes.md).",
+      "type": "object", "maxProperties": 64,
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,62}$", "not": { "enum": ["user", "database", "replication"] } },
+      "additionalProperties": { "type": "string", "maxLength": 1024 }
+    },
+    "cancel_request": {
+      "description": "POST /api/v1/db-sessions/:sid/cancel: the backend's process id from BackendKeyData.",
+      "type": "object", "additionalProperties": false, "required": ["process_id"],
+      "properties": { "process_id": { "type": "integer", "minimum": 1, "maximum": 2147483647 } }
+    },
+    "relay_close": {
+      "description": "A relay the server ends: close code 4000, its reason a close_reason or canyon_restarting. Canyon also closes 1011 when it cannot check the session or write the connection's start, 1001 when the client misses a ping, and 1009 on a binary message over 1 MiB (contracts/routes.md).",
+      "type": "object", "additionalProperties": false, "required": ["code", "reason"],
+      "properties": { "code": { "const": 4000 }, "reason": { "anyOf": [{ "$ref": "#/definitions/close_reason" }, { "const": "canyon_restarting" }] } }
+    },
+    "opened_detail": {
+      "type": "object", "additionalProperties": false, "required": ["db_session", "env", "resource", "mode", "role", "expires_at", "via_tool"],
+      "properties": {
+        "db_session": { "$ref": "#/definitions/sid" },
+        "env": { "$ref": "#/definitions/env" },
+        "resource": { "$ref": "#/definitions/resource" },
+        "mode": { "$ref": "#/definitions/mode" },
+        "role": { "$ref": "#/definitions/role" },
+        "reason": { "$ref": "#/definitions/reason" },
+        "expires_at": { "$ref": "#/definitions/ts" },
+        "via_tool": { "$ref": "#/definitions/via_tool" }
+      },
+      "if": { "properties": { "env": { "const": "prod" } } },
+      "then": { "required": ["reason"] }
+    },
+    "attached_detail": {
+      "type": "object", "additionalProperties": false, "required": ["db_session", "env", "resource", "mode", "via_tool"],
+      "properties": {
+        "db_session": { "$ref": "#/definitions/sid" },
+        "env": { "$ref": "#/definitions/env" },
+        "resource": { "$ref": "#/definitions/resource" },
+        "mode": { "$ref": "#/definitions/mode" },
+        "reason": { "$ref": "#/definitions/reason" },
+        "via_tool": { "$ref": "#/definitions/via_tool" }
+      },
+      "if": { "properties": { "env": { "const": "prod" } } },
+      "then": { "required": ["reason"] }
+    },
+    "closed_detail": {
+      "type": "object", "additionalProperties": false,
+      "required": ["db_session", "person", "reason", "duration_s", "connections", "queries", "rows_returned", "bytes_from_db", "bytes_to_db"],
+      "properties": {
+        "db_session": { "$ref": "#/definitions/sid" },
+        "person": { "$ref": "#/definitions/who" },
+        "reason": { "$ref": "#/definitions/close_reason" },
+        "duration_s": { "$ref": "#/definitions/count" },
+        "connections": { "description": "The connections opened in the database session so far, a query's and each connect client's, open or closed: never how many are open now.", "$ref": "#/definitions/count" },
+        "queries": { "$ref": "#/definitions/count" },
+        "rows_returned": { "$ref": "#/definitions/count" },
+        "bytes_from_db": { "$ref": "#/definitions/count" },
+        "bytes_to_db": { "$ref": "#/definitions/count" }
+      }
+    },
+    "audit_row": {
+      "allOf": [
+        { "$ref": "app-page.schema.json#/definitions/event" },
+        { "required": ["project"], "properties": { "action": { "enum": ["db session opened", "db write session opened", "db session attached", "db session closed"] } } },
+        { "if": { "properties": { "action": { "const": "db session closed" } } }, "then": { "properties": { "detail": { "$ref": "#/definitions/closed_detail" } } } },
+        { "if": { "properties": { "action": { "const": "db session attached" } } }, "then": { "required": ["via", "session"], "properties": { "detail": { "$ref": "#/definitions/attached_detail" } } } },
+        { "if": { "properties": { "action": { "const": "db session opened" } } }, "then": { "required": ["via", "session"], "properties": { "detail": { "allOf": [{ "$ref": "#/definitions/opened_detail" }, { "properties": { "mode": { "const": "read" } } }] } } } },
+        { "if": { "properties": { "action": { "const": "db write session opened" } } }, "then": { "required": ["via", "session"], "properties": { "detail": { "allOf": [{ "$ref": "#/definitions/opened_detail" }, { "properties": { "mode": { "const": "write" } } }] } } } }
+      ]
+    },
+    "people_request": {
+      "description": "POST {base}/{project}/{env}/{name}/people (contracts/provisioner.md, People).",
+      "type": "object", "additionalProperties": false, "required": ["person", "mode", "ttl_seconds"],
+      "properties": {
+        "person": {
+          "type": "object", "additionalProperties": false, "required": ["subject", "email"],
+          "properties": { "subject": { "type": "string", "minLength": 1 }, "email": { "$ref": "#/definitions/email" } }
+        },
+        "mode": { "$ref": "#/definitions/mode" },
+        "ttl_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "people_answer": {
+      "description": "The adapter's 200: one login, held in memory for one connect and dropped.",
+      "type": "object", "additionalProperties": false, "required": ["login"],
+      "properties": {
+        "login": {
+          "type": "object", "additionalProperties": false, "required": ["host", "port", "database", "user", "secret", "sslmode", "expires_at"],
+          "properties": {
+            "host": { "description": "A host name, an IPv4 address or an IPv6 literal: never a URL, credentials or a port.", "type": "string", "maxLength": 253, "pattern": "^(([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*|[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7})$" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "database": { "description": "A Postgres identifier.", "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_$.-]{0,62}$" },
+            "user": { "$ref": "#/definitions/role" },
+            "secret": { "type": "string", "minLength": 1 },
+            "sslmode": { "const": "verify-full" },
+            "expires_at": { "$ref": "#/definitions/ts" }
+          }
+        }
+      }
+    }
+  }
+}

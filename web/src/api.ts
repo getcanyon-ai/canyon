@@ -90,7 +90,7 @@ export interface Finding {
   entry: number;
   locations: [{ physicalLocation: { artifactLocation: { uri: string }; region: { startLine: number; startColumn: number; snippet: { text: string } } } }];
   partialFingerprints: { "canyon/v1": string };
-  properties: { canyon: { severity: "critical" | "high" | "medium" | "low"; blocks: boolean; title: string; problem: string; fix: string; policy_name?: string; required_end_state?: string; do_not?: string[]; shown?: { startColumn: number; endColumn: number } } };
+  properties: { canyon: { severity: "critical" | "high" | "medium" | "low"; blocks: boolean; title: string; problem: string; fix: string; policy_name?: string; required_end_state?: string; do_not?: string[]; shown?: { startColumn: number; endColumn: number }; carried_from?: string } };
   // Present only while an unexpired approval covers the finding (contracts/routes.md, GET /gate-runs/:id).
   approval?: { reason: string; expires_at: string; approved_by: Actor };
   // The tool that found it, as the run read names it: absent on a finding read from a log itself.

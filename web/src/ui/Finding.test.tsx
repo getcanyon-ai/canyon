@@ -23,6 +23,22 @@ afterEach(() => {
 });
 
 describe("Finding", () => {
+  // A finding an earlier review made, carried while its code is unchanged (contracts/finding.md, A blocking finding an
+  // earlier review made stays while its code stands): a tag, the line under its problem, and the agent's block says
+  // what to do, as canyon check --ai does. A finding not carried says none of it.
+  it("says a carried finding was found in an earlier review", () => {
+    const carried: FindingRead = { ...blocking, properties: { canyon: { ...blocking.properties.canyon, carried_from: "gr_7d3e8f2a91c04b56" } } };
+    render(<Finding finding={carried} app="claims-portal" />);
+    expect(screen.getByText("Found in an earlier review")).toBeDefined();
+    expect(screen.getByText("Canyon's AI review found this in an earlier review. This review didn't mention it, but the code hasn't changed, so it still blocks until the code changes or someone approves it.")).toBeDefined();
+    expect(forAgent(carried, "claims-portal")).toContain("earlier review:\n  This was found in an earlier review and this review didn't report it.\n" +
+      "  The code hasn't changed, so it still blocks: change the code so the rule\n  holds, or ask for an approval. Don't wait for another review to drop it.\n");
+    cleanup();
+    render(<Finding finding={blocking} app="claims-portal" />);
+    expect(screen.queryByText("Found in an earlier review")).toBeNull();
+    expect(forAgent(blocking, "claims-portal")).not.toContain("earlier review");
+  });
+
   // A finding no Canyon policy covers keeps the tool's rule under sarif.<tool>: the block an agent gets reads
   // its title, then the tool's own rule under found by, never sarif.semgrep.… as if it were Canyon's (QA round 5).
   it("copies a finding no policy covers by its title and the tool's rule", () => {

@@ -829,6 +829,12 @@ Three deliberate frictions: a required free-text reason, an expiry, and naming w
 
 Collapsed cards show severity, rule id, title, location. Expanding shows what a senior engineer would actually say.
 
+A finding an earlier AI review made, carried while its code is unchanged (its `carried_from`; contracts/finding.md, *A
+blocking finding an earlier review made stays while its code stands*; #2900), carries the tag `Found in an earlier
+review` beside its severity, and under its problem the line `Canyon's AI review found this in an earlier review. This
+review didn't mention it, but the code hasn't changed, so it still blocks until the code changes or someone approves
+it.` (EXPERIENCE.md D5). Its agent block carries the AI format's `earlier review:` lines (cli.md §5.2).
+
 ---
 
 **Finding 1 — expanded**

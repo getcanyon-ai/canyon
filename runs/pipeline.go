@@ -2244,7 +2244,7 @@ func (p *Pipeline) gate(ctx context.Context, in Input, missed []unfinished) (log
 	if log, err = p.Gate(gate.WithRun(ctx, in.Run, in.Project), dir, tree, in.Policy, p.checked(in)); err != nil { // the run a dropped AI candidate's log line names
 		return finding.Log{}, err
 	}
-	if err := p.floor(ctx, in, &log); err != nil {
+	if err := p.reviewedBefore(ctx, in, dir, &log); err != nil {
 		return finding.Log{}, err
 	}
 	if err := p.customByCode(ctx, in, dir, &log); err != nil {
@@ -2281,34 +2281,42 @@ func (p *Pipeline) gate(ctx context.Context, in Input, missed []unfinished) (log
 	return log, nil
 }
 
-// floor raises the log's AI review results to the severities the project's last 20 completed reviews, its
-// newest verdicts of any other run, gave the same code (gate.Floor; contracts/finding.md, A region reviewed
-// before keeps its severity): a review that read nothing, a branch check or a rollback review in between
-// never resets it. Before blocks is derived, so a raise that blocks blocks. A project with no verdict has
-// nothing to raise; a read that fails, or findings that are not a log in Canyon's profile, fail the run.
-func (p *Pipeline) floor(ctx context.Context, in Input, log *finding.Log) error {
-	// ponytail: last 20 verdicts; a region absent from 20 in a row gets a fresh rating
-	rows, err := p.Pool.Query(ctx, "SELECT data->'findings' FROM timeline_rows WHERE project_id = $1 AND kind = 'verdict' AND run_id <> $2 ORDER BY id DESC LIMIT 20", // timeline_verdicts
+// reviewedBefore holds the log's AI review results to what the project's last 20 completed reviews, its newest
+// verdicts of any other run, said of the same code: each result raised to the severity they gave it (gate.Floor;
+// contracts/finding.md, A region reviewed before keeps its severity), then each blocking result of theirs this review
+// left out carried while its code stands in the package at dir (gate.Carry; A blocking finding an earlier review made
+// stays while its code stands). A review that read nothing, a branch check or a rollback review in between never
+// resets either. Before blocks is derived, so what blocks blocks. A project with no verdict has nothing to hold; a
+// read that fails, or findings that are not a log in Canyon's profile, fail the run.
+func (p *Pipeline) reviewedBefore(ctx context.Context, in Input, dir string, log *finding.Log) error {
+	// ponytail: last 20 verdicts; a region absent from 20 in a row gets a fresh rating, and is carried no more
+	rows, err := p.Pool.Query(ctx, "SELECT run_id, data->'findings' FROM timeline_rows WHERE project_id = $1 AND kind = 'verdict' AND run_id <> $2 ORDER BY id DESC LIMIT 20", // timeline_verdicts
 		in.Project, in.Run)
 	if err != nil {
 		return fmt.Errorf("runs: the project's last reviews could not be read: %w", err)
 	}
-	found, err := pgx.CollectRows(rows, pgx.RowTo[[]byte])
+	found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {
+		Run string
+		Raw []byte
+	}])
 	if err != nil {
 		return fmt.Errorf("runs: the project's last reviews could not be read: %w", err)
 	}
 	var earlier finding.Log
-	for _, raw := range found {
+	verdicts := make([]gate.Verdict, 0, len(found))
+	for _, f := range found {
 		var l finding.Log
-		if err := json.Unmarshal(raw, &l); err != nil {
+		if err := json.Unmarshal(f.Raw, &l); err != nil {
 			return fmt.Errorf("runs: a recent review's findings are not a log: %w", err)
 		}
 		if l.Version != finding.Version || l.Schema != finding.SchemaURI { // null and {} unmarshal: they are no log either
 			return fmt.Errorf("runs: a recent review's findings are not a log in Canyon's profile: version %q, $schema %q", l.Version, l.Schema)
 		}
 		earlier.Runs = append(earlier.Runs, l.Runs...)
+		verdicts = append(verdicts, gate.Verdict{Run: f.Run, Log: l})
 	}
 	gate.Floor(log, earlier, in.Policy)
+	gate.Carry(log, verdicts, in.Policy, dir)
 	return nil
 }
 

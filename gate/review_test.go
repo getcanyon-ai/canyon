@@ -1468,7 +1468,7 @@ func TestTwinsTakeCodeOfNoLanguageAndNameDependencyFolders(t *testing.T) {
 }
 
 // secondOpinion is the note every run the model answered carries last.
-var secondOpinion = finding.Notification{Level: "note", Message: finding.Message{Text: "ai review · a model's second opinion: another review, even of a small change, may find different things"}}
+var secondOpinion = finding.Notification{Level: "note", Message: finding.Message{Text: "ai review · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged"}}
 
 // A run the model answered says the review is a model's second opinion, last of its notes, results or
 // none, replayed or not, the custom-rules agent's in its own words; a run the model did not answer says
@@ -1507,7 +1507,7 @@ func TestAnAnsweredReviewSaysItIsASecondOpinion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := last(out.Runs[len(out.Runs)-1]).Message.Text; got != "custom rules · a model's second opinion: another review, even of a small change, may find different things" {
+		if got := last(out.Runs[len(out.Runs)-1]).Message.Text; got != "custom rules · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged" {
 			t.Fatalf("the custom-rules run says it in its own words: %q", got)
 		}
 	})

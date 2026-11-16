@@ -1,3 +1,20 @@
 {
-   "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "canyongp",
+      "id": 150704,
+      "comment_id": 6915778431,
+      "created_at": "2026-11-16T11:58:49Z",
+      "repoId": 1459346490,
+      "pullRequestNo": 1
+    },
+    {
+      "name": "canyongp",
+      "id": 150704,
+      "comment_id": 6915809759,
+      "created_at": "2026-11-16T12:00:20Z",
+      "repoId": 1459346490,
+      "pullRequestNo": 1
+    }
+  ]
 }

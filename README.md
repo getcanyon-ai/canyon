@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://www.getcanyon.ai/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/canyon-mark-dark.svg">
+      <img src=".github/assets/canyon-mark-light.svg" width="72" height="72" alt="Canyon">
+    </picture>
+  </a>
+</p>
+
 <h1 align="center">Canyon</h1>
 
 <p align="center"><b>Your coding agents ship apps. Canyon reviews every deploy.</b></p>

@@ -56,4 +56,3 @@ jobs:
         if: failure()
         with:
           step: collect
-

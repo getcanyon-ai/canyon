@@ -150,12 +150,21 @@ jobs:
           tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$HOME/.local/bin" linux-arm64/helm
       - id: suite
         run: make test-kube RUN='${{ matrix.run }}'
+        # go test's own -timeout is 30m, and the suite takes about 25 on either kind of runner: a hang past that ends this
+        # step, never the job, so the job's log is kept and the step below says what was still running
+        timeout-minutes: 35
         env:
           CANYON_KUBE_TEST_PUSH: localhost:5001
           CANYON_KUBE_TEST_DB: 172.30.0.201
           CANYON_KUBE_TEST_SIGNIN: 172.30.0.203
           CANYON_KUBE_TEST_NETWORK_POLICY: ${{ matrix.network_policy }}
           CANYON_KUBE_TEST_LEDGER: kind-pg # up.sh's Canyon Postgres, where the floored apps' envs are named to the egress policy
+      - if: failure() && steps.suite.outcome == 'failure'
+        name: what was still running when the suite stopped, so a hang names itself
+        run: |
+          ps -eo pid,ppid,etime,args --forest | grep -E 'go |kube|make|kubectl|helm|docker' | grep -v grep | tail -60 || true
+          kubectl get pods -A -o wide || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -60 || true
       - if: matrix.network == 'kindnet'
         name: under run_by canyon, a deploy builds nothing and the chart's bootstrap fails closed without failing the upgrade (#2514, #2516)
         run: |

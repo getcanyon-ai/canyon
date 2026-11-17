@@ -51,7 +51,7 @@ jobs:
       actions: read # a scan-dbs job in the run, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui

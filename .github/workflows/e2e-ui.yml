@@ -63,7 +63,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8] # Playwright deals its file×project test groups across the shards in order, each in exactly one: today three to a shard, desktop's journeys in 1-4 and phone's in 5-8, and eight is the fewest that part promote (~7 min) from putback (~12 min): 2.7 to 13.3 minutes a shard
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -101,6 +101,7 @@ jobs:
           path: e2e/ui/.work/results
           retention-days: 7
 
+
   egress:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The stack's egress tests in two parts, each on a stack of its own: together they passed the package's 30-minute
@@ -122,7 +123,7 @@ jobs:
       actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -155,6 +156,7 @@ jobs:
       - if: failure()
         run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
 
+
   oidc:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The team setup on one Docker server (docs: self-host/docker.md): the shipped compose file and deploy/docker/team.yml,
@@ -167,7 +169,7 @@ jobs:
       actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -196,6 +198,7 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
+
 
   e2e-ui:
     # the one check named e2e-ui, required by its exact name: green only when every e2e-ui-shard,

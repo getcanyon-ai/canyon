@@ -197,7 +197,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/hosted-dns # GitHub's hosted runners: their resolver also asks public DNS (its action.yml)
       - name: helm — the pinned release, checksum-verified, as the chart job's
         env:
           HELM_VERSION: v4.0.5

@@ -1,6 +1,6 @@
 # The docs' Take the tour on the laptop demo built from the tree (make tour-check): the chapters canyon demo tour has a new
 # visitor's agent run, and the outputs its page pastes. It builds the demo and four sample apps, so a pull request pays
-# for it only when it changes the sample, the tour, the page or the words the page pastes. journeys.yml calls it nightly on main, whatever
+# for it only when it changes the sample, the tour, the page or the words the page pastes. stack.yml calls it nightly on main, whatever
 # the paths, for a change elsewhere that moves those words.
 name: tour
 
@@ -23,7 +23,7 @@ on:
       - 'gate/opengrep/**'
       - 'scripts/tour-check.sh'
       - '.github/workflows/tour.yml'
-  workflow_call: # journeys.yml, stack.yml
+  workflow_call: # stack.yml
 
 permissions:
   contents: read

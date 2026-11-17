@@ -36,7 +36,8 @@ The review writes a fix for each finding. For the table above it wrote:
 
 `canyon check` runs the same review `canyon deploy` runs, the AI review included, without deploying.
 A model's answers vary between calls, so another review may find different things, even after a
-small change.
+small change. A blocking finding an earlier review made still blocks while the code it's on hasn't changed,
+until the code changes or someone approves it.
 
 ## If you think it's wrong
 

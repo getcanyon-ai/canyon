@@ -96,7 +96,7 @@ LINE_BREAK = re.compile("[\\r\\n\\u2028\\u2029]")  # finding.md: a do_not entry 
 MAX_SNIPPET_LINES = 3  # finding.md: a snippet is the span's lines, ≤3 as serialized
 # tool.driver.name → the snapshot producer whose rules that run may carry (finding.md, profile rules).
 # finding.md: the only notifications a reviewer's run carries, each exactly so.
-AGENT_NOTE = re.compile(r"(?P<who>ai review|custom rules) · (skipped \(no model configured on this Canyon host\)|replayed from a recording|dropped [1-9][0-9]* invalid result\(s\)|a model's second opinion: another review, even of a small change, may find different things)")
+AGENT_NOTE = re.compile(r"(?P<who>ai review|custom rules) · (skipped \(no model configured on this Canyon host\)|replayed from a recording|dropped [1-9][0-9]* invalid result\(s\)|a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged|1 blocking finding from an earlier review: the code it's on hasn't changed|(?:[2-9]|[1-9][0-9]+) blocking findings from an earlier review: the code they're on hasn't changed)")
 DRIVER_PRODUCER = {"canyon/scanners": "scanner", "canyon/server-state": "server-state", "canyon/promote-gate": "promote-gate"}
 # finding.md, In: external SARIF: an imported tool's run, its rule sarif.<tool>, and its notifications, each exactly so.
 SARIF_DRIVER = re.compile(r"sarif/((?=.{1,40}$)[a-z0-9]+(?:-[a-z0-9]+)*)")
@@ -352,6 +352,8 @@ def check_log(label, log, snap, schema):
                 errors.append(f"{tag}: a custom rule's finding is high whatever the model answered (finding.md, Custom rules)")
             if "secret_name" in c and ns != "secrets":
                 errors.append(f"{tag}: secret_name only belongs on secrets.* findings")
+            if "carried_from" in c and (imported or driver["name"] in DRIVER_PRODUCER):  # finding.md: only a review's result is carried
+                errors.append(f"{tag}: carried_from is on a result of no agent's run")
             if c["blocks"]:  # the governance prose is required once the finding blocks; permitted, never forbidden, otherwise
                 for key in ("required_end_state", "do_not"):
                     if key not in c:
@@ -457,6 +459,16 @@ def seam1(snap):
         notes = [n["message"]["text"] for inv in run.get("invocations", []) for n in inv["toolExecutionNotifications"]]
         if run["results"] or notes != ["ai review · skipped (no model configured on this Canyon host)"]:
             errors.append(f"finding: skipped review: no results and D10's one notification, not {notes}")
+    # A carried finding: an agent's result with carried_from, and the run's note counting it (finding.md, A blocking
+    # finding an earlier review made stays while its code stands).
+    carried = load(CONTRACTS / "testdata" / "finding" / "carried-review.sarif.json")
+    if carried is not None:
+        check_log("finding: carried review", carried, snap, schema)
+        run = carried["runs"][0]
+        notes = [n["message"]["text"] for inv in run.get("invocations", []) for n in inv["toolExecutionNotifications"]]
+        held = [r for r in run["results"] if "carried_from" in r["properties"]["canyon"]]
+        if len(held) != 1 or notes[-1:] != ["ai review · 1 blocking finding from an earlier review: the code it's on hasn't changed"]:
+            errors.append(f"finding: carried review: one carried result and the note counting it last, not {len(held)} and {notes}")
     # The reviewer's notifications finding.md names are exactly the ones the gate declares.
     documented = set(re.findall(r"`(ai review · [^`]+)`", (CONTRACTS / "finding.md").read_text().replace("\n  ", " ")))
     declared = {t.replace("%d", "N").replace("%s", "<path>") for t in re.findall(r'^const \w+ = "(ai review · [^"]+)"$', (ROOT / "gate" / "review.go").read_text(), re.M)}  # a Go count verb is finding.md's N, a string verb its <path>

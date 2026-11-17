@@ -170,7 +170,7 @@ type Properties struct {
 	Canyon Canyon `json:"canyon"`
 }
 
-// Canyon is the properties.canyon bag. Nothing here is optional except SecretName.
+// Canyon is the properties.canyon bag. Nothing here is optional except SecretName, Shown, Recorded and CarriedFrom.
 // Blocks is a pointer so that a log which omits it is told apart from one that says
 // false: the field is required, and absent must fail closed, not read as "does not block".
 // SecretName is a pointer for the opposite reason: absent is fine, present-but-empty is not.
@@ -189,6 +189,11 @@ type Canyon struct {
 
 	// Recorded labels a row replayed from a recording, not reviewed by a model (EXPERIENCE D10).
 	Recorded bool `json:"recorded,omitempty"`
+
+	// CarriedFrom is the run whose review reported an agent's result this review carried, its code standing
+	// unchanged (contracts/finding.md, A blocking finding an earlier review made stays while its code stands);
+	// "" on every other result.
+	CarriedFrom string `json:"carried_from,omitempty"`
 
 	// Governance prose the surfaces print verbatim: required once the server has said the
 	// finding blocks (Log.ValidateAgainst), permitted on any other finding, never forbidden.

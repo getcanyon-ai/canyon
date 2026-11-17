@@ -106,7 +106,11 @@ const (
 	aiNotRequired = "Not required. This severity does not block deployment."
 	aiUnsaid      = "(the host did not say)" // a blocking finding without its prose: K5 makes the host refuse it
 	aiSameFinding = "Each of these produces the same finding on the next run."
-	aiCoverage    = "These are the host's notes on its own review. Mention them to the user.\n"
+	// aiCarried is a finding an earlier review made, carried while its code is unchanged (contracts/finding.md; #2900).
+	aiCarried = "This was found in an earlier review and this review didn't report it.\n" +
+		"The code hasn't changed, so it still blocks: change the code so the rule\n" +
+		"holds, or ask for an approval. Don't wait for another review to drop it."
+	aiCoverage = "These are the host's notes on its own review. Mention them to the user.\n"
 )
 
 // aiVerdict prints §5.2's block for a blocked run and §5.3's for a passed one; code is what
@@ -690,6 +694,9 @@ func (a *app) aiFinding(e *cveGroup) {
 		a.printf("note: the secret value is redacted here. Canyon never prints it.\n")
 	}
 	a.aiProse("problem", bag.Problem)
+	if bag.CarriedFrom != "" {
+		a.aiProse("earlier review", aiCarried)
+	}
 	var ends, fixes, doNots []string
 	for _, m := range members {
 		c := m.Properties.Canyon

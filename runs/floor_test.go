@@ -144,8 +144,10 @@ func TestAReviewThatReadNothingInBetweenKeepsTheSeverity(t *testing.T) {
 		t.Fatalf("the first review blocks on high: %s %s %s", state, why(reason), severityOf(r))
 	}
 	changedElsewhere(t, ctx, p)
-	if state, reason, r := reviewed(t, ctx, p, snap); state != "blocked" || len(r.Results) != 0 {
-		t.Fatalf("a review out of room reads nothing and blocks on gate.unreadable: %s %s %+v", state, why(reason), r.Results)
+	// it reads nothing, and the finding the review before made on unchanged code is carried (contracts/finding.md, A
+	// blocking finding an earlier review made stays while its code stands)
+	if state, reason, r := reviewed(t, ctx, p, snap); state != "blocked" || len(r.Results) != 1 || r.Results[0].Properties.Canyon.CarriedFrom == "" {
+		t.Fatalf("a review out of room reads nothing, blocks and carries the finding: %s %s %+v", state, why(reason), r.Results)
 	}
 	state, reason, r := reviewed(t, ctx, p, snap)
 	if m.calls.Load() != 3 || state != "blocked" || severityOf(r) != finding.High {

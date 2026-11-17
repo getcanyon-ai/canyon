@@ -45,6 +45,9 @@ func noLiveKey(serialized []byte) error {
 
 // unreadableSnippet is the one snippet a gate.unreadable finding carries: never source, only a
 // Canyon-run tool's, or an agent's that read nothing, digest over the tree (contracts/finding.md).
+// runID is a gate run's id as finding.schema.json's carried_from has it.
+var runID = regexp.MustCompile(`^gr_[a-z0-9]{4,}$`)
+
 var unreadableSnippet = regexp.MustCompile(`^\((trivy|opengrep|eslint|grype|checkov|the AI review|custom rules) could not check this tree; tree sha256:[0-9a-f]{64}\)$`)
 
 // Validate checks what a schema cannot express. The lexical half of the profile — field
@@ -192,6 +195,9 @@ func (l *Log) ValidateAgainst(snap policy.Snapshot) error {
 				if len(c.DoNot) == 0 {
 					return fmt.Errorf("run %d result %d: do_not is missing or empty on a finding that blocks", i, j)
 				}
+			}
+			if c.CarriedFrom != "" && !isAgent { // only a review's result is carried (contracts/finding.md)
+				return fmt.Errorf("run %d result %d: carried_from is on a result of no agent's run", i, j)
 			}
 			if c.PolicyName != rule.Name {
 				return fmt.Errorf("run %d result %d: policy_name is not the snapshot's name for this rule", i, j)
@@ -436,6 +442,9 @@ func (r *Result) validate(declared map[string]bool) error {
 		if at.StartColumn < 1 || at.EndColumn < 1 || at.StartColumn > first+1 || at.EndColumn > last+1 || (len(ls) == 1 && at.EndColumn < at.StartColumn) {
 			return errors.New("the caret is outside the snippet it is drawn on")
 		}
+	}
+	if c.CarriedFrom != "" && !runID.MatchString(c.CarriedFrom) {
+		return errors.New("carried_from is not a run id")
 	}
 	if c.SecretName != nil {
 		if *c.SecretName == "" {

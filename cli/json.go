@@ -40,6 +40,7 @@ type jsonFinding struct {
 	Fix              string   `json:"fix"`
 	PolicyName       string   `json:"policy_name"`
 	SecretName       *string  `json:"secret_name,omitempty"`
+	CarriedFrom      string   `json:"carried_from,omitempty"`
 	RequiredEndState string   `json:"required_end_state,omitempty"`
 	DoNot            []string `json:"do_not,omitempty"`
 }
@@ -80,7 +81,7 @@ func (a *app) jsonVerdict(run checkRun, code int) int {
 		blocks, _ := f.Blocking() // verdict has already refused a finding that says nothing
 		out.Findings = append(out.Findings, jsonFinding{Severity: bag.Severity, Blocks: blocks, Rule: f.RuleID,
 			File: where.ArtifactLocation.URI, Line: where.Region.StartLine, Column: where.Region.StartColumn,
-			Problem: bag.Problem, Fix: bag.Fix, PolicyName: bag.PolicyName, SecretName: bag.SecretName,
+			Problem: bag.Problem, Fix: bag.Fix, PolicyName: bag.PolicyName, SecretName: bag.SecretName, CarriedFrom: bag.CarriedFrom,
 			RequiredEndState: bag.RequiredEndState, DoNot: bag.DoNot})
 	}
 	a.unpark(false)

@@ -253,13 +253,13 @@ func TestJSONVerdictCarriesEachProducersNotes(t *testing.T) {
 // 1 finding"); a warning it carries keeps a row of its own.
 func TestAReviewersNoteFoldsUnderItsRow(t *testing.T) {
 	said := `{"producer":"canyon-review","sarif":{"runs":[{"invocations":[{"toolExecutionNotifications":` +
-		`[{"level":"note","message":{"text":"ai review · a model's second opinion: another review, even of a small change, may find different things"}}]}],"results":[]}]}}`
+		`[{"level":"note","message":{"text":"ai review · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged"}}]}],"results":[]}]}}`
 	h := &gateHost{run: aRun("clean", 0, 0), page: gatePage(
 		checkStarted(41, "canyon-review"), checkCompleted(42, "canyon-review", "clean", 0, 40),
 		`{"id":43,"ts":"2026-09-02T09:31:05Z","kind":"producer.sarif","data":`+said+`}`)}
 	out, _, code := checking(t, h)
 	rows := "    ✓ AI review          clean\n" +
-		"      a model's second opinion: another review, even of a small change, may find different things\n"
+		"      a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged\n"
 	if code != exitOK || !strings.Contains(out, rows) || strings.Contains(out, "· ai review ·") {
 		t.Errorf("exit %d; the review's rows read\n%s\nwant\n%s", code, out, rows)
 	}
@@ -274,7 +274,7 @@ func TestAFoldedNoteNeedsItsRow(t *testing.T) {
 	h := &gateHost{run: aRun("clean", 0, 0), page: gatePage(
 		checkStarted(41, "custom-rules"), checkCompleted(42, "custom-rules", "clean", 0, 40),
 		`{"id":43,"ts":"2026-09-02T09:31:05Z","kind":"producer.sarif","data":`+note("custom-rules", "custom rules · reused from an earlier review of the same code and policy")+`}`,
-		`{"id":44,"ts":"2026-09-02T09:31:05Z","kind":"producer.sarif","data":`+note("canyon-review", "ai review · a model's second opinion: another review, even of a small change, may find different things")+`}`)}
+		`{"id":44,"ts":"2026-09-02T09:31:05Z","kind":"producer.sarif","data":`+note("canyon-review", "ai review · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged")+`}`)}
 	out, _, code := checking(t, h)
 	if code != exitOK || !strings.Contains(out, "    ✓ custom rules       clean\n      reused from an earlier review of the same code and policy\n") ||
 		!strings.Contains(out, "    · ai review · a model's second opinion") {

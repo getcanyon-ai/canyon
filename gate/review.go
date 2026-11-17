@@ -104,7 +104,14 @@ const Dropped = "ai review · dropped %d invalid result(s)"
 
 // SecondOpinion is the note on every run the model answered: its answers vary between calls and no
 // setting pins them, so a new review, even of a small change, may find different things (#1819).
-const SecondOpinion = "ai review · a model's second opinion: another review, even of a small change, may find different things"
+const SecondOpinion = "ai review · a model's second opinion: another review, even of a small change, may find different things; a blocking finding stays while its code is unchanged"
+
+// CarriedOne and CarriedMany are the note on a run that carries blocking findings from an earlier review whose code
+// stands (Carry; contracts/finding.md, A blocking finding an earlier review made stays while its code stands).
+const CarriedOne = "ai review · 1 blocking finding from an earlier review: the code it's on hasn't changed"
+
+// CarriedMany is CarriedOne for two or more, %d the count.
+const CarriedMany = "ai review · %d blocking findings from an earlier review: the code they're on hasn't changed"
 
 // Reused is the notification on a run the review cache answered: the same tree, policy snapshot,
 // model and agent were reviewed before, and that review is replayed with no model call.
@@ -874,27 +881,42 @@ func candidateResult(d *detect.Detector, c Candidate, allowed map[string]finding
 	for endLine > startLine && strings.TrimSpace(lines[endLine-1]) == "" {
 		endLine--
 	}
-	span := lines[startLine-1 : endLine]
-	first, last := []rune(span[0]), []rune(span[len(span)-1])
-	start := slices.IndexFunc(first, func(r rune) bool { return !unicode.IsSpace(r) })
-	end := len([]rune(strings.TrimRightFunc(string(last), unicode.IsSpace)))
-	if start < 0 || end == 0 {
+	span, joined, from, to, ok := reviewSpan(lines, strings.Split(shownText[c.File], "\n"), startLine, endLine)
+	if !ok {
 		return finding.Result{}, errBlank
 	}
+	span.URI = c.File
 	res, err := finding.New(finding.Input{
 		Rule: rule, Severity: severity, Title: clip(c.Title, maxTitle), Problem: c.Problem, Fix: c.Fix, RequiredEndState: endState, DoNot: doNot,
-		Location: finding.Span{URI: c.File, StartLine: startLine, StartColumn: start + 1, EndLine: endLine, EndColumn: end + 1, Lines: span},
+		Location: span,
 	})
 	if err != nil {
 		return finding.Result{}, fmt.Errorf("profile (%w)", err)
 	}
-	// The snippet is the lines as shown, and the caret the same first-to-last non-space on them.
-	shown := strings.Split(shownText[c.File], "\n")[startLine-1 : endLine]
-	joined, tail := strings.Join(shown, "\n"), shown[len(shown)-1]
-	from := max(0, slices.IndexFunc([]rune(shown[0]), func(r rune) bool { return !unicode.IsSpace(r) })) // a line inside a masked literal is shown blank
-	to := utf8.RuneCountInString(joined) - utf8.RuneCountInString(tail) + utf8.RuneCountInString(strings.TrimRightFunc(tail, unicode.IsSpace))
 	res.Show(joined, from, to)
 	return res, nil
+}
+
+// reviewSpan is a reviewer's result over lines start to end of a file, both 1-based and inclusive: its span on the
+// file as written (lines), the first to the last non-space, and its lines as shown (shown, the file masked as the
+// model is shown it) with the caret on them, the same first to last non-space, for Result.Show. ok is false when its
+// first or last line is blank. The reviewer builds a candidate's snippet with it, and Carry rebuilds an earlier
+// result's to tell whether its code stands (contracts/finding.md).
+func reviewSpan(lines, shown []string, start, end int) (span finding.Span, joined string, from, to int, ok bool) {
+	src := lines[start-1 : end]
+	first, last := []rune(src[0]), []rune(src[len(src)-1])
+	at := slices.IndexFunc(first, func(r rune) bool { return !unicode.IsSpace(r) })
+	upTo := len([]rune(strings.TrimRightFunc(string(last), unicode.IsSpace)))
+	if at < 0 || upTo == 0 {
+		return finding.Span{}, "", 0, 0, false
+	}
+	span = finding.Span{StartLine: start, StartColumn: at + 1, EndLine: end, EndColumn: upTo + 1, Lines: src}
+	// The snippet is the lines as shown, and the caret the same first-to-last non-space on them.
+	view := shown[start-1 : end]
+	joined, tail := strings.Join(view, "\n"), view[len(view)-1]
+	from = max(0, slices.IndexFunc([]rune(view[0]), func(r rune) bool { return !unicode.IsSpace(r) })) // a line inside a masked literal is shown blank
+	to = utf8.RuneCountInString(joined) - utf8.RuneCountInString(tail) + utf8.RuneCountInString(strings.TrimRightFunc(tail, unicode.IsSpace))
+	return span, joined, from, to, true
 }
 
 // maxTitle is the reviewer's title cap, under the profile's 120 (contracts/schema/finding.schema.json): a

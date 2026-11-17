@@ -437,7 +437,8 @@ approved line) and then the log; a run that failed in its review prints its rows
 printed then on a terminal, where the spinner stood in for it. A tool row that blocks reads
 `✗ gitleaks  1 blocking finding`. A reviewer's own `note`, `ai review · <how it ran>` (`custom rules · …` alike), prints folded
 under its row, dim, indented two more and without the reviewer's name: `      a model's second
-opinion: another review, even of a small change, may find different things`, so it never reads as
+opinion: another review, even of a small change, may find different things; a blocking finding stays while its code
+is unchanged`, so it never reads as
 a second reviewer row (amended 2026-10-11); a reviewer's `warning` keeps a row of its own, and so
 does a note whose reviewer printed no row. The reviewer's row is `AI review`, and on a host with
 no model it
@@ -757,6 +758,7 @@ Every finding, in every format, carries exactly these fields. Nothing more.
 | fix | commands and code | The end state, concretely, including any `canyon` command required. |
 | why | policy name + `--explain` | The governance chain. Turns a cop into a colleague. |
 | from | `from codeql · rule js-sql-injection` | An imported tool's finding alone (its rule `sarif.<tool>.<its rule>`): which tool found it and under which of its rules, a dim line under the location; `--format ai` puts the tool's rule under `found by:`, as it does every tool's (§5.2; contracts/finding.md; amended 2026-10-04, #1100; 2026-10-10). |
+| earlier review | `found in an earlier review · the code hasn't changed, so it still blocks` | A finding an earlier AI review made that this one left out while its code is unchanged (its `carried_from`; contracts/finding.md, *A blocking finding an earlier review made stays while its code stands*; #2900): a dim line under the location, after any `from` line (EXPERIENCE.md D5). |
 
 **Prose rules for `problem`:** name the attacker and the outcome. Not "insecure credential
 storage" — "anyone who opens the app can read it and charge your account." Not "unsanitized
@@ -1520,6 +1522,11 @@ Design notes on this format:
   state:`, `suggested fix:` and, blocking, `do not:`, each host line once however many findings carry
   it, in order. No `source:` and no `problem:`: each CVE's are in `--format json`. Each finding stays
   its own to approve.
+- **A finding an earlier review made says so** (added 2026-11-15, #2900; contracts/finding.md, *A blocking
+  finding an earlier review made stays while its code stands*): a finding carrying `carried_from` has, after
+  `problem:`, `earlier review:` and three lines under it, as D5 has them: `This was found in an earlier review and
+  this review didn't report it.`, `The code hasn't changed, so it still blocks: change the code so the rule`,
+  `holds, or ask for an approval. Don't wait for another review to drop it.` The dashboard's agent block copies them.
 - **`title:` is the finding's own headline** (amended 2026-10-02, the redesign #1401): the same
   words the dashboard's finding card and the terminal print above it, from the finding's
   `properties.canyon.title`, so a person and their agent name a finding alike. It is the first line
@@ -1949,8 +1956,9 @@ every other verb still refuses the flag.
 - `findings[]` is in the order the host answered them, not blocking-first as the human and ai
   renderings sort: a script filters on `blocks`, and wire order is stable across runs, so two runs
   diff meaningfully. `blocks` is a boolean read from the finding,
-  never derived from severity. `secret_name`, `required_end_state` and `do_not` are omitted when the
-  finding carries none. Every string is the host's, unpainted; encoding/json escapes control bytes.
+  never derived from severity. `secret_name`, `carried_from` (the run whose review reported a finding an
+  earlier review made, carried while its code is unchanged; #2900), `required_end_state` and `do_not` are
+  omitted when the finding carries none. Every string is the host's, unpainted; encoding/json escapes control bytes.
 - `notes[]` is what each producer said about its own run (its SARIF `toolExecutionNotifications`),
   `{producer, text}` in the order the rows arrived: `ai review · skipped (…)`, `not checked on this
   host: …`. Always present, `[]` when no producer said anything, so a script reads one key.

@@ -107,7 +107,7 @@ function foundBy(entry: FindingRead[]): string {
 // printed as `canyon check --ai` prints them (cli/ai.go), so an agent gets one instruction and
 // never less from the browser than from the command line for the same finding.
 export function forAgent(finding: FindingRead, app: string, also: FindingRead[] = []): string {
-  const { blocks, problem, fix, required_end_state, do_not } = finding.properties.canyon;
+  const { blocks, problem, fix, required_end_state, do_not, carried_from } = finding.properties.canyon;
   const severity = highest([finding, ...also]);
   const { artifactLocation, region } = finding.locations[0].physicalLocation;
   const parts = [
@@ -115,12 +115,22 @@ export function forAgent(finding: FindingRead, app: string, also: FindingRead[] 
     `${severity.toUpperCase()} ${named([finding, ...also])}\nblocks: ${blocks ? "yes" : "no"}\n${artifactLocation.uri}:${region.startLine} — ${problem}`,
     fix,
   ];
+  if (carried_from !== undefined) parts.push(`earlier review:\n  ${CARRIED_FOR_AGENT.split("\n").join("\n  ")}`);
   const end = blocks ? required_end_state : "Not required. This severity does not block deployment.";
   if (end !== undefined) parts.push(`required end state:\n  ${end.split("\n").join("\n  ")}`);
   if (blocks && do_not !== undefined) parts.push(`do not:\n${do_not.map((move) => `  - ${move}\n`).join("")}  Each of these produces the same finding on the next run.`);
   parts.push(AFTER);
   return `${parts.join("\n\n")}\n`;
 }
+
+// A finding an earlier review made, carried while its code is unchanged (contracts/finding.md, A blocking finding an
+// earlier review made stays while its code stands; EXPERIENCE.md D5): its tag, the line under its problem, and what
+// the agent's block says, as canyon check --ai says it (cli/ai.go).
+export const CARRIED = "Found in an earlier review";
+export const CARRIED_WHY = "Canyon's AI review found this in an earlier review. This review didn't mention it, but the code hasn't changed, so it still blocks until the code changes or someone approves it.";
+const CARRIED_FOR_AGENT = "This was found in an earlier review and this review didn't report it.\n" +
+  "The code hasn't changed, so it still blocks: change the code so the rule\n" +
+  "holds, or ask for an approval. Don't wait for another review to drop it.";
 
 export const AFTER = "Then run: canyon check\n" +
   "This runs the identical gate without deploying. It takes about 15 seconds.\n" +
@@ -144,7 +154,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
 }) {
   const { copy, copied } = useCopy(() => forAgent(finding, app, also));
   const [approving, setApproving] = useState(false);
-  const { blocks, title, problem, fix } = finding.properties.canyon;
+  const { blocks, title, problem, fix, carried_from } = finding.properties.canyon;
   const severity = highest([finding, ...also]); // an entry's is the highest of its findings', as the CLI's (cli.md §3.3)
   const approval = also.every((other) => other.approval !== undefined) ? finding.approval : undefined;
   const { artifactLocation, region } = finding.locations[0].physicalLocation;
@@ -164,6 +174,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
           : unread ? <Chip tone="blocks">couldn't finish</Chip>
           : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">advisory before preview · blocks before production</Chip> : <Chip tone="advisory">advisory · does not block</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
+        {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
         <span className="text-lg font-semibold">{title}</span>
       </div>
       {approval !== undefined && <p className="mt-1.5 text-base text-text-dim">{approval.reason}</p>}
@@ -179,7 +190,8 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         </>
       )}
       <dl className="mt-2.5 grid grid-cols-[48px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-base">
-        <dt className="text-text-faint">Why</dt><dd className="text-text-dim">{problem}</dd>
+        <dt className="text-text-faint">Why</dt>
+        <dd className="text-text-dim">{problem}{carried_from !== undefined && <span className="mt-1 block">{CARRIED_WHY}</span>}</dd>
         <dt className="text-text-faint">Fix</dt><dd className="text-text-dim">{fix}</dd>
       </dl>
       {unread && (

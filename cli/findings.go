@@ -167,6 +167,7 @@ type canyonBag struct {
 	PolicyName       string   `json:"policy_name"`
 	SecretName       *string  `json:"secret_name,omitempty"`
 	Shown            *shown   `json:"shown,omitempty"`
+	CarriedFrom      string   `json:"carried_from,omitempty"` // the run whose review reported a finding this one carried (contracts/finding.md)
 	RequiredEndState string   `json:"required_end_state,omitempty"`
 	DoNot            []string `json:"do_not,omitempty"`
 }
@@ -260,6 +261,9 @@ func (a *app) entry(f finding, fixes []string, foundBy string) {
 		a.printf("  %s\n", a.render.paint(ansiDim, "found by "+foundBy))
 	} else if from != "" {
 		a.printf("  %s\n", a.render.paint(ansiDim, from))
+	}
+	if bag.CarriedFrom != "" { // a finding an earlier review made, its code unchanged (contracts/finding.md; #2900)
+		a.printf("  %s\n", a.render.paint(ansiDim, "found in an earlier review "+a.dot()+" the code hasn't changed, so it still blocks"))
 	}
 	caret := where.Region
 	if at := bag.Shown; at != nil {

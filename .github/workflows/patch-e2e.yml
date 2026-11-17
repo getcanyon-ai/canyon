@@ -5,7 +5,7 @@
 # preview reads could not check, Settings › Patching shows the admin why (e2e/ui's patch project, in Chromium), and the
 # rescans after it re-match with no image saved. What a change to the plan (Canyon Enterprise's, ee/patching, and the
 # server's hook to it), the patch run, its watch and revert, the rebase, the rescan's scans, the run image or that page
-# can break; journeys.yml calls it nightly on main, whatever the paths. Kubernetes' rebase is kpack's, which CI's kind does not run: e2e/cluster/CASES.md R1 is the test cluster's.
+# can break; stack.yml calls it nightly on main, whatever the paths. Kubernetes' rebase is kpack's, which CI's kind does not run: e2e/cluster/CASES.md R1 is the test cluster's.
 name: patch-e2e
 
 on:
@@ -31,7 +31,7 @@ on:
       - 'e2e/ui/playwright.config.ts'
       - 'e2e/compose.patch.yml'
       - '.github/workflows/patch-e2e.yml'
-  workflow_call: # journeys.yml, stack.yml
+  workflow_call: # stack.yml
   workflow_dispatch:
 
 permissions:

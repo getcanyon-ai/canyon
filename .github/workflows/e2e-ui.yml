@@ -2,7 +2,7 @@
 # probes (e2e/stack_test.go) on the same stack, the egress floor and Envoy (e2e/egress_test.go)
 # on a stack of their own, and the team setup's sign-in (e2e/oidc) on one of its own: what a change to the dashboard, the journeys, the goldens the dashboard
 # reads, the e2e fixtures, the stack's compose file or a new table can break. This check is the run:
-# nobody runs e2e-ui on a laptop except to debug a red one (AGENTS.md, Commands). journeys.yml calls it
+# nobody runs e2e-ui on a laptop except to debug a red one (AGENTS.md, Commands). stack.yml calls it
 # nightly on main, whatever the paths.
 name: e2e-ui
 
@@ -24,7 +24,7 @@ on:
       - 'db/migrations/**' # the journeys diff every public table: a new table that changes on its own reddens them all (#1969)
       - '.github/workflows/e2e-ui.yml'
       - '.github/actions/scan-dbs/**'
-  workflow_call: # journeys.yml, stack.yml
+  workflow_call: # stack.yml
 
 permissions:
   contents: read

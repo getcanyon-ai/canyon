@@ -1,0 +1,37 @@
+name: hosted-docker
+description: >-
+  On GitHub's hosted runners, Docker resolves a build's lookups as Canyon needs it to (contracts/executor.md, A build
+  reaches no private or link-local address, DNS): from the host's network namespace, through the host's own
+  resolvers. Some of these runners come with a daemon dns setting naming Azure's resolver, 168.63.129.16; Docker asks
+  a resolver named there from inside the build, where the build's floor refuses that address, and every build's
+  lookup fails ("lookup nodejs.org on 127.0.0.11:53: server misbehaving"). This removes the setting and restarts
+  Docker, then stops the job unless a container on a user-defined network is handed host resolvers alone. Run it
+  right after checkout, before anything starts a container. On any other runner it does nothing.
+runs:
+  using: composite
+  steps:
+    - if: runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        set -euo pipefail
+        conf=/etc/docker/daemon.json
+        current=$(sudo cat "$conf" 2>/dev/null || true)
+        [ -n "$current" ] || current='{}'
+        if [ "$(jq 'has("dns")' <<<"$current")" = true ]; then
+          echo "Docker's daemon.json names DNS servers, which a build would be refused: $(jq -c .dns <<<"$current"). Removing them."
+          jq 'del(.dns)' <<<"$current" | sudo tee "$conf.new" >/dev/null
+          sudo mv "$conf.new" "$conf"
+          sudo systemctl restart docker
+          for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+        fi
+        if systemctl cat docker 2>/dev/null | grep -q -- '--dns'; then
+          echo "::error::docker's unit passes --dns, which a build would be refused, and this action removes only daemon.json's"; exit 1
+        fi
+        docker network create canyon-dns-probe >/dev/null
+        servers=$(docker run --rm --network canyon-dns-probe busybox:1.37 sed -n 's/^# ExtServers: \[\(.*\)\]$/\1/p' /etc/resolv.conf)
+        docker network rm canyon-dns-probe >/dev/null
+        for s in $servers; do
+          case $s in host\(*\)) ;; *) echo "::error::Docker hands a build $s, which it asks from inside the build, where the floor refuses it (ExtServers: [$servers])"; exit 1 ;; esac
+        done
+        [ -n "$servers" ] || { echo "::error::a container's resolv.conf names no ExtServers: Docker is older than Canyon needs, or this check no longer reads it"; exit 1; }
+        echo "Docker hands builds the host's resolvers: $servers"

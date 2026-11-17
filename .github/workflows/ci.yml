@@ -384,9 +384,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2 # the pull request's merge commit and its base, which the next step diffs
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - id: compose
         if: github.event_name == 'pull_request'
         run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy/egress Makefile cmd/canyon-server/localpeer.go cmd/canyon-server/published.go cmd/canyon-server/main.go executor/published.go executor/http.go executor/executor.go executor/appfloor.go executor/appfloor.sh || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
@@ -403,8 +401,6 @@ jobs:
         run: make demo-check
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect
 
 
   images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
@@ -426,9 +422,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2 # the merge commit and its base, which the next steps diff
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - id: bundle
         run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
       - if: steps.bundle.outputs.changed == 'true'
@@ -451,5 +445,3 @@ jobs:
           echo "$(wc -l < "$RUNNER_TEMP/opengrep-source.txt") files"
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect

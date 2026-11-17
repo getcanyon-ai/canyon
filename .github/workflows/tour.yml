@@ -39,9 +39,7 @@ jobs:
     timeout-minutes: 45 # the stack's images, the four sample apps' builds and two tours
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: tour
@@ -54,5 +52,3 @@ jobs:
       - run: make tour-check
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect

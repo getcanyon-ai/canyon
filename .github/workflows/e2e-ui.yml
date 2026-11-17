@@ -63,9 +63,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8] # Playwright deals its file×project test groups across the shards in order, each in exactly one: today three to a shard, desktop's journeys in 1-4 and phone's in 5-8, and eight is the fewest that part promote (~7 min) from putback (~12 min): 2.7 to 13.3 minutes a shard
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -104,8 +102,6 @@ jobs:
           retention-days: 7
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect
 
 
   egress:
@@ -129,9 +125,7 @@ jobs:
       actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -165,8 +159,6 @@ jobs:
         run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect
 
 
   oidc:
@@ -181,9 +173,7 @@ jobs:
       actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: e2e-ui
@@ -214,8 +204,6 @@ jobs:
         run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect
 
 
   e2e-ui:

@@ -53,9 +53,7 @@ jobs:
     timeout-minutes: 45 # ten real buildpack builds, a stock Next 16 among them (#1240), and the Paketo samples' image scans (#2216): the test step ran 23 min
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: dockerd's debug log, for the DNS evidence below
-        with:
-          step: start
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - if: github.event_name == 'pull_request'
         name: free the runner's disk — ten app builds, canyon-run and the scanners' images need more than it leaves
         run: |
@@ -87,5 +85,3 @@ jobs:
         run: go test -tags e2e -count=1 -run '^$' ./executor
       - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
         if: failure()
-        with:
-          step: collect

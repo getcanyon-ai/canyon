@@ -399,8 +399,6 @@ jobs:
             --entrypoint /bin/sh "$(jq -r '.services["egress-envoy"].image' <<<"$config")" /etc/canyon/envoy.sh --mode validate
       - if: github.event_name == 'push' || steps.compose.outputs.changed == 'true'
         run: make demo-check
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()
 
 
   images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
@@ -443,5 +441,3 @@ jobs:
           done
           ! grep -q '/\.git\(/\|$\)' "$RUNNER_TEMP/opengrep-source.txt" || { echo "::error::the source tarball carries .git"; exit 1; }
           echo "$(wc -l < "$RUNNER_TEMP/opengrep-source.txt") files"
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()

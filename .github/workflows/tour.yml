@@ -50,5 +50,3 @@ jobs:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
       - run: make tour-check
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()

@@ -95,5 +95,3 @@ jobs:
           path: e2e/ui/.work/results
           retention-days: 7
           if-no-files-found: ignore
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()

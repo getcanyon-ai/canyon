@@ -100,8 +100,6 @@ jobs:
           name: e2e-ui-results-${{ matrix.shard }}
           path: e2e/ui/.work/results
           retention-days: 7
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()
 
 
   egress:
@@ -157,8 +155,6 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()
 
 
   oidc:
@@ -202,8 +198,6 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()
 
 
   e2e-ui:

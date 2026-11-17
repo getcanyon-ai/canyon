@@ -53,5 +53,3 @@ jobs:
       - run: .github/old-cli.sh
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()

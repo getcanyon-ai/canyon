@@ -83,5 +83,3 @@ jobs:
         run: make test-e2e
       - if: github.event_name == 'push' # what make test-e2e compiles, into the build cache go-cache saves for pull requests
         run: go test -tags e2e -count=1 -run '^$' ./executor
-      - uses: ./.github/actions/dns-evidence # GitHub's hosted runners: what DNS did, when a build's lookup failed
-        if: failure()

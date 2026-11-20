@@ -4,6 +4,7 @@ import { Button } from "../ui/Button";
 import { Rail } from "../ui/Rail";
 import { isAdmin } from "./OrgSettings";
 import { Pipeline } from "./Pipeline";
+import { Playbooks } from "./Playbooks";
 import { Policies } from "./Policies";
 import { hashQuery } from "./query";
 import { SCANNER_RULES, Scanners } from "./Scanners";
@@ -63,7 +64,7 @@ function Register({ done, close }: { done: (row: DesignSystemRow) => void; close
 // Guardrails' four pages (the redesign: "Only the rules live here now"): the pipeline, the policies,
 // the scanners, and what coding agents are told. Each is #/guardrails/<page>; the bare route is the
 // first, Pipeline, and a link to a rule's row (?rule=) is the tab that rule's row is on.
-const PAGES = [["pipeline", "Pipeline"], ["policies", "Policies"], ["scanners", "Scanners"], ["agents", "What agents are told"]] as const;
+const PAGES = [["pipeline", "Pipeline"], ["policies", "Policies"], ["scanners", "Scanners"], ["playbooks", "Playbooks"], ["agents", "What agents are told"]] as const;
 const pageOf = (hash: string) => {
   const rule = new URLSearchParams(hashQuery()).get("rule");
   if (rule !== null) return SCANNER_RULES.includes(rule) ? "scanners" : "policies";
@@ -199,6 +200,7 @@ export function Guardrails() {
         {record !== null && page === "pipeline" && <div className="mt-4"><Pipeline /></div>}
         {record !== null && page === "policies" && <div className="mt-4"><Policies /></div>}
         {record !== null && page === "scanners" && <div className="mt-4"><Scanners /></div>}
+        {record !== null && page === "playbooks" && <div className="mt-4"><Playbooks /></div>}
         {record !== null && rows !== null && page === "agents" && (
           <>
             <section aria-label="Approved stacks">

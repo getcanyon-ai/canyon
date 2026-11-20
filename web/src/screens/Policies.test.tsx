@@ -41,6 +41,7 @@ const CUSTOM = "/api/v1/custom-rules";
 const routes = {
   [`GET ${POLICIES}`]: { body: golden.policies },
   [`GET ${CUSTOM}`]: { body: { custom_rules: [] } },
+  ["GET /api/v1/playbooks"]: { body: { playbooks: [] } },
   [`PUT ${RULE}`]: { body: golden.preview.response },
   [`PUT ${RULE}?apply=true`]: { body: golden.apply.response },
 };
@@ -338,10 +339,10 @@ describe("Custom rules", () => {
     expect(screen.getByText(`${email.name.length} / 80 · its id: ${saved.rule}`)).toBeDefined();
     list = [saved];
     policies = { ...golden.policies, policies: [...golden.policies.policies, { id: saved.rule, name: email.name, state: "off" }] };
-    fireEvent.click(screen.getByRole("button", { name: "Save the new rule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save the new rule" }));
     await screen.findByRole("radiogroup", { name: email.name });
     expect(shown(email.name)).toBe("off");
-    expect(sent()).toContain(`PUT ${CUSTOM}/customer-emails-are-encrypted-at-rest ${JSON.stringify({ name: email.name, instructions: email.instructions })}`);
+    expect(sent()).toContain(`PUT ${CUSTOM}/customer-emails-are-encrypted-at-rest ${JSON.stringify({ name: email.name, instructions: email.instructions, playbook: null })}`);
   });
 
   it("says what the server refuses in a rule, in its words", async () => {
@@ -349,7 +350,7 @@ describe("Custom rules", () => {
     server({ ...withCustoms, [`PUT ${CUSTOM}/${golden.custom_rule_put.slug}`]: { status: 400, body: { error: "invalid_custom_rule", message } } });
     render(<Policies />);
     fireEvent.click(await within(await screen.findByRole("region", { name: email.name })).findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: `Save ${email.name}` }));
+    fireEvent.click(await screen.findByRole("button", { name: `Save ${email.name}` }));
     expect(await screen.findByText(message)).toBeDefined();
   });
 
@@ -374,9 +375,9 @@ describe("Custom rules", () => {
       [`PUT ${CUSTOM}/${golden.custom_rule_put.slug}`]: { body: golden.custom_rule_put.response } });
     render(<Policies />);
     fireEvent.click(await screen.findByRole("button", { name: `Check it with the AI instead: ${lodash.name}` }));
-    await waitFor(() => expect(sent()).toContain(`PUT ${CUSTOM}/no-lodash ${JSON.stringify({ name: lodash.name, instructions: lodash.instructions, check: "ai" })}`));
+    await waitFor(() => expect(sent()).toContain(`PUT ${CUSTOM}/no-lodash ${JSON.stringify({ name: lodash.name, instructions: lodash.instructions, check: "ai", playbook: lodash.playbook })}`));
     fireEvent.click(screen.getByRole("button", { name: `Check it by code where Canyon can: ${email.name}` }));
-    await waitFor(() => expect(sent()).toContain(`PUT ${CUSTOM}/${golden.custom_rule_put.slug} ${JSON.stringify({ name: email.name, instructions: email.instructions, check: "code" })}`));
+    await waitFor(() => expect(sent()).toContain(`PUT ${CUSTOM}/${golden.custom_rule_put.slug} ${JSON.stringify({ name: email.name, instructions: email.instructions, check: "code", playbook: email.playbook })}`));
   });
 
   it("says why a rule asked to be checked by code stays with the AI", async () => {
@@ -407,7 +408,7 @@ describe("Custom rules", () => {
       [`POST ${CUSTOM}/${dry.slug}/dry-run`]: { body: dry.response } });
     render(<Policies />);
     fireEvent.click(await within(await screen.findByRole("region", { name: lodash.name })).findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: `Save ${lodash.name}` }));
+    fireEvent.click(await screen.findByRole("button", { name: `Save ${lodash.name}` }));
     expect(await screen.findByText("ledger: Would pass")).toBeDefined();
     expect(sent()).toContain(`POST ${CUSTOM}/${dry.slug}/dry-run`);
   });
@@ -425,7 +426,7 @@ describe("Custom rules", () => {
     fireEvent.click(await screen.findByRole("button", { name: "New rule" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Customer email: encrypted!" } }); // custom.customer-email-encrypted, the golden's
     fireEvent.change(screen.getByLabelText("What should Canyon check?"), { target: { value: "x" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save the new rule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save the new rule" }));
     expect(await screen.findByText("A rule with this id already exists: edit that one instead.")).toBeDefined();
     expect(sent().filter((one) => one.startsWith("PUT") && !one.includes("/policies/"))).toHaveLength(0); // the rows' previews of today aside
   });

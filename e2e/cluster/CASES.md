@@ -62,11 +62,13 @@ identity provider.` and the callbacks note are visible; enter issuer `$E2E_OIDC_
 JSON for the value); cluster: no object labelled `canyon.probe` remains in `canyon-apps` within
 30 s. *Cleanup*: none. Docker cannot run this: `frontDoorDocker`.
 
-**A3 · the front door and outbound refuse a member.** UI + API. *Given* A2. As alice: the front door reads
+**A3 · the front door, outbound and playbooks refuse a member.** UI + API. *Given* A2. As alice: the front door reads
 `Only an admin can change the front door.` with no form; `PUT /api/v1/front-door` as alice is
 `403 {error:"admin_required"}` and writes no audit row. Settings › Outbound reads `Only an admin can
 change how apps call out.` above how apps call out, read-only, with no choice and no button; `PUT
-/api/v1/egress {mode}` as alice is `403 {error:"admin_required"}` (#2422).
+/api/v1/egress {mode}` as alice is `403 {error:"admin_required"}` (#2422). Guardrails › Playbooks is the admins-only page,
+`Only an admin can open Guardrails.`; `GET /api/v1/playbooks` as alice is `200`, and `PUT /api/v1/playbooks/:slug`
+as alice is `403 {error:"admin_required"}` and saves nothing (design/specs/mcp.md §3.2).
 
 **A5 · apps call out through Canyon.** UI + API. *Given* A3, before any deploy: every app of the run is
 floored from its first pod, so choice 2's and choice 1's pods starting at all is what proves they start on the

@@ -36,7 +36,7 @@ because a device code shown inside a tool result would have the agent driving th
 | `canyon_deploy` | Deploys a directory to preview, as `canyon deploy` | `POST …/packages`, `POST …/deploys`, then polls | the verdict, and on success the deploy's `url`, `answered` and access line |
 | `canyon_status` | The app's environments, receipt and needs, as `canyon status` | `GET …/status` | the status read, as the caller's level trims it (§4) |
 | `canyon_logs` | The app's last lines in one environment | `GET …/logs?env=&lines=&redaction=masked` | text, at most 200 lines, the masked read's limit |
-| `canyon_promote` | Promotes what preview runs, or puts back an earlier version, as `canyon deploy --env prod [--version]` | `GET …/status`, `POST …/promotions`, then polls | the promote block's fields, or the approval URL when a person approves production |
+| `canyon_promote` | Promotes what preview runs, or puts back an earlier version, as `canyon deploy --env prod [--version]` | `GET …/status`, `POST …/promotions`, then polls | the promote block, as text: its fields, or the approval URL when a person approves production |
 
 - **Arguments.**
   - `dir` defaults to the server's working directory. The app is the one `canyon.toml` names there, or `app`.
@@ -51,15 +51,16 @@ because a device code shown inside a tool result would have the agent driving th
 - **Annotations.**
   - `canyon_rules`, `canyon_playbook`, `canyon_status` and `canyon_logs` are `readOnlyHint`.
   - `canyon_check` writes a check's package and a run.
-  - `canyon_deploy` and `canyon_promote` are `destructiveHint: false, idempotentHint: false`.
+  - `canyon_deploy` is `destructiveHint: false, idempotentHint: false`.
+  - `canyon_promote` is `destructiveHint: true, idempotentHint: false`, because it replaces what production runs.
   - `canyon_promote` is `openWorldHint`, because it changes what customers reach.
 - **Promotion asks.**
-  - `canyon_promote` sends nothing until it has an answer. Where the client supports MCP elicitation, the server asks the person: `Promote <app> <version> to production?`, the CLI's §6.3 question.
+  - `canyon_promote` sends nothing until it has an answer. Where the client supports MCP elicitation, the server always asks the person, and `confirm` is ignored: `Promote <app> <version> to production?`, or for a rollback `Put <app> <version> back in production, replacing <version>?`, the CLI's §6.3 and §6.3.1 questions, at the point the CLI asks it. It asks as an input request (SEP-2322): the call ends before anything is sent, and the client calls again with the answer. The SDK turns that into an `elicitation/create` request for a client on a protocol version before 2026-07-28.
   - Elsewhere it needs `confirm: true`, which the server instructions say to set only when the person asked for production in this conversation. That's the skill's rule for `--yes`.
   - When the org has a person approve production, the tool asks nothing and returns the approval URL, as the CLI's WAITING FOR APPROVAL block does.
 - **Long runs.** A check or deploy outlasts most clients' tool-call timeout.
   - The tool sends MCP progress notifications from the run's timeline (seam 2), one per `progress` row.
-  - Past 10 minutes it returns `state: "running"`, the run id and the fleet URL. `canyon_status` then reads where it ended, as the CLI's "keeps going without this terminal" line does today.
+  - Past 10 minutes it returns `state: "running"`, the run id and `fleet_url`, the app's page. `canyon_status` then reads where it ended, as the CLI's "keeps going without this terminal" line does today.
 
 ### 1.2 No secret value passes through a tool
 
@@ -303,7 +304,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
    - Acceptance: `make test PKG=./cli RUN=TestMCP` (an in-memory MCP client against a stub host) · `make third-party-notices-check` · `make test PKG=./cmd/canyon RUN=TestCLIIsApache`.
 2. **Local write tools.**
    - What: `canyon_check`, `canyon_deploy` and `canyon_promote`, with elicitation and `confirm`, progress, and the 10-minute hand-off.
-   - Acceptance: `make test PKG=./cli RUN='TestMCP(Check|Deploy|Promote)'` · `make demo-check` (gains a step that drives a check and a deploy through `canyon mcp`).
+   - Acceptance: `make test PKG=./cli RUN='TestMCP(Check|Deploy|Promote)'` · the stack suite's `TestMCPChecksAndDeploysOnTheStack` (`make e2e`): an MCP client drives a check and a deploy through the built `canyon mcp`. `make demo-check` builds no app, so the journey lives with the ones that do.
 3. **`skill install` writes MCP config.**
    - What: the three harnesses, plus uninstall, and the skill text names the tools.
    - Acceptance: `make test PKG=./cli RUN='TestSkill(Install|Uninstall)MCP'` · `make test PKG=./qa/agent`.

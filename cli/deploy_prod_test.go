@@ -432,7 +432,7 @@ func TestTheQuestionDefaultsToNoAndOnlyATerminalMayAnswerIt(t *testing.T) {
 	if code != exitError || len(enter.posts) != 0 {
 		t.Errorf("Enter exited %d and sent %q", code, enter.posts)
 	}
-	if errs != "\n  Promote claims-portal to production? [y/N] " {
+	if errs != "\n  Promote claims-portal v1.3 to production? [y/N] " { // D5's question names what ships
 		t.Errorf("the question this build asks is %q", errs)
 	}
 	if !strings.Contains(out, noRebuild) || !strings.HasSuffix(out, "\n  Nothing was promoted.\n") {

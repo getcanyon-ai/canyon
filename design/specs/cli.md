@@ -4020,6 +4020,17 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   checks, refusals and lines are the verb's own: `canyon_status` is `canyon status --format json`, `canyon_logs` is
   `canyon logs --format ai` on the masked read (`redaction=masked`, at most 200 lines, never followed), and
   `canyon_rules` is `canyon manifest`'s read, the typed manifest as structured content and the agent's rendering as text.
+- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`: the block as text,
+  and the verdict typed, `{run, state, failure_reason?, blocking, warnings, findings}`, `findings` the run's SARIF log as
+  `GET /gate-runs/:id/sarif` serves it, and a deploy's `url`, `answered` and `access`. Each `progress` row of the run is a
+  progress notification. Past 10 minutes the tool stops following: §3.5's still-running block, `state: "running"`, the
+  run and `fleet_url`, and the run goes on.
+- **`canyon_promote`** is `canyon deploy --env prod` under `--format ai`. Where the client can ask the person, §6.3's
+  question goes to them at the point the verb asks it, as an input request, whatever `confirm` says; a no prints
+  `Nothing was promoted.` Where it can't, only `confirm` sends `--yes`, and without it the verb's block has the agent
+  ask the user.
+- **`dir`** is the server's directory or one under it, links resolved; any other is refused before anything is read
+  or sent, so no tool packages a home directory.
 - **The instructions** are D5's preamble and then the manifest as `canyon manifest --format ai` prints it, read once at
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.

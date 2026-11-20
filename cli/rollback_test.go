@@ -417,3 +417,12 @@ func TestStatusListsEarlierVersions(t *testing.T) {
 		t.Errorf("status under ai: no %q in\n%s", want, out.String())
 	}
 }
+
+// The question names the version going back and the one it replaces (D5): the person answering sees what ships.
+func TestTheRollbacksQuestionNamesBothVersions(t *testing.T) {
+	h := &rollbackHost{status: rollbackRead(t), review: reviewed("clean", ""), tty: true, input: "\n"}
+	_, errs, code := rollingBack(t, h, "--version", "v1.3")
+	if code != exitError || len(h.posts) != 1 || !strings.HasSuffix(errs, "\n  Put claims-portal v1.3 back in production, replacing v1.4? [y/N] ") {
+		t.Errorf("exit %d, sent %q, stderr %q", code, h.posts, errs)
+	}
+}

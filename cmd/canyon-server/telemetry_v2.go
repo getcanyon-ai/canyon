@@ -263,7 +263,7 @@ func (a *app) telemetryV2(ctx context.Context, q querier, r *telemetryReport, si
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND harness = 'codex'),
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND harness IS NULL AND started_by_kind = 'agent'),
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport IS NULL),
-		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport = 'mcp-remote'), -- PLANTED FAULT: mcp_local counted from mcp-remote
+		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport = 'mcp-local'),
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport = 'mcp-remote'),
 		count(DISTINCT project_id) FILTER (WHERE kind = 'gate' AND created_at > now() - interval '7 days'),
 		count(DISTINCT project_id) FILTER (WHERE kind = 'gate' AND created_at > now() - interval '28 days')

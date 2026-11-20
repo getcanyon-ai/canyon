@@ -157,6 +157,18 @@ describe("the parts", () => {
     expect([...container.querySelectorAll("a")].map((one) => one.getAttribute("href"))).toEqual(["https://example.com"]);
   });
 
+  // Nothing an admin writes reaches the DOM as something that runs: no script, no element with a handler, no fetched
+  // image, and a link only to an http(s) address. The rest is the body's own text.
+  it("renders a body with a script, a handler, a javascript: link and a data: image inert", () => {
+    const body = "<script>alert(1)</script>\n\nText <img src=x onerror=alert(2)> inline <b onclick=alert(3)>b</b>\n\n" +
+      "[run](javascript:alert(4)) [vb](vbscript:msgbox) [rel](/admin) ![pixel](data:image/png;base64,AAAA) [ok](https://example.com)\n";
+    const { container } = render(<Markdown text={body} />);
+    expect(container.querySelectorAll("script, img, iframe, object, embed, b")).toHaveLength(0);
+    expect([...container.querySelectorAll("*")].flatMap((one) => one.getAttributeNames()).filter((name) => name.startsWith("on"))).toEqual([]);
+    expect([...container.querySelectorAll("a")].map((one) => [one.getAttribute("href"), one.getAttribute("rel")])).toEqual([["https://example.com", "noopener noreferrer"]]);
+    for (const text of ["<script>alert(1)</script>", "<img src=x onerror=alert(2)>", "<b onclick=alert(3)>", "[run](javascript:alert(4))", "[rel](/admin)", "pixel"]) expect(container.textContent).toContain(text);
+  });
+
   it("reads a SKILL.md's frontmatter with a YAML parser, and refuses one without a name or a description", () => {
     expect(skillOf("---\r\nname: 'A: b'\r\ndescription: c\r\n---\r\nbody\r\n")).toEqual({ name: "A: b", description: "c", body: "body\n" });
     expect(skillOf("---\nname: a\n---\nbody")).toBe("The SKILL.md's frontmatter needs a name and a description.");

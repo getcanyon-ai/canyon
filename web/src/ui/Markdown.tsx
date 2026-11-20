@@ -3,13 +3,14 @@ import { Lexer, type Token, type Tokens } from "marked";
 
 // Markdown is a playbook's body as its preview shows it (Guardrails › Playbooks): marked's lexer reads the Markdown,
 // a real parser, and its tokens become React elements here, so no text an admin writes is ever HTML on the page —
-// raw HTML in the body shows as its own text, an image as its alt text with no fetch, and a link goes only to
-// http, https or mailto.
+// raw HTML in the body, block or inline, shows as its own text; an image is its alt text, never fetched; and a link
+// is a link only to an http or https address, opened with rel="noopener noreferrer", any other (javascript:, data:,
+// vbscript:, a relative path) its own text.
 export function Markdown({ text }: { text: string }) {
   return <div className="text-base break-words">{blocks(Lexer.lex(text))}</div>;
 }
 
-const SAFE = /^(https?:|mailto:)/i;
+const SAFE = /^https?:\/\//i;
 
 function blocks(tokens: Token[]): ReactNode[] {
   return tokens.map((token, i) => block(token, i));
@@ -61,7 +62,7 @@ function inline(tokens: Token[], at?: number): ReactNode {
       case "br": return <br key={i} />;
       case "link": {
         const link = t as Tokens.Link;
-        return SAFE.test(link.href) ? <a key={i} className="text-link" href={link.href} rel="noreferrer noopener" target="_blank">{inline(link.tokens)}</a> : <span key={i}>{inline(link.tokens)}</span>;
+        return SAFE.test(link.href) ? <a key={i} className="text-link" href={link.href} rel="noopener noreferrer" target="_blank">{inline(link.tokens)}</a> : <span key={i}>{link.raw}</span>;
       }
       case "image": return (t as Tokens.Image).text;
       default: return t.raw; // raw HTML among them: its own text, never markup

@@ -491,6 +491,8 @@ type app struct {
 	modelID    string       // the id it is sent
 
 	boot gatepolicy.Snapshot // the policy snapshot as booted: the rule list, and the base effectivePolicy lays the org's edits over
+
+	clientDocuments *http.Client // fetches an OAuth client's metadata document: nil is clientDocumentClient's, a test's own otherwise
 }
 
 // refuseNewKeyOverSealedRows fails the boot that generated a key while secrets sealed under
@@ -635,6 +637,7 @@ func serve(ctx context.Context, ln net.Listener, logOut io.Writer, a *app) error
 	routesFleet(api, a)
 	routesSessions(api, a)
 	routesDeviceGrants(api, a)
+	routesOAuthRequests(api, a)
 	routesPromote(api, a)
 	routesPromotionApprovals(api, a)
 	routesPatching(api, a)

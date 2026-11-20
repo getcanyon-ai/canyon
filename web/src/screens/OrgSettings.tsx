@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { putPreferences, said, type Overridable, type Preferences, type PreferencesEdit } from "../api";
-import { APPROVAL, S } from "../strings";
+import { useEffect, useState, type ReactNode } from "react";
+import { endSession, listSessions, putPreferences, said, type ListedSession, type Overridable, type Preferences, type PreferencesEdit } from "../api";
+import { APPROVAL, S, SESSIONS } from "../strings";
 import { Button } from "../ui/Button";
 import { EnterpriseLine, unlocks, useLicence } from "../ui/Enterprise";
 
@@ -361,6 +361,56 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
           <p className={NOTE}>{APPROVAL.switchNote}</p>
         </section>
       </Section>
+      <Sessions admin={admin} />
     </>
+  );
+}
+
+const when = (at: string) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+
+// The reader's live sessions, and everyone's to an admin (contracts/routes.md, Sessions): how each signed in, an MCP
+// client by its name, and Disconnect on every one but the reader's own browser session, which keeps Sign out.
+export function Sessions({ admin }: { admin: boolean }) {
+  const [sessions, setSessions] = useState<ListedSession[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const read = () => listSessions().then((answer) => setSessions(answer.sessions), (err: unknown) => setFailure(said(err)));
+  useEffect(() => { void read(); }, []);
+  const end = (id: string) => () => void endSession(id).then(read, (err: unknown) => setFailure(said(err)));
+  return (
+    <section aria-label={SESSIONS.title} className="mt-8">
+      <h2 className={H2}>{SESSIONS.title}</h2>
+      <p className={SUB}>{SESSIONS.line}</p>
+      {failure !== null && <p className="mt-2 text-md text-critical">{failure}</p>}
+      {sessions !== null && (
+        <table className="mt-3 w-full text-left text-md">
+          <thead className="text-text-dim">
+            <tr>
+              {admin && <th className="py-1.5 font-medium">{SESSIONS.person}</th>}
+              <th className="py-1.5 font-medium">{SESSIONS.how}</th>
+              <th className="py-1.5 font-medium">{SESSIONS.since}</th>
+              <th className="py-1.5 font-medium">{SESSIONS.lastUsed}</th>
+              <th className="py-1.5 font-medium">{SESSIONS.expires}</th>
+              <th className="py-1.5"><span className="sr-only">{SESSIONS.disconnect}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.id} className="border-t border-border">
+                {admin && <td className="py-2">{s.person?.email ?? ""}</td>}
+                <td className="py-2">{s.flow === "oauth" ? SESSIONS.flow.oauth.replace("<client>", s.client ?? "") : SESSIONS.flow[s.flow]}</td>
+                <td className="py-2">{when(s.created_at)}</td>
+                <td className="py-2">{s.last_seen_at === null ? "" : when(s.last_seen_at)}</td>
+                <td className="py-2">{when(s.expires_at)}</td>
+                <td className="py-2 text-right">
+                  {s.current && s.flow === "device"
+                    ? <span className="text-text-dim">{SESSIONS.current}</span>
+                    : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={end(s.id)}>{SESSIONS.disconnect}</Button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

@@ -161,7 +161,8 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The team setup on one Docker server (docs: self-host/docker.md): the shipped compose file and deploy/docker/team.yml,
     # signing people in through the stub's OIDC issuer (make e2e-up OIDC=1), and e2e/oidc's journey on it: the admin's
-    # browser sign-in, canyon login's code approved, a deploy, and a teammate refused until the app is shared.
+    # browser sign-in, canyon login's code approved, a deploy, a teammate refused until the app is shared, and an MCP client's
+    # consent as the admin and as a member (e2e/oidc/oauth_test.go, e2e/ui's consent project).
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 45
     permissions:
@@ -178,6 +179,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: actions/setup-node@v4 # e2e/ui's consent project, which the journey runs
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/ui/package-lock.json
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e/ui
       - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
       - run: make e2e-up OIDC=1
       - name: the team setup's sign-in, deploy and sharing (e2e/oidc), every test listed run and passed, so a skip never passes

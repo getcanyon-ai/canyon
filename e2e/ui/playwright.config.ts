@@ -42,6 +42,14 @@ export default defineConfig({
       retries: 0,
       use: { baseURL: process.env.E2E_CANYON_URL, ignoreHTTPSErrors: true, trace: "off", video: "off", screenshot: "off", viewport: { width: 1360, height: 900 } },
     },
+    // An MCP client's consent page on the team setup, which e2e/oidc/oauth_test.go runs as the admin and as a member (never
+    // make e2e-ui): the authorization server is served only with sign-in on, which the Docker projects' stack has off.
+    {
+      name: "consent",
+      testDir: "consent",
+      retries: 0,
+      use: { baseURL: process.env.E2E_CANYON_URL, trace: "retain-on-failure", viewport: { width: 1360, height: 900 } },
+    },
     // Settings › Patching on the team setup with patching on, which e2e/oidc/patch_test.go runs mid-journey (never make
     // e2e-ui): patching needs sign-in on (design/PATCHING.md §4.5), which the Docker projects' stack has off.
     {

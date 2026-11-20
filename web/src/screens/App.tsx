@@ -24,6 +24,7 @@ import { Outbound, prodPending } from "./Outbound";
 import { Provided } from "./Provided";
 import { SystemLibraries } from "./SystemLibraries";
 import { AppSections } from "./AppSections";
+import { Secrets } from "./Secrets";
 import { BuildFailure, CopyForAgent, useBroke } from "./BuildFailure";
 import { Progress, progressWords, useProgress } from "./Progress";
 import { Missing } from "../ui/Missing";
@@ -786,6 +787,8 @@ export function App({ id, run: pinned = null, auth, outbound = false }: { id: st
               told={(read) => { const now = prodPending(read); setRefused((was) => (was.join(" ") === now.join(" ") ? was : now)); setEgress(read); }} />
             {/* What Canyon adds under the app, as its known-vulnerable check reads it: a contributor's and up (design/PERMISSIONS.md). */}
             <SystemLibraries id={id} envs={status.envs} />
+            {/* The app's secrets by name, and the form that sets one: a contributor's and up (design/specs/mcp.md §10.1). */}
+            <Secrets id={id} />
             <AppSections project={project} envs={status.envs} refreshed={() => void tick.current()} />
           </>
         )}

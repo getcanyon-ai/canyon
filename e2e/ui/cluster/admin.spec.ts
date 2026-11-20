@@ -115,7 +115,7 @@ test("A2 front door, choice 2: the probe passes", async ({ page }) => {
   await expect.poll(() => kube("canyon-apps", "pods,jobs,services,networkpolicies", "canyon.probe=true").map((o) => o.metadata.name), { timeout: 30_000, message: "objects labelled canyon.probe left in canyon-apps" }).toEqual([]);
 });
 
-test("A3 the front door and outbound refuse a member", async ({ page }) => {
+test("A3 the front door, outbound and playbooks refuse a member", async ({ page }) => {
   const session = await signIn(page, "alice");
   await page.goto("/#/settings/hosting");
   const door = settings(page);
@@ -140,6 +140,17 @@ test("A3 the front door and outbound refuse a member", async ({ page }) => {
   const mode = await raw(session, "PUT", "/api/v1/egress", { mode: "allowlist" });
   expect(mode.status, mode.text).toBe(403);
   expect((mode.json as { error: string }).error).toBe("admin_required");
+
+  // The org's playbooks are every member's to read, through the API an agent reads them by, and an admin's to write,
+  // in Guardrails, an admin's screen (design/specs/mcp.md §3.2; design/PERMISSIONS.md, Playbooks).
+  await page.goto("/#/guardrails/playbooks");
+  await expect(page.getByText("Only an admin can open Guardrails.")).toBeVisible();
+  const list = await raw(session, "GET", "/api/v1/playbooks");
+  expect(list.status, list.text).toBe(200);
+  const write = await raw(session, "PUT", "/api/v1/playbooks/a3-member", { name: "A3", kind: "note", when: "Never.", body: "Never saved.\n" });
+  expect(write.status, write.text).toBe(403);
+  expect((write.json as { error: string }).error).toBe("admin_required");
+  expect((await raw(session, "GET", "/api/v1/playbooks/a3-member")).status).toBe(404);
 });
 
 test("A5 apps call out through Canyon", async ({ page }) => {

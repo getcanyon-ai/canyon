@@ -178,6 +178,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: actions/setup-node@v4 # e2e/ui's secrets project, which e2e/oidc/secrets_test.go runs as each person
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/ui/package-lock.json
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e/ui
       - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
       - run: make e2e-up OIDC=1
       - name: the team setup's sign-in, deploy and sharing (e2e/oidc), every test listed run and passed, so a skip never passes
@@ -198,6 +205,13 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: oidc-walk # the Secrets section as each person saw it (e2e/ui/secrets); a typed value is a password field's dots
+          path: e2e/ui/.work/walk
+          retention-days: 7
+          if-no-files-found: ignore
 
 
   e2e-ui:

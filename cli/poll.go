@@ -97,6 +97,24 @@ func poll(ctx context.Context, c *Client, run string, clk clock, ceiling time.Du
 	return follow(ctx, c, run, clk, ceiling, each, patiently)
 }
 
+// poll is poll within this invocation: an MCP tool's hand-off shortens the ceiling, and its progress
+// is told each row.
+func (a *app) poll(ctx context.Context, c *Client, run string, ceiling time.Duration, each func(timelineRow)) (timeline, error) {
+	if a.handoff > 0 && a.handoff < ceiling {
+		ceiling = a.handoff
+	}
+	if told := a.onRow; told != nil {
+		inner := each
+		each = func(row timelineRow) {
+			if inner != nil {
+				inner(row)
+			}
+			told(row)
+		}
+	}
+	return poll(ctx, c, run, a.clock, ceiling, each)
+}
+
 // askedOnce asks once, never again: a read that waits on nobody, such as canyon status's platform row (#2730).
 func askedOnce(_ context.Context, _ clock, _ time.Time, _ time.Duration, ask func() error) error {
 	return ask()

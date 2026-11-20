@@ -20,6 +20,8 @@ type promoted struct {
 	keeps             string        // the version a rollback took out of production that preview still runs; "" otherwise (#2787)
 	advisory          []receiptRule // the receipt's rules that failed and block nothing, as canyon status says them (#2300)
 	ask               string        // the step that has the agent ask the user, where nothing here can answer the question (#2875)
+	question          string        // production's question, naming what ships (D5): a person answers it, at a terminal or through an MCP client
+	ships             string        // what goes to production, past its label: preview's run, or the image a rollback puts back. An answer is to it
 }
 
 // again is the command that asks for this promotion once more.

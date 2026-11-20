@@ -62,6 +62,8 @@ function worded(action: string, detail: Record<string, unknown>): string {
     .replace("<run>", () => (detail.kind === "promote" ? "the promotion" : "the run"))
     .replace("<started_by>", () => { const by = detail.started_by as ActorRef | null | undefined; return by === null || by === undefined ? "someone" : actorName(by); })
     .replace("<image>", () => PATCHING.liveImage.replace("<hex>", () => hex12(text(detail.identity))))
+    .replace("<slug>", () => text(detail.slug))
+    .replace("<from>", () => String(detail.from ?? ""))
     .replace("<reason>", () => text(detail.reason)); // last: a person's words, never read for a word to fill
   return detail.forced === true ? `${said}${S.auditForced}` : said;
 }

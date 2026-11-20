@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"time"
 )
@@ -30,11 +29,11 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 		a.park()
 		defer a.unpark(true)
 	}
-	dir, err := os.Getwd()
+	dir, err := a.getwd()
 	if err != nil {
 		return a.usage(err)
 	}
-	p, err := readProject(dir) // prod reads the file; writing it is a preview deploy's alone (§3.2)
+	p, err := a.project() // prod reads the file; writing it is a preview deploy's alone (§3.2)
 	if err != nil {
 		return a.usage(err)
 	}
@@ -106,6 +105,7 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 	}
 	out.missing, out.unchecked = a.missingInProd(ctx, client, at)
 	out.ask = "Ask the user whether to put " + a.version(preview) + " in production; if they say yes, run canyon deploy --env prod --yes."
+	out.question, out.ships = "Promote "+cell(p.App)+" "+a.version(preview)+" to production?", *read.PromoteRun
 	return a.promote(ctx, client, at, read, out, *read.PromoteRun, asks, yes, wait) // the run the status read answered, never "latest" and never omitted (routes.md)
 }
 
@@ -113,10 +113,19 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 // gateRun and follows it: preview's run, or a rollback review's.
 func (a *app) promote(ctx context.Context, client *Client, at string, read statusRead, out promoted, gateRun string, asks, yes, wait bool) int {
 	if !asks {
+		if !yes && a.elicit != nil { // an MCP client that can ask the person asks them, the CLI's own question
+			asked, said := a.elicit(out.question, out.app+" "+out.ships)
+			if asked && !said {
+				a.printf("\n  Nothing was promoted.\n")
+				a.declined = true
+				return exitError
+			}
+			yes = said
+		}
 		if !yes && a.render.Format == FormatAI { // nothing here can answer the question: the agent asks the user (#2875)
 			return a.aiUnasked(out, read.Envs["prod"].running())
 		}
-		if code, ok := a.confirm(yes, "Promote "+cell(out.app)+" to production?", "Nothing was promoted."); !ok {
+		if code, ok := a.confirm(yes, out.question, "Nothing was promoted."); !ok {
 			return code
 		}
 	}
@@ -166,7 +175,7 @@ func (a *app) followPromotion(ctx context.Context, client *Client, at string, re
 	a.printf("\n  %s\n", a.render.paint(ansiDim, "Promote"))
 	var last string
 	var live *deployed
-	if _, err := poll(ctx, client, run, a.clock, deployCeiling, func(row timelineRow) {
+	if _, err := a.poll(ctx, client, run, deployCeiling, func(row timelineRow) {
 		switch row.Kind { // the run's own lines, each as the server writes it: a resource, the start, live at
 		case "build.log":
 			var logged struct {

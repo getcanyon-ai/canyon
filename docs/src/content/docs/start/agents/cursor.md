@@ -91,7 +91,7 @@ the rule and Canyon's entry in `.cursor/hooks.json`, and leaves the rest of that
 ## Add Canyon's MCP server in one click
 
 Canyon's MCP server, `canyon mcp`, gives Cursor's agent Canyon as tools, with typed arguments and
-results, beside the `canyon` commands it already runs: your org's rules, and an app's status and logs.
+results, beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it.
 It runs as the `canyon` you installed, signed in as it is. With `canyon` on your `PATH`, open this link and
 Cursor asks you to install it:
 

@@ -161,7 +161,7 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	}
 	a.park() // after parse, so --help prints in every format; every return unparks
 	defer a.unpark(true)
-	dir, err := os.Getwd()
+	dir, err := a.getwd()
 	if err != nil {
 		return a.usage(err)
 	}
@@ -189,7 +189,7 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 		return a.fail(err)
 	}
 	each, stop := a.narrate(&run)
-	seen, err := poll(ctx, client, started, a.clock, checkCeiling, each)
+	seen, err := a.poll(ctx, client, started, checkCeiling, each)
 	stop()
 	if code, still := a.reviewStillRunning(run, started, seen, err); still { // the review goes on in Canyon (#2730)
 		return code
@@ -605,6 +605,7 @@ func runNamed(raw json.RawMessage) string {
 // with no answer. The CLI derives no verdict, and refuses one that argues with its own findings:
 // a passing exit on a run carrying a blocker is the one failure this product cannot have.
 func (a *app) verdict(run checkRun) int {
+	a.ended = &run
 	res := run.Result
 	if !a.agrees(run) {
 		return exitError

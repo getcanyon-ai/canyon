@@ -100,6 +100,7 @@ func (a *app) aiStillRunning(run checkRun, id string, seen timeline, reason, out
 func (a *app) aiNotFollowed(result string, run checkRun, id string, seen timeline, reason, outcome string, steps ...string) int {
 	a.unpark(false)
 	run.Run, run.StartedAt = id, seen.StartedAt
+	a.ended = &run // an MCP tool's result: state running, this run, its page
 	a.aiHead(run, result)
 	a.aiGateRun(run)
 	recap := []string{"reason: " + cell(reason)}

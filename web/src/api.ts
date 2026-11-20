@@ -90,7 +90,7 @@ export interface Finding {
   entry: number;
   locations: [{ physicalLocation: { artifactLocation: { uri: string }; region: { startLine: number; startColumn: number; snippet: { text: string } } } }];
   partialFingerprints: { "canyon/v1": string };
-  properties: { canyon: { severity: "critical" | "high" | "medium" | "low"; blocks: boolean; title: string; problem: string; fix: string; policy_name?: string; required_end_state?: string; do_not?: string[]; shown?: { startColumn: number; endColumn: number }; carried_from?: string } };
+  properties: { canyon: { severity: "critical" | "high" | "medium" | "low"; blocks: boolean; title: string; problem: string; fix: string; policy_name?: string; required_end_state?: string; do_not?: string[]; shown?: { startColumn: number; endColumn: number }; carried_from?: string; playbook?: PlaybookRef } };
   // Present only while an unexpired approval covers the finding (contracts/routes.md, GET /gate-runs/:id).
   approval?: { reason: string; expires_at: string; approved_by: Actor };
   // The tool that found it, as the run read names it: absent on a finding read from a log itself.
@@ -186,7 +186,9 @@ export interface PreferencesEdit {
 export interface ManifestPolicy { id: string; name: string; state: "off" | "advisory" | "blocking"; production?: "advisory" | "blocking"; how?: string; instructions?: string }
 export interface ManifestDesignSystem { name: string; namespace: string; registry_url: string; tokens_url?: string }
 // `prod_approval`: whether a person approves each promotion in the dashboard (design/AUTH.md §4.5).
-export interface Manifest { host: string; policies: ManifestPolicy[]; component_types: string[]; stacks: Stack[]; design_system: ManifestDesignSystem | null; prod_approval: boolean }
+export interface Manifest { host: string; policies: ManifestPolicy[]; component_types: string[]; stacks: Stack[]; design_system: ManifestDesignSystem | null; prod_approval: boolean; playbooks?: ManifestPlaybook[] }
+// A playbook as an agent is handed it, never its body (contracts/routes.md, GET /skill/manifest).
+export interface ManifestPlaybook { slug: string; name: string; kind: PlaybookKind; when: string; version: number }
 // One setup turn. `tool` is a string and not the schema's two-name enum: the dispatcher grows tools
 // the bundle was built before, and the panel has to echo one it has never heard of. `before` and
 // `after` are typed JSON the panel prints as typed JSON — nothing here reads inside them.
@@ -391,6 +393,12 @@ export const listRuns = (id: string, cursor: string | null) => call<{ runs: RunR
 // query is the trail read's query string as the caller builds it (project, cursor, limit); the server filters and pages.
 export const listAudit = (query: string) => call<AuditPage>("GET", query === "" ? "/audit" : `/audit?${query}`);
 export const listSecrets = (id: string) => call<{ secrets: Secret[] }>("GET", `/projects/${encodeURIComponent(id)}/secrets`);
+// A secret set or replaced, and removed (contracts/routes.md, the secrets rows): the value travels in this PUT alone, and no
+// route ever answers one back. env and where are sent as chosen, never left for the server to default.
+export const setSecret = (id: string, name: string, body: { value: string; env: "preview" | "prod"; where: "runtime" | "build" }) =>
+  call<void>("PUT", `/projects/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, body);
+export const removeSecret = (id: string, name: string, env: "preview" | "prod") =>
+  call<void>("DELETE", `/projects/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}?env=${env}`);
 // The Access group (contracts/routes.md): the read, and a share that writes one grant whole and
 // answers the read again. Every route but asking is its owners' and admins'.
 export type GrantKind = "email" | "group" | "everyone";
@@ -422,10 +430,26 @@ export const applyPolicy = (rule: string, body: PolicyChange & { grace_days?: nu
 // admin saves a rule's next version; its state is the policies row's, like any rule's.
 // Its check is how its version is checked: by code, with the condition in plain words, or by AI (#2639).
 export interface CustomCheck { by: "code" | "ai"; expr?: string; says?: string; facts_version: number }
-export interface CustomRule { rule: string; name: string; instructions: string; check: CustomCheck; version: number; set_by: Actor; set_at: string }
+// `playbook` is the slug of the org's playbook the version points at, null for none: a PUT that leaves it out points at none.
+export interface CustomRule { rule: string; name: string; instructions: string; check: CustomCheck; playbook: string | null; version: number; set_by: Actor; set_at: string }
 export const getCustomRules = () => call<{ custom_rules: CustomRule[] }>("GET", "/custom-rules");
-export const putCustomRule = (slug: string, body: { name: string; instructions: string; check?: "code" | "ai" }) =>
+export const putCustomRule = (slug: string, body: { name: string; instructions: string; check?: "code" | "ai"; playbook?: string | null }) =>
   call<{ custom_rule: CustomRule; why?: string }>("PUT", `/custom-rules/${encodeURIComponent(slug)}`, body);
+// The org's playbooks (contracts/routes.md, the playbooks row; design/specs/mcp.md §3): how the org builds, which
+// agents read and Canyon never checks. Every member reads one that stands; an admin, from a browser, saves, removes
+// and restores them, and reads every version, a removed playbook's too.
+export type PlaybookKind = "skill" | "note";
+export interface PlaybookRef { slug: string; name: string }
+export interface PlaybookText { name: string; kind: PlaybookKind; when: string; body: string }
+export interface PlaybookEntry { slug: string; name: string; kind: PlaybookKind; when: string; version: number; updated_by: Actor; updated_at: string }
+export interface Playbook extends PlaybookEntry { body: string }
+export interface PlaybookVersion extends PlaybookText { version: number; set_by: Actor; set_at: string }
+export const getPlaybooks = () => call<{ playbooks: PlaybookEntry[] }>("GET", "/playbooks");
+export const getPlaybook = (slug: string) => call<{ playbook: Playbook }>("GET", `/playbooks/${encodeURIComponent(slug)}`);
+export const putPlaybook = (slug: string, body: PlaybookText) => call<{ playbook: Playbook }>("PUT", `/playbooks/${encodeURIComponent(slug)}`, body);
+export const removePlaybook = (slug: string) => call<void>("DELETE", `/playbooks/${encodeURIComponent(slug)}`);
+export const getPlaybookVersions = (slug: string) => call<{ slug: string; removed: boolean; versions: PlaybookVersion[] }>("GET", `/playbooks/${encodeURIComponent(slug)}/versions`);
+export const restorePlaybook = (slug: string, version: number) => call<{ playbook: Playbook }>("POST", `/playbooks/${encodeURIComponent(slug)}/restore`, { version });
 // A dry run of a rule checked by code: its current version judged on every app's latest review, an
 // admin's alone (contracts/routes.md, the dry-run row; #2640). Nothing is written.
 export interface DryRunApp { project: string; result: "pass" | "fail" | "not_checked"; why?: string }

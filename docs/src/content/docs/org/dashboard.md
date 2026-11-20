@@ -58,8 +58,9 @@ the app's owners and admins, "Rename…" and "Delete app…". Further down the p
 - **What Canyon checked**: what this review ran.
 - **Who can open it**, where people sign in: who the app is shared with. Its owners and admins share it and answer
   requests here. See [Share an app](/build/share/).
-- **History**, closed until you open it, with four tabs: **Versions**, **Reviews**, **Secrets** and
-  **Activity**.
+- **Secrets**, for the app's owners and contributors and admins: the app's secrets by name, and a
+  form to set, replace or remove one. See [Secrets](/build/secrets/#in-the-dashboard).
+- **History**, closed until you open it, with three tabs: **Versions**, **Reviews** and **Activity**.
 
 Someone without access to an app who opens its link sees "You don't have access to" the app, and an
 "Ask for access" button.

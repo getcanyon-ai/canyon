@@ -11,11 +11,12 @@ told before they write code.
 coding agents are told." Only an admin can open it. A member who follows a link there is told "Only
 an admin can open Guardrails." What an app must pass is on that app's page.
 
-It has four pages:
+It has five pages:
 
 - **Pipeline:** where each rule is checked, before preview or before production.
 - **Policies:** each rule's state, and your own custom rules.
 - **Scanners:** the tools Canyon runs, and their settings.
+- **Playbooks:** how your org builds, written down for coding agents to read.
 - **What agents are told:** the stacks, buildpacks and design system coding agents are told to use.
 
 ## Off, Advisory, Blocking
@@ -234,6 +235,25 @@ selling software built on it, so whether your organisation may use it is your de
 A private rules repository needs a username and token, saved once. Canyon never shows the token
 again, only that a credential is set, for which repository, by whom and when. "Remove" deletes it,
 and so does changing the repository.
+
+## Playbooks
+
+A playbook is how your org builds, in its own words: a **skill**, how to do a kind of task such as
+adding a route, or a **note**, something to know such as how the database fails over. Every coding
+agent is told each playbook's name and when to read it, and reads the ones that fit its task.
+Canyon never checks a playbook: a rule does that.
+
+1. Click "New playbook", or "Import a SKILL.md" to start from a skill file you already have: its
+   name becomes the playbook's name, its description when to read it, and the rest the body.
+2. Write the body in Markdown. "Preview" shows how it reads.
+3. Save it. Each save is a new version.
+
+"History" lists every version, shows what changed between any two, and restores an older one, which
+saves its text as a new version. "Remove" stops agents being handed it and keeps its versions. A
+playbook can't hold a secret: a save with one is refused. A Canyon keeps up to 50 playbooks.
+
+A custom rule can point at a playbook: pick it under "Playbook" in the rule's editor. A finding of
+that rule then tells the agent, after the fix, to read the playbook.
 
 ## What agents are told
 

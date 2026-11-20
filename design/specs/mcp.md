@@ -180,7 +180,7 @@ Enterprise (decided).
 
 ### 3.2 Authoring: Guardrails › Playbooks
 
-- **The list:** name, kind, `when`, version, updated by and at, and reads in the last 30 days (§3.5).
+- **The list:** name, kind, `when`, version, updated by and at, reads in the last 30 days, and, for a skill, "on N machines" (§3.5).
 - **The editor:** Markdown with a preview, saving a new version each time.
 - **History:** every version is kept, with a diff between any two. A restore saves an old version's text as a new version.
 - **Import:** paste or upload a `SKILL.md`. Its frontmatter `name` fills `slug`, `description` fills `when`, and the rest is the body, as `kind: skill`.
@@ -214,12 +214,17 @@ Enterprise (decided).
   - Through MCP, the tool is named first: `Read the playbook <name>: call canyon_playbook with slug <slug>`.
 - **A removed playbook** drops the link. The snapshot carries `playbook` only while the playbook exists, so the finding carries none and the rule keeps working.
 
-### 3.5 Reads
+### 3.5 Reads and syncs
 
-- **What's counted:** each fetch of a playbook, by tool, resource, `canyon playbook` or native-skill sync, counted per playbook per day per way.
-- **What isn't:** no row names a person; it's counts only.
-- **Where it shows:** the list's reads in the last 30 days, so the team sees whether agents use a playbook.
-- **Storage:** migration `playbook_reads`, numbered at merge (§6, item 10).
+Two numbers, both counts only, neither naming a person:
+
+- **Reads:** each fetch of a playbook through the tool, the resource or `canyon playbook`, counted per playbook per day per way.
+- **Syncs, shown as "on N machines":** the distinct sessions whose native skill holds a playbook's current version, over the last 30 days.
+  - **How a sync is recorded.** At each session start, the hook's manifest request names the versions its skills already hold. The server records one sync per current version, held or just fetched.
+  - **Why it's separate.** A sync fetches a playbook only when its version changes, so counted as reads, a heavily used skill would show close to none.
+  - **What's stored.** A keyed hash of the session, under a key Canyon rotates every 30 days and never keeps with the sessions, so a row can't be joined back to a person. The rows are deleted after 30 days.
+- **Where they show:** the list shows both. One line says Canyon can't see an agent reading its local copy of a skill: "on N machines" says where the current version is, not how often it's read.
+- **Storage:** two migrations, numbered at merge: `playbook_reads` and `playbook_syncs` (§6, item 10).
 
 ## 4. Permissions
 
@@ -259,7 +264,8 @@ Named here, and edited later in the PR that builds each.
   - `/mcp` (POST, GET, DELETE), and the two `.well-known` metadata routes;
   - `/oauth/authorize`, `/oauth/token` and `/oauth/register`;
   - `POST /api/v1/projects/:id/packages/from-repository {ref}`;
-  - the playbook routes (`GET /api/v1/playbooks`, `GET|PUT|DELETE /api/v1/playbooks/:slug`, `GET …/:slug/versions`, `POST …/:slug/restore {version}`), the reads in the list;
+  - the playbook routes (`GET /api/v1/playbooks`, `GET|PUT|DELETE /api/v1/playbooks/:slug`, `GET …/:slug/versions`, `POST …/:slug/restore {version}`), the reads and machines in the list;
+  - the versions a manifest request says its skills hold (§3.5);
   - `playbook` on `PUT /api/v1/custom-rules/:slug` and its `GET`;
   - linking a repository (`PUT …/repository`) at contributor, on a repository the org's Canyon App sees (§10.1);
   - `playbooks[]` on `GET /skill/manifest`;
@@ -322,8 +328,8 @@ Each runs its acceptance in CI, and shows its new checks red first.
    - What: Guardrails › Playbooks: the list, the editor with preview, history with diff, restore, and import of a `SKILL.md`; the rule editor's playbook field; the finding's playbook step on the app page.
    - Acceptance: `cd web && npx vitest run src/screens/Playbooks.test.tsx src/screens/CustomRules.test.tsx` · `make e2e-ui` (an admin writes, imports and restores; a contributor reads, and is refused a write).
 10. **Playbooks, handed out.**
-    - What: `canyon_playbook` on both servers, the resource, `canyon playbook`, the hook's native-skill sync and its uninstall, and the read counts with their migration, `playbook_reads`.
-    - Acceptance: `make test PKG=./cli RUN='TestPlaybook|TestSkillSyncTouchesOnlyItsOwn'` · `make test PKG=./cmd/canyon-server RUN='TestMCPPlaybook|TestPlaybookReads'` · `make test PKG=./qa/agent`.
+    - What: `canyon_playbook` on both servers, the resource, `canyon playbook`, the hook's native-skill sync and its uninstall, and the read and sync counts with their migrations, `playbook_reads` and `playbook_syncs`.
+    - Acceptance: `make test PKG=./cli RUN='TestPlaybook|TestSkillSyncTouchesOnlyItsOwn'` · `make test PKG=./cmd/canyon-server RUN='TestMCPPlaybook|TestPlaybookReads|TestPlaybookSyncsCountMachines'` · `make test PKG=./qa/agent`.
 11. **Distribution.**
     - What: `server.json`, the registry publish in the release workflow, install links, and per-agent docs.
     - Acceptance: `make docs-site docs-links` · `python3 contracts/validate.py` (server.json against the registry's schema).

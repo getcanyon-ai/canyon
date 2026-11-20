@@ -24,7 +24,7 @@ test("the person reads who asks, as whom, and what it may do, and answers it", a
   await expect(page.getByText(new RegExp(`^Canyon e2e agent will act as .* \\(${env("CONSENT_WHO").replace(".", "\\.")}\\) on .*\\. Then Canyon sends you back to 127\\.0\\.0\\.1\\.$`))).toBeVisible();
   await expect(page.getByText("Canyon can't verify this name: the app chose it itself.")).toBeVisible();
   await expect(page.getByRole("region", { name: "What it may do" }).getByText("See your org's rules, and the apps you can see: their status, and logs where you're a contributor")).toBeVisible();
-  await page.getByRole("button", { name: env("CONSENT_ANSWER") === "allow" ? "Allow" : "Don't allow" }).click();
+  await page.getByRole("button", { name: env("CONSENT_ANSWER") === "allow" ? "Allow" : "Don't allow", exact: true }).click(); // exact: Allow is in Don't allow
   await expect.poll(() => sent).not.toBe("");
   writeFileSync(env("CONSENT_OUT"), sent);
 });

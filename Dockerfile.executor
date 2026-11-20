@@ -1,7 +1,7 @@
 # The build executor: the one container that holds the Docker socket. It carries the docker
 # and pack CLIs (pinned) and the canyon-executor binary, and nothing else — no vault, no org
 # config, no database (contracts/executor.md).
-FROM golang:1.26.11 AS build
+FROM golang:1.26.11@sha256:4165ee6bf3b7811fd7b40373290405c83d0167dcb87ee5f29c427cdcef45ff8f AS build
 WORKDIR /src
 COPY go.mod go.sum* ./
 # Go's default; CI passes a list that asks the proxy again on any error (#2533)
@@ -10,7 +10,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/canyon-executor ./cmd/canyon-executor
 
-FROM docker:28.4.0-cli AS pack
+FROM docker:28.4.0-cli@sha256:6a73c9433f2ba4279815be1e60f5739288b939dda1e48151d8c393537802de37 AS pack
 ARG TARGETARCH
 # The version and sha256 values are the Makefile's (PACK_VERSION, PACK_SHA256_*): compose passes
 # them as build args so they live in one place. PACK_URL is the Makefile's too, its release's
@@ -32,7 +32,7 @@ RUN set -eu; case "$TARGETARCH" in \
     echo "${sum}  /tmp/pack.tgz" | sha256sum -c -; \
     tar -xzf /tmp/pack.tgz -C /usr/local/bin pack; rm /tmp/pack.tgz
 
-FROM docker:28.4.0-cli
+FROM docker:28.4.0-cli@sha256:6a73c9433f2ba4279815be1e60f5739288b939dda1e48151d8c393537802de37
 COPY --from=pack /usr/local/bin/pack /usr/local/bin/pack
 COPY --from=build /out/canyon-executor /canyon-executor
 # Canyon's licence, NOTICE, and the licence texts of the third-party code in the binary (THIRD_PARTY_NOTICES).

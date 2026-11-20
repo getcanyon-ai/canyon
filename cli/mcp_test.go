@@ -14,7 +14,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/getcanyon-ai/canyon/internal/mcptools"
@@ -125,6 +124,9 @@ func TestMCPListsTheReadToolsAndTheManifestResources(t *testing.T) {
 		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint || !bytes.Contains(schema, []byte(`"dir"`)) || !bytes.Contains(schema, []byte(`"app"`)) {
 			t.Errorf("%s: annotations %+v, input schema %s", tool.Name, tool.Annotations, schema)
 		}
+		if tool.OutputSchema != nil { // a client that held a result to it would refuse a newer host's answer (design/specs/mcp.md §1.1)
+			t.Errorf("%s declares an outputSchema", tool.Name)
+		}
 	}
 	if want := []string{mcptools.Logs, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
 		t.Errorf("tools %v, want %v", names, want)
@@ -192,23 +194,6 @@ func TestMCPRulesIsTheManifestTypedAndAsText(t *testing.T) {
 	structured, _ := json.Marshal(res.StructuredContent)
 	if res.IsError || text != manifest || !sameJSON(structured, fixture) {
 		t.Errorf("isError %v, text:\n%s\nstructured %s", res.IsError, text, structured)
-	}
-	var tool *mcp.Tool
-	for _, each := range mcptools.Tools() {
-		if each.Name == mcptools.Rules {
-			tool = each
-		}
-	}
-	schema, _ := json.Marshal(tool.OutputSchema)
-	var output jsonschema.Schema
-	if err := json.Unmarshal(schema, &output); err != nil {
-		t.Fatal(err)
-	}
-	resolved, err := output.Resolve(nil)
-	var got any
-	_ = json.Unmarshal(structured, &got)
-	if err != nil || resolved.Validate(got) != nil {
-		t.Errorf("the manifest doesn't pass canyon_rules's outputSchema: %v, %v", err, resolved.Validate(got))
 	}
 	callTool(t, cs, mcptools.Rules, map[string]any{"app": "billing"})
 	if asked := h.requests(); !slices.Contains(asked, "GET /api/v1/skill/manifest?app=claims-portal") || !slices.Contains(asked, "GET /api/v1/skill/manifest?app=billing") {

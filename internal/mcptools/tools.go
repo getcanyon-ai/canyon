@@ -1,19 +1,15 @@
-// Package mcptools is Canyon's MCP surface as data: each tool's name, arguments, result schema and
-// annotations, the resources and the instructions' preamble (design/specs/mcp.md §1). The local
+// Package mcptools is Canyon's MCP surface as data: each tool's name, arguments and annotations, the resources and the instructions' preamble (design/specs/mcp.md §1). The local
 // server (canyon mcp) and the remote one (/mcp) both serve these, so the two can't drift apart.
 package mcptools
 
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/getcanyon-ai/canyon/contracts"
 )
 
 // The tools' names, the same on both servers.
@@ -59,16 +55,16 @@ func object(props map[string]*jsonschema.Schema) *jsonschema.Schema {
 	return &jsonschema.Schema{Type: "object", Properties: props, AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}}}
 }
 
-// Tools are the read tools, as both servers list them.
+// Tools are the read tools, as both servers list them. None declares an outputSchema: a client that held a
+// result to one would reject a newer host's manifest in an older CLI, since the contracts are strict and grow.
 func Tools() []*mcp.Tool {
 	return []*mcp.Tool{
 		{
-			Name:         Rules,
-			Title:        "Canyon's rules",
-			Description:  "The org's rules for every app Canyon runs, and with app, that app's additions: what blocks a deploy and how to pass it.",
-			InputSchema:  object(map[string]*jsonschema.Schema{"app": appArg}),
-			OutputSchema: manifestSchema(),
-			Annotations:  &mcp.ToolAnnotations{ReadOnlyHint: true},
+			Name:        Rules,
+			Title:       "Canyon's rules",
+			Description: "The org's rules for every app Canyon runs, and with app, that app's additions: what blocks a deploy and how to pass it.",
+			InputSchema: object(map[string]*jsonschema.Schema{"app": appArg}),
+			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		},
 		{
 			Name:        Status,
@@ -127,25 +123,6 @@ func Decode(t *mcp.Tool, raw json.RawMessage, v any) error {
 		return err
 	}
 	return json.Unmarshal(filled, v)
-}
-
-// manifestSchema is the skill manifest's schema, guardrails.schema.json#/properties/manifest, with the
-// definitions it refers to: a tool's outputSchema must stand alone.
-func manifestSchema() map[string]any {
-	var root struct {
-		Schema      string                     `json:"$schema"`
-		Definitions map[string]json.RawMessage `json:"definitions"`
-		Properties  map[string]json.RawMessage `json:"properties"`
-	}
-	if err := json.Unmarshal(contracts.GuardrailsSchema, &root); err != nil {
-		panic(err) // embedded, and checked by contracts/validate.py: a bad file is a build that can't ship
-	}
-	var out map[string]any
-	if err := json.Unmarshal(root.Properties["manifest"], &out); err != nil || out == nil {
-		panic(errors.Join(errors.New("guardrails.schema.json has no manifest"), err))
-	}
-	out["$schema"], out["definitions"] = root.Schema, root.Definitions
-	return out
 }
 
 func ptr[T any](v T) *T { return &v }

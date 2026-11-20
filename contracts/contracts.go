@@ -36,12 +36,6 @@ var egressSchema []byte
 //go:embed schema/telemetry.schema.json
 var TelemetrySchema []byte
 
-// GuardrailsSchema is the guardrails reads' schema, the skill manifest's among them: the MCP tools
-// advertise the manifest's from it (design/specs/mcp.md §1.1).
-//
-//go:embed schema/guardrails.schema.json
-var GuardrailsSchema []byte
-
 // GoldenLog is the recorded claims-portal log, the seam-1 fixture, embedded for the run
 // driver's stand-in gate until the gate library lands.
 //

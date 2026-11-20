@@ -30,7 +30,7 @@ because a device code shown inside a tool result would have the agent driving th
 
 | Tool | Does | Calls | Result |
 |---|---|---|---|
-| `canyon_rules` | The org's rules, and the app's additions with `app` | `GET /api/v1/skill/manifest?app=` | the manifest, typed (`guardrails.schema.json#/properties/manifest`) |
+| `canyon_rules` | The org's rules, and the app's additions with `app` | `GET /api/v1/skill/manifest?app=` | the manifest, typed (`guardrails.schema.json#/properties/manifest`), as `structuredContent` with no `outputSchema` |
 | `canyon_playbook` | One playbook's body, by `slug` (§3) | `GET /api/v1/playbooks/:slug` | the playbook's Markdown, with its `name`, `kind` and `version` |
 | `canyon_check` | Reviews a directory without deploying, as `canyon check` | `POST …/packages` (a check's), `POST …/gate-runs`, then polls | the verdict (below) |
 | `canyon_deploy` | Deploys a directory to preview, as `canyon deploy` | `POST …/packages`, `POST …/deploys`, then polls | the verdict, and on success the deploy's `url`, `answered` and access line |
@@ -44,7 +44,8 @@ because a device code shown inside a tool result would have the agent driving th
   - `canyon_promote` takes `version` and `reason` for a rollback, and `confirm`.
   - Every argument is validated as the CLI validates its flags, and a refusal is the CLI's own line.
 - **Results reuse the findings contract.**
-  - A verdict's `structuredContent` is `{run, state, failure_reason?, blocking, warnings, findings}`. `findings` holds the run's results in Canyon's SARIF profile (`contracts/finding.md`), byte for byte as `GET /gate-runs/:id/sarif` serves them, and each tool's `outputSchema` references `finding.schema.json`.
+  - A verdict's `structuredContent` is `{run, state, failure_reason?, blocking, warnings, findings}`. `findings` holds the run's results in Canyon's SARIF profile (`contracts/finding.md`), byte for byte as `GET /gate-runs/:id/sarif` serves them.
+  - **No tool declares an `outputSchema`.** A client that holds a result to its tool's schema would reject a newer host's answer in an older CLI: the contracts are strict, and the manifest and the findings both gain fields (§3.4). The contracts stay strict where Canyon checks its own output; the tools hand on what the host answered.
   - The text `content` is the CLI's `--format ai` block for the same outcome (`design/specs/cli.md` §5.2), so an agent that reads only text reads what it reads today.
   - No tool result is a new shape where an existing one fits.
 - **Annotations.**

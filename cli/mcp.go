@@ -48,6 +48,7 @@ func (nopCloser) Close() error { return nil }
 
 // mcpServer is the local server: the read tools and resources, and instructions read once, now.
 func (a *app) mcpServer(ctx context.Context) *mcp.Server {
+	a.transport = transportMCPLocal // every request it makes says so, a tool call's too (design/specs/mcp.md §7)
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: Version}, &mcp.ServerOptions{Instructions: a.mcpInstructions(ctx)})
 	for _, t := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
 		t := mcptools.Local(t)
@@ -173,7 +174,8 @@ func (a *app) readManifest(ctx context.Context, named string, within time.Durati
 func (a *app) sub(ctx context.Context, dir string) *app {
 	var out, errs strings.Builder
 	render, _ := resolveRender(string(FormatAI), a.getenv, false) // ai is a format resolveRender always takes
-	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir}
+	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir,
+		transport: a.transport}
 }
 
 // verbIn runs `canyon <verb> <args>` in dir, as the app named when it names one: what it printed, or its refusal.

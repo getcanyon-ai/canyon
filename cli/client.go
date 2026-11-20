@@ -29,7 +29,14 @@ type Client struct {
 	Public  string // the host's public URL off GET /auth/config, which names its session cookie; "" before login read it
 	HTTP    *http.Client
 	Harness string // the coding agent the CLI runs under (harnessOf), sent as Canyon-Harness; "" sends none
+	// Transport is how the request was asked for, sent as Canyon-Transport: transportMCPLocal from canyon mcp, and
+	// "" from the CLI itself, which sends none (design/specs/mcp.md §7).
+	Transport string
 }
+
+// transportMCPLocal is canyon mcp's Canyon-Transport: the host keeps it on a review it starts, for its usage report's
+// agents_via (contracts/routes.md, the gate-runs row).
+const transportMCPLocal = "mcp-local"
 
 // requestTimeout is what a call waits unless it names its own: every read and every POST that only
 // writes a row answers well inside it.
@@ -207,6 +214,9 @@ func (c *Client) do(ctx context.Context, method, path, contentType string, body 
 	req.Header.Set("User-Agent", "canyon/"+Version)
 	if c.Harness != "" { // the host keeps it on a review it starts, for its usage report's agents (#2953)
 		req.Header.Set("Canyon-Harness", c.Harness)
+	}
+	if c.Transport != "" { // the host keeps it on a review it starts, for its usage report's agents_via
+		req.Header.Set("Canyon-Transport", c.Transport)
 	}
 	maps.Copy(req.Header, header) // the route's own headers, when it has any: the upload's base package
 	sent := c.session() != ""

@@ -35,14 +35,14 @@ test("the Secrets section as contributor", async ({ page }) => {
   await form(page).getByRole("button", { name: "Set secret" }).click();
   await expect(form(page).getByRole("status")).toHaveText("Set JOURNEY_TOKEN for preview. It takes effect at the next deploy.");
   await expect(form(page).getByLabel("Value")).toHaveValue("");
-  await expect(section(page).getByRole("cell", { name: "JOURNEY_TOKEN" })).toBeVisible();
+  await expect(section(page).getByRole("cell", { name: "JOURNEY_TOKEN", exact: true })).toBeVisible();
   expect(await page.content()).not.toContain(VALUE);
   await walked(page, "contributor");
 });
 
 test("the Secrets section as viewer", async ({ page }) => {
   await open(page);
-  await expect(page.getByText("Your access: read-only.")).toBeVisible();
+  await expect(page.getByText("Your access: read-only.", { exact: true })).toBeVisible();
   await expect(section(page)).toHaveCount(0);
   await expect(form(page)).toHaveCount(0);
   await walked(page, "viewer");
@@ -59,7 +59,7 @@ test("the Secrets section as admin", async ({ page }) => {
   await open(page);
   const row = section(page).getByRole("row").filter({ hasText: "JOURNEY_TOKEN" });
   await row.getByRole("button", { name: "Remove JOURNEY_TOKEN from Preview" }).click();
-  await expect(section(page).getByText("Remove JOURNEY_TOKEN from preview?")).toBeVisible();
+  await expect(section(page).getByText("Remove JOURNEY_TOKEN from preview?", { exact: true })).toBeVisible();
   await walked(page, "admin-asking");
   await row.getByRole("button", { name: "Remove JOURNEY_TOKEN from Preview" }).click();
   await expect(form(page).getByRole("status")).toHaveText("Removed JOURNEY_TOKEN from preview. It takes effect at the next deploy.");

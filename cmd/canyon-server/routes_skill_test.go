@@ -25,7 +25,8 @@ func skillManifest(t *testing.T, c *http.Client, base string) (int, map[string]a
 // is needed there.
 func TestTheManifestIsTheGoldenShape(t *testing.T) {
 	shipped(t) // every policy the host ships with, its default tools among them
-	_, _, base, c := withProject(t)
+	pool, ctx, base, c := withProject(t)
+	seedGoldenPlaybooks(t, ctx, pool) // the golden's playbooks, at the versions it hands them out at
 	raw, err := os.ReadFile("../../contracts/testdata/guardrails/preferences.json")
 	var doc map[string]any
 	if err == nil {
@@ -100,6 +101,9 @@ func TestAFreshHostManifest(t *testing.T) {
 	types, _ := got["component_types"].([]any)
 	if len(types) != 2 {
 		t.Fatalf("the snapshot's component menu, regardless of preferences: %s", lastBody)
+	}
+	if playbooks, ok := got["playbooks"].([]any); !ok || len(playbooks) != 0 {
+		t.Fatalf("a fresh host's playbooks must be [], never null: %s", lastBody)
 	}
 }
 

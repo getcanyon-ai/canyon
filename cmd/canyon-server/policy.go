@@ -189,29 +189,71 @@ const customRulesAgent = "custom-rules"
 
 // customRules is every custom rule the org has saved, at its newest version, installed off with its
 // name, instructions and check, its producer the check's: a scanner for one checked by code
-// (contracts/snapshot.md, Custom rules), sorted by id bytewise as importedTools sorts; saved counts every
-// version, each save a change that moves the version once.
+// (contracts/snapshot.md, Custom rules), and the playbook it points at while that stands, sorted by id
+// bytewise as importedTools sorts; saved counts every version, each save a change that moves the version
+// once, and every save and removal of a playbook a rule points at, as each can move what the snapshot
+// carries of it.
 func customRules(ctx context.Context, q querier) ([]gatepolicy.Rule, int, error) {
-	rows, err := q.Query(ctx, `SELECT DISTINCT ON (rule) rule, name, instructions, check_by, coalesce(check_expr, ''), coalesce(check_says, ''), check_facts_version, count(*) OVER ()
+	playbooks, err := standingPlaybooks(ctx, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (rule) rule, name, instructions, check_by, coalesce(check_expr, ''), coalesce(check_says, ''), check_facts_version, coalesce(playbook, ''), count(*) OVER ()
 		FROM custom_rule_edits ORDER BY rule, version DESC`)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 	var rules []gatepolicy.Rule
-	saved := 0
+	saved, linked := 0, 0
 	for rows.Next() {
 		r := gatepolicy.Rule{State: gatepolicy.Off, Producer: gatepolicy.LLMReview, Check: &gatepolicy.Check{}}
-		if err := rows.Scan(&r.ID, &r.Name, &r.Instructions, &r.Check.By, &r.Check.Expr, &r.Check.Says, &r.Check.FactsVersion, &saved); err != nil {
+		var slug string
+		if err := rows.Scan(&r.ID, &r.Name, &r.Instructions, &r.Check.By, &r.Check.Expr, &r.Check.Says, &r.Check.FactsVersion, &slug, &saved); err != nil {
 			return nil, 0, err
 		}
 		if r.Check.By == custom.ByCode {
 			r.Producer = gatepolicy.Scanner
 		}
+		if p, ok := playbooks[slug]; ok {
+			linked += p.changes
+			if p.stands {
+				r.Playbook = &gatepolicy.Playbook{Slug: slug, Name: p.name}
+			}
+		}
 		rules = append(rules, r)
 	}
 	slices.SortFunc(rules, func(x, y gatepolicy.Rule) int { return strings.Compare(x.ID, y.ID) })
-	return rules, saved, rows.Err()
+	return rules, saved + linked, rows.Err()
+}
+
+// playbookState is one playbook as the snapshot reads it: its newest name, whether it stands, and how many saves
+// and removals it has had.
+type playbookState struct {
+	name    string
+	stands  bool
+	changes int
+}
+
+// standingPlaybooks is every playbook ever saved, by slug (contracts/routes.md, the playbooks row).
+func standingPlaybooks(ctx context.Context, q querier) (map[string]playbookState, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (v.slug) v.slug, v.name, NOT EXISTS (SELECT 1 FROM playbook_removals r WHERE r.slug = v.slug AND r.version = v.version),
+		(SELECT count(*) FROM playbook_versions w WHERE w.slug = v.slug) + (SELECT count(*) FROM playbook_removals r WHERE r.slug = v.slug)
+		FROM playbook_versions v ORDER BY v.slug, v.version DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]playbookState{}
+	for rows.Next() {
+		var slug string
+		var p playbookState
+		if err := rows.Scan(&slug, &p.name, &p.stands, &p.changes); err != nil {
+			return nil, err
+		}
+		out[slug] = p
+	}
+	return out, rows.Err()
 }
 
 // importedTools is a sarif.<tool> rule for every tool an admin has added — every one with an edit

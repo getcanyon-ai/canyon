@@ -28,6 +28,9 @@ func routesCustomRules(api *http.ServeMux, a *app) {
 	api.HandleFunc("POST /custom-rules/{slug}/dry-run", a.adminOnly(a.dryRunCustomRule))
 }
 
+// noSuchPlaybook is the refusal of a custom rule pointing at a playbook the org doesn't have (contracts/routes.md).
+const noSuchPlaybook = "the playbook is one of the org's playbooks, by its slug"
+
 // noModel is the refusal of a custom rule turned on with no model on the host (contracts/routes.md).
 const noModel = "No model is configured on this Canyon host, so a custom rule can't run. Ask whoever runs it to set one up."
 
@@ -42,6 +45,7 @@ type customRule struct {
 	Name         string           `json:"name"`
 	Instructions string           `json:"instructions"`
 	Check        gatepolicy.Check `json:"check"`
+	Playbook     *string          `json:"playbook"` // the slug of the playbook the version points at, nil for none
 	Version      int              `json:"version"`
 	SetBy        actor            `json:"set_by"`
 	SetAt        string           `json:"set_at"`
@@ -56,14 +60,14 @@ type beforeAfter struct {
 // customRulesOf is every custom rule at its newest version, by rule.
 func customRulesOf(ctx context.Context, q querier) ([]customRule, error) {
 	rows, err := q.Query(ctx, `SELECT DISTINCT ON (rule) rule, name, instructions, check_by, coalesce(check_expr, ''), coalesce(check_says, ''), check_facts_version,
-		version, set_by_kind, set_by_subject, set_by_display, set_at
+		playbook, version, set_by_kind, set_by_subject, set_by_display, set_at
 		FROM custom_rule_edits ORDER BY rule, version DESC`)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (c customRule, err error) {
 		var at time.Time
-		err = row.Scan(&c.Rule, &c.Name, &c.Instructions, &c.Check.By, &c.Check.Expr, &c.Check.Says, &c.Check.FactsVersion, &c.Version, &c.SetBy.Kind, &c.SetBy.Subject, &c.SetBy.Display, &at)
+		err = row.Scan(&c.Rule, &c.Name, &c.Instructions, &c.Check.By, &c.Check.Expr, &c.Check.Says, &c.Check.FactsVersion, &c.Playbook, &c.Version, &c.SetBy.Kind, &c.SetBy.Subject, &c.SetBy.Display, &at)
 		c.SetAt = at.UTC().Format(time.RFC3339)
 		return c, err
 	})
@@ -80,7 +84,7 @@ func (a *app) getCustomRules(w http.ResponseWriter, r *http.Request) {
 }
 
 // customRuleProblem is the first thing the routes row refuses in a custom rule, in its words, or "".
-func customRuleProblem(slug, name, instructions string) (string, error) {
+func customRuleProblem(slug, name, instructions string, playbook *string) (string, error) {
 	plain := func(s string, newline bool) bool {
 		for _, c := range s {
 			if unicode.IsControl(c) && (!newline || c != '\n') {
@@ -96,6 +100,8 @@ func customRuleProblem(slug, name, instructions string) (string, error) {
 		return "the name is 1 to 80 characters of plain text, on one line", nil
 	case m < 1 || m > 2000 || !plain(instructions, true):
 		return "the instructions are 1 to 2,000 characters of plain text", nil
+	case playbook != nil && !playbookSlug.MatchString(*playbook):
+		return noSuchPlaybook, nil
 	}
 	for _, s := range []string{name, instructions} {
 		secret, err := gate.HasSecret(s)
@@ -114,15 +120,16 @@ func (a *app) putCustomRule(w http.ResponseWriter, r *http.Request) {
 		Name         string  `json:"name"`
 		Instructions string  `json:"instructions"`
 		Check        *string `json:"check"`
+		Playbook     *string `json:"playbook"` // absent or null is none
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16))
 	dec.DisallowUnknownFields()
 	if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF || body.Check != nil && *body.Check != custom.ByCode && *body.Check != custom.ByAI { //nolint:errorlint // sentinel from the decoder itself
-		writeErr(w, http.StatusBadRequest, "bad_request", `the body is one JSON object of name, instructions and, if you choose, check: "code" or "ai"`, nil)
+		writeErr(w, http.StatusBadRequest, "bad_request", `the body is one JSON object of name, instructions and, if you choose, check: "code" or "ai", and playbook: a playbook's slug`, nil)
 		return
 	}
 	slug := r.PathValue("slug")
-	problem, err := customRuleProblem(slug, body.Name, body.Instructions)
+	problem, err := customRuleProblem(slug, body.Name, body.Instructions, body.Playbook)
 	if err != nil {
 		a.log.Printf("canyon-server: custom rule %s: %v", slug, err)
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
@@ -132,8 +139,10 @@ func (a *app) putCustomRule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid_custom_rule", problem, nil)
 		return
 	}
-	saved, why, err := a.saveCustomRule(r.Context(), actorOf(r.Context()), "custom."+slug, body.Name, body.Instructions, body.Check)
+	saved, why, err := a.saveCustomRule(r.Context(), actorOf(r.Context()), "custom."+slug, customText{body.Name, body.Instructions, body.Playbook}, body.Check)
 	switch {
+	case errors.Is(err, errNoSuchPlaybook):
+		writeErr(w, http.StatusBadRequest, "invalid_custom_rule", noSuchPlaybook, nil)
 	case errors.Is(err, errTooManyRules):
 		writeErr(w, http.StatusConflict, "too_many_rules", "A Canyon host takes 20 custom rules.", nil)
 	case errors.Is(err, errSavedMeanwhile):
@@ -151,6 +160,15 @@ func (a *app) putCustomRule(w http.ResponseWriter, r *http.Request) {
 }
 
 var errTooManyRules = errors.New("a host takes 20 custom rules")
+
+// errNoSuchPlaybook is a version pointing at a playbook that doesn't stand when it is saved.
+var errNoSuchPlaybook = errors.New("no such playbook")
+
+// customText is what a custom rule's version says: its name, its instructions and the playbook it points at.
+type customText struct {
+	name, instructions string
+	playbook           *string
+}
 
 // errSavedMeanwhile is a save another one beat while the model was asked: its version would not be the
 // one after what the admin saw.
@@ -201,7 +219,8 @@ func plainly(why string) string {
 
 // saveCustomRule saves the rule's next version, checked as by asks: nil names no check, which keeps the
 // current one on the same text and asks for code on a new rule or new text (contracts/routes.md).
-func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instructions string, by *string) (customRule, string, error) {
+func (a *app) saveCustomRule(ctx context.Context, act actor, rule string, text customText, by *string) (customRule, string, error) {
+	name, instructions, playbook := text.name, text.instructions, text.playbook
 	rules, err := customRulesOf(ctx, a.pool)
 	if err != nil {
 		return customRule{}, "", err
@@ -212,7 +231,8 @@ func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instruc
 			current = &rules[i]
 		}
 	}
-	same := current != nil && current.Name == name && current.Instructions == instructions
+	textSame := current != nil && current.Name == name && current.Instructions == instructions
+	same := textSame && sameSlug(current.Playbook, playbook)
 	if same && (by == nil || *by == current.Check.By) {
 		return *current, "", nil // nothing changed: no version, no row
 	}
@@ -223,7 +243,13 @@ func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instruc
 	if current == nil && len(rules) >= maxCustomRules {
 		return customRule{}, "", errTooManyRules
 	}
-	check, why := a.checkOf(ctx, rule, instructions, want) // the model's call, outside the transaction
+	var check gatepolicy.Check
+	var why string
+	if textSame && (by == nil || *by == current.Check.By) {
+		check = current.Check // only the playbook moved: the text is checked as it was, with no model call
+	} else {
+		check, why = a.checkOf(ctx, rule, instructions, want) // the model's call, outside the transaction
+	}
 	if same && check == current.Check {
 		return *current, why, nil // asked again, answered the same: no version, no row
 	}
@@ -248,6 +274,15 @@ func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instruc
 	if (current == nil) != (previous == nil) || current != nil && current.Version != previous.Version {
 		return customRule{}, "", errSavedMeanwhile
 	}
+	if playbook != nil {
+		standing, err := standingPlaybooks(ctx, tx)
+		if err != nil {
+			return customRule{}, "", err
+		}
+		if !standing[*playbook].stands {
+			return customRule{}, "", errNoSuchPlaybook
+		}
+	}
 	audited := map[string]any{"by": check.By}
 	if check.By == custom.ByCode {
 		audited["says"] = check.Says
@@ -258,9 +293,20 @@ func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instruc
 		detail["name"], detail["instructions"] = beforeAfter{Before: &current.Name, After: name}, beforeAfter{Before: &current.Instructions, After: instructions}
 	}
 	detail["version"] = version
-	if _, err := tx.Exec(ctx, `INSERT INTO custom_rule_edits (rule, version, name, instructions, check_by, check_expr, check_says, check_facts_version, set_by_kind, set_by_subject, set_by_display)
-		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), $8, $9, $10, $11)`,
-		rule, version, name, instructions, check.By, check.Expr, check.Says, check.FactsVersion, act.Kind, act.Subject, act.Display); err != nil {
+	var was *string
+	if current != nil {
+		was = current.Playbook
+	}
+	if !sameSlug(was, playbook) {
+		pb := map[string]any{"after": playbook}
+		if current != nil {
+			pb["before"] = was
+		}
+		detail["playbook"] = pb
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO custom_rule_edits (rule, version, name, instructions, check_by, check_expr, check_says, check_facts_version, playbook, set_by_kind, set_by_subject, set_by_display)
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), $8, $9, $10, $11, $12)`,
+		rule, version, name, instructions, check.By, check.Expr, check.Says, check.FactsVersion, playbook, act.Kind, act.Subject, act.Display); err != nil {
 		return customRule{}, "", err
 	}
 	if err := events.AuditTx(ctx, tx, act, "custom_rule.set", "", "", detail); err != nil {
@@ -276,4 +322,9 @@ func (a *app) saveCustomRule(ctx context.Context, act actor, rule, name, instruc
 		}
 	}
 	return customRule{}, "", errors.New("a saved custom rule did not read back")
+}
+
+// sameSlug is whether two playbook slugs are the same, none and none included.
+func sameSlug(a, b *string) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }

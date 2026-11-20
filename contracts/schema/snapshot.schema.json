@@ -48,6 +48,11 @@
             "if": { "properties": { "by": { "const": "code" } } },
             "then": { "required": ["expr", "says"] },
             "else": { "not": { "anyOf": [{ "required": ["expr"] }, { "required": ["says"] }] } }
+          },
+          "playbook": {
+            "description": "The org's playbook a custom rule's version points at, carried only while that playbook stands (snapshot.md, Custom rules; design/specs/mcp.md §3.4); its findings carry the same (finding.md).",
+            "type": "object", "additionalProperties": false, "required": ["slug", "name"],
+            "properties": { "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" }, "name": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" } }
           }
         },
         "allOf": [
@@ -57,7 +62,7 @@
               "if": { "properties": { "check": { "properties": { "by": { "const": "code" } } } } },
               "then": { "properties": { "producer": { "const": "scanner" } } },
               "else": { "properties": { "producer": { "const": "llm-review" } } } },
-            "else": { "not": { "anyOf": [{ "required": ["instructions"] }, { "required": ["check"] }] } } },
+            "else": { "not": { "anyOf": [{ "required": ["instructions"] }, { "required": ["check"] }, { "required": ["playbook"] }] } } },
           { "if": { "properties": { "id": { "const": "sarif.trivy" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/trivy"}}} },
           { "if": { "properties": { "id": { "const": "sarif.opengrep" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/opengrep"}}} },
           { "if": { "properties": { "id": { "const": "sarif.grype" } } }, "then": {"properties": {"settings": {"$ref": "#/definitions/toolSettings/grype"}}} },

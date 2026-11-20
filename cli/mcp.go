@@ -50,6 +50,10 @@ func (nopCloser) Close() error { return nil }
 func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: Version}, &mcp.ServerOptions{Instructions: a.mcpInstructions(ctx)})
 	for _, t := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
+		if t.Name == mcptools.Playbook { // a playbook is the org's: no app, no dir
+			s.AddTool(t, a.mcpPlaybook(t))
+			continue
+		}
 		t := mcptools.Local(t)
 		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var args struct { // every tool's, each schema taking its own
@@ -97,7 +101,54 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	}
 	s.AddResource(&mcp.Resource{URI: mcptools.ManifestURI, Name: "manifest", Title: "Canyon's rules", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.ManifestAppTemplate, Name: "manifest-app", Title: "Canyon's rules for one app", MIMEType: "application/json"}, a.manifestResource)
+	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.PlaybookTemplate, Name: "playbook", Title: "One of the org's playbooks", MIMEType: "text/markdown"}, a.playbookResource)
 	return s
+}
+
+// mcpPlaybook is canyon_playbook: a playbook's body as its admin wrote it, counted as a read by the tool, and the
+// playbook whole as structured content.
+func (a *app) mcpPlaybook(t *mcp.Tool) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args mcptools.PlaybookArgs
+		if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
+			return toolRefused(err), nil
+		}
+		p, raw, err := a.readPlaybook(ctx, args.Slug, "tool")
+		if err != nil {
+			return toolRefused(err), nil
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: p.Body}}, StructuredContent: raw}, nil
+	}
+}
+
+// playbookResource reads canyon://playbooks/<slug>: the same body, counted as a read by the resource.
+func (a *app) playbookResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	slug, _ := strings.CutPrefix(req.Params.URI, mcptools.PlaybookURI)
+	p, _, err := a.readPlaybook(ctx, slug, "resource")
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "text/markdown", Text: p.Body}}}, nil
+}
+
+// readPlaybook is GET /playbooks/:slug counted as way, or its refusal as the CLI says it: a slug that names none is
+// canyon playbook's own line.
+func (a *app) readPlaybook(ctx context.Context, slug, way string) (playbookRead, json.RawMessage, error) {
+	c := a.sub(ctx, "")
+	client, err := c.client()
+	if err != nil {
+		return playbookRead{}, nil, c.refusal(err)
+	}
+	p, raw, err := fetchPlaybook(ctx, client, slug, way)
+	var api *APIError
+	switch {
+	case errors.As(err, &api) && api.Status == http.StatusNotFound:
+		return p, nil, fmt.Errorf(noPlaybook, cell(slug)) //nolint:staticcheck // D5's line, said whole as the tool's answer
+	case err != nil:
+		return p, nil, c.refusal(err)
+	}
+	c.remember()
+	return p, raw, nil
 }
 
 // mcpInstructions are the preamble and the manifest as the session hook hands it, for the app the
@@ -173,7 +224,7 @@ func (a *app) readManifest(ctx context.Context, named string, within time.Durati
 func (a *app) sub(ctx context.Context, dir string) *app {
 	var out, errs strings.Builder
 	render, _ := resolveRender(string(FormatAI), a.getenv, false) // ai is a format resolveRender always takes
-	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir}
+	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir, tools: true}
 }
 
 // verbIn runs `canyon <verb> <args>` in dir, as the app named when it names one: what it printed, or its refusal.

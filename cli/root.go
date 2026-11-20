@@ -96,6 +96,7 @@ type app struct {
 	onRow    func(timelineRow)                              // an MCP tool's: each row of the run this invocation follows, for its progress
 	ended    *checkRun                                      // the run a verdict was rendered for, which an MCP tool's result carries
 	elicit   func(question, ships string) (asked, yes bool) // an MCP client's answer to production's question about what ships; nil where nothing can ask
+	tools    bool                                           // an MCP tool's invocation: a next step names the tool, not the verb (design/specs/mcp.md §3.4)
 }
 
 // getwd is the directory the verb runs in.

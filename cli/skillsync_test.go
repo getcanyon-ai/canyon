@@ -153,3 +153,17 @@ func TestPlaybookPrintsItsBody(t *testing.T) {
 		t.Error("no slug ran")
 	}
 }
+
+// playbookFixture is the contract's golden read of one playbook: service-conventions at version 3.
+func playbookFixture(t *testing.T) []byte {
+	t.Helper()
+	raw, err := os.ReadFile("../contracts/testdata/guardrails/preferences.json")
+	var doc map[string]json.RawMessage
+	if err == nil {
+		err = json.Unmarshal(raw, &doc)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc["playbook"]
+}

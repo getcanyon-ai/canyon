@@ -504,6 +504,7 @@ func TestACancelDuringTheScansEndsTheRunBeforeTheGate(t *testing.T) {
 	f.Busy.Store(1) // the first ask answers busy, so a run the cancel missed would ask again
 	attach, attaching, cancelled := pipe.Attach, make(chan struct{}, 2), make(chan struct{})
 	pipe.Attach = func(c context.Context, project, pkg, tool string, raw []byte, unloaded, unparsed []string, ev Evidence, by events.Actor) (int64, error) {
+		time.Sleep(1500 * time.Millisecond) // the race at its worst (#25): this scan reaches its attach after the busy one's Retry-After of 1 s
 		attaching <- struct{}{}
 		<-cancelled // the scan is mid-step until the cancel is asked
 		return attach(c, project, pkg, tool, raw, unloaded, unparsed, ev, by)

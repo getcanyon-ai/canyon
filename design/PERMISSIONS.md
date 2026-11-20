@@ -252,6 +252,28 @@ Decided 2026-10-02 with the redesign (`design/EXPERIENCE.md` D14); built after #
 - **A dry run of a custom rule** (#2640) judges the rule on every app's latest review, so it is an
   admin's, who sees every app: `403 admin_required` for anyone else, who sees nothing of it.
 
+## Playbooks — who writes how the org builds
+
+Decided 2026-11-19 with the MCP design (design/specs/mcp.md §3, §4). A playbook is org-written
+guidance an agent reads and Canyon never checks: free, not Canyon Enterprise.
+
+| Who | The org's playbooks (Guardrails › Playbooks) | A custom rule's `playbook` |
+|---|---|---|
+| **Admin** | writes, imports, restores and removes them; reads every version, a removed playbook's too | sets it, as the rule itself |
+| **Any signed-in member** | reads each playbook that stands, body and all, and the list | reads it on the rule |
+
+- **Writing is a widening of what agents are told**, so it is an admin's, a person's, from a browser,
+  as a custom rule's instructions are: `403 admin_required` for anyone else, `403 person_required` to
+  an `agent` or `canyon` actor, and on a host with sign-in `403 dashboard_required` from any session
+  but a browser's — an admin's agent replaying the CLI's session never rewrites what every agent
+  reads. Each refusal writes one `denied` row, before the body is read.
+- **Reading is every member's.** A playbook is handed to every agent in the org (the manifest, and
+  later the tool), so it is never a secret: a save carrying one is refused.
+- **History is an admin's.** Every version is kept, and only an admin reads them, a removed
+  playbook's included; a member reads the newest version of one that stands.
+- **A playbook changes nobody's level and loosens no rule.** The review never reads one, and a rule
+  pointing at one is checked exactly as before.
+
 ## Outbound — who changes what an app calls out to
 
 Decided 2026-10-11 (the owner) with `design/EGRESS.md` §3.5 and §14: contributors widen, from the

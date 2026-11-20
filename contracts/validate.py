@@ -352,6 +352,8 @@ def check_log(label, log, snap, schema):
                 errors.append(f"{tag}: a custom rule's finding is high whatever the model answered (finding.md, Custom rules)")
             if "secret_name" in c and ns != "secrets":
                 errors.append(f"{tag}: secret_name only belongs on secrets.* findings")
+            if c.get("playbook") != rule.get("playbook"):  # finding.md: derived server-side from the snapshot, as blocks is
+                errors.append(f"{tag}: playbook {c.get('playbook')!r} is not its rule's in the snapshot, {rule.get('playbook')!r}")
             if "carried_from" in c and (imported or driver["name"] in DRIVER_PRODUCER):  # finding.md: only a review's result is carried
                 errors.append(f"{tag}: carried_from is on a result of no agent's run")
             if c["blocks"]:  # the governance prose is required once the finding blocks; permitted, never forbidden, otherwise
@@ -1969,6 +1971,122 @@ def one_row_per_language(label, stacks):
     langs = [s["language"] for s in stacks]
     for lang in sorted({x for x in langs if langs.count(x) > 1}):
         errors.append(f"{label}: stacks carries {langs.count(lang)} rows for '{lang}'; one row per language")
+
+
+def playbook_finding(customs, finding_schema):
+    """finding.md, canyon.playbook: a custom rule's finding carries its rule's playbook as the snapshot carries it,
+    and nothing else does; the golden against the custom-rules snapshot, then logs it must refuse."""
+    log = load(CONTRACTS / "testdata" / "finding" / "custom-playbook.sarif.json")
+    if log is None:
+        return
+    check_log("finding: playbook", log, customs, finding_schema)
+    canyon = lambda p: p["runs"][0]["results"][0]["properties"]["canyon"]
+    if not canyon(log).get("playbook"):
+        errors.append("finding: playbook: the golden's custom rule finding carries no playbook")
+    other = next(r for r in customs["rules"] if r["id"].startswith("custom.") and "playbook" not in r)
+    for name, mutate in (("no playbook", lambda p: canyon(p).pop("playbook")),
+                         ("another playbook's slug", lambda p: canyon(p)["playbook"].update(slug="incident-notes")),
+                         ("another name", lambda p: canyon(p)["playbook"].update(name="Meridian services")),
+                         ("a playbook on a rule that points at none", lambda p: (p["runs"][0]["tool"]["driver"]["rules"][0].update(id=other["id"], name=other["name"]),
+                                                                                  p["runs"][0]["results"][0].update(ruleId=other["id"]), canyon(p).update(policy_name=other["name"])))):
+        probe = copy.deepcopy(log)
+        mutate(probe)
+        mark = len(errors)
+        check_log("selftest", probe, customs, finding_schema)
+        refused = any("playbook" in e for e in errors[mark:])
+        del errors[mark:]
+        if not refused:
+            errors.append(f"selftest: a custom rule's finding with {name} was not refused")
+
+
+def seam3_playbooks(customs):
+    """routes.md, the playbooks row: the list, one, a version saved and one restored with their audit rows, and the
+    versions, in contracts/testdata/guardrails/preferences.json. What the schema cannot say: the list and the
+    manifest name the same playbooks, by slug; the read is the newest version; a save answers what was sent under
+    the version its audit row names, its diff the fields that changed; a restore saves the version it names; at
+    most 50; no live key and at most 65,536 bytes of body; and the custom-rules snapshot points only at one that
+    stands, under its name."""
+    path = CONTRACTS / "schema" / "guardrails.schema.json"
+    doc = load(CONTRACTS / "testdata" / "guardrails" / "preferences.json")
+    if doc is None:
+        return
+
+    def problems(d):
+        out = []
+        listed = d["playbooks"]["playbooks"]
+        brief = [{k: e[k] for k in ("slug", "name", "kind", "when", "version")} for e in listed]
+        if [e["slug"] for e in listed] != sorted(e["slug"] for e in listed):
+            out.append("the list is not by slug")
+        if len(listed) > 50:
+            out.append(f"{len(listed)} playbooks; Canyon keeps 50")
+        for key in ("manifest", "manifest_app"):
+            if d[key]["playbooks"] != brief:
+                out.append(f"the {key}'s playbooks are not the list's, by slug, without who and when")
+        one, versions = d["playbook"]["playbook"], d["playbook_versions"]
+        newest = versions["versions"][0]
+        if [v["version"] for v in versions["versions"]] != sorted((v["version"] for v in versions["versions"]), reverse=True):
+            out.append("the versions are not newest first")
+        if one["slug"] != versions["slug"] or {k: one[k] for k in ("name", "kind", "when", "body", "version")} != {k: newest[k] for k in ("name", "kind", "when", "body", "version")} or \
+                (one["updated_by"], one["updated_at"]) != (newest["set_by"], newest["set_at"]):
+            out.append("the read is not the newest version")
+        entry = next((e for e in listed if e["slug"] == one["slug"]), None)
+        if entry is None or {k: v for k, v in one.items() if k != "body"} != entry:
+            out.append("the list's entry is not the read without its body")
+        put = d["playbook_put"]
+        got, detail = put["response"]["playbook"], put["audit"]["detail"]
+        by_version = {v["version"]: v for v in versions["versions"]}
+        before = by_version.get(got["version"] - 1)
+        if got["slug"] != put["slug"] or {k: got[k] for k in ("name", "kind", "when", "body")} != put["request"] or detail["slug"] != got["slug"] or detail["version"] != got["version"]:
+            out.append("the playbook saved does not answer what was sent, under the version its audit row names")
+        changed = {k for k in ("name", "kind", "when", "body") if before is None or before[k] != got[k]}
+        if set(detail["diff"]) != changed:
+            out.append(f"the save's diff names {sorted(detail['diff'])}, but {sorted(changed)} changed")
+        for k in ("name", "kind", "when"):
+            if k in detail["diff"] and (detail["diff"][k]["after"] != got[k] or detail["diff"][k].get("before") != (before or {}).get(k)):
+                out.append(f"the save's diff of {k} is not its before and after")
+        restore = d["playbook_restore"]
+        back, rdetail = restore["response"]["playbook"], restore["audit"]["detail"]
+        source = by_version.get(restore["request"]["version"])
+        if source is None or {k: back[k] for k in ("name", "kind", "when", "body")} != {k: source[k] for k in ("name", "kind", "when", "body")} or \
+                rdetail["from"] != restore["request"]["version"] or rdetail["version"] != back["version"] or back["version"] <= rdetail["from"]:
+            out.append("the restore does not save the version it names as a newer one")
+        for p in [one] + versions["versions"] + [put["request"]]:
+            if LIVE_KEY.search(p["name"] + p["when"] + p["body"]):
+                out.append("a playbook carries a live key")
+            if len(p["body"].encode()) > 65536:
+                out.append("a playbook's body is over 65,536 bytes")
+        return out
+
+    for p in problems(doc):
+        errors.append(f"guardrails: playbooks: {p}")
+    standing = {e["slug"]: e["name"] for e in doc["playbooks"]["playbooks"]}
+    if customs:
+        for r in customs["rules"]:
+            pb = r.get("playbook")
+            if pb and standing.get(pb["slug"]) != pb["name"]:
+                errors.append(f"snapshot: custom rules: {r['id']} points at {pb}, which no playbook that stands is, by that name")
+    for name, mutate, schema_refuses in (
+            ("a slug beginning with a digit", lambda d: d["playbook"]["playbook"].update(slug="1st"), True),
+            ("a kind that is neither", lambda d: d["playbook"]["playbook"].update(kind="rule"), True),
+            ("a when over 200", lambda d: d["playbook"]["playbook"].update(when="x" * 201), True),
+            ("a when on two lines", lambda d: d["playbook"]["playbook"].update(when="a\nb"), True),
+            ("a body in the manifest", lambda d: d["manifest"]["playbooks"][0].update(body="x"), True),
+            ("a body in the list", lambda d: d["playbooks"]["playbooks"][0].update(body="x"), True),
+            ("a body with a control character", lambda d: d["playbook"]["playbook"].update(body="a\x01b"), True),
+            ("a save's diff naming nothing", lambda d: d["playbook_put"]["audit"]["detail"].update(diff={}), True),
+            ("a manifest without its playbooks", lambda d: d["manifest"].pop("playbooks"), True),
+            ("a manifest missing one", lambda d: d["manifest"]["playbooks"].pop(), False),
+            ("a list out of order", lambda d: d["playbooks"]["playbooks"].reverse(), False),
+            ("a read that is not the newest", lambda d: d["playbook"]["playbook"].update(version=2), False),
+            ("a save answering other text", lambda d: d["playbook_put"]["request"].update(body="Something else."), False),
+            ("a save's diff naming a field that did not change", lambda d: d["playbook_put"]["audit"]["detail"]["diff"].update(kind={"before": "skill", "after": "skill"}), False),
+            ("a restore of another version", lambda d: d["playbook_restore"]["request"].update(version=2), False),
+            ("a live key in a body", lambda d: d["playbook"]["playbook"].update(body="use sk_live_" + "Q" * 24), False)):
+        probe = copy.deepcopy(doc)
+        mutate(probe)
+        refused = not accepts(path, probe) if schema_refuses else bool(problems(probe))
+        if not refused:
+            errors.append(f"selftest: playbooks with {name} were not refused")
 
 
 def seam3_guardrails(snap):
@@ -5402,11 +5520,15 @@ def custom_rules_policies(snap, finding_schema):
     def problems(doc):
         out = []
         listed = {c["rule"]: (c["name"], c["instructions"]) for c in doc["custom_rules"]["custom_rules"]}
+        for c in doc["custom_rules"]["custom_rules"]:  # snapshot.md: the snapshot carries a rule's playbook while it stands, as its list names it
+            if c["rule"] in customs and "playbook" in customs[c["rule"]] and customs[c["rule"]]["playbook"]["slug"] != c["playbook"]:
+                out.append(f"GET /custom-rules names {c['playbook']!r} on {c['rule']}, but the snapshot carries {customs[c['rule']]['playbook']}")
         if listed != {i: (r["name"], r["instructions"]) for i, r in customs.items()}:
             out.append("GET /custom-rules does not list the snapshot's custom rules, their names and instructions")
         put = doc["custom_rule_put"]
         got, detail = put["response"]["custom_rule"], put["audit"]["detail"]
-        if (got["rule"] != "custom." + put["slug"] or {k: got[k] for k in ("name", "instructions")} != put["request"] or detail["rule"] != got["rule"] or
+        if (got["rule"] != "custom." + put["slug"] or {k: got[k] for k in ("name", "instructions")} != {k: put["request"][k] for k in ("name", "instructions")} or
+                got["playbook"] != put["request"].get("playbook") or ("playbook" in detail and detail["playbook"]["after"] != got["playbook"]) or detail["rule"] != got["rule"] or
                 detail["version"] != got["version"] or detail["name"]["after"] != got["name"] or detail["instructions"]["after"] != got["instructions"] or
                 ("before" in detail["name"]) != (got["version"] > 1) or ("before" in detail["instructions"]) != (got["version"] > 1)):
             out.append("the custom rule saved does not answer what was sent, or its audit row's before and after do not")
@@ -5431,6 +5553,8 @@ def custom_rules_policies(snap, finding_schema):
     golden = load(CONTRACTS / "testdata" / "finding" / "claims-portal.sarif.json")
     res = copy.deepcopy(golden["runs"][1]["results"][0])  # a reviewer result: a custom rule's is one too
     res["ruleId"], res["properties"]["canyon"]["policy_name"] = on_custom["id"], on_custom["name"]
+    if "playbook" in on_custom:  # finding.md: its rule's playbook, as the snapshot carries it
+        res["properties"]["canyon"]["playbook"] = on_custom["playbook"]
     log = {"version": golden["version"], "$schema": golden["$schema"], "runs": [{"columnKind": golden["runs"][0]["columnKind"],
            "tool": {"driver": {"name": "custom-rules", "version": golden["runs"][1]["tool"]["driver"]["version"],
                                "rules": [{"id": res["ruleId"], "name": res["properties"]["canyon"]["policy_name"]}]}}, "results": [res]}]}
@@ -5573,10 +5697,21 @@ def seam3_telemetry(snap):
     v2 = golden["report_v2"]
     if not schema_check("telemetry report, second version", schema, v2):
         return
+    # agents_via (design/specs/mcp.md §7) came after the second version shipped, so a second-version server from before
+    # it sends none: it is optional, the one field a report with period_hours may leave out.
+    optional = {"period_hours", "agents_via"}
     added = [k for k in v2 if k not in report]
     for field in added:
-        if field != "period_hours" and accepts(schema, {k: v for k, v in v2.items() if k != field}):
+        if field not in optional and accepts(schema, {k: v for k, v in v2.items() if k != field}):
             errors.append(f"telemetry: a second-version report without {field} was taken")
+    if not accepts(schema, {k: v for k, v in v2.items() if k != "agents_via"}):
+        errors.append("telemetry: a second-version report from before agents_via, without it, was refused")
+    # Reviews by how they were asked for, never by whom: a client's name is refused, and so is a count left out.
+    via = v2["agents_via"]
+    for probe, where in ((dict(via, cursor=1), "a client's name"), ({k: n for k, n in via.items() if k != "mcp_remote"}, "no mcp_remote"),
+                         (dict(via, cli=1000001), "a count past 1,000,000")):
+        if accepts(schema, dict(v2, agents_via=probe)):
+            errors.append(f"telemetry: agents_via took {where}")
     if not accepts(schema, {k: v for k, v in v2.items() if k not in added}):
         errors.append("telemetry: a first-version report, without period_hours and what it brings, was refused")
     # The licence is its state alone (the owner, 2026-11-15): what it unlocks, its seats, its dates and whose it is never go.
@@ -5836,6 +5971,8 @@ if snapshot:
     customs = custom_rules_snapshot(snapshot)
     if customs and finding:
         custom_rules_policies(customs, finding[1])
+        playbook_finding(customs, finding[1])
+    seam3_playbooks(customs)
 seam3_secrets()
 seam3_integrations()
 seam3_front_door()

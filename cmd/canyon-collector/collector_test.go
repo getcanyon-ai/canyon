@@ -133,6 +133,12 @@ func TestOnlyTheSchemasReportIsKept(t *testing.T) {
 		{"a second-version report without demo", with(v2, func(m map[string]any) { delete(m, "demo") }), false},
 		{"a licence's customer", with(v2, func(m map[string]any) { m["licence"].(map[string]any)["customer"] = "Meridian Insurance" }), false},
 		{"an exact number of people", with(v2, func(m map[string]any) { m["people_total"] = 7 }), false},
+		// agents_via (design/specs/mcp.md §7): reviews by how they were asked for, kept; a server before it sends none,
+		// and is kept too; a transport the schema doesn't name, or a client's name, is dropped.
+		{"reviews by how they were asked for", with(v2, func(m map[string]any) {}), true},
+		{"a second-version report without agents_via", with(v2, func(m map[string]any) { delete(m, "agents_via") }), true},
+		{"agents_via naming a client", with(v2, func(m map[string]any) { m["agents_via"].(map[string]any)["cursor-1.7"] = 1 }), false},
+		{"agents_via without mcp_remote", with(v2, func(m map[string]any) { delete(m["agents_via"].(map[string]any), "mcp_remote") }), false},
 	} {
 		before := len(f.saved)
 		code, body := post(c, c2.body, "198.51.100.9")

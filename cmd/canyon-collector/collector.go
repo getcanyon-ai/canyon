@@ -253,13 +253,16 @@ type demos struct {
 	New    int `json:"new"`
 }
 
-// sums are a week's period counts: deploys, reviews, failures by why, hand-off releases by how they ended, and fixes.
+// sums are a week's period counts: deploys, reviews and how they were asked for (the CLI, canyon mcp or the server's
+// /mcp; a report from before agents_via adds nothing to it), failures by why, hand-off releases by how they ended, and
+// fixes.
 type sums struct {
-	Deploys  map[string]int `json:"deploys"`
-	Checks   map[string]int `json:"checks"`
-	Failures []named        `json:"failures"`
-	Handoff  map[string]int `json:"handoff"`
-	Fixes    int            `json:"fixes"`
+	Deploys   map[string]int `json:"deploys"`
+	Checks    map[string]int `json:"checks"`
+	AgentsVia map[string]int `json:"agents_via"`
+	Failures  []named        `json:"failures"`
+	Handoff   map[string]int `json:"handoff"`
+	Fixes     int            `json:"fixes"`
 }
 
 // spread is a count across installs: how many installs said it, its median and its sum.
@@ -354,7 +357,8 @@ func (s pgStore) weekly(ctx context.Context, weeks int) ([]week, error) {
 			byWeek[w] = &week{Week: w, Funnel: map[string]int{"first_check": 0, "first_block": 0, "first_fix": 0},
 				Deploying: map[string]ratio{"1w": {}, "4w": {}}, Retention: map[string]kept{"1w": {}, "4w": {}, "12w": {}},
 				InstallsBy: map[string][]named{"version": {}, "install_mode": {}, "platform": {}},
-				Sums: sums{Deploys: map[string]int{"preview": 0, "prod": 0}, Checks: map[string]int{"passed": 0, "advisory": 0, "blocked": 0}, Failures: []named{},
+				Sums: sums{Deploys: map[string]int{"preview": 0, "prod": 0}, Checks: map[string]int{"passed": 0, "advisory": 0, "blocked": 0},
+					AgentsVia: map[string]int{"cli": 0, "mcp_local": 0, "mcp_remote": 0}, Failures: []named{},
 					Handoff: map[string]int{"deployed": 0, "failed": 0, "refused": 0, "undelivered": 0}},
 				People: map[string]spread{"d1": {}, "d7": {}, "d28": {}}, Features: map[string]share{}, First: map[string]map[string]int{},
 				Unsupported: []named{}, RulesFired: []named{}}
@@ -439,18 +443,21 @@ func (s pgStore) weekly(ctx context.Context, weeks int) ([]week, error) {
 	sum := func(path string) string { return `coalesce(sum(` + countOf("r.report->"+path) + `), 0)::bigint` }
 	rows, err = s.pool.Query(ctx, weekCTE+`SELECT to_char(r.wk, 'YYYY-MM-DD'), `+strings.Join([]string{sum("'deploys'->'preview'"), sum("'deploys'->'prod'"),
 		sum("'checks'->'passed'"), sum("'checks'->'advisory'"), sum("'checks'->'blocked'"), sum("'handoff'->'deployed'"), sum("'handoff'->'failed'"),
-		sum("'handoff'->'refused'"), sum("'handoff'->'undelivered'"), sum("'fixes'->'count'")}, ", ")+`
+		sum("'handoff'->'refused'"), sum("'handoff'->'undelivered'"), sum("'fixes'->'count'"), sum("'agents_via'->'cli'"), sum("'agents_via'->'mcp_local'"),
+		sum("'agents_via'->'mcp_remote'")}, ", ")+`
 		FROM base r WHERE NOT r.demo AND r.wk >= (SELECT at FROM since) GROUP BY 1`, weeks)
 	if err != nil {
 		return nil, err
 	}
-	var preview, prod, passed, advisory, blocked, deployed, failed, refused, undelivered, fixes int
-	if _, err := pgx.ForEachRow(rows, []any{&w, &preview, &prod, &passed, &advisory, &blocked, &deployed, &failed, &refused, &undelivered, &fixes}, func() error {
+	var preview, prod, passed, advisory, blocked, deployed, failed, refused, undelivered, fixes, viaCLI, viaLocal, viaRemote int
+	if _, err := pgx.ForEachRow(rows, []any{&w, &preview, &prod, &passed, &advisory, &blocked, &deployed, &failed, &refused, &undelivered, &fixes,
+		&viaCLI, &viaLocal, &viaRemote}, func() error {
 		one := at(w)
 		one.Sums.Deploys = map[string]int{"preview": preview, "prod": prod}
 		one.Sums.Checks = map[string]int{"passed": passed, "advisory": advisory, "blocked": blocked}
 		one.Sums.Handoff = map[string]int{"deployed": deployed, "failed": failed, "refused": refused, "undelivered": undelivered}
 		one.Sums.Fixes = fixes
+		one.Sums.AgentsVia = map[string]int{"cli": viaCLI, "mcp_local": viaLocal, "mcp_remote": viaRemote}
 		return nil
 	}); err != nil {
 		return nil, err

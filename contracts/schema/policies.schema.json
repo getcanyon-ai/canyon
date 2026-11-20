@@ -67,7 +67,8 @@
       "properties": {
         "slug": { "type": "string", "pattern": "^[a-z][a-z-]{0,39}$" },
         "request": { "type": "object", "additionalProperties": false, "required": ["name", "instructions"],
-                     "properties": { "name": { "$ref": "#/definitions/customName" }, "instructions": { "$ref": "#/definitions/instructions" }, "check": { "enum": ["code", "ai"] } } },
+                     "properties": { "name": { "$ref": "#/definitions/customName" }, "instructions": { "$ref": "#/definitions/instructions" }, "check": { "enum": ["code", "ai"] },
+                                    "playbook": { "anyOf": [{ "$ref": "#/definitions/playbookSlug" }, { "type": "null" }] } } },
         "response": { "type": "object", "additionalProperties": false, "required": ["custom_rule"], "properties": { "custom_rule": { "$ref": "#/definitions/customRule" },
                       "why": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "Why the AI review checks the rule though code was asked for (routes.md, the custom-rules row)." } } },
         "audit": {
@@ -77,6 +78,8 @@
             "detail": { "type": "object", "additionalProperties": false, "required": ["rule", "version", "name", "instructions", "check"],
                         "properties": { "rule": { "$ref": "#/definitions/customId" }, "version": { "type": "integer", "minimum": 1 },
                                         "name": { "$ref": "#/definitions/beforeAfterName" }, "instructions": { "$ref": "#/definitions/beforeAfterText" },
+                                        "playbook": { "type": "object", "additionalProperties": false, "required": ["after"],
+                                                      "properties": { "before": { "anyOf": [{ "$ref": "#/definitions/playbookSlug" }, { "type": "null" }] }, "after": { "anyOf": [{ "$ref": "#/definitions/playbookSlug" }, { "type": "null" }] } } },
                                         "check": { "type": "object", "additionalProperties": false, "required": ["by"],
                                                    "properties": { "by": { "enum": ["code", "ai"] }, "says": { "$ref": "#/definitions/says" } },
                                                    "if": { "properties": { "by": { "const": "code" } } }, "then": { "required": ["says"] }, "else": { "not": { "required": ["says"] } } } } }
@@ -137,11 +140,13 @@
     "customName": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" },
     "instructions": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\x00-\\x09\\x0B-\\x1F\\x7F-\\x9F]+$" },
     "customRule": {
-      "type": "object", "additionalProperties": false, "required": ["rule", "name", "instructions", "check", "version", "set_by", "set_at"],
+      "type": "object", "additionalProperties": false, "required": ["rule", "name", "instructions", "check", "playbook", "version", "set_by", "set_at"],
       "properties": { "rule": { "$ref": "#/definitions/customId" }, "name": { "$ref": "#/definitions/customName" }, "instructions": { "$ref": "#/definitions/instructions" },
                       "check": { "$ref": "#/definitions/check" },
+                      "playbook": { "description": "The slug of the org's playbook the version points at, null for none (routes.md, the custom-rules row).", "anyOf": [{ "$ref": "#/definitions/playbookSlug" }, { "type": "null" }] },
                       "version": { "type": "integer", "minimum": 1 }, "set_by": { "$ref": "#/definitions/actor" }, "set_at": { "$ref": "#/definitions/ts" } }
     },
+    "playbookSlug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
     "says": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "A code check's condition in plain words (snapshot.md, Custom rules)." },
     "check": {
       "description": "How a custom rule's version is checked (snapshot.md, Custom rules).",

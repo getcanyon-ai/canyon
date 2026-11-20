@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +55,7 @@ var commands = []command{
 	{"login", "SETUP", "Sign this machine in to a Canyon host", false, runLogin},
 	{"logout", "SETUP", "Revoke this machine's session on a Canyon host", false, runLogout},
 	{"skill", "SETUP", "Teach your coding agent to use Canyon", true, runSkill},
+	{"mcp", "SETUP", "Serve Canyon's tools to your coding agent over MCP", false, runMCP},
 	{"demo", "SETUP", "Start, stop or take a tour of Canyon's demo on this machine", false, runDemo},
 	{"version", "SETUP", "Show the CLI version and which Canyon it talks to", true, runVersion},
 	{"feedback", "SETUP", "Ask for a feature or report a problem", false, runFeedback},
@@ -86,6 +88,16 @@ type app struct {
 	moved    string           // §3.6's main-moved line when the deploy went on, for the ai block to say
 	notice   *noticeCheck     // the once-a-day check in flight, nil when none is due (notice.go)
 	noticed  bool             // whether this invocation has decided about the notice: once, at the verb's parse
+	wd       string           // the directory the verb runs in: "" is the process's, an MCP tool's dir otherwise (mcp.go)
+	named    string           // the app an MCP tool names, in place of the one canyon.toml names
+}
+
+// getwd is the directory the verb runs in.
+func (a *app) getwd() (string, error) {
+	if a.wd != "" {
+		return a.wd, nil
+	}
+	return os.Getwd()
 }
 
 // printf writes a verb's rendering. It does not escape, because Canyon's own colour codes are

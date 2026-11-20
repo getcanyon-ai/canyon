@@ -646,6 +646,7 @@ func serve(ctx context.Context, ln net.Listener, logOut io.Writer, a *app) error
 	routesPolicies(api, a)
 	routesAppPolicies(api, a)
 	routesCustomRules(api, a)
+	routesPlaybooks(api, a)
 	routesScanners(api, a)
 	routesIntegrations(api, a)
 	routesFrontDoor(api, a)

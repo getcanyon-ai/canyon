@@ -1,15 +1,22 @@
 name: Release
 
-# A pushed tag v* publishes one release of the tagged commit: the CLI for every platform (make
-# cli-release) as the tag's GitHub release, and Canyon's nine images on GHCR (make images-release),
-# each for linux/amd64 and linux/arm64, with images.txt on the release naming each one by digest (the
-# Kubernetes install guide, docs/src/content/docs/self-host/kubernetes.md). The release stays a draft
-# until images.txt is on it and every image in it pulls by digest on amd64 and on arm64. Both follow the repository's visibility: while the repo is private, only
-# its collaborators can download the release or pull the images. Images build on tags alone, never
-# on a pull request.
+# A pushed tag v* publishes one release of the tagged commit (RELEASING.md): the CLI for every platform (make
+# cli-release) as the tag's GitHub release, and Canyon's nine images on GHCR (make images-release), each for
+# linux/amd64 and linux/arm64, with images.txt on the release naming each one by digest (the Kubernetes install
+# guide, docs/src/content/docs/self-host/kubernetes.md). The release stays a draft until images.txt is on it and
+# every image in it pulls by digest on amd64 and on arm64. Then the same release, with the chart, the deploy bundle
+# and Opengrep's source packed beside it, goes to getcanyon-ai/canyon-releases, which install.sh reads
+# (scripts/publish-release.sh, in the release environment, whose token only a v* tag may use), and release-smoke
+# installs what was published. Images build on tags alone, never on a pull request, and every job runs on GitHub's
+# runners.
+#
+# Run by hand (workflow_dispatch), it is a rehearsal that publishes nothing: the CLI, all nine images for both
+# architectures (built to their digests, pushed nowhere), and the chart, the bundle and Opengrep's source packed and
+# checked as for a release, under the version v0.0.0-rehearsal.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,7 +25,8 @@ concurrency:
   group: release-${{ github.ref_name }}
 
 env:
-  TAG: ${{ github.ref_name }}
+  TAG: ${{ github.event_name == 'workflow_dispatch' && 'v0.0.0-rehearsal' || github.ref_name }}
+  REHEARSAL: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
   release:
@@ -38,7 +46,14 @@ jobs:
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
       - name: make cli-release
         run: make cli-release VERSION="$TAG"
+      - if: env.REHEARSAL == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: bin/release/
+          retention-days: 1
       - name: publish the release
+        if: env.REHEARSAL != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -69,13 +84,21 @@ jobs:
       - name: the tag is a version
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
       - name: build each image for linux/${{ matrix.arch }} and push it by digest, untagged
+        if: env.REHEARSAL != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ARCH: ${{ matrix.arch }}
         run: |
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker buildx create --use >/dev/null # the docker driver cannot push by digest
-          make images-release PLATFORM="linux/$ARCH" VERSION="$TAG" REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" SOURCE=https://github.com/getcanyon-ai/canyon-releases # what a partner sees, never this private repository
+          make images-release PLATFORM="linux/$ARCH" VERSION="$TAG" REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" SOURCE="https://github.com/$GITHUB_REPOSITORY"
+      - name: rehearsal, build each image for linux/${{ matrix.arch }} to its digest and push nothing
+        if: env.REHEARSAL == 'true'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker buildx create --use >/dev/null # as the release's builder
+          make images-release PUSH=false PLATFORM="linux/$ARCH" VERSION="$TAG" REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" SOURCE="https://github.com/$GITHUB_REPOSITORY"
       - uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.arch }}
@@ -84,6 +107,7 @@ jobs:
 
   publish-images:
     needs: [release, images]
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
@@ -156,3 +180,78 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false -R "$GITHUB_REPOSITORY"
+
+  canyon-releases:
+    needs: publish
+    if: github.event_name == 'push' && github.repository == 'getcanyon-ai/canyon'
+    environment: release # CANYON_RELEASES_TOKEN, which only a v* tag may use
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read # this repository's release and tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the tag, which the chart and the bundle are packed from
+      - name: helm, the pinned release, checksum-verified
+        env:
+          HELM_VERSION: v4.0.5
+          HELM_SHA256: 206a7747702d13994a93629eaed4259bd9d0aec6e23ca52d640f47f7edfdc863 # linux-arm64 of HELM_VERSION, as helm.yml's; bump both together
+        run: |
+          set -euo pipefail
+          .github/fetch.sh "https://get.helm.sh/helm-$HELM_VERSION-linux-arm64.tar.gz" "$HELM_SHA256" "$RUNNER_TEMP/helm.tar.gz"
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/bin" linux-arm64/helm
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: publish the release on getcanyon-ai/canyon-releases
+        env:
+          SOURCE_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CANYON_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_RELEASES_TOKEN: nothing was published"; exit 1; }
+          scripts/publish-release.sh "$TAG"
+
+  smoke:
+    needs: canyon-releases
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  rehearse:
+    needs: [release, images]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: helm, the pinned release, checksum-verified
+        env:
+          HELM_VERSION: v4.0.5
+          HELM_SHA256: 206a7747702d13994a93629eaed4259bd9d0aec6e23ca52d640f47f7edfdc863 # linux-arm64 of HELM_VERSION, as helm.yml's; bump both together
+        run: |
+          set -euo pipefail
+          .github/fetch.sh "https://get.helm.sh/helm-$HELM_VERSION-linux-arm64.tar.gz" "$HELM_SHA256" "$RUNNER_TEMP/helm.tar.gz"
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/bin" linux-arm64/helm
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli
+          path: assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: digests
+      - name: images.txt from the built digests, then the release's files packed and checked, publishing nothing
+        run: |
+          set -euo pipefail
+          for name in $(ls digests/digests-amd64); do echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$name@$(cat "digests/digests-amd64/$name")"; done > assets/images.txt
+          [ "$(wc -l < assets/images.txt)" -eq 9 ] || { echo "::error::the rehearsal built $(wc -l < assets/images.txt) images for amd64, not 9"; exit 1; }
+          [ "$(ls digests/digests-arm64 | wc -l)" -eq 9 ] || { echo "::error::the rehearsal built $(ls digests/digests-arm64 | wc -l) images for arm64, not 9"; exit 1; }
+          PUBLISH_ASSETS=assets PUBLISH_REF="$GITHUB_SHA" scripts/publish-release.sh "$TAG"

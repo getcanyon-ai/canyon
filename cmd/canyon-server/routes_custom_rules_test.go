@@ -291,6 +291,7 @@ func TestTheCustomRuleRoutesAnswerTheGolden(t *testing.T) {
 		byCode["rule"], byCode["name"], byCode["instructions"], check["expr"], check["says"], int(check["facts_version"].(float64)), byCode["set_at"]); err != nil {
 		t.Fatal(err)
 	}
+	seedPlaybook(t, ctx, pool, put["request"].(map[string]any)["playbook"].(string), "How Meridian writes a service") // the playbook the golden's rule points at
 	code, got, _ := do(t, dana, http.MethodPut, base+"/api/v1/custom-rules/"+put["slug"].(string), string(mustJSON(put["request"])))
 	saved, _ := got["custom_rule"].(map[string]any)
 	if code != 200 || saved == nil {

@@ -49,6 +49,17 @@ type manifest struct {
 	DesignSystem   *manifestDesignSystem `json:"design_system"`
 	ProdApproval   bool                  `json:"prod_approval"` // an agent is told whether a promotion it asks for waits for a person
 	AppAdditions   []manifestAddition    `json:"app_additions,omitempty"`
+	Playbooks      []manifestPlaybook    `json:"playbooks"` // every playbook that stands, never a body (design/specs/mcp.md §3.3)
+}
+
+// manifestPlaybook is one playbook as an agent is handed it: by slug, with when to read it, never its body, so the
+// session hook's context stays small.
+type manifestPlaybook struct {
+	Slug    string `json:"slug"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	When    string `json:"when"`
+	Version int    `json:"version"`
 }
 
 // manifestAddition is one of an app's additions as the manifest hands it to an agent: the rule, its
@@ -143,6 +154,15 @@ func (a *app) skillManifest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
+	standing, err := playbooksOf(r.Context(), a.pool)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
+		return
+	}
+	playbooks := make([]manifestPlaybook, 0, len(standing))
+	for _, p := range standing {
+		playbooks = append(playbooks, manifestPlaybook{Slug: p.Slug, Name: p.Name, Kind: p.Kind, When: p.When, Version: p.Version})
+	}
 	var ds *manifestDesignSystem
 	if prefs.DesignSystem != nil {
 		ds = &manifestDesignSystem{
@@ -160,5 +180,6 @@ func (a *app) skillManifest(w http.ResponseWriter, r *http.Request) {
 		DesignSystem:   ds,
 		ProdApproval:   prefs.ProdApproval,
 		AppAdditions:   adds,
+		Playbooks:      playbooks,
 	})
 }

@@ -170,6 +170,15 @@ type canyonBag struct {
 	CarriedFrom      string   `json:"carried_from,omitempty"` // the run whose review reported a finding this one carried (contracts/finding.md)
 	RequiredEndState string   `json:"required_end_state,omitempty"`
 	DoNot            []string `json:"do_not,omitempty"`
+
+	// Playbook is the org's playbook the finding's custom rule points at (contracts/finding.md, canyon.playbook).
+	Playbook *playbookRef `json:"playbook,omitempty"`
+}
+
+// playbookRef names one of the org's playbooks: its slug and its name.
+type playbookRef struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
 }
 
 // §3.3's block: a dim rule per finding, the span with a caret under it, the problem, then fix

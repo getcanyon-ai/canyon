@@ -108,6 +108,17 @@ type Rule struct {
 	// Check is how a custom rule's version is checked, on custom.* alone, fixed when the version is
 	// saved (contracts/snapshot.md, Custom rules): by code, its producer Scanner, or by AI, LLMReview.
 	Check *Check `json:"check,omitempty"`
+
+	// Playbook is the org's playbook a custom rule's newest version points at, on custom.* alone and only while
+	// the playbook stands (contracts/snapshot.md, Custom rules): the rule's findings carry the same
+	// (contracts/finding.md, canyon.playbook). No review is sent it: the reviewer reads Instructions and Check.
+	Playbook *Playbook `json:"playbook,omitempty"`
+}
+
+// Playbook names one of the org's playbooks: its slug and its name (design/specs/mcp.md §3.4).
+type Playbook struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
 }
 
 // Check is a custom rule's check: By "code", with Expr and Says, or "ai"; FactsVersion the version of

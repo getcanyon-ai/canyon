@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -355,11 +354,7 @@ func runStatus(ctx context.Context, a *app, args []string) int {
 	if len(rest) > 0 {
 		return a.usage(fmt.Errorf("status takes no arguments, and got %q", rest[0]))
 	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return a.usage(err)
-	}
-	p, err := readProject(dir) // status reads the file; writing it is deploy's alone (§3.2)
+	p, err := a.project() // status reads the file; writing it is deploy's alone (§3.2)
 	if err != nil {
 		return a.usage(err)
 	}

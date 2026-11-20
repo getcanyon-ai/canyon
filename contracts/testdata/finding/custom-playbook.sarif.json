@@ -1,0 +1,71 @@
+{
+ "version": "2.1.0",
+ "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+ "runs": [
+  {
+   "columnKind": "unicodeCodePoints",
+   "tool": {
+    "driver": {
+     "name": "custom-rules",
+     "version": "0.1.0",
+     "rules": [
+      {
+       "id": "custom.customer-email-encrypted",
+       "name": "Customer emails are encrypted at rest"
+      }
+     ]
+    }
+   },
+   "results": [
+    {
+     "ruleId": "custom.customer-email-encrypted",
+     "level": "error",
+     "message": {
+      "text": "A customer's email is written to the database unencrypted"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "apps/api/src/customers.ts"
+        },
+        "region": {
+         "startLine": 21,
+         "startColumn": 3,
+         "endLine": 21,
+         "endColumn": 69,
+         "snippet": {
+          "text": "  await db.customers.insert({ email: body.email, name: body.name });"
+         }
+        }
+       }
+      }
+     ],
+     "relatedLocations": [],
+     "partialFingerprints": {
+      "canyon/v1": "f_f19b1451474ee5e312b3fff12ee5253f8d63aa19835814e7afc2009e3b5d766e"
+     },
+     "properties": {
+      "canyon": {
+       "severity": "high",
+       "blocks": true,
+       "title": "A customer's email is written to the database unencrypted",
+       "problem": "customers.ts inserts body.email into the customers table as it came in. The rule asks that a customer's email is encrypted before it is stored.",
+       "fix": "Encrypt the address with the app's field key before the insert, and decrypt it where it is read.",
+       "policy_name": "Customer emails are encrypted at rest",
+       "required_end_state": "No customer's email reaches a database column or a file unencrypted: every write of one passes through the app's encrypt step.",
+       "do_not": [
+        "hash the address instead where the app needs to read it back",
+        "store it in another column or table unencrypted"
+       ],
+       "playbook": {
+        "slug": "service-conventions",
+        "name": "How Meridian writes a service"
+       }
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

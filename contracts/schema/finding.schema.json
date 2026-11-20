@@ -323,6 +323,26 @@
                     "type": "string",
                     "minLength": 1
                   }
+                },
+                "playbook": {
+                  "description": "The org's playbook the result's custom rule points at, derived server-side from the policy snapshot as blocks is.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "slug",
+                    "name"
+                  ],
+                  "properties": {
+                    "slug": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    }
+                  }
                 }
               }
             }

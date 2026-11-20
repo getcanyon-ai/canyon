@@ -128,7 +128,8 @@ func TestTheWeeklyNumbersFromAFixture(t *testing.T) {
 		Deploying:  map[string]ratio{"1w": {Of: 2, Deploying: 1}, "4w": {Of: 2, Deploying: 1}},
 		Retention:  map[string]kept{"1w": {Of: 2, Reported: 1, Deploying: 1}, "4w": {Of: 2, Reported: 2, Deploying: 1}, "12w": {Of: 2}},
 		InstallsBy: map[string][]named{"version": {{"v0.9.0", 2}}, "install_mode": {{"helm_one_node", 2}}, "platform": {{"linux/arm64", 2}}},
-		Sums: sums{Deploys: map[string]int{"preview": 0, "prod": 0}, Checks: map[string]int{"passed": 1, "advisory": 0, "blocked": 0}, Failures: []named{},
+		Sums: sums{Deploys: map[string]int{"preview": 0, "prod": 0}, Checks: map[string]int{"passed": 1, "advisory": 0, "blocked": 0},
+			AgentsVia: map[string]int{"cli": 0, "mcp_local": 0, "mcp_remote": 0}, Failures: []named{},
 			Handoff: map[string]int{"deployed": 0, "failed": 0, "refused": 0, "undelivered": 0}, Fixes: 4},
 		People: map[string]spread{"d1": {}, "d7": {}, "d28": {}}, Features: map[string]share{}, First: map[string]map[string]int{}, // first-version reports carry none
 		Unsupported: []named{{"language_unrecognised", 3}, {"own_dockerfile_ignored", 1}}, RulesFired: []named{{"custom", 4}, {"secrets.client-bundle", 1}}}
@@ -198,6 +199,7 @@ func TestTheWeeklyCountsTheSecondVersion(t *testing.T) {
 			m["instance_id"], m["age_days"], m["version"], m["arch"], m["run_by"], m["github"] = b, "1-6", "v1.0.0", "amd64", "org", false
 			delete(m, "install_mode")
 			m["people"], m["deploys"], m["failures"], m["first"] = map[string]int{"d1": 1, "d7": 1, "d28": 1}, map[string]int{"preview": 1, "prod": 0}, map[string]int{}, map[string]string{"check": "1h_1d"}
+			delete(m, "agents_via")
 		}},
 		{monday.AddDate(0, 0, 2), func(m map[string]any) { m["instance_id"], m["age_days"], m["demo"] = c, "1-6", true }},
 		{monday.AddDate(0, 0, 3), func(m map[string]any) {
@@ -250,6 +252,8 @@ func TestTheWeeklyCountsTheSecondVersion(t *testing.T) {
 			"platform": {{"linux/arm64", 2}, {"linux/amd64", 1}}}},
 		{"deploys, D's among them", w.Sums.Deploys, map[string]int{"preview": 9 + 1 + 100 + 9, "prod": 2 + 0 + 0 + 2}},
 		{"failures", w.Sums.Failures, []named{{"build", 6}, {"detect", 6}, {"error.scan", 3}}},
+		// B's server is from before agents_via and sends none; the demo's is counted apart.
+		{"reviews by how they were asked for", w.Sums.AgentsVia, map[string]int{"cli": 9 * 3, "mcp_local": 3 * 3, "mcp_remote": 1 * 3}},
 		{"people", w.People, map[string]spread{"d1": {Of: 3, Median: 3, Sum: 14}, "d7": {Of: 3, Median: 5, Sum: 26}, "d28": {Of: 3, Median: 8, Sum: 39}}},
 		{"github, run_by org, licence", []share{w.Features["github"], w.Features["run_by_org"], w.Features["licence"]}, []share{{3, 2}, {3, 1}, {3, 2}}},
 		{"first", w.First, map[string]map[string]int{"check": {"lt_10m": 1, "1h_1d": 1}, "block": {"10m_1h": 1}, "fix": {"1h_1d": 1}, "prod": {"1d_7d": 1}}},

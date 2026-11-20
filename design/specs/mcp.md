@@ -332,8 +332,8 @@ Each runs its acceptance in CI, and shows its new checks red first.
     - What: `canyon_playbook` on both servers, the resource, `canyon playbook`, the hook's native-skill sync and its uninstall, and the read and sync counts with their migrations, `playbook_reads` and `playbook_syncs`.
     - Acceptance: `make test PKG=./cli RUN='TestPlaybook|TestSkillSyncTouchesOnlyItsOwn'` · `make test PKG=./cmd/canyon-server RUN='TestMCPPlaybook|TestPlaybookReads|TestPlaybookSyncsCountMachines'` · `make test PKG=./qa/agent`.
 11. **Distribution.**
-    - What: `server.json`, the registry publish in the release workflow, install links, and per-agent docs.
-    - Acceptance: `make docs-site docs-links` · `python3 contracts/validate.py` (server.json against the registry's schema).
+    - What: install links and per-agent docs. The MCP Registry listing waits (§8).
+    - Acceptance: `make docs-site docs-links`.
 12. **The tour on MCP.**
     - What: §11.
     - Acceptance: `make tour-check` (also runs the tour through `canyon mcp`).
@@ -358,11 +358,14 @@ Each runs its acceptance in CI, and shows its new checks red first.
 
 ## 8. Distribution
 
-- **MCP Registry.** A `server.json` at the repository root describes the local server. Its package is the CLI itself, as the registry's package type for a downloadable binary allows: per-platform archives from canyon-releases, each with its SHA-256. Its name is `io.github.getcanyon-ai/canyon`. `release.yml` publishes it with the registry's publisher tool, signing in with GitHub's own token for the run, which the `io.github.*` namespace accepts with no DNS record. Only the local server is listed: a remote server's URL is each company's own, so the docs and Guardrails › Connect agents (§12) give it instead.
+- **MCP Registry: the listing waits** (getcanyon-ai/canyon#22). Two reasons:
+  - **A registry install would be a broken first run.** The local server signs in as the CLI does, so someone who installs it from the registry gets a server whose every tool answers "run `canyon login`", with no `canyon` on their `PATH`.
+  - **The registry can't pick an architecture.** Its type for a downloadable binary is an MCP Bundle (`mcpb`): a zip with its own manifest, not the CLI's archives, and a bundle names only the operating systems it runs on. One bundle per OS can't choose between arm64 and amd64.
+  - When it comes, the name stays `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, which the `io.github.*` namespace accepts with no DNS record. Only the local server is listed: a remote server's URL is each company's own, so the docs and the dashboard (§12) give it instead.
 - **Install links.** The docs give each agent its own:
   - Cursor's MCP install deep link, carrying `{"command":"canyon","args":["mcp"]}`;
   - VS Code's `vscode:mcp/install` link;
-  - `claude mcp add canyon -- canyon mcp`;
+  - `claude mcp add --scope user canyon -- canyon mcp` (user scope, as `skill install` writes it: Claude Code's default scope is the one project);
   - `codex mcp add canyon -- canyon mcp`.
   - `canyon skill install` stays the one command that does all of it.
 - **The tour switches to MCP:** §11.
@@ -453,9 +456,9 @@ None.
 1. **Playbooks** are free, not Canyon Enterprise (§3).
 2. **Client identification:** both Client ID Metadata Documents and Dynamic Client Registration, since clients differ (§2.2).
 3. **Scopes:** two from v1, `read` and `act` (§2.2, §4).
-4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own (§8).
+4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own. The listing waits for a first run that works without the CLI and for architectures (§8, getcanyon-ai/canyon#22).
 5. **The demo and agent config:** `canyon demo up` writes none; the tour prompt has the agent run `canyon skill install`, which the person sees (§11).
 6. **MIT-0:** no exception. `segmentio/asm` v1.1.3 is MIT (§9), as the PR that adds the SDK found.
-7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record (§8).
+7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record, once the listing comes (§8).
 8. **The demo and `/mcp`:** no URL chapter and no demo sign-in. The demo's `/mcp` fails closed like every host with sign-in off; the tour uses `canyon mcp`, and its last beat links *Connect your agent* (§11).
 9. **A contributor links a repository:** yes, to one the org's Canyon App already sees. PERMISSIONS.md changes as PR 8's first commit (§10.1).

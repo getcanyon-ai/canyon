@@ -604,13 +604,13 @@ func TestTheSessionHookMovesAShellFormEntryToExecForm(t *testing.T) {
 	settings := filepath.Join(home, ".claude", "settings.json")
 	shell := `{"model":"opus","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo pre <tool>"}]}],` +
 		`"SessionStart":[` + theirs + `,{"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"canyon manifest --harness claude-code"}]}]}}`
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	write := func(body string) {
-		old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		must(t, os.WriteFile(settings, []byte(body), 0o600), os.Chtimes(settings, old, old))
 	}
 	untouched := func(what, body string) {
 		t.Helper()
-		if info, err := os.Stat(settings); err != nil || fileBytes(t, settings) != body || info.ModTime().Year() != 2020 {
+		if info, err := os.Stat(settings); err != nil || fileBytes(t, settings) != body || !info.ModTime().Equal(old) { // the instant, never a local calendar's year: midnight UTC is 2019 west of Greenwich
 			t.Errorf("%s: the file was touched:\n%s", what, fileBytes(t, settings))
 		}
 	}

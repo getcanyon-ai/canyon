@@ -129,7 +129,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   - It is a person's session, so a tool acts as that person: `kind: person`, recorded under their name (AUTH.md §4.4).
   - `dashboard_required` refuses it, as it refuses a CLI session.
 - **Revoking.** Sign-outs revoke these sessions like any other (`DELETE /api/v1/sessions`). Settings › People & sign-in lists them with their client's name, through a new sessions list (§5).
-- **With sign-in off, it fails closed.** On a host with `CANYON_AUTH` off, Canyon serves neither `/mcp` nor the metadata or OAuth routes. `/mcp` answers `404 {error:"mcp_needs_sign_in", message}`, D5's line naming `canyon mcp` as the way on this machine. A host where every caller is the anonymous admin must not hand that power to anything that can reach a port. This holds on the laptop demo too: there, `/mcp` serves only with a demo sign-in (§11, open question 8).
+- **With sign-in off, it fails closed.** On a host with `CANYON_AUTH` off, Canyon serves neither `/mcp` nor the metadata or OAuth routes. `/mcp` answers `404 {error:"mcp_needs_sign_in", message}`, D5's line naming `canyon mcp` as the way on this machine. A host where every caller is the anonymous admin must not hand that power to anything that can reach a port. The laptop demo is such a host, with no exception: its `/mcp` answers `mcp_needs_sign_in` too.
 
 ### 2.3 Tools
 
@@ -180,7 +180,7 @@ every agent the way it hands out the rules.
   - MCP serves each body as `canyon://playbooks/<slug>`, and the server `instructions` name them.
   - `canyon playbook <slug>` prints a body for hook-only harnesses.
 - **What a body must not hold.** It is org-written text handed to a model, so the save refuses one that holds anything Canyon's secret scanners flag, as a custom rule's instructions are held.
-- **Free or Enterprise?** Open question 1.
+- **Free.** Playbooks are part of the free core, not Canyon Enterprise (decided).
 
 ## 4. Permissions
 
@@ -230,7 +230,6 @@ Named here, and edited later in the PR that builds each.
 - **design/PERMISSIONS.md:** an *MCP* section (a tool is its route; an OAuth session is a person's session; consent is a browser's), and *Playbooks*.
 - **design/EXPERIENCE.md** (D5, D7):
   - the consent screen's lines, each scope's among them, and `insufficient_scope`'s;
-  - the demo sign-in's people picker, if open question 8 chooses it;
   - the instructions' preamble;
   - `mcp_needs_sign_in`'s line;
   - elicitation's question (the CLI's own);
@@ -238,7 +237,7 @@ Named here, and edited later in the PR that builds each.
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
 - **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1), and §7.2's skill text.
 - **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
-- **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`, and the demo's sign-in for the URL chapter, as open question 8 decides.
+- **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
 
@@ -248,7 +247,7 @@ One PR per independent change, each off `main` and merged before the next starts
 Each runs its acceptance in CI, and shows its new checks red first.
 
 1. **`canyon mcp`, read tools.**
-   - What: `canyon_rules`, `canyon_status`, `canyon_logs`, the instructions and the manifest resources. The SDK dependency is in this PR.
+   - What: `canyon_rules`, `canyon_status`, `canyon_logs`, the instructions and the manifest resources. The SDK dependency is in this PR, and so is the MIT-0 exception for `segmentio/asm` in `exceptions` in `internal/tools/thirdparty/main.go` (§9), named in the PR body.
    - Acceptance: `make test PKG=./cli RUN=TestMCP` (an in-memory MCP client against a stub host) · `make third-party-notices-check` · `make test PKG=./cmd/canyon RUN=TestCLIIsApache`.
 2. **Local write tools.**
    - What: `canyon_check`, `canyon_deploy` and `canyon_promote`, with elicitation and `confirm`, progress, and the 10-minute hand-off.
@@ -281,8 +280,8 @@ Each runs its acceptance in CI, and shows its new checks red first.
     - What: `server.json`, the registry publish in the release workflow, install links, and per-agent docs.
     - Acceptance: `make docs-site docs-links` · `python3 contracts/validate.py` (server.json against the registry's schema).
 12. **The tour on MCP.**
-    - What: §11, with open question 8's answer.
-    - Acceptance: `make tour-check` (also runs the tour through `canyon mcp`, and the URL chapter through `/mcp` with the demo sign-in open question 8 chooses).
+    - What: §11.
+    - Acceptance: `make tour-check` (also runs the tour through `canyon mcp`).
 13. **Secrets in the dashboard.**
     - What: §10.1's Secrets section on the app page.
     - Acceptance: `cd web && npx vitest run src/screens/Secrets.test.tsx` · `make e2e-ui` (a journey per level: a contributor sets a value, a viewer sees no form).
@@ -304,7 +303,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 
 ## 8. Distribution
 
-- **MCP Registry.** A `server.json` at the repository root describes the local server. Its package is the CLI itself, as the registry's package type for a downloadable binary allows: per-platform archives from canyon-releases, each with its SHA-256. The release workflow publishes it with the registry's publisher tool. Only the local server is listed: a remote server's URL is each company's own, so the docs and Guardrails › Connect agents (§12) give it instead.
+- **MCP Registry.** A `server.json` at the repository root describes the local server. Its package is the CLI itself, as the registry's package type for a downloadable binary allows: per-platform archives from canyon-releases, each with its SHA-256. Its name is `io.github.getcanyon-ai/canyon`. `release.yml` publishes it with the registry's publisher tool, signing in with GitHub's own token for the run, which the `io.github.*` namespace accepts with no DNS record. Only the local server is listed: a remote server's URL is each company's own, so the docs and Guardrails › Connect agents (§12) give it instead.
 - **Install links.** The docs give each agent its own:
   - Cursor's MCP install deep link, carrying `{"command":"canyon","args":["mcp"]}`;
   - VS Code's `vscode:mcp/install` link;
@@ -325,7 +324,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 | `github.com/golang-jwt/jwt/v5` | MIT | the SDK's auth package |
 | `golang.org/x/oauth2`, `x/time`, `x/tools` | BSD-3-Clause | the SDK's |
 
-- **MIT-0 isn't on AGENTS.md's licence list**, so it needs an `exceptions` entry, or the SDK built without it (open question 6).
+- **MIT-0 isn't on AGENTS.md's licence list.** It gets an `exceptions` entry in `internal/tools/thirdparty/main.go` (decided), added and named by the PR that adds the SDK (§6, item 1). AGENTS.md's list of exceptions names it in the same PR.
 - **The CLI stays Apache-2.0.** Every module above is compatible, and `TestCLIIsApache` keeps the CLI's own packages so.
 
 ## 10. What still needs the CLI
@@ -363,25 +362,12 @@ What's missing for it:
 - **The tour prompt installs everything.** Its first step runs `canyon skill install`, which writes the hook, the skill and the MCP config together (§1.4). The person's agent then has Canyon's tools in the same session, or after one restart where the harness loads MCP servers only at start; the tour says so.
 - **The chapters use MCP tools.** Each beat that runs `canyon check` or `canyon deploy` names `canyon_check` and `canyon_deploy` instead, with the shell command as the fallback when the tools aren't loaded. Each chapter is also an MCP prompt, `canyon_tour`, with `chapter` as its argument. The website's one-line prompt is unchanged.
 - **`canyon demo up` writes no agent config.** The tour prompt has the agent run `canyon skill install`, which the person sees in their own session.
-- **`canyon demo up` also serves remote `/mcp`**, at `http://localhost:7777/mcp`, under the same rule as every host: no token, no tool (§2.2).
-- **An optional chapter: connect a second agent with just a URL.** The person adds `http://localhost:7777/mcp` to a second agent, such as Cursor beside Claude Code, and signs in when it asks (below). The second agent then sees the same app, its findings and its status, with no install. The chapter ends on that agent's first `canyon_status` call.
-
-The demo runs with sign-in off, and remote `/mcp` fails closed without sign-in, so the URL chapter needs a demo sign-in. Open question 8 has the options:
-
-- **A. The demo's people sign in.** On a demo host only, Canyon's sign-in page offers the demo's built-in people: Dana Whitfield, who owns claims-portal, and the others the fleet already names. There's no password. Picking one signs in as that person, at that person's levels.
-  - MCP clients use it through the same OAuth authorization-code flow, consent screen and token as on a real host. The CLI could use it through the existing device flow too.
-  - The dashboard stays as today, the anonymous admin, so the first chapters don't change.
-  - It doubles as a lesson: sign in as a read-only person, and the same tool is refused.
-  - It exists only where the host already serves this machine alone (design/AUTH.md, the row *A demo published beyond loopback*). With no sign-in, `/mcp` is still `401`.
-- **B. A bundled identity provider.** The demo turns sign-in on, with a provider in the stack, as the Helm chart bundles Pocket ID. It's real OIDC end to end, but every chapter gains a sign-in, and the demo gains a container and a slower first start.
-- **C. No URL chapter in the demo.** Remote MCP is shown only on a host with sign-in, and the chapter points at a team install.
-
-**Recommendation: A.** It keeps the rule that `/mcp` never serves without a signed-in person. It shows the real OAuth flow and real levels. And it adds no service to the demo: the people are already there, and the picker exists only on a host that serves this machine alone.
+- **No URL chapter.** The demo has sign-in off, so its `/mcp` fails closed like every such host (§2.2), and the tour uses the local `canyon mcp` tools throughout. Its last beat says that a team install can also connect agents by URL over MCP, and links *Connect your agent* (§13).
 
 ## 12. The dashboard
 
 - **Guardrails › Connect agents**, a new panel:
-  - **The URL.** The server's `/mcp` URL, with a copy button. On a host with sign-in off it shows `canyon mcp` and §11's demo line instead.
+  - **The URL.** The server's `/mcp` URL, with a copy button. On a host with sign-in off it shows `canyon mcp` instead, and says a team install connects agents by URL.
   - **Per agent:** Claude Code, Codex, Cursor and VS Code each get their one-click install link where one exists (§8), and the CLI line `canyon skill install`.
   - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with this host's URL.
   - **Who sees it.** Every member sees the URL and the per-agent lines; only admins see the org-managed snippets, as they're for rolling out to everyone.
@@ -395,7 +381,7 @@ The demo runs with sign-in off, and remote `/mcp` fails closed without sign-in, 
 - **A new docs page, Connect your agent** (`docs/start/connect-your-agent.md`), with three ways in, one section each:
   - **The CLI:** `canyon skill install` writes the skill, the hook and the MCP config for each agent it finds.
   - **One click:** each agent's install link (§8).
-  - **A URL:** add `https://<canyon>/mcp` to any MCP client, and allow it in the browser.
+  - **A URL:** on a team install with sign-in, add `https://<canyon>/mcp` to any MCP client, and allow it in the browser. The laptop demo has no sign-in, so it serves no URL: there, use the CLI.
   - The page links each agent's own page (`docs/start/agents/`) for the details, and §10 for what still needs the CLI.
 - **The website's FAQ.** The entry "Which coding agents work with Canyon?" answers today that Claude Code, Cursor and Codex connect with one command, `canyon skill install`. Once remote MCP ships, it also names connecting any MCP client with Canyon's URL. The change goes to the website's repository with that release; the wording is the lead's.
 
@@ -403,15 +389,15 @@ The demo runs with sign-in off, and remote `/mcp` fails closed without sign-in, 
 
 For the owner:
 
-1. **Playbooks: free or Canyon Enterprise?**
-6. **MIT-0.** Add `segmentio/asm` to the reviewed exceptions, or keep the SDK out of the CLI until it no longer needs it?
-7. **The registry's namespace.** `ai.getcanyon/canyon` (domain-verified) or `io.github.getcanyon-ai/canyon`?
-8. **A demo sign-in for the URL chapter.** A: the demo's people sign in on a demo host. B: a bundled identity provider. C: no URL chapter in the demo. Recommended: A (§11).
 9. **A contributor links a repository.** Should a contributor link their app to a repository the org's Canyon App already sees, so the zero-CLI path needs no admin (§10.1)? It's a change to PERMISSIONS.md.
 
 ## Decided
 
+1. **Playbooks** are free, not Canyon Enterprise (§3).
 2. **Client identification:** both Client ID Metadata Documents and Dynamic Client Registration, since clients differ (§2.2).
 3. **Scopes:** two from v1, `read` and `act` (§2.2, §4).
 4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own (§8).
 5. **The demo and agent config:** `canyon demo up` writes none; the tour prompt has the agent run `canyon skill install`, which the person sees (§11).
+6. **MIT-0:** `segmentio/asm` gets an exception in `internal/tools/thirdparty/main.go`, named by the PR that adds the Go MCP SDK (§9).
+7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record (§8).
+8. **The demo and `/mcp`:** no URL chapter and no demo sign-in. The demo's `/mcp` fails closed like every host with sign-in off; the tour uses `canyon mcp`, and its last beat links *Connect your agent* (§11).

@@ -164,10 +164,7 @@ type oauthClient struct {
 	redirects      []string
 }
 
-var (
-	errNoClient   = errors.New("its client isn't registered")
-	errNoRedirect = errors.New("it names a redirect the client didn't register")
-)
+var errNoClient = errors.New("its client isn't registered")
 
 // clientOf resolves client_id: a document's URL, fetched now, or a registration's id.
 func (a *app) clientOf(ctx context.Context, id string) (oauthClient, error) {
@@ -175,7 +172,7 @@ func (a *app) clientOf(ctx context.Context, id string) (oauthClient, error) {
 		return fetchClientDocument(ctx, a.documents(), id)
 	}
 	var c oauthClient
-	err := a.pool.QueryRow(ctx, "UPDATE oauth_clients SET used_at = coalesce(used_at, now()) WHERE id = $1 RETURNING id, name, redirect_uris", id).Scan(&c.id, &c.name, &c.redirects)
+	err := a.pool.QueryRow(ctx, "SELECT id, name, redirect_uris FROM oauth_clients WHERE id = $1", id).Scan(&c.id, &c.name, &c.redirects)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, errNoClient
 	}
@@ -237,12 +234,12 @@ func fetchClientDocument(ctx context.Context, c *http.Client, id string) (oauthC
 	if err != nil || u.Path == "" || u.Path == "/" || u.User != nil || u.Fragment != "" || len(id) > 2048 {
 		return oauthClient{}, errNoClient
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, id, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, id, nil) //nolint:gosec // G704: the client names its own URL, by design; dialable lets the dial reach a public address on 443 alone
 	if err != nil {
 		return oauthClient{}, errNoClient
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.Do(req)
+	resp, err := c.Do(req) //nolint:gosec // G704: the client names its own URL, by design; dialable lets the dial reach a public address on 443 alone
 	if err != nil {
 		return oauthClient{}, errNoClient
 	}
@@ -263,8 +260,8 @@ func fetchClientDocument(ctx context.Context, c *http.Client, id string) (oauthC
 
 // oauthInvalid sends the browser to the consent page's refusal: Canyon can't send it back to a client it can't
 // verify, or to a redirect the client didn't register, so it never redirects there.
-func oauthInvalid(w http.ResponseWriter, r *http.Request, why error) {
-	reason := map[error]string{errNoClient: "client", errNoRedirect: "redirect"}[why]
+// oauthInvalid answers a faulty authorization request on Canyon's own page, the reason a word the page has words for.
+func oauthInvalid(w http.ResponseWriter, r *http.Request, reason string) {
 	http.Redirect(w, r, "/#/oauth?invalid="+reason, http.StatusFound)
 }
 
@@ -307,12 +304,12 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		if !errors.Is(err, errNoClient) {
 			a.log.Printf("canyon-server: oauth client: %v", err)
 		}
-		oauthInvalid(w, r, errNoClient)
+		oauthInvalid(w, r, "client")
 		return
 	}
 	redirect := q.Get("redirect_uri")
 	if !redirectURI(redirect) || !redirectMatches(c.redirects, redirect) {
-		oauthInvalid(w, r, errNoRedirect)
+		oauthInvalid(w, r, "redirect")
 		return
 	}
 	if c.host == "" { // a registration is shown by where it sends the person back
@@ -320,22 +317,21 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 			c.host = cmpHost(u)
 		}
 	}
+	// Until the person answers, nothing goes to the redirect: a stranger's link would make Canyon a hop to their site
+	// (RFC 9700 §4.11.2).
 	state := q.Get("state")
-	back := func(code, description string) {
-		http.Redirect(w, r, a.oauthBack(redirect, state, neturl.Values{"error": {code}, "error_description": {description}}), http.StatusFound)
-	}
 	scopes, ok := scopesOf(q.Get("scope"))
 	switch {
 	case q.Get("response_type") != "code":
-		back("unsupported_response_type", "Canyon answers response_type=code alone")
+		oauthInvalid(w, r, "response")
 	case q.Get("code_challenge_method") != "S256" || len(q.Get("code_challenge")) != 43:
-		back("invalid_request", "Canyon needs a PKCE challenge, S256")
+		oauthInvalid(w, r, "pkce")
 	case q.Get("resource") != a.mcpResource():
-		back("invalid_target", "the resource is "+a.mcpResource())
+		oauthInvalid(w, r, "resource")
 	case !ok:
-		back("invalid_scope", "Canyon's scopes are read and act")
+		oauthInvalid(w, r, "scope")
 	case len(state) > 1024:
-		back("invalid_request", "the state is over 1,024 characters")
+		oauthInvalid(w, r, "state")
 	default:
 		id, err := token()
 		if err == nil {
@@ -346,7 +342,7 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			a.log.Printf("canyon-server: oauth authorize: %v", err)
-			back("server_error", "Canyon could not take the request")
+			writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 			return
 		}
 		http.Redirect(w, r, "/#/oauth?request="+id, http.StatusFound)
@@ -408,7 +404,9 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	id := "dcr_" + hex.EncodeToString(raw[:])
 	var at time.Time
-	if err := a.pool.QueryRow(r.Context(), `WITH gone AS (DELETE FROM oauth_clients WHERE used_at IS NULL AND created_at < now() - interval '1 day')
+	if err := a.pool.QueryRow(r.Context(), `WITH gone AS (DELETE FROM oauth_clients c WHERE (used_at IS NULL AND created_at < now() - interval '1 day')
+			OR (used_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.oauth_client = c.id
+				AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now())))))
 		INSERT INTO oauth_clients (id, name, redirect_uris) VALUES ($1, $2, $3) RETURNING created_at`, id, body.ClientName, body.RedirectURIs).Scan(&at); err != nil {
 		a.log.Printf("canyon-server: oauth register: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
@@ -609,6 +607,11 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				now() + make_interval(secs => $19), $20)`,
 			id, p.act.Kind, p.act.Subject, p.act.Display, p.issuer, p.email, p.verified, p.claimedAdmin, p.claimedResponder, p.hd, p.groups, p.groupsRead,
 			oauthRefreshLife.Seconds(), client, clientName, resource, scopes, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:]); err != nil {
+			internal(err)
+			return
+		}
+		// a registration is used when its code redeems, never at an authorization anyone can send (a document has no row)
+		if _, err := tx.Exec(ctx, "UPDATE oauth_clients SET used_at = now() WHERE id = $1", client); err != nil {
 			internal(err)
 			return
 		}

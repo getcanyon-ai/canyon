@@ -1,5 +1,5 @@
 #!/bin/sh
-# scripts/release-smoke.sh <tag|latest>: Canyon's release as a design partner gets it, from the public downloads
+# scripts/release-smoke.sh <tag|latest>: Canyon's release as a user gets it, from the public downloads
 # alone (.github/workflows/release-smoke.yml, #2409), under a HOME of its own: no sign-in and no registry login.
 # The README's install.sh installs the CLI, which says it is <tag>; every CLI archive matches SHA256SUMS; every
 # archive the release publishes passes scripts/release-archives-check.sh and unpacks without a word; the laptop demo

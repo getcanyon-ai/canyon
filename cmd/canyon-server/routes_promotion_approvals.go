@@ -310,6 +310,9 @@ func (a *app) getApproval(w http.ResponseWriter, r *http.Request) {
 	if ap.run != nil {
 		out["run"] = *ap.run
 	}
+	if ap.rollback { // the page asks the put-back question (contracts/routes.md)
+		out["rollback"] = true
+	}
 	if ap.held != nil {
 		out["held"] = ap.held
 	}

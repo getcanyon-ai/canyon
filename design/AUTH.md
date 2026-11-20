@@ -537,8 +537,9 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
    `/.well-known/oauth-authorization-server` (RFC 8414). It identifies itself one of two ways, since clients differ:
    a **Client ID Metadata Document** at its own `https` URL, which Canyon fetches at authorization, from public
    addresses alone, so a client's word never makes the server reach the org's own network; or **Dynamic Client
-   Registration** (RFC 7591), public clients only, no secret. Either way a redirect is `https`, or `http` on a
-   loopback host, and nothing else.
+   Registration** (RFC 7591), public clients only, no secret. Either way a redirect is `https`, `http` on a
+   loopback host, or a native app's own scheme Canyon names, `cursor` alone, since Cursor receives its sign-in on
+   `cursor://`; nothing else, and never a scheme by pattern.
 2. It sends the person's browser to `GET /oauth/authorize`, PKCE `S256` and `resource=<public URL>/mcp` (RFC 8707)
    required. Canyon checks the client and the redirect first, and answers a fault in either on its own page, never at
    the redirect: a redirect the client didn't name is where an attacker would want the code. Any other fault goes back

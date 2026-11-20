@@ -543,6 +543,7 @@ export const getGitHubRepositories = () => call<{ repositories: GitHubRepository
 export const importRepository = (repo: number, folder: string, name?: string) =>
   call<{ project: App }>("POST", `/github/repositories/${repo}/import`, name === undefined ? { folder } : { folder, name });
 export const linkRepository = (app: string, repo: number, folder: string) => call<{ repository: RepoLink }>("PUT", `/projects/${encodeURIComponent(app)}/repository`, { repo_id: repo, folder });
+export const linkRepositoryByName = (app: string, fullName: string, folder: string) => call<{ repository: RepoLink }>("PUT", `/projects/${encodeURIComponent(app)}/repository`, { full_name: fullName, folder });
 export const unlinkRepository = (app: string) => call<void>("DELETE", `/projects/${encodeURIComponent(app)}/repository`, undefined, true);
 export const getFrontDoor = () => call<FrontDoorRead>("GET", "/front-door");
 // GET /scanners/data (contracts/routes.md; #2743): how old each vulnerability database is, an admin's read.

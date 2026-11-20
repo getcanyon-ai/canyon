@@ -252,6 +252,13 @@ export const S = {
   githubImportNote: "Making an app links it and reviews the default branch's newest commit. Nothing is deployed. The app arrives with no owner, and an admin assigns one.",
   githubUnanswered: "GitHub didn't answer for <org>, so its repositories aren't listed. Try again in a minute.",
   sourceKept: "Kept in Canyon only",
+  // Linking the app to a repository from its page, for its contributors (design/PERMISSIONS.md, linking a repository; #1917).
+  sourceLink: "Link a repository",
+  sourceLinkName: "Repository",
+  sourceLinkFolder: "Folder, if the app is one folder of it",
+  sourceLinkNote: "Your own GitHub account must be able to read it.",
+  sourceLinkYes: "Link",
+  sourceLinkEmpty: "Type the repository as owner/name.",
   // Kept in GitHub (#1926), and handing it to developers (#1938).
   sourceKeptBy: "Kept by Canyon in",
   sourcePending: "Kept by Canyon in GitHub · the repository isn't made yet",
@@ -1070,6 +1077,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "gate run from github": "started a review of <version> from GitHub",
   "github app registered": "registered the GitHub App",
   "POST /api/v1/projects/{id}/packages": "uploaded <version>",
+  "POST /api/v1/projects/{id}/packages/from-repository": "packaged <version> from GitHub",
   "POST /api/v1/projects/{id}/gate-runs": "started a review of <version>",
   "POST /api/v1/projects/{id}/deploys": "started a deploy of <version>",
   "POST /api/v1/projects/{id}/promotions": "started a promotion of <version>",

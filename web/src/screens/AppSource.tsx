@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { getPreferences, handOver, said, setAutoDeploy, unlinkRepository, type RepoLink } from "../api";
+import { getPreferences, handOver, linkRepositoryByName, said, setAutoDeploy, unlinkRepository, type RepoLink } from "../api";
 import { S } from "../strings";
 import { Button } from "../ui/Button";
 import { isAdmin } from "./OrgSettings";
 
 // Where the app's code lives (design/specs/screens.md, A2; #1917): one line under its name, from the
 // project read's repository. Linking and unlinking are an admin's, so the actions are theirs alone.
-export function AppSource({ id, link, autoDeploy, owner, changed }: { id: string; link: RepoLink | null; autoDeploy: boolean; owner: boolean; changed: () => void }) {
+export function AppSource({ id, link, autoDeploy, owner, team, changed }: { id: string; link: RepoLink | null; autoDeploy: boolean; owner: boolean; team: boolean; changed: () => void }) {
   const [admin, setAdmin] = useState(false);
+  const [linking, setLinking] = useState(false); // the link form, opened from the line
+  const [name, setName] = useState("");
+  const [folder, setFolder] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false); // the hand-over can't be undone: it asks first
@@ -26,11 +29,13 @@ export function AppSource({ id, link, autoDeploy, owner, changed }: { id: string
     setBusy(true);
     return call().then(() => { setFailure(null); changed(); }, (err: unknown) => setFailure(said(err))).finally(() => { sending.current = false; setBusy(false); });
   };
+  const linker = team || admin; // linking and unlinking are a contributor's; GitHub decides which repositories they may link
   const unlink = () => run(() => unlinkRepository(id));
-  const unlinkButton = admin && <> <Button size="sm" variant="ghost" onClick={() => void unlink()}>Unlink</Button></>;
+  const unlinkButton = linker && <> <Button size="sm" variant="ghost" onClick={() => void unlink()}>Unlink</Button></>;
+  const submit = () => run(() => linkRepositoryByName(id, name.trim(), folder.trim())).then(() => setLinking(false));
   let line;
   if (link === null) {
-    line = <>{S.sourceKept}{admin && <> · <a className="text-link no-underline hover:underline" href="#/settings/github">Link a repository</a></>}</>;
+    line = <>{S.sourceKept}{linker && !linking && <> · <Button size="sm" variant="ghost" onClick={() => setLinking(true)}>{S.sourceLink}</Button></>}</>;
   } else if (link.state === "pending") {
     line = S.sourcePending;
   } else if (link.state === "linked") {
@@ -43,7 +48,7 @@ export function AppSource({ id, link, autoDeploy, owner, changed }: { id: string
         {unlinkButton}
       </>
     );
-  } else { // GitHub no longer feeds it: an admin unlinks it, to link it again or to another repository
+  } else { // GitHub no longer feeds it: a contributor unlinks it, to link it again or to another repository
     line = <>{({ deleted: S.sourceDeleted, archived: S.sourceArchived, removed: S.sourceRemoved } as const)[link.state].replace("<repo>", () => link.full_name)}{unlinkButton}</>;
   }
   const flip = (on: boolean) => run(() => setAutoDeploy(id, on));
@@ -55,6 +60,24 @@ export function AppSource({ id, link, autoDeploy, owner, changed }: { id: string
         <span className="text-text-faint">Source</span> {line}
         {failure !== null && <span role="alert" className="text-critical">{failure}</span>}
       </p>
+      {link === null && linking && (
+        <div className="flex flex-col items-start gap-1.5 text-md">
+          <label htmlFor="source-repo" className="text-text-faint">{S.sourceLinkName}</label>
+          <span className="flex w-full max-w-[520px] items-center rounded-lg border border-border bg-surface text-base">
+            <span className="pl-2.5 text-text-faint">github.com/</span>
+            <input id="source-repo" className="min-w-0 flex-1 bg-transparent px-1 py-1.5" placeholder="owner/name" aria-describedby="source-repo-note" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && name.trim() !== "") void submit(); }} />
+          </span>
+          <span id="source-repo-note" className="text-text-dim">{S.sourceLinkNote}</span>
+          <label htmlFor="source-folder" className="text-text-faint">{S.sourceLinkFolder}</label>
+          <input id="source-folder" className="w-full max-w-[520px] rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-base" value={folder} onChange={(event) => setFolder(event.target.value)} />
+          <span className="flex flex-wrap gap-2">
+            {name.trim() === ""
+              ? <Button size="sm" disabled reason={S.sourceLinkEmpty}>{S.sourceLinkYes}</Button>
+              : <Button size="sm" variant="primary" onClick={() => void submit()}>{S.sourceLinkYes}</Button>}
+            <Button size="sm" variant="ghost" onClick={() => setLinking(false)}>Cancel</Button>
+          </span>
+        </div>
+      )}
       {kept && link.kept_error && <p className="text-md text-text-dim">{link.kept_error}</p>}
       {/* the kept repository is its owners' to hand to developers (#1938) */}
       {kept && link.state === "linked" && (owner || admin) && (

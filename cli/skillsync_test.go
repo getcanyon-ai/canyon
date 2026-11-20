@@ -167,3 +167,26 @@ func playbookFixture(t *testing.T) []byte {
 	}
 	return doc["playbook"]
 }
+
+// canyon skill uninstall removes every skill the sync wrote, one row each, and none it didn't (design/specs/mcp.md §3.3).
+func TestSkillUninstallRemovesTheSyncedSkills(t *testing.T) {
+	home, _ := harnessHome(t)
+	env := xdg(t.TempDir())
+	env["HOME"], env["CANYON_ASCII"] = home, "1"
+	claude, codex := filepath.Join(home, ".claude", "skills"), filepath.Join(home, ".agents", "skills")
+	skillAt(t, claude, "canyon-service-conventions", `{"host":"http://localhost:7777","version":3}`)
+	skillAt(t, codex, "canyon-service-conventions", `{"host":"http://localhost:7777","version":3}`)
+	skillAt(t, claude, "canyon-mine", "")
+	out, errs, code := run(t, env, false, "skill", "uninstall")
+	if code != exitOK || errs != "" || !strings.Contains(out, "~/.claude/skills/canyon-service-conventions/") || !strings.Contains(out, "~/.agents/skills/canyon-service-conventions/") {
+		t.Fatalf("exit %d, stderr %q, out:\n%s", code, errs, out)
+	}
+	for _, gone := range []string{filepath.Join(claude, "canyon-service-conventions"), filepath.Join(codex, "canyon-service-conventions")} {
+		if _, err := os.Stat(gone); !os.IsNotExist(err) {
+			t.Errorf("%s stayed: %v", gone, err)
+		}
+	}
+	if got := fileBytes(t, filepath.Join(claude, "canyon-mine", "SKILL.md")); got != "a person's own skill\n" {
+		t.Errorf("a skill the sync didn't write was touched: %q", got)
+	}
+}

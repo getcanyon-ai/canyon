@@ -44,6 +44,9 @@ func skillsDir(home, harness string) string {
 	return ""
 }
 
+// skillsShown is each harness's skills directory as a row names it.
+var skillsShown = map[string]string{targetClaude: "~/.claude/skills/", targetCodex: "~/.agents/skills/"}
+
 // syncedSkills is each canyon-* directory under dir whose marker names host, by slug, with the version it holds.
 func syncedSkills(dir, host string) map[string]int {
 	held := map[string]int{}

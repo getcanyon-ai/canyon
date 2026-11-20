@@ -69,17 +69,15 @@ optional except `secret_name`, `recorded`, `shown`, `carried_from` and `playbook
 - `canyon.severity` ∉ the four values ⇒ the run fails closed.
 - **`canyon.blocks` is present on every finding; producers cannot set it** — the server derives
   it after policy lookup and overwrites whatever a producer wrote.
-- **`canyon.playbook` is the server's, as `blocks` is** (**added 2026-11-20**, design/specs/mcp.md §3.4):
-  `{slug, name}`, the org's playbook a `custom.*` rule points at, as the run's snapshot carries it on
-  the rule (snapshot.md, *Custom rules*) — and only there: a finding of any other rule, or of a custom
-  rule whose snapshot carries none, has no `playbook`. A producer never sets it; the server derives it
-  after policy lookup and overwrites whatever a producer wrote, so a log whose `playbook` is not its
-  rule's in the snapshot fails closed. It is how an agent is told where the org explains the rule, one
-  more next step after the fix: `Read the playbook <name>: canyon playbook <slug>` in the CLI's
-  `--format ai` block (design/specs/cli.md §5.2) and on the dashboard's finding. It is outside the
-  `canyon/v1` recipe, so a playbook linked or removed never moves a fingerprint or an approval. The
-  sample is `contracts/testdata/finding/custom-playbook.sarif.json`, against
-  `contracts/testdata/snapshot/custom-rules.json`.
+- **`canyon.playbook` is the server's, as `blocks` is** (**added 2026-11-20**): `{slug, name}`, the
+  org's playbook a `custom.*` rule points at, as the run's policy snapshot carries it on the rule —
+  and only there: a finding of any other rule, or of a custom rule the snapshot carries no playbook
+  on, has no `playbook`. A producer never sets it; the server derives it after policy lookup and
+  overwrites whatever a producer wrote, so a log whose `playbook` is not its rule's fails closed. It
+  is how an agent is told where the org explains the rule: one more next step after the fix,
+  `Read the playbook <name>: canyon playbook <slug>`, in the CLI's `--format ai` block and on the
+  dashboard's finding. It is outside the `canyon/v1` recipe, so a playbook linked or removed never
+  moves a fingerprint or an approval.
 - `required_end_state` and `do_not` are required on any finding whose `blocks` is true, and
   permitted on any other. `do_not` names the specific wrong moves that reproduce this finding;
   each entry is one line. Both are governance prose the surfaces print verbatim and never

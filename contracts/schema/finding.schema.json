@@ -325,7 +325,7 @@
                   }
                 },
                 "playbook": {
-                  "description": "The org's playbook the result's custom rule points at, derived server-side from the snapshot as blocks is (finding.md; design/specs/mcp.md §3.4).",
+                  "description": "The org's playbook the result's custom rule points at, derived server-side from the policy snapshot as blocks is.",
                   "type": "object",
                   "additionalProperties": false,
                   "required": [

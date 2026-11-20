@@ -332,8 +332,8 @@ func (a *app) startRun(ctx context.Context, r *http.Request, id, pkg string, dep
 			return runs.Run{}, "", nil, err
 		}
 	}
-	if r.Header.Get("Canyon-Transport") == transportMCPLocal { // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's
-		if _, err := tx.Exec(ctx, "UPDATE runs SET transport = $1 WHERE id = $2", transportMCPLocal, run.ID); err != nil {
+	if t := r.Header.Get("Canyon-Transport"); t == transportMCPLocal || t == "mcp-remote" { // PLANTED FAULT: a client may claim mcp-remote // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's
+		if _, err := tx.Exec(ctx, "UPDATE runs SET transport = $1 WHERE id = $2", t, run.ID); err != nil {
 			return runs.Run{}, "", nil, err
 		}
 	}

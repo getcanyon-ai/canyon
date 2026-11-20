@@ -128,6 +128,9 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "app_policy.set": return { verb: "Changed the app's guardrail", rest: text(d.rule) };
     case "app_policy.remove": return { verb: "Removed the app's guardrail", rest: text(d.rule) };
     case "custom_rule.set": return { verb: "Saved a custom rule", rest: `${text(d.rule)}, version ${String(d.version ?? "")}` };
+    case "set playbook": return { verb: "Saved a playbook", rest: `${text(d.slug)}, version ${String(d.version ?? "")}` };
+    case "restore playbook": return { verb: "Restored a playbook", rest: `${text(d.slug)}, version ${String(d.from ?? "")} as version ${String(d.version ?? "")}` };
+    case "remove playbook": return { verb: "Removed a playbook", rest: text(d.slug) };
     case "PUT /api/v1/preferences": {
       const admins = beforeAfter(d.admin_emails);
       if (admins !== null) return { verb: "Changed who is an admin", rest: moved(admins) };

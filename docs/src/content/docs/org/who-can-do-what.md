@@ -191,6 +191,8 @@ otherwise:
 - Change the approved buildpacks or the design system, or use **Set up with Canyon**. Dashboard only
   while production approval is on.
 - Change the approved stacks.
+- Write, restore or remove a playbook. Only a person, and only in the dashboard. Every member can
+  read the playbooks.
 - Connect GitHub, import a repository, link an app to a repository or unlink it.
 - Change who may sign in and who is an admin, and sign someone out everywhere.
 - Change how people reach apps (the front door) and the platform webhook.

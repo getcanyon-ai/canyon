@@ -22,7 +22,7 @@ Every row is one of three kinds. The **Kind** filter names them:
   - setting and removing secrets;
   - sharing an app, asking for access, and dismissing a request;
   - declaring and deleting databases;
-  - every change to the org's settings, its rules, its custom rules, an app's own stricter rules,
+  - every change to the org's settings, its rules, its custom rules, its playbooks, an app's own stricter rules,
     the scanner credential, the front door (how people reach apps) and the GitHub App;
   - finishing setup, and signing someone out everywhere.
 - **Access**: sign-ins, sign-outs, refused sign-ins, requests Canyon refused, and reads of an app's

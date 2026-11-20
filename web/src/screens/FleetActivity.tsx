@@ -26,7 +26,7 @@ export const ACTIVITY_ACTIONS = [
   ...RUN, ...PROMOTE, APPROVE, APPROVE_ALL,
   "share app", "unshare app",
   "PUT /api/v1/projects/{id}/secrets/{name}", "DELETE /api/v1/projects/{id}/secrets/{name}",
-  "policy.set", "app_policy.set", "app_policy.remove", "custom_rule.set", "PUT /api/v1/preferences",
+  "policy.set", "app_policy.set", "app_policy.remove", "custom_rule.set", "set playbook", "restore playbook", "remove playbook", "PUT /api/v1/preferences",
   "POST /api/v1/projects", "DELETE /api/v1/projects/{id}", "PUT /api/v1/projects/{id}/owner", "DELETE /api/v1/projects/{id}/envs/{env}",
   "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest",
 ];

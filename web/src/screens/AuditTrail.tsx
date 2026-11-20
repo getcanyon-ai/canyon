@@ -26,7 +26,7 @@ const RANGES = [
 const QUESTIONS: { key: string; label: string; actions: string[]; admin?: true }[] = [
   { key: "production", label: "Production changes", actions: ["deploy prod", "POST /api/v1/projects/{id}/promotions", "platform reported deployed", "platform reported another digest", "platform reported failed"] },
   { key: "admin", label: "Admin and sign-in changes", actions: ["PUT /api/v1/preferences", "sign in", "sign out", "revoke sessions", "complete setup", "set front door", "egress.set", "egress.networks.recreate", "set platform webhook", "rotate platform token", "scanner.credential.set", "scanner.credential.remove", "github app registered"], admin: true },
-  { key: "guardrails", label: "Guardrail changes", actions: ["policy.set", "app_policy.set", "app_policy.remove", "custom_rule.set"], admin: true },
+  { key: "guardrails", label: "Guardrail changes", actions: ["policy.set", "app_policy.set", "app_policy.remove", "custom_rule.set", "set playbook", "restore playbook", "remove playbook"], admin: true },
   { key: "access", label: "Access changes", actions: ["share app", "unshare app", "request access", "dismiss access request", "PUT /api/v1/projects/{id}/owner"] },
   { key: "approvals", label: "Approved blocking problems", actions: ["POST /api/v1/gate-runs/{run}/findings/{fingerprint}/approve", "POST /api/v1/gate-runs/{run}/findings/approve"] },
   { key: "secrets", label: "Secrets", actions: ["PUT /api/v1/projects/{id}/secrets/{name}", "DELETE /api/v1/projects/{id}/secrets/{name}"] },

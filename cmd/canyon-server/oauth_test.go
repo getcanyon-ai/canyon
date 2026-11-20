@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,22 @@ func oauthHost(t *testing.T) (base string, pool *pgxpool.Pool, ctx context.Conte
 	pool, ctx = migrated(t)
 	base, _ = start(t, pool, time.Hour)
 	return base, pool, ctx, signedIn(t, ctx, pool, base, "sub-gina", "gina@meridian.example", false)
+}
+
+// justNow is an RFC 3339 time within the last minute.
+func justNow(v any) bool {
+	at, err := time.Parse(time.RFC3339, fmt.Sprint(v))
+	return err == nil && time.Since(at) < time.Minute && time.Since(at) > -time.Second
+}
+
+// countRows counts the rows q selects.
+func countRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, q string) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(ctx, q).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // staying is c without following redirects: the test reads where each one goes.
@@ -107,7 +124,8 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	req := requestOf(t, authorize(t, base, gina, asked)) // a loopback redirect on another port: a native client picks its port at each sign-in
 	if code, body, _ := do(t, gina, http.MethodGet, base+"/api/v1/oauth/requests/"+req, ""); code != 200 ||
 		!marshalsTo(body["client"], `{"host":"127.0.0.1","name":"Claude Code","verified":false}`) || body["redirect_host"] != "127.0.0.1" ||
-		!marshalsTo(body["scopes"], `["read","act"]`) || !marshalsTo(body["account"], `{"display":"sub-gina","email":"gina@meridian.example"}`) || body["host"] != "localhost:7777" {
+		!marshalsTo(body["scopes"], `["read","act"]`) || !marshalsTo(body["account"], `{"display":"sub-gina","email":"gina@meridian.example"}`) || body["host"] != "localhost:7777" ||
+		!justNow(body["requested_at"]) {
 		t.Fatalf("the consent read: %d %s", code, lastBody)
 	}
 	code, body, _ := doWith(t, gina, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
@@ -132,7 +150,7 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 		resource != "http://localhost:7777/mcp" || strings.Join(scopes, " ") != "read act" || hours < 0.99 || hours > 1 || days < 29.9 || days > 30 || row == access {
 		t.Fatalf("the session: %s %s %s %s %v, access %.2f hours, the session %.2f days, %v", flow, clientID, clientName, resource, scopes, hours, days, err)
 	}
-	if n := count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE (action = 'connect agent' AND detail = '{"client": "Claude Code", "client_host": "127.0.0.1", "scopes": ["read", "act"]}')
+	if n := countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE (action = 'connect agent' AND detail = '{"client": "Claude Code", "client_host": "127.0.0.1", "scopes": ["read", "act"]}')
 		OR (action = 'sign in' AND detail = '{"flow": "oauth", "client": "Claude Code"}' AND via = 'mcp')`); n != 2 {
 		t.Errorf("%d audit rows for the consent and the sign-in, want 2", n)
 	}
@@ -152,7 +170,7 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	}
 	var same int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM sessions WHERE id = $1 AND access_hash = $2 AND refresh_hash = $3 AND revoked_at IS NULL",
-		row, hash(renewed["access_token"].(string)), hash(renewed["refresh_token"].(string))).Scan(&same); err != nil || same != 1 || count(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth'") != 1 {
+		row, hash(renewed["access_token"].(string)), hash(renewed["refresh_token"].(string))).Scan(&same); err != nil || same != 1 || countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth'") != 1 {
 		t.Errorf("the refresh rotated onto another row, or none: %v", err)
 	}
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {renewed["refresh_token"].(string)}, "client_id": {"dcr_" + strings.Repeat("0", 32)}}); status != 400 {
@@ -161,8 +179,8 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, "already used") {
 		t.Errorf("the rotated refresh token used again: %d %s", status, lastBody)
 	}
-	if n := count(t, ctx, pool, `SELECT count(*) FROM sessions WHERE id = '`+row+`' AND revoked_at IS NOT NULL`) +
-		count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND actor_kind = 'canyon' AND detail = '{"reason": "refresh token reused", "subject": "sub-gina"}'`); n != 2 {
+	if n := countRows(t, ctx, pool, `SELECT count(*) FROM sessions WHERE id = '`+row+`' AND revoked_at IS NOT NULL`) +
+		countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND actor_kind = 'canyon' AND detail = '{"reason": "refresh token reused", "subject": "sub-gina"}'`); n != 2 {
 		t.Errorf("a reused refresh token left the session live, or wrote no row")
 	}
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {renewed["refresh_token"].(string)}, "client_id": {id}}); status != 400 {
@@ -220,7 +238,7 @@ func TestOAuthRevokingASessionEndsItsTokens(t *testing.T) {
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {id}}); status != 400 {
 		t.Errorf("a disconnected agent's refresh: %d %s", status, lastBody)
 	}
-	if n := count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND actor_subject = 'sub-gina' AND detail->>'client' = 'Claude Code' AND NOT detail ? 'subject'`); n != 1 {
+	if n := countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND actor_subject = 'sub-gina' AND detail->>'client' = 'Claude Code' AND NOT detail ? 'subject'`); n != 1 {
 		t.Errorf("%d rows for gina's disconnect, want 1, with no subject: it was her own", n)
 	}
 }
@@ -238,7 +256,7 @@ func TestOAuthAPersonOffTheListsGetsNoToken(t *testing.T) {
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, "no longer sign in") {
 		t.Errorf("a refresh off the lists: %d %s", status, lastBody)
 	}
-	if n := count(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL"); n != 0 {
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL"); n != 0 {
 		t.Errorf("the session of a person off the lists is still live")
 	}
 }
@@ -283,9 +301,11 @@ func TestOAuthACodeRedeemsOnlyForWhatItWasIssued(t *testing.T) {
 	}
 }
 
-// What Canyon can't send back to is its own page, never a redirect: an unknown client, a client document that names
-// another, and a redirect the client didn't register. Everything else goes back to the client as OAuth says.
-func TestOAuthAuthorizeRefusesWhereItCanSendBack(t *testing.T) {
+// Until the person has answered, Canyon redirects nowhere but its own consent page (RFC 9700 §4.11.2): every fault of
+// an authorization request, a client's or its redirect's or any other, is Canyon's own refusal page, never the
+// client's redirect, so no one can name a client and have Canyon's origin send a browser to their site unasked. Only an
+// answer on the consent page goes back.
+func TestOAuthAuthorizeRefusesOnItsOwnPage(t *testing.T) {
 	base, _, _, gina := oauthHost(t)
 	const redirect = "https://claude.ai/api/mcp/auth_callback"
 	id := register(t, base, redirect)
@@ -296,30 +316,68 @@ func TestOAuthAuthorizeRefusesWhereItCanSendBack(t *testing.T) {
 	}
 	for name, c := range map[string]struct {
 		change func(neturl.Values)
-		page   string // the refusal page's reason, or "" for the client's redirect
-		error  string
+		reason string
 	}{
-		"an unknown client":           {func(q neturl.Values) { q.Set("client_id", "dcr_"+strings.Repeat("a", 32)) }, "client", ""},
-		"an unregistered redirect":    {func(q neturl.Values) { q.Set("redirect_uri", "https://evil.example/cb") }, "redirect", ""},
-		"no PKCE":                     {func(q neturl.Values) { q.Del("code_challenge") }, "", "invalid_request"},
-		"plain PKCE":                  {func(q neturl.Values) { q.Set("code_challenge_method", "plain") }, "", "invalid_request"},
-		"another resource":            {func(q neturl.Values) { q.Set("resource", "http://localhost:7777/api") }, "", "invalid_target"},
-		"no resource":                 {func(q neturl.Values) { q.Del("resource") }, "", "invalid_target"},
-		"a scope Canyon doesn't have": {func(q neturl.Values) { q.Set("scope", "read admin") }, "", "invalid_scope"},
-		"a token response":            {func(q neturl.Values) { q.Set("response_type", "token") }, "", "unsupported_response_type"},
+		"an unknown client":           {func(q neturl.Values) { q.Set("client_id", "dcr_"+strings.Repeat("a", 32)) }, "client"},
+		"an unregistered redirect":    {func(q neturl.Values) { q.Set("redirect_uri", "https://evil.example/cb") }, "redirect"},
+		"no PKCE":                     {func(q neturl.Values) { q.Del("code_challenge") }, "pkce"},
+		"plain PKCE":                  {func(q neturl.Values) { q.Set("code_challenge_method", "plain") }, "pkce"},
+		"another resource":            {func(q neturl.Values) { q.Set("resource", "http://localhost:7777/api") }, "resource"},
+		"no resource":                 {func(q neturl.Values) { q.Del("resource") }, "resource"},
+		"a scope Canyon doesn't have": {func(q neturl.Values) { q.Set("scope", "read admin") }, "scope"},
+		"a token response":            {func(q neturl.Values) { q.Set("response_type", "token") }, "response"},
+		"a state over 1,024":          {func(q neturl.Values) { q.Set("state", strings.Repeat("s", 1025)) }, "state"},
 	} {
 		q := good()
 		c.change(q)
-		at := authorize(t, base, gina, q)
-		if c.page != "" {
-			if at.Path != "/" || at.Fragment != "/oauth?invalid="+c.page || at.Query().Get("code") != "" {
-				t.Errorf("%s: sent to %s, want Canyon's page for %s", name, at, c.page)
+		for _, who := range []*http.Client{gina, client(t)} { // signed in or not: nobody is sent off Canyon unasked
+			at := authorize(t, base, who, q)
+			if at.Host != strings.TrimPrefix(base, "http://") || at.Path != "/" || at.Fragment != "/oauth?invalid="+c.reason {
+				t.Errorf("%s: sent to %s, want Canyon's own page for %s", name, at, c.reason)
 			}
-			continue
 		}
-		if at.Host != "claude.ai" || at.Query().Get("error") != c.error || at.Query().Get("state") != "s" || at.Query().Get("iss") != "http://localhost:7777" {
-			t.Errorf("%s: sent to %s, want the client's redirect with %s", name, at, c.error)
+	}
+}
+
+// A registration counts as used only once a code it was issued redeems: an authorization that names it, refused or
+// never answered, keeps it unused, so the next registration a day later deletes it. One used is deleted once 30 days
+// pass with no session of it live or begun since.
+func TestOAuthUnusedRegistrationsAreDeleted(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect = "https://claude.ai/cb"
+	idle := register(t, base, redirect)
+	authorize(t, base, gina, neturl.Values{"client_id": {idle}, "redirect_uri": {redirect}, "response_type": {"token"}}) // refused
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+idle+"' AND used_at IS NULL"); n != 1 {
+		t.Errorf("a refused authorization marked the registration used")
+	}
+	used := register(t, base, redirect)
+	signedInOver(t, base, gina, used, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+used+"' AND used_at IS NOT NULL"); n != 1 {
+		t.Errorf("a redeemed code left the registration unused")
+	}
+	if _, err := pool.Exec(ctx, "UPDATE oauth_clients SET created_at = now() - interval '2 days' WHERE id = $1", idle); err != nil {
+		t.Fatal(err)
+	}
+	register(t, base, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+idle+"'"); n != 0 {
+		t.Errorf("a registration unused for two days outlived the next registration")
+	}
+	for _, q := range []string{"UPDATE oauth_clients SET created_at = now() - interval '40 days', used_at = now() - interval '40 days' WHERE id = '" + used + "'",
+		"UPDATE sessions SET created_at = now() - interval '40 days' WHERE oauth_client = '" + used + "'"} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
 		}
+	}
+	register(t, base, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+used+"'"); n != 1 {
+		t.Errorf("a registration with a live session was deleted")
+	}
+	if _, err := pool.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE oauth_client = $1", used); err != nil {
+		t.Fatal(err)
+	}
+	register(t, base, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+used+"'"); n != 0 {
+		t.Errorf("a registration with no session live or begun in 30 days outlived the next registration")
 	}
 }
 
@@ -407,9 +465,16 @@ func TestOAuthDocumentsComeFromPublicAddressesAlone(t *testing.T) {
 	if _, err := fetchClientDocument(t.Context(), c, srv.URL+"/client.json"); err == nil {
 		t.Error("a document on loopback was fetched")
 	}
+	for address, ok := range map[string]bool{"93.184.216.34:443": true, "93.184.216.34:8443": false, "93.184.216.34:80": false, "[2606:4700::1111]:443": true, "10.0.0.1:443": false} {
+		if err := dialable("tcp", address, nil); (err == nil) != ok { // a public address on any port but 443 is never dialled
+			t.Errorf("%s: dialable %v, want %v", address, err, ok)
+		}
+	}
 	for addr, public := range map[string]bool{"8.8.8.8": true, "2606:4700::1111": true, "10.0.0.1": false, "172.16.4.2": false, "192.168.1.1": false, "100.64.0.1": false,
 		"169.254.169.254": false, "127.0.0.1": false, "::1": false, "fd00::1": false, "fe80::1": false, "0.0.0.0": false, "::ffff:10.0.0.1": false, "224.0.0.1": false,
-		"ff02::1": false, "::": false, "64:ff9b::a00:1": false, "64:ff9b::808:808": false, "64:ff9b:1::1": false} {
+		"ff02::1": false, "::": false, "64:ff9b::a00:1": false, "64:ff9b::808:808": false, "64:ff9b:1::1": false,
+		"0.1.2.3": false, "198.18.0.1": false, "198.19.255.1": false, "192.0.0.8": false, "240.0.0.1": false, "255.255.255.254": false,
+		"2002:a00:1::1": false, "2002:808:808::1": false, "::a00:1": false, "2001:db8::1": false} {
 		if got := publicAddress(netip.MustParseAddr(addr)); got != public {
 			t.Errorf("%s: public %v, want %v", addr, got, public)
 		}

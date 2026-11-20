@@ -775,7 +775,7 @@ export const CONSENT = {
   title: "Allow <client> to use Canyon as you?",
   line: "<client> will act as <display> (<email>) on <host>. Then Canyon sends you back to <redirect host>.",
   unverified: "Canyon can't verify this name: the app chose it itself.",
-  from: "From <client id host>",
+  onlyYours: "Only allow a connection you started yourself.",
   scope: {
     read: "See your org's rules, and the apps you can see: their status, and logs where you're a contributor",
     act: "Check, deploy and promote the apps you contribute to",
@@ -786,7 +786,15 @@ export const CONSENT = {
   expired: "This request has expired. Go back to <client> and connect again.",
   expiredNoClient: "This request has expired. Go back to the app and connect again.",
   invalid: "This connection request isn't valid: <reason>. Go back to the app that sent you here.",
-  reason: { client: "its client isn't registered", redirect: "it names a redirect the client didn't register" },
+  reason: {
+    client: "its client isn't registered",
+    redirect: "it names a redirect the client didn't register",
+    response: "it doesn't ask for a code",
+    pkce: "it has no S256 PKCE challenge",
+    resource: "it isn't for this Canyon's MCP server",
+    scope: "it asks for access Canyon doesn't grant",
+    state: "its state is over 1,024 characters",
+  },
 } as const;
 
 // Settings › People & sign-in, the sessions list.

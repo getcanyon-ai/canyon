@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { approveOAuthRequest, denyOAuthRequest, getOAuthRequest, said, signOut, type ApiError, type OAuthRequest } from "../api";
-import { CONSENT } from "../strings";
+import { AUTH, CONSENT } from "../strings";
 import { ApprovingAs } from "../ui/ApprovingAs";
 import { AuthCard, AuthHead, AuthNote } from "../ui/AuthCard";
 import { Button } from "../ui/Button";
+import { ROW, requestedAt } from "./Device";
 
 // An MCP client's consent page, #/oauth (design/AUTH.md §4.7): who asks, as whom, where Canyon sends the person back,
 // and what it may do. A registration's name is the client's own word, and the page says so; a document's is shown
@@ -44,7 +45,7 @@ export function Consent({ request, invalid, org }: { request: string; invalid: s
     void send(request).then((answer) => { if (allowed(answer.redirect)) leave.to(answer.redirect); else setSending(false); }, failed);
   };
 
-  const reason = invalid === "client" || invalid === "redirect" ? CONSENT.reason[invalid] : null;
+  const reason = invalid !== null && Object.hasOwn(CONSENT.reason, invalid) ? CONSENT.reason[invalid as keyof typeof CONSENT.reason] : null;
   if (invalid !== null || request === "") {
     return (
       <AuthCard org={org}>
@@ -60,15 +61,19 @@ export function Consent({ request, invalid, org }: { request: string; invalid: s
     );
   }
   if (read === null) return <AuthCard org={org}>{failure !== null && <p className="text-md text-critical">{failure}</p>}</AuthCard>;
-  const fill = (line: string) => line.replaceAll("<client>", read.client.name).replace("<display>", read.account.display).replace("<email>", read.account.email)
-    .replace("<host>", read.host).replace("<redirect host>", read.redirect_host);
+  const words: Record<string, string> = { "<client>": read.client.name, "<display>": read.account.display, "<email>": read.account.email, "<host>": read.host, "<redirect host>": read.redirect_host };
+  const fill = (line: string) => line.replace(/<client>|<display>|<email>|<host>|<redirect host>/g, (k) => words[k] ?? k); // one pass: a name holding a placeholder or "$'" stays as it is
   return (
     <AuthCard org={org}>
       <div className="grid gap-5">
         <AuthHead title={fill(CONSENT.title)} line={fill(CONSENT.line)} />
-        {read.client.verified
-          ? <p className="text-md text-text-dim">{CONSENT.from.replace("<client id host>", read.client.host)}</p>
-          : <AuthNote tone="amber" icon="alert" title={CONSENT.unverified} />}
+        <section aria-label="The request">
+          <dl className="grid grid-cols-[auto_1fr] rounded-lg border border-border text-md [&>dd]:text-right [&>dd]:font-medium [&>dt]:text-text-dim">
+            <dt className={ROW}>{AUTH.deviceFrom}</dt><dd className={`${ROW} font-mono`}>{read.client.host}</dd>
+            <dt className={ROW}>{AUTH.deviceWhen}</dt><dd className={ROW}>{requestedAt(read.requested_at)}</dd>
+          </dl>
+        </section>
+        <AuthNote tone="amber" icon="alert" title={CONSENT.onlyYours}>{read.client.verified ? undefined : CONSENT.unverified}</AuthNote>
         <section aria-label="What it may do">
           <ul className="grid gap-1.5 rounded-lg border border-border px-3.5 py-3 text-md">
             {read.scopes.map((scope) => <li key={scope}>{CONSENT.scope[scope]}</li>)}

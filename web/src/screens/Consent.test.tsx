@@ -1,14 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONSENT, S } from "../strings";
+import { AUTH, CONSENT, S } from "../strings";
 import { leave } from "./Consent";
+import { requestedAt } from "./Device";
 import { Shell } from "./Shell";
 
 const ID = "a".repeat(64);
 const REQUEST = `/api/v1/oauth/requests/${ID}`;
-const pending = (verified: boolean, scopes = ["read", "act"]) => ({
-  client: { name: "Claude Code", host: verified ? "claude.ai" : "127.0.0.1", verified }, redirect_host: "127.0.0.1", scopes, host: "canyon.meridian.example",
-  expires_at: "2026-11-20T12:10:00Z", account: { display: "Gina Ruiz", email: "gina@meridian.example" },
+const pending = (verified: boolean, scopes = ["read", "act"], name = "Claude Code") => ({
+  client: { name, host: verified ? "claude.ai" : "127.0.0.1", verified }, redirect_host: "127.0.0.1", scopes, host: "canyon.meridian.example",
+  requested_at: "2026-11-20T12:00:00Z", expires_at: "2026-11-20T12:10:00Z", account: { display: "Gina Ruiz", email: "gina@meridian.example" },
 });
 const answer = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body }) as unknown as Response;
 
@@ -46,7 +47,11 @@ describe("an MCP client's consent page", () => {
     const { sent, assign } = open(`#/oauth?request=${ID}`);
     expect(await screen.findByRole("heading", { name: "Allow Claude Code to use Canyon as you?" })).toBeDefined();
     expect(screen.getByText("Claude Code will act as Gina Ruiz (gina@meridian.example) on canyon.meridian.example. Then Canyon sends you back to 127.0.0.1.")).toBeDefined();
+    expect(screen.getByText(CONSENT.onlyYours)).toBeDefined(); // a link someone else sent is how this page phishes
     expect(screen.getByText(CONSENT.unverified)).toBeDefined(); // a registration's name is its own word
+    const asked = screen.getByRole("region", { name: "The request" });
+    expect(within(asked).getByText(AUTH.deviceFrom).nextSibling?.textContent).toBe("127.0.0.1");
+    expect(within(asked).getByText(AUTH.deviceWhen).nextSibling?.textContent).toBe(requestedAt("2026-11-20T12:00:00Z"));
     const may = screen.getByRole("region", { name: "What it may do" });
     expect(within(may).getByText(CONSENT.scope.read)).toBeDefined();
     expect(within(may).getByText(CONSENT.scope.act)).toBeDefined();
@@ -59,12 +64,21 @@ describe("an MCP client's consent page", () => {
 
   it("shows a client document's host, read alone, and sends a refusal back", async () => {
     const { sent, assign } = open(`#/oauth?request=${ID}`, () => answer(200, pending(true, ["read"])));
-    expect(await screen.findByText("From claude.ai")).toBeDefined();
+    const asked = await screen.findByRole("region", { name: "The request" });
+    expect(within(asked).getByText(AUTH.deviceFrom).nextSibling?.textContent).toBe("claude.ai");
+    expect(screen.getByText(CONSENT.onlyYours)).toBeDefined();
     expect(screen.queryByText(CONSENT.unverified)).toBeNull();
     expect(screen.queryByText(CONSENT.scope.act)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: CONSENT.refuse }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("http://127.0.0.1:41999/callback?error=access_denied&iss=x&state=s"));
     expect(sent()).toEqual([`GET ${REQUEST}`, `POST ${REQUEST}/deny`]);
+  });
+
+  it("fills a client's name in as it is, never as a placeholder or a replacement pattern", async () => {
+    const name = "Evil <redirect host> $' $& <email>";
+    open(`#/oauth?request=${ID}`, () => answer(200, pending(false, ["read"], name)));
+    expect(await screen.findByRole("heading", { name: `Allow ${name} to use Canyon as you?` })).toBeDefined();
+    expect(screen.getByText(`${name} will act as Gina Ruiz (gina@meridian.example) on canyon.meridian.example. Then Canyon sends you back to 127.0.0.1.`)).toBeDefined();
   });
 
   it("follows only an https redirect, or http on loopback", async () => {
@@ -106,10 +120,10 @@ describe("an MCP client's consent page", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it("names why a request Canyon can't send back for isn't valid, and asks nothing", async () => {
-    for (const [invalid, reason] of [["client", CONSENT.reason.client], ["redirect", CONSENT.reason.redirect]] as const) {
+  it("names why a request isn't valid, and asks nothing", async () => {
+    for (const invalid of ["client", "redirect", "response", "pkce", "resource", "scope", "state"] as const) {
       const { sent } = open(`#/oauth?invalid=${invalid}`);
-      expect(await screen.findByRole("heading", { name: CONSENT.invalid.replace("<reason>", reason) })).toBeDefined();
+      expect(await screen.findByRole("heading", { name: CONSENT.invalid.replace("<reason>", CONSENT.reason[invalid]) })).toBeDefined();
       expect(sent()).toEqual([]);
       cleanup();
     }

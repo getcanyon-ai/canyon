@@ -322,7 +322,7 @@ export const approveDevice = (code: string) => call<void>("POST", `${grantPath(c
 export const denyDevice = (code: string) => call<void>("POST", `${grantPath(code)}/deny`);
 // An MCP client's consent (contracts/routes.md, Sessions; design/AUTH.md §4.7): the request it waits on, and the
 // redirect the browser follows once the person allows or refuses it.
-export interface OAuthRequest { client: { name: string; host: string; verified: boolean }; redirect_host: string; scopes: ("read" | "act")[]; host: string; expires_at: string; account: { display: string; email: string } }
+export interface OAuthRequest { client: { name: string; host: string; verified: boolean }; redirect_host: string; scopes: ("read" | "act")[]; host: string; requested_at: string; expires_at: string; account: { display: string; email: string } }
 const oauthPath = (id: string) => `/oauth/requests/${encodeURIComponent(id)}`;
 export const getOAuthRequest = (id: string) => call<OAuthRequest>("GET", oauthPath(id));
 export const approveOAuthRequest = (id: string) => call<{ redirect: string }>("POST", `${oauthPath(id)}/approve`);

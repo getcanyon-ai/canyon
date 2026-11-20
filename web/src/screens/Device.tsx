@@ -14,10 +14,10 @@ import { Button } from "../ui/Button";
 // and comes back to this code. A 404 says this screen's own line, never the server's: that sentence
 // is written for the CLI's terminal.
 const FIELD = "h-[52px] w-full rounded-lg border border-border-strong bg-surface text-center font-mono text-title tracking-[.18em] placeholder:text-text-faint focus:border-accent aria-invalid:border-critical";
-const ROW = "border-t border-border px-3.5 py-2 first-of-type:border-t-0";
+export const ROW = "border-t border-border px-3.5 py-2 first-of-type:border-t-0";
 
 // "14:22 today" as the mockup has it; a code lives ten minutes, so another day is only midnight.
-function requestedAt(at: string): string {
+export function requestedAt(at: string): string {
   const when = new Date(at);
   const clock = when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return when.toDateString() === new Date().toDateString() ? `${clock} today` : `${clock} on ${when.toLocaleDateString()}`;

@@ -193,28 +193,38 @@ func (a *app) documents() *http.Client {
 // clientDocumentClient fetches a client's metadata document, from a public address alone: a document's URL is the
 // client's word, and the server must never be made to reach the org's own network for it.
 func clientDocumentClient() *http.Client {
-	dialer := &net.Dialer{Timeout: oauthFetchLimit, Control: func(_, address string, _ syscall.RawConn) error {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return err
-		}
-		ip, err := netip.ParseAddr(host)
-		if err != nil || !publicAddress(ip) {
-			return fmt.Errorf("%s is not a public address", host)
-		}
-		return nil
-	}}
+	dialer := &net.Dialer{Timeout: oauthFetchLimit, Control: dialable}
 	return &http.Client{Timeout: oauthFetchLimit, Transport: &http.Transport{DialContext: dialer.DialContext, Proxy: nil, ForceAttemptHTTP2: true, TLSHandshakeTimeout: oauthFetchLimit},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-// notPublic are the prefixes IsGlobalUnicast lets through that still reach an org's own network: carrier-grade NAT,
-// and NAT64's (RFC 6052, RFC 8215), which carry an IPv4 address of any kind inside them.
-var notPublic = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("64:ff9b::/96"), netip.MustParsePrefix("64:ff9b:1::/48")}
+// dialable is the dialer's last word, on the address a name resolved to: a public address, on port 443 alone.
+func dialable(_, address string, _ syscall.RawConn) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil || !publicAddress(ip) {
+		return fmt.Errorf("%s is not a public address", host)
+	}
+	if port != "443" {
+		return fmt.Errorf("port %s is not 443", port)
+	}
+	return nil
+}
+
+// notPublic are the prefixes IsGlobalUnicast lets through that are no public host's: carrier-grade NAT, "this network"
+// (0/8), benchmarking (198.18/15), IETF protocol assignments (192.0.0/24), reserved (240/4), documentation (2001:db8::/32),
+// and the ones that carry an IPv4 address of any kind inside them: NAT64's (RFC 6052, RFC 8215), 6to4 (2002::/16) and
+// IPv4-compatible (::/96).
+var notPublic = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("0.0.0.0/8"), netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("192.0.0.0/24"), netip.MustParsePrefix("240.0.0.0/4"), netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("64:ff9b::/96"), netip.MustParsePrefix("64:ff9b:1::/48"), netip.MustParsePrefix("2002::/16"), netip.MustParsePrefix("::/96")}
 
 // publicAddress is a global unicast address on the public internet: none of the org's own, mapped or not. Loopback,
 // unspecified, link-local and every multicast address are not global unicast; private and ULA (fc00::/7) addresses
-// are IsPrivate; carrier-grade NAT and NAT64 are notPublic.
+// are IsPrivate; the rest are notPublic.
 func publicAddress(ip netip.Addr) bool {
 	ip = ip.Unmap()
 	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !slices.ContainsFunc(notPublic, func(p netip.Prefix) bool { return p.Contains(ip) })
@@ -415,9 +425,9 @@ func (a *app) getOAuthRequest(w http.ResponseWriter, r *http.Request) {
 	var name, host, redirect string
 	var verified bool
 	var scopes []string
-	var expires time.Time
-	err := a.pool.QueryRow(r.Context(), `SELECT client_name, client_host, client_verified, redirect_uri, scope, expires_at FROM oauth_requests
-		WHERE id = $1 AND session_id IS NULL AND expires_at > now()`, r.PathValue("id")).Scan(&name, &host, &verified, &redirect, &scopes, &expires)
+	var requested, expires time.Time
+	err := a.pool.QueryRow(r.Context(), `SELECT client_name, client_host, client_verified, redirect_uri, scope, created_at, expires_at FROM oauth_requests
+		WHERE id = $1 AND session_id IS NULL AND expires_at > now()`, r.PathValue("id")).Scan(&name, &host, &verified, &redirect, &scopes, &requested, &expires)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeErr(w, http.StatusNotFound, "not_found", "This request has expired. Go back to the app and connect again.", nil)
 		return
@@ -432,7 +442,7 @@ func (a *app) getOAuthRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	public, _ := neturl.Parse(a.public)
 	writeJSON(w, http.StatusOK, map[string]any{"client": map[string]any{"name": name, "host": host, "verified": verified}, "redirect_host": back,
-		"scopes": scopes, "host": public.Host, "expires_at": expires.UTC().Format(time.RFC3339),
+		"scopes": scopes, "host": public.Host, "requested_at": requested.UTC().Format(time.RFC3339), "expires_at": expires.UTC().Format(time.RFC3339),
 		"account": map[string]string{"display": actorOf(r.Context()).Display, "email": addressOf(r.Context())}})
 }
 

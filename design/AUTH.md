@@ -541,13 +541,14 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
    loopback host, or a native app's own scheme Canyon names, `cursor` alone, since Cursor receives its sign-in on
    `cursor://`; nothing else, and never a scheme by pattern.
 2. It sends the person's browser to `GET /oauth/authorize`, PKCE `S256` and `resource=<public URL>/mcp` (RFC 8707)
-   required. Canyon checks the client and the redirect first, and answers a fault in either on its own page, never at
-   the redirect: a redirect the client didn't name is where an attacker would want the code. Any other fault goes back
-   to the client, as OAuth says.
+   required. Canyon answers every fault on its own page, never at the redirect: a redirect the client didn't name is
+   where an attacker would want the code, and until the person has answered, Canyon sends their browser nowhere a
+   stranger's link names (RFC 9700 §4.11.2), so no one turns its origin into a hop to their own site.
 3. The request waits ten minutes on the **consent page**, `/#/oauth`. A browser with no session signs in first and
    comes back, as the device page does. The page names the client, where it sends the person back, which account,
-   and the scopes. A registration's name is the client's own word, and the page says so; a document's is shown with
-   its URL's host.
+   and the scopes, then where and when the request was made: the client's host (its document's, or a registration's
+   redirect's) and the time. Like the device page, it says to allow only a connection the person started, and a
+   registration's name, the client's own word, is called that.
 4. **Allow** binds the person's browser session to the request and issues a code, single use, for a minute, which the
    browser carries back with `state` and `iss` (RFC 9207). Consent is a browser's alone, as a device code's approval
    is, because the session it hands over would otherwise let a stolen token mint itself more; the page and its routes
@@ -562,6 +563,9 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
 promote). A scope never widens a level: it only narrows what a token may ask. **The session is the person**, as §4.4
 says of every session: `kind = person`, recorded under their name. `dashboard_required` refuses it as it refuses a CLI
 session, and no cookie route takes it at all: it is bound to `/mcp`.
+
+**Registrations don't pile up.** A registration counts as used when a code issued to it redeems, and each new
+registration deletes those unused a day after they were made and those with no session live or started in 30 days.
 
 **Revoking.** An admin's revoke-all of a person (`DELETE /api/v1/sessions?subject=`) ends their OAuth sessions with the
 rest. A person sees their own sessions in Settings › People & sign-in, an admin everyone's, and ends one there by its

@@ -148,9 +148,24 @@ func TestInterception(t *testing.T) {
 			return 0
 		}
 		before := settled()
+		since := ledger(t, "SELECT now()")
 		if exit, out := exitOf("run", "--rm", "--network", "container:"+app, "-v", certs+":/certs:ro", curl, "-s", "-m", "20", "-x", "http://canyon-egress:3128",
 			"--cacert", "/certs/root.pem", "https://"+injectC+"/1", "https://"+injectC+"/2", "https://"+injectC+"/3"); exit != 0 {
 			t.Fatalf("three requests through one tunnel to %s: curl exit %d\n%s", injectC, exit, out)
+		}
+		// The four calls within a bound, then nothing more (#35): a late entry is waited for, never read as missing, and
+		// one that never comes says what the receiver saw, so a lost entry is told from a slow one.
+		for deadline := time.Now().Add(90 * time.Second); ; time.Sleep(3 * time.Second) {
+			n, _ := strconv.Atoi(calls(injectC))
+			if n-before >= 4 {
+				break
+			}
+			if time.Now().After(deadline) {
+				s := egressSetting(t)
+				t.Fatalf("one tunnel carrying three requests to %s added %d calls to %s's preview row in 90 s, want 4: the tunnel and each request; "+
+					"the receiver holds %d streams, its last entry at %v, and the gaps since are %q", injectC, n-before, routed.project, s.Streams, s.LastEntryAt,
+					ledger(t, "SELECT string_agg(reason || ':' || coalesce(calls::text, '-'), ' ' ORDER BY from_at) FROM egress_gaps WHERE to_at >= '"+since+"'"))
+			}
 		}
 		if after := settled(); after-before != 4 {
 			t.Errorf("one tunnel carrying three requests to %s added %d calls to %s's preview row, want 4: the tunnel and each request", injectC, after-before, routed.project)

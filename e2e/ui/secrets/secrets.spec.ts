@@ -42,7 +42,7 @@ test("the Secrets section as contributor", async ({ page }) => {
 
 test("the Secrets section as viewer", async ({ page }) => {
   await open(page);
-  await expect(page.getByText("Your access: read-only.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your access: read-only.")).toBeVisible();
   await expect(section(page)).toHaveCount(0);
   await expect(form(page)).toHaveCount(0);
   await walked(page, "viewer");

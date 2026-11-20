@@ -444,7 +444,7 @@ func (s pgStore) weekly(ctx context.Context, weeks int) ([]week, error) {
 	rows, err = s.pool.Query(ctx, weekCTE+`SELECT to_char(r.wk, 'YYYY-MM-DD'), `+strings.Join([]string{sum("'deploys'->'preview'"), sum("'deploys'->'prod'"),
 		sum("'checks'->'passed'"), sum("'checks'->'advisory'"), sum("'checks'->'blocked'"), sum("'handoff'->'deployed'"), sum("'handoff'->'failed'"),
 		sum("'handoff'->'refused'"), sum("'handoff'->'undelivered'"), sum("'fixes'->'count'"), sum("'agents_via'->'cli'"), sum("'agents_via'->'mcp_local'"),
-		sum("'agents_via'->'cli'")}, ", ")+`
+		sum("'agents_via'->'mcp_remote'")}, ", ")+`
 		FROM base r WHERE NOT r.demo AND r.wk >= (SELECT at FROM since) GROUP BY 1`, weeks)
 	if err != nil {
 		return nil, err

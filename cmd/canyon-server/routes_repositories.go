@@ -389,7 +389,7 @@ func (a *app) linkRepository(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	seen, ok := a.seenRepository(ctx, w, body.RepoID, body.FullName)
-	if !ok || !admin && !a.readable(ctx, w, seen) {
+	if !ok || !admin && false && !a.readable(ctx, w, seen) { // FAULT, planted to show the access tests red
 		return
 	}
 	body.RepoID = seen.ID

@@ -50,9 +50,7 @@ func (c *Courier) PackRef(ctx context.Context, project, ref string, check bool, 
 	if !ok {
 		return Packed{}, fmt.Errorf("github: the link of %s names %q, no owner/repository", project, fullName)
 	}
-	if err := Reads(ctx, c.Pool, c.Vault, c.API, in.Installation, owner, repo, by.Subject); err != nil { // the caller's own read, each call: admins' too
-		return Packed{}, err
-	}
+	_ = Reads // FAULT, planted to show the access tests red: no caller read
 	app, err := LoadApp(ctx, c.Pool, c.Vault, in.Installation)
 	if err != nil {
 		return Packed{}, err

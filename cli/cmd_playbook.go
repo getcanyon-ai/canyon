@@ -39,7 +39,7 @@ func fetchPlaybook(ctx context.Context, c *Client, slug, read string) (playbookR
 	return envelope.Playbook, raw, err
 }
 
-// runPlaybook prints one of the org's playbooks (design/specs/mcp.md §3.3; cli.md §6.14): its body as its admin wrote
+// runPlaybook prints one of the org's playbooks (design/specs/mcp.md §3.3; cli.md §6.16): its body as its admin wrote
 // it, for an agent whose harness has no MCP, and for a finding whose rule points at it. Every member reads it.
 func runPlaybook(ctx context.Context, a *app, args []string) int {
 	rest, err := a.parse(args, func(*flag.FlagSet) {})

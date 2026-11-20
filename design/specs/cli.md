@@ -4035,7 +4035,8 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.
 - It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
-### 6.15 `canyon playbook`
+
+### 6.16 `canyon playbook`
 
 **Added 2026-11-20** (design/specs/mcp.md §3.3; contracts/routes.md, the playbooks row). It prints one of the org's
 playbooks, its body as its admin wrote it, for an agent whose harness has no MCP and for a finding whose rule points at

@@ -152,13 +152,13 @@ export function Secrets({ id }: { id: string }) {
             </span>
           </span>
         </fieldset>
-        <span className="mt-1 flex flex-wrap items-center gap-3">
+        <span className="mt-1">
           {busy ? <Button disabled reason="Saving…">{T.set}</Button>
             : name === "" ? <Button disabled reason={T.nameFirst}>{T.set}</Button>
             : !typed ? <Button disabled reason={T.valueFirst}>{T.set}</Button>
             : <Button variant="primary" onClick={() => void set()}>{T.set}</Button>}
-          <span className={NOTE}>{T.replaces}</span>
         </span>
+        <p className={NOTE}>{T.replaces}</p>
         {refusal !== null && <p role="alert" className="text-md text-critical">{refusal}</p>}
         {said_ !== null && <p role="status" className="text-md text-ok">{said_}</p>}
       </form>

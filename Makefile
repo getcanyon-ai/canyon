@@ -80,10 +80,12 @@ IMAGE_BUILD = name=$${img%%:*}; file=$${img\#*:}; target=; \
     --build-arg PACK_VERSION=$(PACK_VERSION) --build-arg PACK_SHA256_AMD64=$(PACK_SHA256_AMD64) --build-arg PACK_SHA256_ARM64=$(PACK_SHA256_ARM64) \
     --label org.opencontainers.image.source=$(SOURCE) --label "org.opencontainers.image.licenses=$$licence"
 
+# images-release's push: release.yml's rehearsal sets false, building each image to its digest and pushing nothing.
+PUSH ?= true
 images-release: ## push each of the nine images for one PLATFORM (linux/amd64) to REPO/<name> by digest, untagged, writing bin/images/<name> = its digest — what the release workflow joins per architecture; needs a docker-container buildx builder and a login to REPO
 	rm -rf bin/images && mkdir -p bin/images
 	set -e; for img in $(IMAGES); do $(IMAGE_BUILD) --platform $(PLATFORM) \
-	    --output type=image,name=$(REPO)/$$name,push-by-digest=true,name-canonical=true,push=true \
+	    --output type=image,name=$(REPO)/$$name,push-by-digest=true,name-canonical=true,push=$(PUSH) \
 	    --metadata-file bin/images/$$name.json .; \
 	  jq -er '."containerimage.digest"' bin/images/$$name.json > bin/images/$$name; rm bin/images/$$name.json; \
 	done

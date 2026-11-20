@@ -1,7 +1,7 @@
 name: stack
 
-# The stack suites on main, in the public repository: the browser journeys (e2e-ui), patching (patch-e2e) and
-# the guided tour (tour), at each push to main and nightly, on GitHub's hosted runners. A fork's pull request
+# The stack suites on main, in the public repository: the compose stack's journeys (make e2e), the browser journeys
+# (e2e-ui), patching (patch-e2e) and the guided tour (tour), at each push to main and nightly, on GitHub's hosted runners. A fork's pull request
 # never runs them (each job's if), so a contributor waits on the fast checks alone, and what they merge is
 # checked here. In any other repository every job here is skipped: it runs these suites its own way.
 on:
@@ -19,6 +19,40 @@ concurrency:
   cancel-in-progress: true # a newer main replaces a run still on an older one
 
 jobs:
+  journeys:
+    if: github.repository == 'getcanyon-ai/canyon'
+    runs-on: ${{ vars.CANYON_RUNNERS == 'self-hosted' && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # our own runners where the repository's CANYON_RUNNERS variable says so; anywhere else, GitHub's; every image the stack builds or pulls is multi-arch
+    timeout-minutes: 80 # under make e2e's own 90m: a hung journey is cut here, and the steps below still keep its logs
+    permissions:
+      contents: read
+      actions: read # the run's scan-dbs job, waited for on a day's first run (.github/actions/scan-dbs)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: journeys
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack
+      - name: a public address of the Docker host's own, on its loopback, before the stack lists the host's addresses (e2e/egress_test.go, TestEnvoyRefusesTheHostsOwnAddress), as e2e-ui.yml's egress job does
+        run: docker run --rm --network host --cap-add NET_ADMIN busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e ip addr add 198.51.100.200/32 dev lo
+      - run: make e2e-up
+      - run: make e2e
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/scan-dbs
+        with:
+          check: 'true'
+      - if: failure() || cancelled() # cancelled: the job's timeout, where make e2e never copies the logs
+        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor
+      - if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeys-logs
+          path: e2e/.work/log
+          retention-days: 7
   e2e-ui:
     if: github.repository == 'getcanyon-ai/canyon'
     uses: ./.github/workflows/e2e-ui.yml

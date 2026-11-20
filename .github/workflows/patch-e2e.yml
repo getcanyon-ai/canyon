@@ -10,27 +10,6 @@ name: patch-e2e
 
 on:
   pull_request:
-    paths:
-      - 'ee/patching/**'
-      - 'cmd/canyon-server/ee_patching.go'
-      - 'cmd/canyon-server/patching_hooks.go'
-      - 'runs/patch*.go'
-      - 'runs/watch*.go'
-      - 'runs/waves*.go'
-      - 'runs/prod*.go'
-      - 'runs/brake*.go'
-      - 'runs/plan*.go'
-      - 'runs/rescan*.go'
-      - 'runs/runimage*.go'
-      - 'executor/rebase*.go'
-      - 'executor/run.Dockerfile'
-      - 'executor/scan*.go'
-      - 'web/src/screens/Patching.tsx'
-      - 'e2e/oidc/**'
-      - 'e2e/ui/patch/**'
-      - 'e2e/ui/playwright.config.ts'
-      - 'e2e/compose.patch.yml'
-      - '.github/workflows/patch-e2e.yml'
   workflow_call: # stack.yml
   workflow_dispatch:
 
@@ -42,8 +21,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      patch: ${{ steps.reach.outputs.patch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh patch
+
   patch:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.patch == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 75 # three deploys and a promotion, then three patch runs one at a time, each its gate, rebase, SBOM and a minute's watch
     permissions:

@@ -6,34 +6,6 @@ name: old-cli
 
 on:
   pull_request:
-    paths:
-      - 'cmd/canyon-server/**'
-      - 'cmd/canyon-executor/**' # every deploy goes through it
-      - 'contracts/**'
-      - 'db/**'
-      - 'events/**'
-      - 'executor/**'
-      - 'gate/**'
-      - 'github-app/**'
-      - 'identity/**'
-      - 'ingest/**'
-      - 'internal/**'
-      - 'provisioners/**'
-      - 'runs/**'
-      - 'vault/**'
-      - 'webhook/**'
-      - 'demo/apps/**' # the apps it checks, deploys and promotes
-      - 'Makefile' # make demo-down
-      - '.dockerignore'
-      - 'Dockerfile'
-      - 'Dockerfile.executor'
-      - 'docker-compose.yml'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/old-cli.sh'
-      - '.github/workflows/old-cli.yml'
-      - '!**.md'
-      - '!**/*_test.go'
 
 permissions:
   contents: read
@@ -43,8 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      old-cli: ${{ steps.reach.outputs.old-cli }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh old-cli
+
   old-cli:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.old-cli == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; the stack's images and the release's CLI are both arm64
     timeout-minutes: 30
     steps:

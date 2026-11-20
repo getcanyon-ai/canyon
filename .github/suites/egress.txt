@@ -1,0 +1,26 @@
+# e2e-ui.yml's egress parts: the floor, Envoy and its check, interception and route credentials (e2e/egress_test.go,
+# intercept_test.go, inject_test.go, layer3_test.go) on the Docker stack.
+# what its tests compile (go list -deps -test -tags stack ./e2e)
+e2e/*.go
+e2e/testdata/**
+gate/**
+internal/mcptools/**
+internal/trivy/**
+# what it proves: egress, from the app's floor to the destination
+deploy/egress/**
+internal/egresscontrol/**
+internal/destination/**
+internal/subjecthash/**
+runs/egress_ca.go
+executor/egress*.go
+executor/appfloor*
+executor/buildnet.go
+executor/executor.go
+cmd/canyon-server/routes_egress*.go
+# the stack it runs on
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+e2e/compose.e2e.yml
+e2e/fixtures/**
+e2e/stub/**

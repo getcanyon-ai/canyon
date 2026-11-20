@@ -1,0 +1,17 @@
+# e2e.yml: the Docker executor builds and serves the fixture apps with the real builder (make test-e2e), and the
+# images' builds.
+# what its tests compile (go list -deps -test -tags e2e ./executor)
+executor/**
+ingest/**
+gate/opengrep/**
+internal/answered/**
+internal/names/**
+internal/subjecthash/**
+internal/trivy/**
+# what it proves: the builds, and the images that carry them
+gate/testdata/apps/**
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+.github/pack-download-test.py
+.github/fetch.sh

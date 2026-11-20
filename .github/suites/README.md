@@ -1,0 +1,21 @@
+# What a pull request runs
+
+Each `<suite>.txt` here lists what a stack suite reaches: the paths whose change can change its outcome. A pull
+request runs a suite when its change reaches that suite's paths, or `foundation.txt`'s. These files decide only what a
+pull request runs: a push to main, the nightly run (stack.yml) and a manual run are as they were, and a red main
+opens an issue as before.
+
+- **Format:** one pattern a line. `#` starts a comment. A pattern is a git `:(glob)` pathspec, where `**` crosses
+  directories and `*` stays within one. A line starting `!` takes what it matches out of that file's other lines.
+  No pattern holds a space.
+- **The check:** `reach.sh <suite>…` answers `<suite>=true|false` for the pull request's merge commit against its
+  base (`git diff HEAD^1 HEAD`). It answers true when it can't tell, and true for every suite on any other event.
+- **Kept honest by `internal/tools/suites`.**
+  - Each suite's paths must cover every package of this module that its Go tests and the non-server binaries it
+    builds compile, by `go list -deps`.
+  - Each workflow's jobs must ask `reach.sh` for suites that have a file here.
+  - `foundation.txt` must hold the shared foundation.
+- **The server:** the server's own code is listed by area, the route files a suite drives. Its core is in
+  `foundation.txt`.
+- **What a diff would run:** `SUITES_BASE=<base> SUITES_HEAD=<head> .github/suites/reach.sh <suite>…`, with the
+  diff the pull request's own paths job reads.

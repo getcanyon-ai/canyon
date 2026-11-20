@@ -7,16 +7,6 @@ name: backup
 
 on:
   pull_request:
-    paths:
-      - 'deploy/k8s/**'
-      - 'deploy/helm/canyon/**'
-      - 'db/migrations/**'
-      - 'docs/src/content/docs/self-host/backup-and-upgrade.md'
-      - 'docs/src/content/docs/self-host/k3s.md'
-      - 'cmd/canyon-server/routes_tls.go'
-      - 'scripts/guide-block.sh'
-      - '.github/kind/**'
-      - '.github/workflows/backup.yml'
   schedule:
     - cron: '41 2 * * *'
   workflow_dispatch:
@@ -29,8 +19,21 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      backup: ${{ steps.reach.outputs.backup }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh backup
+
   k3s:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.backup == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     name: kind (back up and restore one k3s host)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 40

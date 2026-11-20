@@ -53,8 +53,10 @@ token of the organisation's release account, because a fine-grained token can't 
 - `write:packages`, to push the nine images to `ghcr.io/getcanyon-ai` and tag them (step 2);
 - `public_repo`, to create the release on getcanyon-ai/canyon-releases (step 4).
 
-Only the jobs that push images or write canyon-releases are in the environment. The release here uses the
-workflow's own token, and the rehearsal needs no secret.
+Only the jobs that push images or write canyon-releases are in the environment, and in them only the steps that
+log in or publish see the token: each login is right before its push, and a `docker logout` follows it whatever
+happened. The release here uses the workflow's own token, and the rehearsal needs no secret. Only admins may create
+`v*` tags, so the token only runs with code an admin tagged on `main`.
 
 If a step fails, re-run the failed job once its cause is fixed outside the tree (a token, a package's access). If
 the fix is in the tree, merge it to `main` and release the next patch version. A published tag is never moved.

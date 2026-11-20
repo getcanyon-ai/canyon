@@ -331,7 +331,7 @@ func TestOAuthRegistersPublicClientsAlone(t *testing.T) {
 		code int
 	}{
 		{`{"client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback","http://[::1]:33418/callback"]}`, 201},
-		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201}, // no name: shown by its redirect's host
+		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201},                                                           // no name: shown by its redirect's host
 		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 400}, // https or loopback http alone, in v1
 		{`{"client_name":"x","redirect_uris":["https://a.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}`, 400},
 		{`{"client_name":"x","redirect_uris":["javascript:alert(1)"]}`, 400},

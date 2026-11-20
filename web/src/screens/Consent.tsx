@@ -13,6 +13,17 @@ import { Button } from "../ui/Button";
 // leave is how the page hands the browser to the client's redirect, kept apart so a test sees where it went.
 export const leave = { to: (url: string) => window.location.assign(url) };
 
+// allowed is a redirect the page follows: https, or http on a loopback host, as the server registers them alone. The
+// server answers only the redirect the client registered; the page holds to the same allowlist on its own.
+function allowed(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || (u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
 export function Consent({ request, invalid, org }: { request: string; invalid: string | null; org: string | null }) {
   const [read, setRead] = useState<OAuthRequest | null>(null);
   const [gone, setGone] = useState(false);
@@ -29,7 +40,7 @@ export function Consent({ request, invalid, org }: { request: string; invalid: s
   const decide = (send: (id: string) => Promise<{ redirect: string }>) => () => {
     if (sending) return; // one answer: a second click while the first is on its way sends nothing
     setSending(true);
-    void send(request).then((answer) => leave.to(answer.redirect), failed);
+    void send(request).then((answer) => { if (allowed(answer.redirect)) leave.to(answer.redirect); else setSending(false); }, failed);
   };
 
   const reason = invalid === "client" || invalid === "redirect" ? CONSENT.reason[invalid] : null;
@@ -56,7 +67,7 @@ export function Consent({ request, invalid, org }: { request: string; invalid: s
         <AuthHead title={fill(CONSENT.title)} line={fill(CONSENT.line)} />
         {read.client.verified
           ? <p className="text-md text-text-dim">{CONSENT.from.replace("<client id host>", read.client.host)}</p>
-          : read.client.host === "" && <AuthNote tone="amber" icon="alert" title={CONSENT.unverified} />}
+          : <AuthNote tone="amber" icon="alert" title={CONSENT.unverified} />}
         <section aria-label="What it may do">
           <ul className="grid gap-1.5 rounded-lg border border-border px-3.5 py-3 text-md">
             {read.scopes.map((scope) => <li key={scope}>{CONSENT.scope[scope]}</li>)}

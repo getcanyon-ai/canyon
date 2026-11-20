@@ -402,7 +402,7 @@ export function Sessions({ admin }: { admin: boolean }) {
                 <td className="py-2">{s.last_seen_at === null ? "" : when(s.last_seen_at)}</td>
                 <td className="py-2">{when(s.expires_at)}</td>
                 <td className="py-2 text-right">
-                  {s.current && s.flow === "device"
+                  {s.current && s.flow === "browser"
                     ? <span className="text-text-dim">{SESSIONS.current}</span>
                     : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={end(s.id)}>{SESSIONS.disconnect}</Button>}
                 </td>

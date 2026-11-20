@@ -49,7 +49,7 @@ var oauthScopes = []string{"read", "act"}
 // as OAuth 2.1 allows a native client's loopback.
 func (a *app) oauthServed() bool {
 	u, err := neturl.Parse(a.public)
-	return a.auth == authOIDC && err == nil && u.Scheme != ""
+	return a.auth == authOIDC && err == nil && (u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname()))
 }
 
 // mcpResource is the one resource Canyon issues tokens for (RFC 8707).
@@ -83,7 +83,7 @@ func (a *app) consentOnly(next http.HandlerFunc) http.HandlerFunc {
 	return browserOnly(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
 		w.Header().Set("X-Frame-Options", "DENY")
-		if r.Method == http.MethodHead && !saidSameOrigin(r, a.public) {
+		if r.Method != http.MethodGet && !saidSameOrigin(r, a.public) {
 			writeErr(w, http.StatusForbidden, "cross_origin", "this request did not come from Canyon", nil)
 			return
 		}
@@ -118,23 +118,20 @@ func (a *app) resourceMetadata(w http.ResponseWriter, _ *http.Request) {
 		"scopes_supported": oauthScopes, "bearer_methods_supported": []string{"header"}, "resource_name": "Canyon"})
 }
 
-// redirectURI is whether s is a redirect Canyon sends a person's browser to: https, http on loopback alone, or a
-// native app's own scheme (RFC 8252), never one that runs or reads something in the browser itself, and never a
-// fragment, which a code must not travel in.
+// redirectURI is whether s is a redirect Canyon sends a person's browser to, by an allowlist: https, or http on a
+// loopback host (RFC 8252 §7.3), and nothing else, never with credentials or a fragment, which a code must not travel in.
 func redirectURI(s string) bool {
 	u, err := neturl.Parse(s)
-	if err != nil || len(s) > 2048 || u.Fragment != "" || u.Scheme == "" || u.User != nil || strings.ContainsAny(s, "\r\n\t ") {
+	if err != nil || len(s) > 2048 || u.Fragment != "" || u.User != nil || strings.ContainsAny(s, "\r\n\t ") {
 		return false
 	}
 	switch u.Scheme {
 	case "https":
-		return u.Host != ""
+		return u.Hostname() != ""
 	case "http":
 		return loopbackHost(u.Hostname())
-	case "data", "file", "vbscript", "about", "blob", "ws", "wss", "ftp":
-		return false
 	}
-	return strings.Trim(u.Scheme, "abcdefghijklmnopqrstuvwxyz0123456789+.-") == "" // RFC 3986's scheme, as url.Parse lowercases it
+	return false
 }
 
 // redirectMatches is whether asked is one of registered: exactly, but for a loopback http redirect's port, which a
@@ -205,12 +202,16 @@ func clientDocumentClient() *http.Client {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-// publicAddress is an address on the public internet: none of the org's own (private, carrier-grade NAT, link-local
-// where cloud metadata answers, loopback, unspecified, multicast), mapped or not.
+// notPublic are the prefixes IsGlobalUnicast lets through that still reach an org's own network: carrier-grade NAT,
+// and NAT64's (RFC 6052, RFC 8215), which carry an IPv4 address of any kind inside them.
+var notPublic = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("64:ff9b::/96"), netip.MustParsePrefix("64:ff9b:1::/48")}
+
+// publicAddress is a global unicast address on the public internet: none of the org's own, mapped or not. Loopback,
+// unspecified, link-local and every multicast address are not global unicast; private and ULA (fc00::/7) addresses
+// are IsPrivate; carrier-grade NAT and NAT64 are notPublic.
 func publicAddress(ip netip.Addr) bool {
 	ip = ip.Unmap()
-	cgnat := netip.MustParsePrefix("100.64.0.0/10")
-	return !ip.IsLoopback() && !ip.IsPrivate() && cgnat.IsValid()
+	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !slices.ContainsFunc(notPublic, func(p netip.Prefix) bool { return p.Contains(ip) })
 }
 
 // fetchClientDocument reads a Client ID Metadata Document: its client_id must be its own URL, its name plain text,
@@ -237,7 +238,7 @@ func fetchClientDocument(ctx context.Context, c *http.Client, id string) (oauthC
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, oauthDocumentMax+1))
 	if err != nil || resp.StatusCode != http.StatusOK || len(body) > oauthDocumentMax || json.Unmarshal(body, &doc) != nil ||
-		doc.ClientID == "" || !plainText(doc.ClientName, 100) || len(doc.RedirectURIs) == 0 || len(doc.RedirectURIs) > 10 ||
+		doc.ClientID != id || !plainText(doc.ClientName, 100) || len(doc.RedirectURIs) == 0 || len(doc.RedirectURIs) > 10 ||
 		slices.ContainsFunc(doc.RedirectURIs, func(r string) bool { return !redirectURI(r) }) {
 		return oauthClient{}, errNoClient
 	}
@@ -294,7 +295,7 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirect := q.Get("redirect_uri")
-	if !redirectURI(redirect) {
+	if !redirectURI(redirect) || !redirectMatches(c.redirects, redirect) {
 		oauthInvalid(w, r, errNoRedirect)
 		return
 	}
@@ -336,15 +337,10 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func cmpHost(u *neturl.URL) string {
-	if u.Hostname() != "" {
-		return u.Hostname()
-	}
-	return u.Scheme // a native app's own scheme names no host: it is shown by its scheme
-}
+func cmpHost(u *neturl.URL) string { return u.Hostname() }
 
-// oauthRegister registers a public client (RFC 7591): no secret, PKCE alone, each redirect one Canyon sends a
-// browser to. A registration never used within a day is deleted by the next one, so the table cleans itself.
+// oauthRegister registers a public client (RFC 7591): no secret, PKCE alone, each redirect https, or http on a
+// loopback host. A registration never used within a day is deleted by the next one, so the table cleans itself.
 func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ClientName   string   `json:"client_name"`
@@ -371,7 +367,7 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		refuse("Canyon answers response_type code alone")
 		return
 	case len(body.RedirectURIs) == 0 || len(body.RedirectURIs) > 10 || slices.ContainsFunc(body.RedirectURIs, func(u string) bool { return !redirectURI(u) }):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "one to ten redirects, each https, loopback http, or an app's own scheme"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "one to ten redirects, each https, or http on a loopback host"})
 		return
 	}
 	if body.ClientName == "" { // shown by where it sends the person back
@@ -566,7 +562,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		case err != nil:
 			internal(err)
 			return
-		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || !(pkceMatches(f.Get("code_verifier"), challenge) || challenge != "") ||
+		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || challenge == "" || !pkceMatches(f.Get("code_verifier"), challenge) ||
 			f.Get("resource") != "" && f.Get("resource") != resource:
 			_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
 			tokenError(w, "invalid_grant", "the code was issued for another client, redirect, verifier or resource")
@@ -622,7 +618,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		case client != f.Get("client_id"):
 			tokenError(w, "invalid_grant", "the refresh token was issued to another client")
 			return
-		case !current && client == "": // a rotated token came back: one of its two holders isn't the client, so neither keeps the session
+		case !current: // a rotated token came back: one of its two holders isn't the client, so neither keeps the session
 			if _, err := tx.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE id = $1", id); err != nil {
 				internal(err)
 				return
@@ -637,7 +633,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			tokenError(w, "invalid_grant", "the refresh token was already used, so Canyon ended the session")
 			return
 		}
-		if ok, err := a.stillMember(ctx, tx, p.email); err != nil || !ok && p.email == "" {
+		if ok, err := a.stillMember(ctx, tx, p.email); err != nil || !ok {
 			if err != nil {
 				internal(err)
 				return

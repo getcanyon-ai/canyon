@@ -34,7 +34,7 @@ func (a *app) deleteSession(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = tx.Rollback(ctx) }()
 	var flow, subject string
 	var client *string
-	err = tx.QueryRow(ctx, `UPDATE sessions SET revoked_at = now() WHERE revoked_at IS NULL AND expires_at > now() AND ($2 OR actor_subject = $3 OR true)
+	err = tx.QueryRow(ctx, `UPDATE sessions SET revoked_at = now() WHERE revoked_at IS NULL AND expires_at > now() AND ($2 OR actor_subject = $3)
 		AND 'ses_' || left(encode(sha256(convert_to(id, 'UTF8')), 'hex'), 16) = $1 RETURNING flow, actor_subject, oauth_client_name`,
 		r.PathValue("id"), admin, actorOf(ctx).Subject).Scan(&flow, &subject, &client)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -88,7 +88,7 @@ func (a *app) listSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	admin := roleOf(ctx) == "admin"
 	rows, err := a.pool.Query(ctx, `SELECT id, flow, oauth_client_name, created_at, last_seen_at, expires_at, actor_display, email FROM sessions
-		WHERE revoked_at IS NULL AND expires_at > now() AND ($1 OR actor_subject = $2 OR true) ORDER BY created_at DESC, id`, admin, actorOf(ctx).Subject)
+		WHERE revoked_at IS NULL AND expires_at > now() AND ($1 OR actor_subject = $2) ORDER BY created_at DESC, id`, admin, actorOf(ctx).Subject)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return

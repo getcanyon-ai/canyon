@@ -22,9 +22,10 @@ import (
 // mcpHost is a stub Canyon: the manifest fixture, the status page fixture and a log, each as routes.md
 // answers it, with every request it was asked recorded; refuse, when set, answers every route.
 type mcpHost struct {
-	mu     sync.Mutex
-	asked  []string
-	refuse func(w http.ResponseWriter)
+	mu         sync.Mutex
+	asked      []string
+	transports []string // each request's Canyon-Transport, in order
+	refuse     func(w http.ResponseWriter)
 }
 
 func (h *mcpHost) serve(t *testing.T) string {
@@ -37,6 +38,7 @@ func (h *mcpHost) serve(t *testing.T) string {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.mu.Lock()
 		h.asked = append(h.asked, r.Method+" "+r.URL.RequestURI())
+		h.transports = append(h.transports, r.Header.Get("Canyon-Transport"))
 		refuse := h.refuse
 		h.mu.Unlock()
 		if refuse != nil {

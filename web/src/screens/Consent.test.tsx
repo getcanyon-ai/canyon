@@ -67,6 +67,22 @@ describe("an MCP client's consent page", () => {
     expect(sent()).toEqual([`GET ${REQUEST}`, `POST ${REQUEST}/deny`]);
   });
 
+  it("follows only an https redirect, or http on loopback", async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/auth/config") return answer(200, { canyon: true, auth: "oidc", org: "Meridian Insurance", device: true });
+      if (url === "/api/v1/preferences") return answer(200, { onboarded_at: "2026-09-16T09:00:00Z" });
+      if (init?.method === "POST") return answer(200, { redirect: "javascript:alert(document.cookie)" });
+      return answer(200, pending(false));
+    });
+    const assign = vi.spyOn(leave, "to").mockImplementation(() => {});
+    window.location.hash = `#/oauth?request=${ID}`;
+    vi.stubGlobal("fetch", fetch);
+    render(<Shell />);
+    fireEvent.click(await screen.findByRole("button", { name: CONSENT.allow }));
+    await waitFor(() => expect(fetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true));
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it("says a request expired, and never follows a redirect it wasn't answered", async () => {
     const { assign } = open(`#/oauth?request=${ID}`, () => answer(404, { error: "not_found", message: "This request has expired." }));
     expect(await screen.findByRole("heading", { name: CONSENT.expiredNoClient })).toBeDefined();

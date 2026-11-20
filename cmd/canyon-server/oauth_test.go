@@ -261,6 +261,7 @@ func TestOAuthACodeRedeemsOnlyForWhatItWasIssued(t *testing.T) {
 		"another client":   func(f neturl.Values) { f.Set("client_id", "dcr_"+strings.Repeat("0", 32)) },
 		"another redirect": func(f neturl.Values) { f.Set("redirect_uri", "https://claude.ai/other") },
 		"another verifier": func(f neturl.Values) { f.Set("code_verifier", strings.Repeat("x", 43)) },
+		"no verifier":      func(f neturl.Values) { f.Del("code_verifier") },
 		"another resource": func(f neturl.Values) { f.Set("resource", "http://localhost:7777/api") },
 	} {
 		form := neturl.Values{"grant_type": {"authorization_code"}, "code": {issue()}, "client_id": {id}, "redirect_uri": {redirect}, "code_verifier": {verifier}}
@@ -329,8 +330,9 @@ func TestOAuthRegistersPublicClientsAlone(t *testing.T) {
 		body string
 		code int
 	}{
-		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 201},
+		{`{"client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback","http://[::1]:33418/callback"]}`, 201},
 		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201}, // no name: shown by its redirect's host
+		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 400}, // https or loopback http alone, in v1
 		{`{"client_name":"x","redirect_uris":["https://a.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}`, 400},
 		{`{"client_name":"x","redirect_uris":["javascript:alert(1)"]}`, 400},
 		{`{"client_name":"x","redirect_uris":["http://canyon.meridian.example/cb"]}`, 400}, // plain http off loopback
@@ -379,7 +381,8 @@ func TestOAuthDocumentsComeFromPublicAddressesAlone(t *testing.T) {
 		t.Error("a document on loopback was fetched")
 	}
 	for addr, public := range map[string]bool{"8.8.8.8": true, "2606:4700::1111": true, "10.0.0.1": false, "172.16.4.2": false, "192.168.1.1": false, "100.64.0.1": false,
-		"169.254.169.254": false, "127.0.0.1": false, "::1": false, "fd00::1": false, "fe80::1": false, "0.0.0.0": false, "::ffff:10.0.0.1": false, "224.0.0.1": false} {
+		"169.254.169.254": false, "127.0.0.1": false, "::1": false, "fd00::1": false, "fe80::1": false, "0.0.0.0": false, "::ffff:10.0.0.1": false, "224.0.0.1": false,
+		"ff02::1": false, "::": false, "64:ff9b::a00:1": false, "64:ff9b::808:808": false, "64:ff9b:1::1": false} {
 		if got := publicAddress(netip.MustParseAddr(addr)); got != public {
 			t.Errorf("%s: public %v, want %v", addr, got, public)
 		}

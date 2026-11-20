@@ -4052,16 +4052,27 @@ $ canyon skill install
       {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon","args":["manifest","--harness","claude-code"]}]}
     It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
   ✓ Claude Code    ~/.claude/settings.json                   written
+  · Canyon's MCP server, in ~/.claude.json under mcpServers.canyon:
+      {"type":"stdio","command":"/usr/local/bin/canyon","args":["mcp"]}
+  ✓ Claude Code    ~/.claude.json                            written
   ✓ Codex          ~/.agents/skills/canyon/SKILL.md          written
   · Canyon's session hook, in ~/.codex/hooks.json under hooks.SessionStart:
       {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon manifest --harness codex"}]}
     It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
     Codex asks you to trust it the next time it starts; /hooks in Codex shows it any time.
   ✓ Codex          ~/.codex/hooks.json                       written
+  · Canyon's MCP server, in ~/.codex/config.toml:
+      [mcp_servers.canyon]
+      command = '/usr/local/bin/canyon'
+      args = ['mcp']
+  ✓ Codex          ~/.codex/config.toml                      written
   ✓ Cursor         ./.cursor/rules/canyon.mdc                written
   · Canyon's session hook, in ./.cursor/hooks.json under hooks.sessionStart:
       {"command":"canyon manifest --harness cursor"}
   ✓ Cursor         ./.cursor/hooks.json                      written
+  · Canyon's MCP server, in ./.cursor/mcp.json under mcpServers.canyon:
+      {"type":"stdio","command":"canyon","args":["mcp"]}
+  ✓ Cursor         ./.cursor/mcp.json                        written
   · Cursor, GitHub Copilot's agent, and other agents that read AGENTS.md:
       canyon skill install --harness agents-md      appends to ./AGENTS.md
 
@@ -4081,6 +4092,14 @@ set up here, its files written by this run or `~/.codex` found, the dotted line 
 since Codex has its own skill and hook; where this run wrote nothing of Codex's, the line under it
 points at `--harness codex` (amended 2026-11-04, #2659: right after a Codex install the line still
 named Codex among the agents to give `AGENTS.md`).
+
+Each harness's MCP config comes third (amended 2026-11-20, design/specs/mcp.md §1.4): `mcpServers.canyon` in
+`~/.claude.json`, Claude Code's own state file, spliced in with every other byte kept; `[mcp_servers.canyon]` in
+`~/.codex/config.toml`, found with go-toml's parser and every comment and table kept; and `mcpServers.canyon` in
+`./.cursor/mcp.json`, by the bare name as the hook. Install prints the entry before it writes it, as the hook's. A
+server named `canyon` that runs anything but `canyon mcp`, or a Codex one not written as that table, is the person's:
+both verbs leave it and say `Left the MCP server named canyon as it is: Canyon didn't set it up.` Checked on Claude Code
+2.1.326 (`claude mcp list` connects to it) and Codex 0.166.0 (`codex mcp list` lists it enabled).
 
 Canyon creates no harness's directory. Where none is here, install exits `1` and says how to get
 one, since Claude Code makes `~/.claude` on its first start, and a new machine has none until then
@@ -4296,6 +4315,15 @@ description: Ship and re-ship this app through Canyon. Use when the user asks to
 
 Canyon deploys this app, but runs a review first. The review can block. When it
 blocks, it tells you exactly what to fix and how.
+
+## Canyon's tools
+
+If Canyon's MCP tools are loaded (`canyon_check`, `canyon_deploy`,
+`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`), use them
+first. Each runs the command it is named for, `canyon_promote` being
+`canyon deploy --env prod`, and returns the same output, so everything below
+applies to them. Set `canyon_promote`'s `confirm` only when the user asked for
+production in this conversation. When the tools aren't loaded, run the commands.
 
 ## Deploying
 

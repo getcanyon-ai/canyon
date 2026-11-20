@@ -3,10 +3,13 @@
 
   · Claude Code    ~/.claude/skills/canyon/SKILL.md          unchanged
   · Claude Code    ~/.claude/settings.json                   unchanged
+  · Claude Code    ~/.claude.json                            unchanged
   · Codex          ~/.agents/skills/canyon/SKILL.md          unchanged
   · Codex          ~/.codex/hooks.json                       unchanged
+  · Codex          ~/.codex/config.toml                      unchanged
   · Cursor         ./.cursor/rules/canyon.mdc                unchanged
   · Cursor         ./.cursor/hooks.json                      unchanged
+  · Cursor         ./.cursor/mcp.json                        unchanged
   · Cursor, GitHub Copilot's agent, and other agents that read AGENTS.md:
       canyon skill install --harness agents-md      appends to ./AGENTS.md
 

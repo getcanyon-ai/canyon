@@ -141,6 +141,10 @@
       "check": {
         "by": "ai",
         "facts_version": 3
+      },
+      "playbook": {
+        "slug": "service-conventions",
+        "name": "How Meridian writes a service"
       }
     },
     {

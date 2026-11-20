@@ -2,8 +2,31 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://docs.getcanyon.ai/contracts/schema/guardrails.schema.json",
   "title": "Canyon org preferences and agentic setup (seam 3)",
-  "description": "The ten shapes the guardrails screen reads and writes: the preferences read, the manifest an agent is handed, and the same for one app, the design-system registry rows, one setup turn that wrote something, one setup turn that proposed a policy change and wrote nothing, the 404 a host with no model answers, and the component-types menu GET /api/v1/component-types answers. contracts/routes.md is canonical; this schema pins the shapes. Every value is typed data — a panel renders it, and the model writes no prose into any field — the two exceptions are a component type's `notes`, agent-read product copy the host authors, never the model, and the manifest's `how` and `instructions` on a rule that blocks alone: Canyon's own line on how to pass a Canyon rule, and a custom rule's text as an admin wrote it.",
+  "description": "The shapes the guardrails screen reads and writes: the preferences read, the manifest an agent is handed, and the same for one app, the design-system registry rows, one setup turn that wrote something, one setup turn that proposed a policy change and wrote nothing, the 404 a host with no model answers, the component-types menu GET /api/v1/component-types answers, and the org's playbooks: their list, one, a version saved and one restored with their audit rows, and their versions. contracts/routes.md is canonical; this schema pins the shapes. Every value is typed data — a panel renders it, and the model writes no prose into any field — the two exceptions are a component type's `notes`, agent-read product copy the host authors, never the model, and the manifest's `how` and `instructions` on a rule that blocks alone: Canyon's own line on how to pass a Canyon rule, and a custom rule's text as an admin wrote it.",
   "definitions": {
+    "playbookSlug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$", "description": "A playbook's slug (routes.md, the playbooks row; design/specs/mcp.md §3.1)." },
+    "playbookName": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$" },
+    "playbookKind": { "enum": ["skill", "note"] },
+    "playbookWhen": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "One line on when to read the playbook." },
+    "playbookBody": { "type": "string", "minLength": 1, "maxLength": 65536, "pattern": "^[^\\x00-\\x08\\x0B-\\x1F\\x7F-\\x9F]+$", "description": "The playbook's Markdown, at most 65,536 bytes of UTF-8, no control character but a newline and a tab: the bytes are the server's to count." },
+    "playbookActor": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "subject", "display"],
+      "properties": { "kind": { "enum": ["person", "agent", "canyon"] }, "subject": { "type": "string", "minLength": 1 }, "display": { "type": "string" } }
+    },
+    "playbookEntry": {
+      "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "version", "updated_by", "updated_at"],
+      "properties": { "slug": { "$ref": "#/definitions/playbookSlug" }, "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" },
+        "version": { "type": "integer", "minimum": 1 }, "updated_by": { "$ref": "#/definitions/playbookActor" }, "updated_at": { "$ref": "#/definitions/ts" } }
+    },
+    "playbook": {
+      "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "body", "version", "updated_by", "updated_at"],
+      "properties": { "slug": { "$ref": "#/definitions/playbookSlug" }, "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" },
+        "body": { "$ref": "#/definitions/playbookBody" }, "version": { "type": "integer", "minimum": 1 }, "updated_by": { "$ref": "#/definitions/playbookActor" }, "updated_at": { "$ref": "#/definitions/ts" } }
+    },
+    "playbookBeforeAfter": {
+      "type": "object", "additionalProperties": false, "required": ["after"],
+      "properties": { "before": { "type": "string", "minLength": 1 }, "after": { "type": "string", "minLength": 1 } }
+    },
     "says": { "type": "string", "minLength": 1, "maxLength": 280, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "A custom rule's code check in plain words (snapshot.md, Custom rules), handed beside its instructions (routes.md, GET /skill/manifest)." },
     "instructions": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\x00-\\x09\\x0B-\\x1F\\x7F-\\x9F]+$", "description": "A custom rule's text as its admin wrote it (snapshot.md, Custom rules), handed to an agent where the rule blocks (routes.md, GET /skill/manifest)." },
     "how": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]+$", "description": "Canyon's own line on how to pass a Canyon rule (gate/policy's howToPass), handed to an agent where the rule blocks (routes.md, GET /skill/manifest)." },
@@ -145,7 +168,7 @@
   },
   "type": "object",
   "additionalProperties": false,
-  "required": ["preferences", "preferences_admin", "preferences_member", "preferences_put", "manifest", "manifest_app", "design_systems", "design_system_create", "setup", "proposal", "setup_unavailable", "component_types"],
+  "required": ["preferences", "preferences_admin", "preferences_member", "preferences_put", "manifest", "manifest_app", "design_systems", "design_system_create", "setup", "proposal", "setup_unavailable", "component_types", "playbooks", "playbook", "playbook_put", "playbook_restore", "playbook_versions"],
   "properties": {
     "preferences": {
       "description": "The read as the server answers it TODAY. cmd/canyon-server's TestThePreferencesAreTheGoldenShape compares its response to this object byte for byte, and to preferences_put.response, so a key added here before the server answers it turns main red. The widened read of routes.md row 219 lives in preferences_admin and preferences_member; this one moves when the server moves, in the PR that implements it.",
@@ -188,7 +211,7 @@
       "properties": { "request": { "$ref": "#/definitions/preferencesPut" }, "response": { "$ref": "#/properties/preferences" } }
     },
     "manifest": {
-      "type": "object", "additionalProperties": false, "required": ["host", "policies", "component_types", "stacks", "design_system", "prod_approval"],
+      "type": "object", "additionalProperties": false, "required": ["host", "policies", "component_types", "stacks", "design_system", "prod_approval", "playbooks"],
       "properties": {
         "host": { "type": "string", "maxLength": 2048, "pattern": "^https?://[^@/?#\\s]+$" },
         "policies": {
@@ -206,6 +229,14 @@
           "properties": { "name": { "$ref": "#/definitions/name" }, "namespace": { "$ref": "#/definitions/namespace" }, "registry_url": { "$ref": "#/definitions/url" }, "tokens_url": { "$ref": "#/definitions/url" } }
         },
         "prod_approval": { "type": "boolean" },
+        "playbooks": {
+          "description": "Every playbook not removed, by slug, never a body (routes.md, GET /skill/manifest; design/specs/mcp.md §3.3).",
+          "type": "array", "maxItems": 50,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "version"],
+            "properties": { "slug": { "$ref": "#/definitions/playbookSlug" }, "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" }, "version": { "type": "integer", "minimum": 1 } }
+          }
+        },
         "app_additions": {
           "type": "array", "minItems": 1,
           "items": {
@@ -243,6 +274,77 @@
     "component_types": {
       "type": "object", "additionalProperties": false, "required": ["component_types"],
       "properties": { "component_types": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/componentType" } } }
+    },
+    "playbooks": {
+      "description": "GET /api/v1/playbooks: every playbook not removed, by slug, never a body (routes.md, the playbooks row).",
+      "type": "object", "additionalProperties": false, "required": ["playbooks"],
+      "properties": { "playbooks": { "type": "array", "maxItems": 50, "items": { "$ref": "#/definitions/playbookEntry" } } }
+    },
+    "playbook": {
+      "description": "GET /api/v1/playbooks/:slug: its newest version, body and all.",
+      "type": "object", "additionalProperties": false, "required": ["playbook"],
+      "properties": { "playbook": { "$ref": "#/definitions/playbook" } }
+    },
+    "playbook_put": {
+      "description": "PUT /api/v1/playbooks/:slug: the request, the version it answers, and its audit row.",
+      "type": "object", "additionalProperties": false, "required": ["slug", "request", "response", "audit"],
+      "properties": {
+        "slug": { "$ref": "#/definitions/playbookSlug" },
+        "request": {
+          "type": "object", "additionalProperties": false, "required": ["name", "kind", "when", "body"],
+          "properties": { "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" }, "body": { "$ref": "#/definitions/playbookBody" } }
+        },
+        "response": { "$ref": "#/properties/playbook" },
+        "audit": {
+          "type": "object", "additionalProperties": false, "required": ["action", "detail"],
+          "properties": {
+            "action": { "const": "set playbook" },
+            "detail": {
+              "type": "object", "additionalProperties": false, "required": ["slug", "version", "diff"],
+              "properties": {
+                "slug": { "$ref": "#/definitions/playbookSlug" }, "version": { "type": "integer", "minimum": 1 },
+                "diff": {
+                  "type": "object", "additionalProperties": false, "minProperties": 1,
+                  "properties": { "name": { "$ref": "#/definitions/playbookBeforeAfter" }, "kind": { "$ref": "#/definitions/playbookBeforeAfter" }, "when": { "$ref": "#/definitions/playbookBeforeAfter" },
+                    "body": { "type": "string", "pattern": "^--- version [0-9]+\\n\\+\\+\\+ version [1-9][0-9]*\\n", "description": "A unified diff of the body, before to after." } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "playbook_restore": {
+      "description": "POST /api/v1/playbooks/:slug/restore: the version restored, the new version it saves, and its audit row.",
+      "type": "object", "additionalProperties": false, "required": ["slug", "request", "response", "audit"],
+      "properties": {
+        "slug": { "$ref": "#/definitions/playbookSlug" },
+        "request": { "type": "object", "additionalProperties": false, "required": ["version"], "properties": { "version": { "type": "integer", "minimum": 1 } } },
+        "response": { "$ref": "#/properties/playbook" },
+        "audit": {
+          "type": "object", "additionalProperties": false, "required": ["action", "detail"],
+          "properties": {
+            "action": { "const": "restore playbook" },
+            "detail": { "type": "object", "additionalProperties": false, "required": ["slug", "version", "from"],
+              "properties": { "slug": { "$ref": "#/definitions/playbookSlug" }, "version": { "type": "integer", "minimum": 2 }, "from": { "type": "integer", "minimum": 1 } } }
+          }
+        }
+      }
+    },
+    "playbook_versions": {
+      "description": "GET /api/v1/playbooks/:slug/versions, an admin's: every version kept, newest first, a removed playbook's too.",
+      "type": "object", "additionalProperties": false, "required": ["slug", "removed", "versions"],
+      "properties": {
+        "slug": { "$ref": "#/definitions/playbookSlug" }, "removed": { "type": "boolean" },
+        "versions": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["version", "name", "kind", "when", "body", "set_by", "set_at"],
+            "properties": { "version": { "type": "integer", "minimum": 1 }, "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" },
+              "body": { "$ref": "#/definitions/playbookBody" }, "set_by": { "$ref": "#/definitions/playbookActor" }, "set_at": { "$ref": "#/definitions/ts" } }
+          }
+        }
+      }
     }
   }
 }

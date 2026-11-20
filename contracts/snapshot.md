@@ -181,6 +181,15 @@ otherwise (amended 2026-11-04, #2639). Users see them as **custom rules**.
   is judged twice. Its one call per review covers every such rule on (finding.md, *Custom rules*).
   The hash covers each rule's `instructions` and `check`, so every run journals the text and the
   check it was judged against, and an edit re-reviews.
+- **A playbook it points at, `playbook`** (**added 2026-11-20**, design/specs/mcp.md §3.4): `{slug,
+  name}`, the org's playbook the rule's newest version names (routes.md, the custom-rules and
+  playbooks rows), `name` the playbook's newest, carried **only while that playbook stands**: a
+  playbook removed drops it, so the rule's findings carry none and the rule keeps working. Only a
+  `custom.*` rule carries one. Its findings carry the same (finding.md, `canyon.playbook`). The review
+  is never sent a playbook: the reviewer reads `instructions` and `check`, never `playbook`. The hash
+  covers it, so a link set, and a playbook a rule points at renamed, removed or restored, is a change
+  to the snapshot; the version counts each save and removal of a playbook a rule points at, as it
+  counts each rule's versions.
 
 ## Tool results mapped to a policy
 

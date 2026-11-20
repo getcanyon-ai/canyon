@@ -8,7 +8,7 @@ finding, in any format.**
 
 The profile = plain SARIF the tools understand + a required `properties.canyon` bag the tools
 ignore and Canyon requires. Nothing Canyon needs lives outside the bag; nothing in the bag is
-optional except `secret_name`, `recorded`, `shown` and `carried_from`, and `required_end_state` and
+optional except `secret_name`, `recorded`, `shown`, `carried_from` and `playbook`, and `required_end_state` and
 `do_not` on a finding that does not block.
 
 ```jsonc
@@ -38,6 +38,7 @@ optional except `secret_name`, `recorded`, `shown` and `carried_from`, and `requ
         "secret_name": "STRIPE_SECRET_KEY",       // OPTIONAL — only on credential findings; the variable the fix stores the rotated key under
         "shown": { "startColumn": 27, "endColumn": 52 },   // OPTIONAL — the caret on the masked snippet; the region stays 27–63
         "carried_from": "gr_7d3e8f2a91c04b56",    // OPTIONAL — only on an agent's result carried from an earlier review: the run whose review reported it
+        // "playbook": { "slug": "service-conventions", "name": "How Meridian writes a service" },   // OPTIONAL — only on a custom rule's result whose rule points at a playbook: DERIVED SERVER-SIDE
         "required_end_state": "No credential literal appears anywhere under apps/web/src/. The Stripe client is constructed only in server-side code, and the key is read from process.env.STRIPE_SECRET_KEY at runtime.",   // REQUIRED when blocks is true
         "do_not": [ "move the value to a NEXT_PUBLIC_, VITE_, REACT_APP_, or PUBLIC_ variable", "move the literal into .env, a comment, a config file, or a different module", "rename the variable", "add an ignore comment, suppression pragma, or --force" ]   // REQUIRED when blocks is true; one line each
       } }
@@ -57,7 +58,7 @@ optional except `secret_name`, `recorded`, `shown` and `carried_from`, and `requ
   with `artifactLocation.uri` and a full `region` (`startLine, startColumn, endLine, endColumn`,
   `snippet`) ·
   `partialFingerprints["canyon/v1"]` · `properties.canyon` with every field above except
-  `secret_name`, `recorded`, `shown` and `carried_from`, and except `required_end_state` and `do_not` on a finding that does not block.
+  `secret_name`, `recorded`, `shown`, `carried_from` and `playbook`, and except `required_end_state` and `do_not` on a finding that does not block.
   A result missing any of these ⇒ **the run fails closed** (never dropped,
   never defaulted). A finding without a location cannot be rendered or redacted.
   `properties` carries the `canyon` bag and nothing else; line and column numbers are at most
@@ -68,6 +69,17 @@ optional except `secret_name`, `recorded`, `shown` and `carried_from`, and `requ
 - `canyon.severity` ∉ the four values ⇒ the run fails closed.
 - **`canyon.blocks` is present on every finding; producers cannot set it** — the server derives
   it after policy lookup and overwrites whatever a producer wrote.
+- **`canyon.playbook` is the server's, as `blocks` is** (**added 2026-11-20**, design/specs/mcp.md §3.4):
+  `{slug, name}`, the org's playbook a `custom.*` rule points at, as the run's snapshot carries it on
+  the rule (snapshot.md, *Custom rules*) — and only there: a finding of any other rule, or of a custom
+  rule whose snapshot carries none, has no `playbook`. A producer never sets it; the server derives it
+  after policy lookup and overwrites whatever a producer wrote, so a log whose `playbook` is not its
+  rule's in the snapshot fails closed. It is how an agent is told where the org explains the rule, one
+  more next step after the fix: `Read the playbook <name>: canyon playbook <slug>` in the CLI's
+  `--format ai` block (design/specs/cli.md §5.2) and on the dashboard's finding. It is outside the
+  `canyon/v1` recipe, so a playbook linked or removed never moves a fingerprint or an approval. The
+  sample is `contracts/testdata/finding/custom-playbook.sarif.json`, against
+  `contracts/testdata/snapshot/custom-rules.json`.
 - `required_end_state` and `do_not` are required on any finding whose `blocks` is true, and
   permitted on any other. `do_not` names the specific wrong moves that reproduce this finding;
   each entry is one line. Both are governance prose the surfaces print verbatim and never

@@ -61,6 +61,7 @@ export default defineConfig({
                 "start/agents/cursor",
                 "start/agents/codex",
                 "start/agents/other-agents",
+                "start/connect-your-agent",
               ],
             },
             "start/deploy-on-your-companys-canyon",

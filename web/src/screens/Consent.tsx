@@ -13,12 +13,13 @@ import { Button } from "../ui/Button";
 // leave is how the page hands the browser to the client's redirect, kept apart so a test sees where it went.
 export const leave = { to: (url: string) => window.location.assign(url) };
 
-// allowed is a redirect the page follows: https, or http on a loopback host, as the server registers them alone. The
-// server answers only the redirect the client registered; the page holds to the same allowlist on its own.
+// allowed is a redirect the page follows: https, http on a loopback host, or cursor:// (the server's privateUseSchemes),
+// as the server registers them alone. The server answers only the redirect the client registered; the page holds to
+// the same allowlist on its own.
 function allowed(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" || (u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname));
+    return u.protocol === "https:" || u.protocol === "cursor:" || (u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname));
   } catch {
     return false;
   }

@@ -83,6 +83,22 @@ describe("an MCP client's consent page", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it("follows a cursor:// redirect, Cursor's own scheme", async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/auth/config") return answer(200, { canyon: true, auth: "oidc", org: "Meridian Insurance", device: true });
+      if (url === "/api/v1/preferences") return answer(200, { onboarded_at: "2026-09-16T09:00:00Z" });
+      if (init?.method === "POST") return answer(200, { redirect: "cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback?code=c&iss=x" });
+      return answer(200, { ...pending(false), redirect_host: "cursor" });
+    });
+    const assign = vi.spyOn(leave, "to").mockImplementation(() => {});
+    window.location.hash = `#/oauth?request=${ID}`;
+    vi.stubGlobal("fetch", fetch);
+    render(<Shell />);
+    expect(await screen.findByText(/Then Canyon sends you back to cursor\.$/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: CONSENT.allow }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback?code=c&iss=x"));
+  });
+
   it("says a request expired, and never follows a redirect it wasn't answered", async () => {
     const { assign } = open(`#/oauth?request=${ID}`, () => answer(404, { error: "not_found", message: "This request has expired." }));
     expect(await screen.findByRole("heading", { name: CONSENT.expiredNoClient })).toBeDefined();

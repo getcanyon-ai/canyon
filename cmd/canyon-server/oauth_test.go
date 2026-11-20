@@ -332,7 +332,9 @@ func TestOAuthRegistersPublicClientsAlone(t *testing.T) {
 	}{
 		{`{"client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback","http://[::1]:33418/callback"]}`, 201},
 		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201},                                                           // no name: shown by its redirect's host
-		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 400}, // https or loopback http alone, in v1
+		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 201}, // cursor, by name
+		{`{"client_name":"x","redirect_uris":["myapp://callback"]}`, 400},                                                    // a scheme no name allows
+		{`{"client_name":"x","redirect_uris":["cursor:callback"]}`, 400},                                                     // cursor with no host
 		{`{"client_name":"x","redirect_uris":["https://a.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}`, 400},
 		{`{"client_name":"x","redirect_uris":["javascript:alert(1)"]}`, 400},
 		{`{"client_name":"x","redirect_uris":["http://canyon.meridian.example/cb"]}`, 400}, // plain http off loopback
@@ -345,6 +347,31 @@ func TestOAuthRegistersPublicClientsAlone(t *testing.T) {
 			t.Errorf("%s: %d %s, want %d", c.body, code, lastBody, c.code)
 		}
 	}
+}
+
+// Cursor receives its sign-in on cursor://, a scheme Canyon allows by name: it registers, authorizes and redeems as any
+// client does, matched exactly, and the consent page names cursor as where it sends the person back. The redirect is a
+// cursor:// shape, not one read from Cursor's documentation.
+func TestOAuthCursorSignsInOnItsOwnScheme(t *testing.T) {
+	base, _, _, gina := oauthHost(t)
+	const redirect = "cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"
+	id := register(t, base, redirect)
+	_, challenge := pkce()
+	q := neturl.Values{"response_type": {"code"}, "client_id": {id}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}
+	req := requestOf(t, authorize(t, base, gina, q))
+	if code, body, _ := do(t, gina, http.MethodGet, base+"/api/v1/oauth/requests/"+req, ""); code != 200 || body["redirect_host"] != "cursor" {
+		t.Errorf("the consent read: %d %s, want cursor as where it goes back", code, lastBody)
+	}
+	_, body, _ := doWith(t, gina, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
+	if back, _ := body["redirect"].(string); !strings.HasPrefix(back, redirect+"?") || !strings.Contains(back, "code=") {
+		t.Errorf("approve sent the browser to %q", back)
+	}
+	q.Set("redirect_uri", "cursor://anysphere.cursor-retrieval/other")
+	if at := authorize(t, base, gina, q); at.Fragment != "/oauth?invalid=redirect" {
+		t.Errorf("another cursor:// redirect than the one registered: sent to %s", at)
+	}
+	signedInOver(t, base, gina, id, redirect)
 }
 
 // A client that names itself by a metadata document at its own https URL is fetched there: shown by that URL's host

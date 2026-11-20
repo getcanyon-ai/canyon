@@ -118,8 +118,14 @@ func (a *app) resourceMetadata(w http.ResponseWriter, _ *http.Request) {
 		"scopes_supported": oauthScopes, "bearer_methods_supported": []string{"header"}, "resource_name": "Canyon"})
 }
 
-// redirectURI is whether s is a redirect Canyon sends a person's browser to, by an allowlist: https, or http on a
-// loopback host (RFC 8252 §7.3), and nothing else, never with credentials or a fragment, which a code must not travel in.
+// privateUseSchemes are the native apps' own redirect schemes Canyon sends a browser to, each by name (RFC 8252 §7.1):
+// cursor, because Cursor, one of the four coding agents Canyon supports, receives its sign-in on cursor:// and has
+// no loopback redirect. No other: a scheme is added here by name, never by a pattern.
+var privateUseSchemes = []string{"cursor"}
+
+// redirectURI is whether s is a redirect Canyon sends a person's browser to, by an allowlist: https, http on a
+// loopback host (RFC 8252 §7.3), or a scheme privateUseSchemes names, with a host, and nothing else; never with
+// credentials or a fragment, which a code must not travel in.
 func redirectURI(s string) bool {
 	u, err := neturl.Parse(s)
 	if err != nil || len(s) > 2048 || u.Fragment != "" || u.User != nil || strings.ContainsAny(s, "\r\n\t ") {
@@ -131,7 +137,7 @@ func redirectURI(s string) bool {
 	case "http":
 		return loopbackHost(u.Hostname())
 	}
-	return false
+	return slices.Contains(privateUseSchemes, u.Scheme) && u.Host != ""
 }
 
 // redirectMatches is whether asked is one of registered: exactly, but for a loopback http redirect's port, which a
@@ -337,10 +343,16 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func cmpHost(u *neturl.URL) string { return u.Hostname() }
+// cmpHost is where a redirect sends the person back, as the consent page names it: its host, or for a native app's own
+// scheme the scheme, which is the app (cursor).
+func cmpHost(u *neturl.URL) string {
+	if slices.Contains(privateUseSchemes, u.Scheme) {
+		return u.Scheme
+	}
+	return u.Hostname()
+}
 
-// oauthRegister registers a public client (RFC 7591): no secret, PKCE alone, each redirect https, or http on a
-// loopback host. A registration never used within a day is deleted by the next one, so the table cleans itself.
+// oauthRegister registers a public client (RFC 7591): no secret, PKCE alone, each redirect one redirectURI allows. A registration never used within a day is deleted by the next one, so the table cleans itself.
 func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ClientName   string   `json:"client_name"`
@@ -367,7 +379,7 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		refuse("Canyon answers response_type code alone")
 		return
 	case len(body.RedirectURIs) == 0 || len(body.RedirectURIs) > 10 || slices.ContainsFunc(body.RedirectURIs, func(u string) bool { return !redirectURI(u) }):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "one to ten redirects, each https, or http on a loopback host"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "one to ten redirects, each https, http on a loopback host, or cursor://"})
 		return
 	}
 	if body.ClientName == "" { // shown by where it sends the person back

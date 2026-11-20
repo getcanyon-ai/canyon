@@ -391,6 +391,12 @@ export const listRuns = (id: string, cursor: string | null) => call<{ runs: RunR
 // query is the trail read's query string as the caller builds it (project, cursor, limit); the server filters and pages.
 export const listAudit = (query: string) => call<AuditPage>("GET", query === "" ? "/audit" : `/audit?${query}`);
 export const listSecrets = (id: string) => call<{ secrets: Secret[] }>("GET", `/projects/${encodeURIComponent(id)}/secrets`);
+// A secret set or replaced, and removed (contracts/routes.md, the secrets rows): the value travels in this PUT alone, and no
+// route ever answers one back. env and where are sent as chosen, never left for the server to default.
+export const setSecret = (id: string, name: string, body: { value: string; env: "preview" | "prod"; where: "runtime" | "build" }) =>
+  call<void>("PUT", `/projects/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}`, body);
+export const removeSecret = (id: string, name: string, env: "preview" | "prod") =>
+  call<void>("DELETE", `/projects/${encodeURIComponent(id)}/secrets/${encodeURIComponent(name)}?env=${env}`);
 // The Access group (contracts/routes.md): the read, and a share that writes one grant whole and
 // answers the read again. Every route but asking is its owners' and admins'.
 export type GrantKind = "email" | "group" | "everyone";

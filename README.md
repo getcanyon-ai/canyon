@@ -18,12 +18,33 @@
 </p>
 
 <p align="center">
-  <a href="docs/src/content/docs/start/what-is-canyon.md">Docs</a> ·
+  <a href="https://www.getcanyon.ai/docs/start/what-is-canyon/">Docs</a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="docs/src/content/docs/self-host/kubernetes.md">Self-host</a> ·
+  <a href="https://www.getcanyon.ai/docs/self-host/kubernetes/">Self-host</a> ·
   <a href="https://github.com/getcanyon-ai/canyon/discussions">Discussions</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
+
+<p>
+  <img src=".github/assets/05-fix-loop.gif" width="100%" alt="A terminal: canyon deploy is blocked on SQL built from the request in server.js line 20, the agent changes that one line to a bound parameter, and canyon check passes">
+</p>
+
+An agent's deploy is blocked, it fixes the line, and the next check passes.
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/01-blocked-dark.png">
+    <img src=".github/assets/01-blocked-light.png" width="49%" alt="Canyon's app page: the version is blocked by one finding, SQL built from the request in server.js, with the fix to make">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/02-passed-dark.png">
+    <img src=".github/assets/02-passed-light.png" width="49%" alt="Canyon's app page: the next version passed review and is ready for production">
+  </picture>
+</p>
+
+Blocked: the agent built SQL from the request. · Passed: after the agent's one-line fix.
+
+**Try it in minutes:** paste the [tour prompt](https://www.getcanyon.ai/docs/start/take-the-tour/) into Claude Code, Codex or Cursor.
 
 `canyon check` on the demo's claims-portal, whose next version builds its SQL from the request:
 
@@ -67,6 +88,17 @@ Canyon reviews every deploy before it runs. It checks the code with open-source 
 you give it a model, an AI review, against your org's rules. Findings come back as a file, a line and
 a fix, which the agent handles like a compiler error. By default nothing reaches production without
 a passing review and a person's say-so, and every app keeps its review history and an audit trail.
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/03-promote-dark.png">
+    <img src=".github/assets/03-promote-light.png" width="49%" alt="Canyon's app page: a version that passed review and meets the go-live checks, with the button a person uses to promote it">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/04-fleet-dark.png">
+    <img src=".github/assets/04-fleet-light.png" width="49%" alt="Canyon's fleet: every app in the org, what needs attention first, and each app's review, preview and production">
+  </picture>
+</p>
 
 ## Quickstart
 

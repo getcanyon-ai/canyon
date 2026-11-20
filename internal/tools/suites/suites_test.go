@@ -296,6 +296,33 @@ func TestReachAnswersWhatAChangeReaches(t *testing.T) {
 		}
 		git("reset", "-q", "--hard", "HEAD^1")
 	}
+	// A pull request can't edit the lists to skip a suite: they are read as the base has them. One that empties the
+	// foundation and journeys' list beside a change to the dashboard still runs every suite, and a suite the base has
+	// no list for runs.
+	for _, f := range []string{"foundation", "journeys"} {
+		if err := os.WriteFile(filepath.Join(scratch, ".github", "suites", f+".txt"), []byte("nothing/**\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(scratch, ".github", "suites", "fresh.txt"), []byte("nothing/**\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(scratch, "web"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scratch, "web", "index.html"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "the lists edited beside the dashboard")
+	names = append(names, "fresh")
+	for name, v := range reach("the lists edited beside the dashboard", "pull_request", "HEAD^1") {
+		if v != "true" {
+			t.Errorf("a pull request that edits the lists: %s=%s, want true (the base's lists decide)", name, v)
+		}
+	}
+	git("reset", "-q", "--hard", "HEAD^1")
+	names = names[:len(names)-1]
 	for name, v := range reach("a push", "push", "HEAD") { // any other event runs every suite
 		if v != "true" {
 			t.Errorf("a push: %s=%s", name, v)

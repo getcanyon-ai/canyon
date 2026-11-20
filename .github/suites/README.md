@@ -9,7 +9,9 @@ opens an issue as before.
   directories and `*` stays within one. A line starting `!` takes what it matches out of that file's other lines.
   No pattern holds a space.
 - **The check:** `reach.sh <suite>…` answers `<suite>=true|false` for the pull request's merge commit against its
-  base (`git diff HEAD^1 HEAD`). It answers true when it can't tell, and true for every suite on any other event.
+  base (`git diff HEAD^1 HEAD`), reading these lists as the base has them, so a pull request can't edit them to
+  skip a suite. It answers true when it can't tell or the base has no list, and true for every suite on any other
+  event.
 - **Kept honest by `internal/tools/suites`.**
   - Each suite's paths must cover every package of this module that its Go tests and the non-server binaries it
     builds compile, by `go list -deps`.

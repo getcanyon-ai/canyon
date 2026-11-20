@@ -2,22 +2,30 @@
 # For each suite named, whether this pull request's change reaches it (.github/suites/README.md): "<suite>=true" or
 # "<suite>=false" on stdout, and into $GITHUB_OUTPUT when Actions sets it. The change is HEAD^1..HEAD, a pull
 # request's merge commit against its base (the checkout's fetch-depth: 2), or SUITES_BASE..SUITES_HEAD when set.
-# Any event but a pull request runs every suite, and a diff that can't run counts as a change: fail closed.
+# The lists are read as the base has them, never as the pull request does, so a change can't edit them to skip a
+# suite; a suite the base has no list for runs. Any event but a pull request runs every suite, and a diff that can't
+# run counts as a change: fail closed.
 set -euo pipefail
 set -f # a pattern is git's to expand, never the shell's
 cd "$(dirname "$0")/../.."
 base=${SUITES_BASE:-HEAD^1}
 head=${SUITES_HEAD:-HEAD}
 
-# specs prints a suite file's patterns as git pathspecs: :(glob)<pattern>, and :(glob,exclude)<pattern> for a !line.
+# specs prints a suite list's patterns, as the base has it, as git pathspecs: :(glob)<pattern>, and
+# :(glob,exclude)<pattern> for a !line. It fails where the base has no such list.
 specs() {
-  sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' -e 's/^!\(.*\)/:(glob,exclude)\1/' -e '/^:(/!s/^/:(glob)/' ".github/suites/$1.txt"
+  local list
+  list=$(git show "$base:.github/suites/$1.txt") || return 1
+  sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' -e 's/^!\(.*\)/:(glob,exclude)\1/' -e '/^:(/!s/^/:(glob)/' <<< "$list"
 }
 
-# reaches says whether base..head changes a path the suite file names; true where git can't answer.
+# reaches says whether base..head changes a path the suite's list names; true where git can't answer, or the base
+# has no list.
 reaches() {
-  # shellcheck disable=SC2046 # one pattern a word: no pattern holds a space (internal/tools/suites)
-  if git diff --quiet "$base" "$head" -- $(specs "$1"); then return 1; fi
+  local patterns
+  patterns=$(specs "$1" 2>/dev/null) || return 0
+  # shellcheck disable=SC2086 # one pattern a word: no pattern holds a space (internal/tools/suites)
+  if git diff --quiet "$base" "$head" -- $patterns; then return 1; fi
 }
 
 for suite in "$@"; do

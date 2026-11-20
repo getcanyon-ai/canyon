@@ -5192,6 +5192,7 @@ YOUR ORG
   fleet       List every app in your org and what needs attention
   resources   List the databases and services this Canyon can create for apps
   manifest    Show the instructions this Canyon gives coding agents
+  playbook    Print one of your org's playbooks: how it builds
 
 SETUP
   login       Sign this machine in to a Canyon host

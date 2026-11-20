@@ -29,6 +29,13 @@ function when(at: string): string {
 
 const fill = (line: string, values: Record<string, string>) => line.replace(/<(\w+)>/g, (whole, key: string) => values[key] ?? whole);
 
+// The question the approver answers names what ships, and for a rollback what it replaces, as the CLI asks it (D5).
+const question = (read: PromotionApproval) => {
+  if (!read.rollback) return fill(APPROVAL.title, { app: read.app, version: read.version });
+  if (read.replaces === null) return fill(APPROVAL.titlePutBackNothing, { app: read.app, version: read.version });
+  return fill(APPROVAL.titlePutBack, { app: read.app, version: read.version, replaces: read.replaces });
+};
+
 // A patch approval's own part (design/PATCHING.md §8): what the patch changes, the proof that only Canyon's system
 // libraries changed, and how preview's watch ended — then D5's confirm, as for any promotion, a rebuild's its own (#2631).
 // The read files one only for a watch that passed, so its one result is said.
@@ -114,7 +121,7 @@ export function Approve({ code, org }: { code: string; org: string | null }) {
 
   const body = () => {
     if (missing) return <AuthHead mark={{ tone: "neutral", icon: "alert" }} title={APPROVAL.unknown} />;
-    if (read === null) return failure === null ? null : <><AuthHead title={fill(APPROVAL.title, { app: "this app" })} />{failed}</>;
+    if (read === null) return failure === null ? null : <><AuthHead title={APPROVAL.titleUnread} />{failed}</>;
     if (outcome === "approved") {
       return (
         <AuthHead mark={{ tone: "ok", icon: "done" }} title={APPROVAL.approved} line={
@@ -143,7 +150,7 @@ export function Approve({ code, org }: { code: string; org: string | null }) {
     return (
       <>
         <div className="grid gap-3">
-          <AuthHead eyebrow={<Eyebrow icon="production">{APPROVAL.eyebrow}</Eyebrow>} title={fill(patch ? PATCHING.approvalTitle : APPROVAL.title, { app: read.app })} />
+          <AuthHead eyebrow={<Eyebrow icon="production">{APPROVAL.eyebrow}</Eyebrow>} title={patch ? fill(PATCHING.approvalTitle, { app: read.app }) : question(read)} />
           <div className="flex items-center gap-2">
             <Avatar name={read.requested_by.display} size="sm" />
             <p className="text-md text-text-dim">{before}<strong className="font-semibold text-text">{read.requested_by.display}</strong>{fill(after, { time: when(read.requested_at) })}</p>
@@ -174,7 +181,7 @@ export function Approve({ code, org }: { code: string; org: string | null }) {
           </div>
         </section>
         {patch && <PatchProof read={read} production={production} />}
-        <p className="text-base text-text-dim">{read.rebuild === true ? PATCHING.rebuildConfirm : S.promoteConfirm}</p>
+        <p className="text-base text-text-dim">{read.rebuild === true ? PATCHING.rebuildConfirm : read.rollback ? S.putBackCodeBare : S.promoteConfirm /* a rollback puts back production's own earlier image, never preview's */}</p>
         {odd !== null && <AuthNote tone="amber" icon="alert" title={`${read.version} ${odd} on preview. Check the app before approving it.`} />}
         {receipt !== undefined && <Receipt receipt={receipt} framed />}
         <ApprovingAs approver={read.approver} onSwitch={() => void signOut().catch(gone)} />

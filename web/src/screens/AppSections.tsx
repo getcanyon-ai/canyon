@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { getRun, listAudit, listPackages, listRuns, listSecrets, pullRequestName, redeploy, said, version, waiting, type App as AppRead, type Package, type RunRow, type Status } from "../api";
+import { getRun, listAudit, listPackages, listRuns, pullRequestName, redeploy, said, version, waiting, type App as AppRead, type Package, type RunRow, type Status } from "../api";
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age } from "../ui/Age";
@@ -56,7 +56,6 @@ function Listed<Row>({ columns, read, rowKey, cells, empty }: {
   );
 }
 
-const ENV = { preview: "Preview", prod: "Production" } as const;
 const FROM: Record<Package["source"]["kind"], string> = { upload: "CLI upload", repo: "Repository" };
 const RESULT: Record<RunRow["state"], string> = { clean: "Passed", blocked: "Blocked", failed: "Failed", pending: "Reviewing", running: "Reviewing" };
 // How a review ended, in the Reviews tab's words: an approval past every blocking finding is never Blocked.
@@ -64,11 +63,11 @@ const result = (row: RunRow) => (row.approved === true ? "Approved past review" 
 // A package row names its uploader by display, the subject where it has none (contracts/routes.md, the packages
 // row): the anonymous admin of a host with sign-in off is nobody signed in, as ui/Actor.tsx says (#2696).
 const uploader = (actor: string) => (actor === "anonymous" ? S.notSignedIn : actor);
-const TABS = ["Versions", "Reviews", "Secrets", "Activity"] as const;
+const TABS = ["Versions", "Reviews", "Activity"] as const; // the secrets are the Secrets section's, beside its form
 const FOLLOW_MS = 1000; // clients poll about once a second while a run is going (contracts/events.md)
 
-// The app's history (the redesign: "history as tabs, Versions · Reviews · Secrets · Activity"): what
-// it uploaded, what each review said, what it holds, and what was done to it. Rarely needed, so it
+// The app's history (the redesign: "history as tabs", Versions · Reviews · Activity; its secrets are the Secrets
+// section's, design/specs/screens.md): what it uploaded, what each review said, and what was done to it. Rarely needed, so it
 // comes last; a tab reads only once it is chosen. Who answers for the app is the Access card's.
 export function AppSections({ project, envs, refreshed }: { project: AppRead; envs: Status["envs"]; refreshed: () => void }) {
   // No tab is open until one is chosen: nothing here is read until somebody asks for it.
@@ -120,8 +119,8 @@ export function AppSections({ project, envs, refreshed }: { project: AppRead; en
     <section aria-label="History">
       {/* Closed until asked for (the app-page redesign): its tabs read nothing until one is chosen anyway. */}
       <details className="grid grid-cols-[minmax(0,1fr)] gap-3">
-      <summary className="cursor-pointer"><h2 className="inline text-base font-semibold">History<span className="ml-2 text-md font-normal text-text-faint">Versions, reviews, secrets, activity</span></h2></summary>
-      <div role="tablist" aria-label="Versions, reviews, secrets and activity" className="flex gap-5 overflow-x-auto border-b border-border">
+      <summary className="cursor-pointer"><h2 className="inline text-base font-semibold">History<span className="ml-2 text-md font-normal text-text-faint">Versions, reviews, activity</span></h2></summary>
+      <div role="tablist" aria-label="Versions, reviews and activity" className="flex gap-5 overflow-x-auto border-b border-border">
         {TABS.map((name, at) => (
           <button key={name} id={`history-tab-${name}`} type="button" role="tab" aria-selected={tab === name} aria-controls="history-panel"
             tabIndex={tab === name || (tab === null && at === 0) ? 0 : -1} onClick={() => setTab(name)}
@@ -187,15 +186,6 @@ export function AppSections({ project, envs, refreshed }: { project: AppRead; en
               </span>
             ) : <a className="text-link no-underline hover:underline" href={reviewOf(row)}>{version(row.package, row.label)}</a>, result(row), row.blocking, row.warnings, row.started_by === null ? "Canyon (automatic)" : <Actor actor={row.started_by} />, <Age at={row.started_at} long />]}
             empty="Not reviewed yet."
-          />
-        )}
-        {tab === "Secrets" && (
-          <Listed
-            columns={["Name", "Environment", "Where", "Version", "Set by", "Set", "Origin"]}
-            read={() => listSecrets(project.id).then((read) => ({ rows: read.secrets, next: null }))}
-            rowKey={(row) => `${row.env}/${row.name}`}
-            cells={(row) => [<span className="font-mono text-md">{row.name}</span>, ENV[row.env], row.where, row.version, <Actor actor={row.set_by} />, <Age at={row.set_at} long />, row.origin]}
-            empty="No secrets set. Add one with canyon secret set."
           />
         )}
         {tab === "Activity" && (

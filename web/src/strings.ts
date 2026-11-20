@@ -940,6 +940,38 @@ export const KNOWN_VULN = {
   inApp: "the Go version Canyon built the app with",
 } as const;
 
+// The app page's Secrets section (design/specs/screens.md, Secrets; design/specs/mcp.md §10.1; EXPERIENCE.md D5): a
+// contributor's and up. The value is typed into a password field, sent once, and never shown back.
+export const SECRETS = {
+  title: "Secrets",
+  about: "Values the app reads by name. Canyon keeps each in its vault and never shows one back.",
+  form: "Set a secret",
+  name: "Name",
+  value: "Value",
+  env: "Environment",
+  where: "Where",
+  preview: "Preview",
+  prod: "Production",
+  runtime: "Runtime",
+  build: "Build",
+  set: "Set secret",
+  nameFirst: "Name the secret first.",
+  valueFirst: "Type the value first.",
+  replaces: "Setting a name that's already set replaces its value.",
+  setPreview: "Set <name> for preview. It takes effect at the next deploy.",
+  setProd: "Set <name> for production. It takes effect at the next promotion.",
+  replace: "Replace",
+  remove: "Remove",
+  askPreview: "Remove <name> from preview?",
+  askProd: "Remove <name> from production?",
+  cancel: "Cancel",
+  removedPreview: "Removed <name> from preview. It takes effect at the next deploy.",
+  removedProd: "Removed <name> from production. It takes effect at the next promotion.",
+  canyons: "Canyon sets this one for the app",
+  none: "No secrets set.",
+  unread: "The app's secrets couldn't be read.",
+} as const;
+
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's
 // image read in its own words beside its mark, then what it counts, one card a package, where it is in a developer's
 // words (never its class), its notes and what Canyon's patches fixed in it.

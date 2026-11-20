@@ -987,11 +987,40 @@ whole, says `Canyon couldn't read what runs in <env>: <error>`, never nothing fo
 `not_scanned` there is no card: the rule is off by default and Canyon lists no image then. A read-only member and a
 responder with no grant never read it, nor see the card (the reduced page reads no image).
 
+### Secrets (design/specs/mcp.md §10.1)
+
+Below System libraries, for a contributor and above, an owner and an admin among them (design/PERMISSIONS.md, *Change
+it*: secrets): the app's secrets by name, from `GET …/secrets`, and the one form on the dashboard that sets one
+(`PUT …/secrets/:name`) or removes one (`DELETE …/secrets/:name?env=`; contracts/routes.md, unchanged). It is how a
+person whose agent has no CLI sets what the app needs (mcp.md §10.1). Titled `Secrets`, then `Values the app reads by
+name. Canyon keeps each in its vault and never shows one back.`
+
+- **The list**, one row per environment and name: the name, `Preview` or `Production`, `Runtime` or `Build`, its
+  version, who set it and when. A row the PUT wrote (`origin: user`) has `Replace` and `Remove`; one a deploy wrote
+  from a declared resource (`provisioned`) says `Canyon sets this one for the app`, with neither, as the routes refuse it (`409
+  provisioned`). With none: `No secrets set.`
+- **`Set a secret`**: `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
+  the default, or `Build`), then `Set secret` (until a name and a value are typed, it says `Name the secret first.` or
+  `Type the value first.`), and under it `Setting a name that's already set replaces its value.`
+  `Value` is a password field: never filled from anything, sent once in the PUT, emptied when the PUT lands, and held
+  in no read, request log or audit row (the audit row names who set which name). Nothing is checked here that the
+  route checks: a name, an environment and a `where` are sent as typed, and a refusal is the route's own message, the
+  form as it was. Done: `Set <name> for preview. It takes effect at the next deploy.`, for production `Set <name> for
+  production. It takes effect at the next promotion.`, and `Name` is emptied too, so the next value can't overwrite the
+  same secret by accident.
+- **`Replace`** fills the form's name, environment and where from its row, and puts focus on `Value`.
+- **`Remove`** asks `Remove <name> from preview?` (or `production`), `Remove` and `Cancel`; done: `Removed <name> from
+  preview. It takes effect at the next deploy.` (`… production. It takes effect at the next promotion.`).
+- **Who sees it.** A contributor, an owner and an admin. A read-only member, a person with no access and a responder
+  with no grant see no section, and no form: the reduced page reads no secret.
+- The History card has no Secrets tab: the list is here, beside the form.
+
 ### Not on this screen
 
 - **A code editor.** Canyon governs; harnesses build. An "Apply fix" button would collapse that boundary and make Canyon a competitor to the tool the visitor already loves.
 - **A diff viewer.** Tempting, adds a viewport, and the file:line is what their agent consumes.
-- **Logs, metrics, traces, env var editor, restart button.** All of it is a PaaS control panel. Not the story.
+- **Logs, metrics, traces, restart button.** All of it is a PaaS control panel. Not the story. (Secrets, above, are
+  the one exception, for a person whose agent has no CLI: design/specs/mcp.md §10.1.)
 - **A severity filter / sort control.** Three findings.
 - **A "share" button.** Nobody shares in minute five.
 

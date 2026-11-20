@@ -86,6 +86,9 @@ type app struct {
 	moved    string           // §3.6's main-moved line when the deploy went on, for the ai block to say
 	notice   *noticeCheck     // the once-a-day check in flight, nil when none is due (notice.go)
 	noticed  bool             // whether this invocation has decided about the notice: once, at the verb's parse
+	// transport is how this invocation's requests were asked for, sent as Canyon-Transport: canyon mcp sets
+	// transportMCPLocal before its first call; every other verb leaves it "", the CLI's (design/specs/mcp.md §7).
+	transport string
 }
 
 // printf writes a verb's rendering. It does not escape, because Canyon's own colour codes are
@@ -263,6 +266,7 @@ func (a *app) client() (*Client, error) {
 		}
 		a.http = newClient(host)
 		a.http.Harness = harnessOf(a.getenv)
+		a.http.Transport = a.transport
 		c := a.config()
 		if c.Host != host { // config.json is authoritative for its host; every other is in hosts/ (cli.md §8.4)
 			c = a.hostConfig(host)

@@ -40,6 +40,7 @@ type gateHost struct {
 	attached       []string // the bodies of the report PUTs, in order
 	started        string   // the body of the run start
 	harness        string   // the run start's Canyon-Harness header
+	transport      string   // the run start's Canyon-Transport header
 	asked          []string
 	created        []string // the bodies of POST /projects, in order
 	base, query    string   // the Canyon-Base-Package header and the query string of the upload
@@ -78,7 +79,7 @@ func (h *gateHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.answer(w, reply{http.StatusOK, `{"package":{"id":"` + strings.TrimPrefix(path, "/api/v1/projects/claims-portal/packages/") + `"}}`})
 	case strings.HasSuffix(path, "/gate-runs"), strings.HasSuffix(path, "/deploys"):
 		body, _ := io.ReadAll(r.Body)
-		h.started, h.harness = string(body), r.Header.Get("Canyon-Harness")
+		h.started, h.harness, h.transport = string(body), r.Header.Get("Canyon-Harness"), r.Header.Get("Canyon-Transport")
 		h.answer(w, h.start)
 	case strings.HasSuffix(path, "/timeline"):
 		h.answer(w, reply{http.StatusOK, h.page})

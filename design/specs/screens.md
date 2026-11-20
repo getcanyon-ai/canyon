@@ -249,7 +249,7 @@ wider, headed `Production approval`.
 │      🔒 canyon.meridian.example                          │
 │ ──────────────────────────────────────────────────────── │
 │ Production approval                                      │
-│ Promote claims-portal to production?                     │
+│ Promote claims-portal v1.4 to production?                │
 │ (CD) Carol Diaz asked from the CLI, 14:22 today.         │
 │ ┌──────────────────────────────────────────────────────┐ │
 │ │ In production now          →         Goes live       │ │
@@ -275,6 +275,11 @@ wider, headed `Production approval`.
 └──────────────────────────────────────────────────────────┘
 ```
 
+- **The heading is the question, naming what ships** (amended 2026-11-20, D5): `Promote <app> <version> to
+  production?`, or for a rollback review's approval (the read's `rollback`) `Put <app> <version> back in production,
+  replacing <version>?`, without `, replacing …` where production runs nothing: the CLI's question and
+  `canyon_promote`'s, byte for byte. Before the read answers, `Promote this app to production?`. A rollback's says `Canyon puts back the code, not the data, the secrets or the outbound rules.` under
+  the versions where a promotion says D5's no-rebuild sentence: it puts back production's own earlier image, never preview's.
 - **Who asked, and from where, comes first**: `<name> asked from the CLI, <time>.` beside the
   asker's initials — the request's actor and channel. A person who did not expect a request has the
   one fact that tells them so.

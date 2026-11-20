@@ -135,7 +135,8 @@ flowchart TD
 ```
 
 - **A person decides, in the dashboard.** Someone on the app's team (an owner or a contributor) or an
-  admin opens the link signed in, sees **Promote _app_ to production?**, and clicks **Approve** or
+  admin opens the link signed in, sees **Promote _app_ _version_ to production?** (or, for an earlier version, **Put _app_ _version_ back in
+  production, replacing _version_?**), and clicks **Approve** or
   **Deny**. Your coding agent gives you the link and stops.
 - **The request lasts 24 hours.** A new request replaces the one still waiting. If preview runs
   another version by the time someone approves, nothing is promoted: ask again.

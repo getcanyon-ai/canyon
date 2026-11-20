@@ -88,7 +88,8 @@ Admins change these settings. Members see them read-only.
 ## Approve a promotion
 
 When "Production is approved in the dashboard" is on, `canyon deploy --env prod` gives a link
-instead of promoting. The link opens a page such as "Promote claims-portal to production?". It shows
+instead of promoting. The link opens a page such as "Promote claims-portal v1.4 to production?", or "Put claims-portal v1.2 back in
+production, replacing v1.4?" for an earlier version. It shows
 who asked and when, what is in production now, and what goes live. "Approve" promotes it and "Deny"
 stops it. If something blocks the version, the page says "This can't go to production now" and why.
 

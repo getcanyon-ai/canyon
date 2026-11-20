@@ -776,7 +776,11 @@ export const AUTH = {
 // switch on Settings › People & sign-in that turns it on (design/AUTH.md §4.5).
 export const APPROVAL = {
   eyebrow: "Production approval",
-  title: "Promote <app> to production?",
+  // The question names what ships, as the CLI's and canyon_promote's do, byte for byte (design/EXPERIENCE.md D5).
+  title: "Promote <app> <version> to production?",
+  titlePutBack: "Put <app> <version> back in production, replacing <replaces>?",
+  titlePutBackNothing: "Put <app> <version> back in production?",
+  titleUnread: "Promote this app to production?", // before the read answers, nothing is known to name
   asked: "<name> asked from the CLI, <time>.",
   asked_elsewhere: "<name> asked, <time>.",
   now: "In production now",

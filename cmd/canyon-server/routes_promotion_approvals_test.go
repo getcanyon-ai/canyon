@@ -229,7 +229,7 @@ func TestAnApprovalNamesTheVersionItWasAskedFor(t *testing.T) {
 	if _, err := pool.Exec(ctx, "UPDATE deploys SET image = image || '-other' WHERE env = 'preview'"); err != nil {
 		t.Fatal(err)
 	}
-	if _, read, _ := do(t, browser, http.MethodGet, at, ""); read["state"] != "outdated" || read["held"] != nil {
+	if _, read, _ := do(t, browser, http.MethodGet, at, ""); read["state"] != "outdated" || read["held"] != nil || read["rollback"] != nil { // a promotion of preview's, not a put-back
 		t.Fatalf("outdated by preview, no hold: %s", lastBody)
 	}
 	if got, _, _ := do(t, browser, http.MethodPost, at+"/approve", ""); got != 409 || lastBody != `{"error":"outdated","message":"preview runs another version now: ask again from the CLI"}` {

@@ -3,8 +3,10 @@ version: 2
 # Go and npm get Dependabot security updates (a repository setting) and CI's
 # govulncheck. Neither looks at the base images Canyon ships, so the
 # Dockerfiles at the root (Dockerfile, Dockerfile.executor,
-# Dockerfile.executor-kube, Dockerfile.identity) get weekly patch bumps:
-# golang's patch releases, the docker CLI's, and distroless's pinned digest.
+# Dockerfile.executor-kube, Dockerfile.identity) get weekly patch bumps. Every
+# base image there is pinned by digest (a release builds exactly what was
+# reviewed), and Dependabot moves the tag and its digest together: golang's
+# patch releases, node's, debian's, the docker CLI's, and distroless's.
 updates:
   - package-ecosystem: "docker"
     directory: "/"

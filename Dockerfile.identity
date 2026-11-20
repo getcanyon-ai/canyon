@@ -1,6 +1,6 @@
 # canyon-identity, the identity sidecar in every app's pod on Kubernetes (contracts/executor.md, The
 # front door): one static binary on distroless :nonroot (its multi-arch index, pinned by digest).
-FROM golang:1.26.11 AS build
+FROM golang:1.26.11@sha256:4165ee6bf3b7811fd7b40373290405c83d0167dcb87ee5f29c427cdcef45ff8f AS build
 WORKDIR /src
 COPY go.mod go.sum* ./
 # Go's default; CI passes a list that asks the proxy again on any error (#2533)

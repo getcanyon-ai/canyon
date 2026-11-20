@@ -1,5 +1,5 @@
 # The dashboard is built first and copied into the Go stage: the binary embeds it (web/embed.go).
-FROM node:22-alpine AS web
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -8,7 +8,7 @@ COPY web/ ./
 COPY deploy/gitops /deploy/gitops
 RUN npm run build
 
-FROM golang:1.26.11 AS build
+FROM golang:1.26.11@sha256:4165ee6bf3b7811fd7b40373290405c83d0167dcb87ee5f29c427cdcef45ff8f AS build
 ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum* ./
@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 go build -trimpath -tags "${GOTAGS}" -ldflags "-s -w -X main.v
 FROM build AS cli
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/canyon ./cmd/canyon
 
-FROM debian:bookworm-slim AS demo-apps
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS demo-apps
 # curl: run.sh sets the demo's design-system rule over the server's API, as the dashboard does.
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=cli /out/canyon /usr/local/bin/canyon
@@ -38,7 +38,7 @@ ENV HOME=/tmp
 ENTRYPOINT ["/demo/run.sh"]
 
 # Not distroless: ingest materialises each upload as a commit with git (design/ARCHITECTURE.md §2).
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 65532 canyon \
  && mkdir -p /var/lib/canyon/keys /var/lib/canyon/repos && chown canyon /var/lib/canyon/keys /var/lib/canyon/repos && chmod 700 /var/lib/canyon/keys /var/lib/canyon/repos

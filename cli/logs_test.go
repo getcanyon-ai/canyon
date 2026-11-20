@@ -642,7 +642,7 @@ func TestAMaskedReadThatIsntMaskedPrintsNothing(t *testing.T) {
 	for _, header := range []string{"none", "", "shipper"} {
 		h := &logsHost{lines: []string{"DATABASE_URL=postgres://app:hunter2@db/app\n"}, redaction: header, noHeader: header == ""}
 		out, errs, code := logsRun(t, h, "--redaction", "masked")
-		if code != exitError || strings.Contains(out+errs, "hunter2") || !strings.Contains(errs, "wasn't masked") {
+		if code != exitError || strings.Contains(out+errs, "hunter2") || !strings.Contains(errs, "sent claims-portal's preview log without masking its secrets, so none of it is shown.") {
 			t.Errorf("header %q: exit %d, stdout %q, stderr %q", header, code, out, errs)
 		}
 	}

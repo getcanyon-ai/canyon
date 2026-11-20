@@ -96,6 +96,16 @@ CLI. To undo it, run `canyon skill uninstall`: it removes the skill and Canyon's
 Codex, and for Cursor in the project you run it from; `--harness claude-code` limits it to Claude
 Code.
 
+## Add Canyon's MCP server
+
+Canyon's MCP server, `canyon mcp`, gives Claude Code Canyon as tools, with typed arguments and
+results, beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it.
+It runs as the `canyon` you installed, signed in as it is. One command adds it for every project on your machine:
+
+```sh
+claude mcp add --scope user canyon -- canyon mcp
+```
+
 ## Ask it to deploy
 
 In an empty directory, this one message:

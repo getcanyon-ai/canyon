@@ -168,7 +168,7 @@ func (a *app) rollback(ctx context.Context, client *Client, at, name string, rea
 	a.printf("\n  Reviewing %s again under today's rules. Preview is not touched.\n", back.version) // once the host took it
 	run := checkRun{App: name, Host: client.page(), Package: row.Package, Rollback: back}
 	each, stop := a.narrate(&run)
-	seen, err := poll(ctx, client, started.Run.ID, a.clock, checkCeiling, each)
+	seen, err := a.poll(ctx, client, started.Run.ID, checkCeiling, each)
 	stop()
 	if code, still := a.reviewStillRunning(run, started.Run.ID, seen, err); still { // nothing goes back while it runs (#2730)
 		return code
@@ -232,6 +232,10 @@ func (a *app) rollback(ctx context.Context, client *Client, at, name string, rea
 		out.keeps = back.replaces // what this takes out of production preview still runs: the next deploy --env prod ships it again (#2787)
 	}
 	out.ask = "Ask the user whether to put back " + shipping + " in production; if they say yes, run canyon " + againWith(named) + " --yes." // under ai, where nothing here can answer (#2873)
+	out.question, out.ships = "Put "+cell(name)+" "+shipping+" back in production?", r.Ships.ImageDigest                                     // its review is a new run each time: the image is what stays
+	if back.replaces != "" {
+		out.question = "Put " + cell(name) + " " + shipping + " back in production, replacing " + back.replaces + "?"
+	}
 	return a.promote(ctx, client, at, read, out, run.Run, asks, yes, wait)
 }
 

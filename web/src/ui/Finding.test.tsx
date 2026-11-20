@@ -23,6 +23,20 @@ afterEach(() => {
 });
 
 describe("Finding", () => {
+  // A custom rule's finding whose rule points at a playbook (contracts/finding.md, canyon.playbook): one more step after
+  // the fix, on the card and in the block an agent gets, in canyon check --ai's words and place. One with none says none.
+  it("names the playbook its rule points at, after the fix", () => {
+    const [custom] = (JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/finding/custom-playbook.sarif.json"), "utf8")) as { runs: [{ results: [FindingRead] }] }).runs[0].results;
+    render(<Finding finding={custom} app="claims-portal" />);
+    expect(screen.getByText("Then")).toBeDefined();
+    expect(screen.getByText("Read the playbook How Meridian writes a service: canyon playbook service-conventions")).toBeDefined();
+    expect(forAgent(custom, "claims-portal")).toContain("then:\n  Read the playbook How Meridian writes a service: canyon playbook service-conventions\n\ndo not:");
+    cleanup();
+    render(<Finding finding={blocking} app="claims-portal" />);
+    expect(screen.queryByText("Then")).toBeNull();
+    expect(forAgent(blocking, "claims-portal")).not.toContain("playbook");
+  });
+
   // A finding an earlier review made, carried while its code is unchanged (contracts/finding.md, A blocking finding an
   // earlier review made stays while its code stands): a tag, the line under its problem, and the agent's block says
   // what to do, as canyon check --ai does. A finding not carried says none of it.

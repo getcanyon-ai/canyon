@@ -987,11 +987,40 @@ whole, says `Canyon couldn't read what runs in <env>: <error>`, never nothing fo
 `not_scanned` there is no card: the rule is off by default and Canyon lists no image then. A read-only member and a
 responder with no grant never read it, nor see the card (the reduced page reads no image).
 
+### Secrets (design/specs/mcp.md §10.1)
+
+Below System libraries, for a contributor and above, an owner and an admin among them (design/PERMISSIONS.md, *Change
+it*: secrets): the app's secrets by name, from `GET …/secrets`, and the one form on the dashboard that sets one
+(`PUT …/secrets/:name`) or removes one (`DELETE …/secrets/:name?env=`; contracts/routes.md, unchanged). It is how a
+person whose agent has no CLI sets what the app needs (mcp.md §10.1). Titled `Secrets`, then `Values the app reads by
+name. Canyon keeps each in its vault and never shows one back.`
+
+- **The list**, one row per environment and name: the name, `Preview` or `Production`, `Runtime` or `Build`, its
+  version, who set it and when. A row the PUT wrote (`origin: user`) has `Replace` and `Remove`; one a deploy wrote
+  from a declared resource (`provisioned`) says `Canyon sets this one for the app`, with neither, as the routes refuse it (`409
+  provisioned`). With none: `No secrets set.`
+- **`Set a secret`**: `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
+  the default, or `Build`), then `Set secret` (until a name and a value are typed, it says `Name the secret first.` or
+  `Type the value first.`), and under it `Setting a name that's already set replaces its value.`
+  `Value` is a password field: never filled from anything, sent once in the PUT, emptied when the PUT lands, and held
+  in no read, request log or audit row (the audit row names who set which name). Nothing is checked here that the
+  route checks: a name, an environment and a `where` are sent as typed, and a refusal is the route's own message, the
+  form as it was. Done: `Set <name> for preview. It takes effect at the next deploy.`, for production `Set <name> for
+  production. It takes effect at the next promotion.`, and `Name` is emptied too, so the next value can't overwrite the
+  same secret by accident.
+- **`Replace`** fills the form's name, environment and where from its row, and puts focus on `Value`.
+- **`Remove`** asks `Remove <name> from preview?` (or `production`), `Remove` and `Cancel`; done: `Removed <name> from
+  preview. It takes effect at the next deploy.` (`… production. It takes effect at the next promotion.`).
+- **Who sees it.** A contributor, an owner and an admin. A read-only member, a person with no access and a responder
+  with no grant see no section, and no form: the reduced page reads no secret.
+- The History card has no Secrets tab: the list is here, beside the form.
+
 ### Not on this screen
 
 - **A code editor.** Canyon governs; harnesses build. An "Apply fix" button would collapse that boundary and make Canyon a competitor to the tool the visitor already loves.
 - **A diff viewer.** Tempting, adds a viewport, and the file:line is what their agent consumes.
-- **Logs, metrics, traces, env var editor, restart button.** All of it is a PaaS control panel. Not the story.
+- **Logs, metrics, traces, restart button.** All of it is a PaaS control panel. Not the story. (Secrets, above, are
+  the one exception, for a person whose agent has no CLI: design/specs/mcp.md §10.1.)
 - **A severity filter / sort control.** Three findings.
 - **A "share" button.** Nobody shares in minute five.
 
@@ -1322,7 +1351,15 @@ That tightening sentence — *policies gate promotion, never running apps* — i
 
 **Exceptions have expiry dates, always.** `2 exceptions · 1 expires in 12 days`. An exception without an expiry is a permanent hole with good intentions, so the UI has no field for "never expires."
 
-**What agents are told.** Guardrails' third tab closes with the manifest, rendered exactly as `canyon manifest` prints it and as nothing else — the panel reads, it does not edit. Under the heading, `Every coding agent in <org> reads this at the start of each session. It's built from the settings above.`, then a line that counts it the way an agent is handed it — `canyon manifest` as its session hook prints it, written for an agent (cli.md §7.4; amended 2026-10-07) — `847 lines · ~1220 tokens`. Past 500 lines — Cursor's own published guidance for a rules file, a recommendation and not a refusal — the panel adds a second line: `Over 500 lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.`
+**What agents are told.** Guardrails' last tab closes with the manifest, rendered exactly as `canyon manifest` prints it and as nothing else — the panel reads, it does not edit. Under the heading, `Every coding agent in <org> reads this at the start of each session. It's built from the settings above.`, then a line that counts it the way an agent is handed it — `canyon manifest` as its session hook prints it, written for an agent (cli.md §7.4; amended 2026-10-07) — `847 lines · ~1220 tokens`. Past 500 lines — Cursor's own published guidance for a rules file, a recommendation and not a refusal — the panel adds a second line: `Over 500 lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.`
+
+**Playbooks** (**added 2026-11-20**, design/specs/mcp.md §3.2). Guardrails' fourth tab, before *What agents are told*, at `#/guardrails/playbooks`: the org's own skills and notes on how it builds, which every coding agent is handed by name and reads by slug, and which Canyon never checks. Under the heading, `How your org builds, in its own words. Every coding agent is told each playbook's name and when to read it, and reads the ones that fit its task. Canyon never checks a playbook: a rule does that.`, then one card per playbook that stands: its name, `Skill` or `Note`, its `when` line, then `<slug> · version <n> · <who> · <date>`, and `Edit`, `History` and `Remove`; none reads `No playbooks yet.` Below them `New playbook` and `Import a SKILL.md`.
+- **The editor:** a name (its slug shown under it as `its slug: <slug>`, made from the name and fixed once the playbook exists), `Skill` or `Note` with what each means, `When to read it`, and the body with `Write` and `Preview` — the preview reads the Markdown with a parser and shows it as text and elements alone: raw HTML in a body is its own text, an image its alt text with nothing fetched, and a link only `http`, `https` or `mailto`. Save writes the next version; a refusal is the server's `message`, verbatim (the secret, the 50, the field rules).
+- **History:** every version, newest first, the newest marked `what agents read`, each older one with `Restore this version`, which saves its text as the next version; two pickers choose any two versions, and the diff under them is each field that changed, `name: <before> → <after>`, and the body's lines kept, removed (`-`) and added (`+`).
+- **Import:** a `SKILL.md` chosen from disk or pasted. Its YAML frontmatter, read by a YAML parser, gives the name and the slug (editable before the first save), its `description` the `when` line, the rest the body, as a skill; the editor opens on it, unsaved: `Its name becomes the playbook's name and slug, its description when to read it, and the rest the body. Nothing is saved until you save it.` A file with no frontmatter reads `This isn't a SKILL.md: it needs a frontmatter block between two --- lines.`; one without a name or a description `The SKILL.md's frontmatter needs a name and a description.`
+- **Remove** asks first, `Remove <name>? Agents stop being handed it. Its versions are kept.`, with `Remove` and `Keep it`.
+- **A rule's playbook:** a custom rule's editor has `Playbook`, `None` or one of the playbooks that stand, under it `A finding of this rule tells the agent to read this playbook after its fix.`; a rule pointing at one reads `Its findings tell the agent to read the playbook <slug>.` on its card. A finding of such a rule carries the step `Then` on its card, and `then:` in *Copy for your agent*, in the CLI's words (`Read the playbook <name>: canyon playbook <slug>`).
+- Each playbook's reads in the last 30 days, and a skill's machines, join the card with design/specs/mcp.md §6 item 10, which counts them.
 
 **Not on this screen:** a policy editor, YAML, a rule DSL, a "custom policy" builder, an import/export of policy-as-code, a policy marketplace. The brief says *tune guardrails, don't write them*. Four dials that ship on. If someone needs a fifth policy in v1, they file an issue and we write it — that's a healthier signal than a DSL nobody uses correctly.
 

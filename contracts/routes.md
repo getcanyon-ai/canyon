@@ -2154,6 +2154,9 @@ filtered out of an auditor's view.
 | `app_policy.set` | governance |
 | `app_policy.remove` | governance |
 | `custom_rule.set` | governance |
+| `set playbook` | governance |
+| `restore playbook` | governance |
+| `remove playbook` | governance |
 | `PUT /api/v1/preferences` | governance |
 | `POST /api/v1/guardrails/setup` | governance |
 | `complete setup` | governance |

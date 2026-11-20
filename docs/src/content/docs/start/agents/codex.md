@@ -131,6 +131,16 @@ asking, turn it on in `~/.codex/config.toml`:
 network_access = true
 ```
 
+## Add Canyon's MCP server
+
+Canyon's MCP server, `canyon mcp`, gives Codex Canyon as tools, with typed arguments and results,
+beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it. It runs
+as the `canyon` you installed, signed in as it is. One command adds it to `~/.codex/config.toml`:
+
+```sh
+codex mcp add canyon -- canyon mcp
+```
+
 ## With AGENTS.md instead
 
 Codex also reads `AGENTS.md`, from the project's root down to the directory it works in, and from

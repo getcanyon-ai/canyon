@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { dryRunCustomRule, getCustomRules, putCustomRule, said, type CustomRule, type DryRunApp, type Policy, type PolicyState } from "../api";
+import { dryRunCustomRule, getCustomRules, getPlaybooks, putCustomRule, said, type CustomRule, type DryRunApp, type PlaybookEntry, type Policy, type PolicyState } from "../api";
 import { S } from "../strings";
 import { shortDate } from "../ui/Verdict";
 import { actorName } from "../ui/Actor";
@@ -65,6 +65,7 @@ export function CustomRules({ policies, flow, saved }: { policies: Policy[]; flo
             </span>
             <p className="mt-2 text-md break-words whitespace-pre-wrap">{rule.instructions}</p>
             <p className="mt-1 text-md">{rule.check.by === "code" ? S.checkedByCode.replace("<says>", rule.check.says ?? "") : S.checkedByAI}</p>
+            {rule.playbook !== null && <p className="mt-1 text-md">{S.rulePlaybookLine.replace("<slug>", rule.playbook)}</p>}
             {why?.rule === rule.rule && <p role="status" className="mt-1 text-sm text-text-dim">{why.text}</p>}
             {tried?.rule === rule.rule && <DryRun apps={tried.apps} refusal={tried.refusal} name={rule.name} />}
             <p className="mt-1 text-sm text-text-dim">{`Written by ${actorName(rule.set_by)} · version ${rule.version} · changed ${shortDate(rule.set_at)}`}</p>
@@ -112,7 +113,7 @@ function Switch({ rule, done, refused }: { rule: CustomRule; done: (answer: { cu
   const save = async () => {
     setSaving(true);
     try {
-      done(await putCustomRule(rule.rule.slice("custom.".length), { name: rule.name, instructions: rule.instructions, check: to }));
+      done(await putCustomRule(rule.rule.slice("custom.".length), { name: rule.name, instructions: rule.instructions, check: to, playbook: rule.playbook }));
     } catch (err) {
       refused(said(err));
     }
@@ -124,7 +125,14 @@ function Switch({ rule, done, refused }: { rule: CustomRule; done: (answer: { cu
 function Editor({ rule, taken, done, cancel }: { rule?: CustomRule; taken: string[]; done: (answer: { custom_rule: CustomRule; why?: string }) => void; cancel: () => void }) {
   const [name, setName] = useState(rule?.name ?? "");
   const [text, setText] = useState(rule?.instructions ?? "");
+  const [playbook, setPlaybook] = useState(rule?.playbook ?? "");
+  const [playbooks, setPlaybooks] = useState<PlaybookEntry[] | null>(null); // the save waits for them: it sends the field whole
   const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    getPlaybooks().then((answer) => { if (live) setPlaybooks(answer.playbooks); }, (err: unknown) => { if (live) setRefusal(said(err)); });
+    return () => { live = false; };
+  }, []);
   const [saving, setSaving] = useState(false);
   const id = useId();
   const slug = rule ? rule.rule.slice("custom.".length) : slugOf(name);
@@ -133,7 +141,7 @@ function Editor({ rule, taken, done, cancel }: { rule?: CustomRule; taken: strin
     if (taken.includes(`custom.${slug}`)) { setRefusal("A rule with this id already exists: edit that one instead."); return; }
     setSaving(true);
     try {
-      done(await putCustomRule(slug, { name, instructions: text }));
+      done(await putCustomRule(slug, { name, instructions: text, playbook: playbook === "" ? null : playbook }));
     } catch (err) {
       setRefusal(said(err));
       setSaving(false);
@@ -148,10 +156,17 @@ function Editor({ rule, taken, done, cancel }: { rule?: CustomRule; taken: strin
       <textarea id={`${id}-text`} aria-describedby={`${id}-text-count`} className={`${FIELD} mt-1 w-full`} rows={5} maxLength={TEXT_MAX} value={text} onChange={(event) => setText(event.target.value)}
         placeholder="Describe one problem in one app's code. Say what counts and what doesn't. Example: Flag code that writes a customer's email address to a database column or file without encrypting it. Hashing for lookup is fine." />
       <span id={`${id}-text-count`} className="text-sm text-text-faint">{`${text.length.toLocaleString("en")} / ${TEXT_MAX.toLocaleString("en")}`}</span>
+      <label className="mt-2 block text-md text-text-dim" htmlFor={`${id}-playbook`}>{S.rulePlaybook}</label>
+      <select id={`${id}-playbook`} aria-describedby={`${id}-playbook-means`} className={`${FIELD} mt-1`} value={playbook} onChange={(event) => setPlaybook(event.target.value)}>
+        <option value="">None</option>
+        {playbooks?.map((one) => <option key={one.slug} value={one.slug}>{one.name}</option>)}
+        {playbook !== "" && playbooks?.some((one) => one.slug === playbook) === false && <option value={playbook}>{playbook}</option>}
+      </select>
+      <span id={`${id}-playbook-means`} className="block text-sm text-text-faint">{S.rulePlaybookMeans}</span>
       {refusal !== null && <p className="mt-2 text-base text-critical">{refusal}</p>}
       <span className="mt-2 flex gap-2">
-        {saving
-          ? <Button disabled reason="Saving: Canyon is working out how to check it, which can take a few seconds.">Save</Button>
+        {saving || playbooks === null
+          ? <Button disabled reason={saving ? "Saving: Canyon is working out how to check it, which can take a few seconds." : "Reading the org's playbooks."}>Save</Button>
           : <Button variant="primary" label={rule ? `Save ${rule.name}` : "Save the new rule"} onClick={() => void save()}>Save</Button>}
         <Button variant="ghost" onClick={cancel}>Cancel</Button>
       </span>

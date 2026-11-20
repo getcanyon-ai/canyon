@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -66,7 +65,7 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 	}
 	a.park() // after parse, so --help prints in every format; every return unparks
 	defer a.unpark(true)
-	dir, err := os.Getwd()
+	dir, err := a.getwd()
 	if err != nil {
 		return a.usage(err)
 	}
@@ -107,7 +106,7 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 	if a.render.Format == FormatHuman {
 		each = a.reviewNow(ctx, client, started, &run, each)
 	}
-	seen, err := poll(ctx, client, started, a.clock, deployCeiling, each)
+	seen, err := a.poll(ctx, client, started, deployCeiling, each)
 	stop()
 	if code, still := a.stillRunning(run, started, seen, err); still {
 		return code

@@ -6,9 +6,11 @@ name: Release
 # guide, docs/src/content/docs/self-host/kubernetes.md). The release stays a draft until images.txt is on it and
 # every image in it pulls by digest on amd64 and on arm64. Then the same release, with the chart, the deploy bundle
 # and Opengrep's source packed beside it, goes to getcanyon-ai/canyon-releases, which install.sh reads
-# (scripts/publish-release.sh, in the release environment, whose token only a v* tag may use), and release-smoke
+# (scripts/publish-release.sh), and release-smoke
 # installs what was published. Images build on tags alone, never on a pull request, and every job runs on GitHub's
-# runners.
+# runners. One secret publishes it all: CANYON_PUBLISH_TOKEN, the release account's classic token (scopes public_repo
+# and write:packages; a fine-grained token can't push to GHCR), in the release environment, which only a v* tag may
+# use. Only the jobs that push to ghcr.io/getcanyon-ai or write getcanyon-ai/canyon-releases are in it.
 #
 # Run by hand (workflow_dispatch), it is a rehearsal that publishes nothing: the CLI, all nine images for both
 # architectures (built to their digests, pushed nowhere), and the chart, the bundle and Opengrep's source packed and
@@ -74,24 +76,33 @@ jobs:
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
+    environment: ${{ github.event_name == 'push' && 'release' || '' }} # a tag's push to ghcr.io/getcanyon-ai, with CANYON_PUBLISH_TOKEN; the rehearsal pushes nothing and has no environment
     permissions:
       contents: read
-      packages: write # push to ghcr.io/<owner>/canyon-*
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: the tag is a version
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
+      - name: log in to ghcr.io as the release account
+        if: env.REHEARSAL != 'true'
+        env:
+          CANYON_PUBLISH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }} # this step's alone; the build below never sees it in its environment
+        run: |
+          [ -n "$CANYON_PUBLISH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was pushed"; exit 1; }
+          user=$(GH_TOKEN="$CANYON_PUBLISH_TOKEN" gh api user --jq .login) # the release account the token belongs to
+          echo "$CANYON_PUBLISH_TOKEN" | docker login ghcr.io -u "$user" --password-stdin
       - name: build each image for linux/${{ matrix.arch }} and push it by digest, untagged
         if: env.REHEARSAL != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
           ARCH: ${{ matrix.arch }}
         run: |
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker buildx create --use >/dev/null # the docker driver cannot push by digest
           make images-release PLATFORM="linux/$ARCH" VERSION="$TAG" REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" SOURCE="https://github.com/$GITHUB_REPOSITORY"
+      - name: log out of ghcr.io, whatever the push did
+        if: always()
+        run: docker logout ghcr.io
       - name: rehearsal, build each image for linux/${{ matrix.arch }} to its digest and push nothing
         if: env.REHEARSAL == 'true'
         env:
@@ -108,21 +119,27 @@ jobs:
   publish-images:
     needs: [release, images]
     if: github.event_name == 'push'
+    environment: release # CANYON_PUBLISH_TOKEN, for the multi-arch index and its tag
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
       contents: write # gh release upload
-      packages: write # the multi-arch index and its tag
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: digests-*
           path: digests # digests/digests-amd64/<name>, digests/digests-arm64/<name>
+      - name: log in to ghcr.io as the release account
+        env:
+          CANYON_PUBLISH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }} # this step's alone
+        run: |
+          [ -n "$CANYON_PUBLISH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was tagged"; exit 1; }
+          user=$(GH_TOKEN="$CANYON_PUBLISH_TOKEN" gh api user --jq .login) # the release account the token belongs to
+          echo "$CANYON_PUBLISH_TOKEN" | docker login ghcr.io -u "$user" --password-stdin
       - name: join each image's two architectures under one digest, tag it, and attach images.txt to the draft
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }} # the draft release here
         run: |
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           for name in $(ls digests/digests-amd64); do # make images-release wrote one file per image, named for it
             repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$name
             docker buildx imagetools create -t "$repo:$TAG" "$repo@$(cat "digests/digests-amd64/$name")" "$repo@$(cat "digests/digests-arm64/$name")"
@@ -132,6 +149,9 @@ jobs:
           [ "$(wc -l < images.txt)" -eq 9 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 9"; exit 1; }
           cat images.txt
           gh release upload "$TAG" images.txt -R "$GITHUB_REPOSITORY"
+      - name: log out of ghcr.io, whatever the join did
+        if: always()
+        run: docker logout ghcr.io
       - uses: actions/upload-artifact@v4
         with:
           name: images
@@ -149,18 +169,15 @@ jobs:
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
-    permissions:
-      packages: read
+    permissions: {}
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: images
-      - name: pull every image in images.txt by digest for linux/${{ matrix.arch }}
+      - name: pull every image in images.txt by digest for linux/${{ matrix.arch }}, with no login, as a user does
         env:
-          GH_TOKEN: ${{ github.token }}
           ARCH: ${{ matrix.arch }}
         run: |
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           [ "$(wc -l < images.txt)" -eq 9 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 9"; exit 1; }
           while read -r ref; do
             docker pull -q --platform "linux/$ARCH" "$ref"
@@ -184,7 +201,7 @@ jobs:
   canyon-releases:
     needs: publish
     if: github.event_name == 'push' && github.repository == 'getcanyon-ai/canyon'
-    environment: release # CANYON_RELEASES_TOKEN, which only a v* tag may use
+    environment: release # CANYON_PUBLISH_TOKEN, which only a v* tag may use
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -204,14 +221,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/bin" linux-arm64/helm
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: publish the release on getcanyon-ai/canyon-releases
+      - name: pack and check the release's files, with no publishing token
         env:
-          SOURCE_TOKEN: ${{ github.token }}
-          GH_TOKEN: ${{ secrets.CANYON_RELEASES_TOKEN }}
+          SOURCE_TOKEN: ${{ github.token }} # reads this repository's release
+        run: PUBLISH_OUT="$RUNNER_TEMP/release" scripts/publish-release.sh "$TAG"
+      - name: publish them on getcanyon-ai/canyon-releases, the only step with the token
+        env:
+          GH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }}
         run: |
           set -euo pipefail
-          [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_RELEASES_TOKEN: nothing was published"; exit 1; }
-          scripts/publish-release.sh "$TAG"
+          [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was published"; exit 1; }
+          PUBLISH_FROM="$RUNNER_TEMP/release" scripts/publish-release.sh "$TAG"
 
   smoke:
     needs: canyon-releases

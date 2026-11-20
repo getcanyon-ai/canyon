@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { said, type Finding as FindingRead } from "../api";
+import { said, type Finding as FindingRead, type PlaybookRef } from "../api";
+import { S } from "../strings";
 import { actorName } from "./Actor";
 import { Button } from "./Button";
 import { Chip } from "./Chip";
@@ -107,7 +108,7 @@ function foundBy(entry: FindingRead[]): string {
 // printed as `canyon check --ai` prints them (cli/ai.go), so an agent gets one instruction and
 // never less from the browser than from the command line for the same finding.
 export function forAgent(finding: FindingRead, app: string, also: FindingRead[] = []): string {
-  const { blocks, problem, fix, required_end_state, do_not, carried_from } = finding.properties.canyon;
+  const { blocks, problem, fix, required_end_state, do_not, carried_from, playbook } = finding.properties.canyon;
   const severity = highest([finding, ...also]);
   const { artifactLocation, region } = finding.locations[0].physicalLocation;
   const parts = [
@@ -118,6 +119,7 @@ export function forAgent(finding: FindingRead, app: string, also: FindingRead[] 
   if (carried_from !== undefined) parts.push(`earlier review:\n  ${CARRIED_FOR_AGENT.split("\n").join("\n  ")}`);
   const end = blocks ? required_end_state : "Not required. This severity does not block deployment.";
   if (end !== undefined) parts.push(`required end state:\n  ${end.split("\n").join("\n  ")}`);
+  if (playbook !== undefined) parts.push(`then:\n  ${playbookStep(playbook)}`);
   if (blocks && do_not !== undefined) parts.push(`do not:\n${do_not.map((move) => `  - ${move}\n`).join("")}  Each of these produces the same finding on the next run.`);
   parts.push(AFTER);
   return `${parts.join("\n\n")}\n`;
@@ -131,6 +133,10 @@ export const CARRIED_WHY = "Canyon's AI review found this in an earlier review. 
 const CARRIED_FOR_AGENT = "This was found in an earlier review and this review didn't report it.\n" +
   "The code hasn't changed, so it still blocks: change the code so the rule\n" +
   "holds, or ask for an approval. Don't wait for another review to drop it.";
+
+// playbookStep is a finding's step after its fix where its custom rule points at a playbook, as canyon check --ai
+// prints it (contracts/finding.md, canyon.playbook; EXPERIENCE.md D5).
+export const playbookStep = (playbook: PlaybookRef) => S.playbookStep.replace("<name>", playbook.name).replace("<slug>", playbook.slug);
 
 export const AFTER = "Then run: canyon check\n" +
   "This runs the identical gate without deploying. It takes about 15 seconds.\n" +
@@ -193,6 +199,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         <dt className="text-text-faint">Why</dt>
         <dd className="text-text-dim">{problem}{carried_from !== undefined && <span className="mt-1 block">{CARRIED_WHY}</span>}</dd>
         <dt className="text-text-faint">Fix</dt><dd className="text-text-dim">{fix}</dd>
+        {finding.properties.canyon.playbook !== undefined && <><dt className="text-text-faint">Then</dt><dd className="text-text-dim">{playbookStep(finding.properties.canyon.playbook)}</dd></>}
       </dl>
       {unread && (
         <details className="mt-2">

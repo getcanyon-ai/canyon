@@ -179,7 +179,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
-      - uses: actions/setup-node@v4 # e2e/ui's consent project, which the journey runs
+      - uses: actions/setup-node@v4 # e2e/ui's secrets and consent projects, which e2e/oidc/secrets_test.go and oauth_test.go run as each person
         with:
           node-version: '22'
           cache: npm
@@ -206,6 +206,13 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose --env-file e2e/.work/fixtures/oidc.env -f docker-compose.yml -f e2e/compose.e2e.yml -f deploy/docker/team.yml -f e2e/compose.oidc.yml logs --no-color --tail=200 server executor stub
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: oidc-walk # the Secrets section as each person saw it (e2e/ui/secrets); a typed value is a password field's dots
+          path: e2e/ui/.work/walk
+          retention-days: 7
+          if-no-files-found: ignore
 
 
   e2e-ui:

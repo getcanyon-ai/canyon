@@ -64,6 +64,13 @@ to the files Copilot works on wins. Only a Copilot running where `canyon` is ins
 can deploy: Copilot CLI, or Copilot in your editor, on your machine. Copilot's cloud agent works in
 its own environment on GitHub, which has neither unless you set it up there.
 
+Copilot in VS Code also takes Canyon's MCP server, `canyon mcp`: your org's rules, an app's
+status and logs, and checking, deploying and promoting it, as tools with typed arguments and results, run as the `canyon` you installed and
+signed in as it is. With `canyon` on your
+`PATH`, open this link and VS Code shows the server to install:
+
+[Add Canyon to VS Code](vscode:mcp/install?%7B%22name%22%3A%22canyon%22%2C%22command%22%3A%22canyon%22%2C%22args%22%3A%5B%22mcp%22%5D%7D)
+
 ### Aider
 
 Aider reads `AGENTS.md` when you tell it to:

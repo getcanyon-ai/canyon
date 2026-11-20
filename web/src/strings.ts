@@ -85,6 +85,27 @@ export const S = {
   pushApproversCantLink: "This Canyon can't link GitHub accounts yet: an admin sets it up in <settings>.",
   // How a custom rule's version is checked, on its card, and the two ways an admin switches it (#2639).
   checkedByCode: "Checked by code: <says>",
+  // A finding's step after its fix where its custom rule points at one of the org's playbooks (contracts/finding.md,
+  // canyon.playbook): the finding's card and its Copy for your agent, as canyon check --ai prints it.
+  playbookStep: "Read the playbook <name>: canyon playbook <slug>",
+  // Guardrails › Playbooks (design/specs/screens.md; contracts/routes.md, the playbooks row), an admin's.
+  playbooksIntro: "How your org builds, in its own words. Every coding agent is told each playbook's name and when to read it, and reads the ones that fit its task. Canyon never checks a playbook: a rule does that.",
+  playbooksNone: "No playbooks yet.",
+  playbookSkill: "Skill",
+  playbookNote: "Note",
+  playbookSkillMeans: "How to do a kind of task, such as adding a route.",
+  playbookNoteMeans: "Something to know, such as how the database fails over.",
+  playbookWhen: "When to read it",
+  playbookRemoveAsk: "Remove <name>? Agents stop being handed it. Its versions are kept.",
+  playbookImport: "Import a SKILL.md",
+  playbookImportHow: "Its name becomes the playbook's name and slug, its description when to read it, and the rest the body. Nothing is saved until you save it.",
+  playbookImportNoFrontmatter: "This isn't a SKILL.md: it needs a frontmatter block between two --- lines.",
+  playbookImportNoName: "The SKILL.md's frontmatter needs a name and a description.",
+  playbookRestore: "Restore this version",
+  // The custom rule editor's playbook field and the rule's line naming it (contracts/routes.md, the custom-rules row).
+  rulePlaybook: "Playbook",
+  rulePlaybookMeans: "A finding of this rule tells the agent to read this playbook after its fix.",
+  rulePlaybookLine: "Its findings tell the agent to read the playbook <slug>.",
   checkedByAI: "Checked by AI",
   checkWithAI: "Check it with the AI instead",
   checkByCode: "Check it by code where Canyon can",
@@ -954,6 +975,38 @@ export const KNOWN_VULN = {
   inApp: "the Go version Canyon built the app with",
 } as const;
 
+// The app page's Secrets section (design/specs/screens.md, Secrets; design/specs/mcp.md §10.1; EXPERIENCE.md D5): a
+// contributor's and up. The value is typed into a password field, sent once, and never shown back.
+export const SECRETS = {
+  title: "Secrets",
+  about: "Values the app reads by name. Canyon keeps each in its vault and never shows one back.",
+  form: "Set a secret",
+  name: "Name",
+  value: "Value",
+  env: "Environment",
+  where: "Where",
+  preview: "Preview",
+  prod: "Production",
+  runtime: "Runtime",
+  build: "Build",
+  set: "Set secret",
+  nameFirst: "Name the secret first.",
+  valueFirst: "Type the value first.",
+  replaces: "Setting a name that's already set replaces its value.",
+  setPreview: "Set <name> for preview. It takes effect at the next deploy.",
+  setProd: "Set <name> for production. It takes effect at the next promotion.",
+  replace: "Replace",
+  remove: "Remove",
+  askPreview: "Remove <name> from preview?",
+  askProd: "Remove <name> from production?",
+  cancel: "Cancel",
+  removedPreview: "Removed <name> from preview. It takes effect at the next deploy.",
+  removedProd: "Removed <name> from production. It takes effect at the next promotion.",
+  canyons: "Canyon sets this one for the app",
+  none: "No secrets set.",
+  unread: "The app's secrets couldn't be read.",
+} as const;
+
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's
 // image read in its own words beside its mark, then what it counts, one card a package, where it is in a developer's
 // words (never its class), its notes and what Canyon's patches fixed in it.
@@ -1030,6 +1083,9 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "build had no room": "the cluster had no room to build <version>",
   "policy.set": "set the policy <rule> to <state>",
   "custom_rule.set": "saved version <number> of the custom rule <rule>",
+  "set playbook": "saved version <number> of the playbook <slug>",
+  "restore playbook": "restored version <from> of the playbook <slug> as version <number>",
+  "remove playbook": "removed the playbook <slug>",
   "POST /api/v1/projects": "created the app",
   "PUT /api/v1/projects/{id}/owner": "claimed the app",
   "DELETE /api/v1/projects/{id}": "deleted the app",

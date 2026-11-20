@@ -18,6 +18,11 @@ description = "hand-off release test: a Stripe-shaped value the test seals and t
 condition = "AND"
 paths = ['''runs/release_test\.go''']
 regexes = ['''sk_live_51NotARealStripeKeyFixtureValue123''']
+[[rules.allowlists]]
+description = "the app page's Secrets section (design/specs/mcp.md §10.1): a synthetic Stripe-shaped value the dashboard test and the oidc walk type into the password field, then prove absent from the page"
+condition = "AND"
+paths = ['''web/src/screens/Secrets\.test\.tsx''', '''e2e/ui/secrets/secrets\.spec\.ts''']
+regexes = ['''sk_test_51Hplanted0000000000000000''', '''sk_test_51Hjourney0000000000000000''']
 
 [[rules]]
 id = "generic-api-key"

@@ -42,6 +42,14 @@ export default defineConfig({
       retries: 0,
       use: { baseURL: process.env.E2E_CANYON_URL, ignoreHTTPSErrors: true, trace: "off", video: "off", screenshot: "off", viewport: { width: 1360, height: 900 } },
     },
+    // The app page's Secrets section at each level, which e2e/oidc/secrets_test.go runs once per person with their session
+    // (never make e2e-ui): levels need sign-in on, which the Docker projects' stack has off.
+    {
+      name: "secrets",
+      testDir: "secrets",
+      retries: 0,
+      use: { baseURL: process.env.E2E_CANYON_URL, trace: "off", video: "off", viewport: { width: 1360, height: 900 } },
+    },
     // An MCP client's consent page on the team setup, which e2e/oidc/oauth_test.go runs as the admin and as a member (never
     // make e2e-ui): the authorization server is served only with sign-in on, which the Docker projects' stack has off.
     {

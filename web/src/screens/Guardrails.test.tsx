@@ -641,11 +641,11 @@ describe("the guardrails screen", () => {
   });
 });
 
-// Guardrails' four tabs: each is its own route, the bare one is Pipeline, a rule's link is the tab its
+// Guardrails' five tabs: each is its own route, the bare one is Pipeline, a rule's link is the tab its
 // row is on, and only the page shown is read.
 describe("the guardrails tabs", () => {
   afterEach(() => { window.location.hash = ""; });
-  const policies = { "GET /api/v1/policies": { body: { policies: [] } }, "GET /api/v1/custom-rules": { body: { custom_rules: [] } } };
+  const policies = { "GET /api/v1/policies": { body: { policies: [] } }, "GET /api/v1/custom-rules": { body: { custom_rules: [] } }, "GET /api/v1/playbooks": { body: { playbooks: [] } } };
   const current = () => screen.getByRole("navigation", { name: "Guardrails" }).querySelector("[aria-current=page]")?.textContent;
 
   it.each([
@@ -653,6 +653,7 @@ describe("the guardrails tabs", () => {
     ["#/guardrails/policies", "Policies", "Policies"],
     ["#/guardrails?rule=prod.clean-gate", "Policies", "Policies"], // the app's checklist and the receipt link here
     ["#/guardrails/scanners", "Scanners", "Scanners"],
+    ["#/guardrails/playbooks", "Playbooks", "Playbooks"],
     ["#/guardrails/agents", "What agents are told", "Approved stacks"],
     ["#/guardrails?rule=sarif.trivy", "Scanners", "Scanners"], // a tool's rule lives on the Scanners tab
   ])("%s shows %s", async (hash, tab, section) => {
@@ -661,6 +662,6 @@ describe("the guardrails tabs", () => {
     render(<Guardrails />);
     expect(await screen.findByRole("region", { name: section })).toBeDefined();
     expect(current()).toBe(tab);
-    for (const other of ["Pipeline", "Policies", "Scanners", "Approved stacks"].filter((one) => one !== section)) expect(screen.queryByRole("region", { name: other })).toBeNull();
+    for (const other of ["Pipeline", "Policies", "Scanners", "Playbooks", "Approved stacks"].filter((one) => one !== section)) expect(screen.queryByRole("region", { name: other })).toBeNull();
   });
 });

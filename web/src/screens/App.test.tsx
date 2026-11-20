@@ -1675,19 +1675,13 @@ describe("the app page", () => {
     const { container } = render(<App id="claims-portal" auth="oidc" />);
     await screen.findByText(BLOCKED);
     openHistory();
-    const tabs = within(screen.getByRole("tablist", { name: "Versions, reviews, secrets and activity" })).getAllByRole("tab");
-    expect(tabs.map((one) => [one.textContent, one.getAttribute("aria-selected")])).toEqual([["Versions", "false"], ["Reviews", "false"], ["Secrets", "false"], ["Activity", "false"]]);
-    // The run that cleared what preview runs is read for its review; nothing a tab holds is.
-    expect(sent().filter((request) => request !== RUN && request !== TIMELINE && request !== "GET /api/v1/gate-runs/gr_6c12" && request.includes("gate-runs")).concat(sent().filter((request) => /packages|secrets|audit/.test(request)))).toEqual([]);
+    const tabs = within(screen.getByRole("tablist", { name: "Versions, reviews and activity" })).getAllByRole("tab");
+    expect(tabs.map((one) => [one.textContent, one.getAttribute("aria-selected")])).toEqual([["Versions", "false"], ["Reviews", "false"], ["Activity", "false"]]);
+    // The run that cleared what preview runs is read for its review; nothing a tab holds is (the secrets are the Secrets section's).
+    expect(sent().filter((request) => request !== RUN && request !== TIMELINE && request !== "GET /api/v1/gate-runs/gr_6c12" && request.includes("gate-runs")).concat(sent().filter((request) => /packages|audit/.test(request)))).toEqual([]);
     const tab = (name: string) => { fireEvent.click(screen.getByRole("tab", { name })); return within(screen.getByRole("tabpanel", { name })); };
     expect((await tab("Versions").findAllByText("v1.4")).length).toBeGreaterThan(0);
     expect((await tab("Reviews").findAllByText("v1.4")).length).toBeGreaterThan(0);
-    const held = tab("Secrets");
-    await held.findByText(secrets.secrets[0]!.name);
-    for (const one of secrets.secrets) {
-      const cells = within(held.getByText(one.name).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent);
-      expect([...cells.slice(0, 4), cells.at(-1)]).toEqual([one.name, one.env === "prod" ? "Production" : "Preview", one.where, String(one.version), one.origin]);
-    }
     // The trail's rows are sentences in the plain words strings.ts gives each action, never the route.
     const trail = tab("Activity");
     await trail.findByText("started a deploy of v1.4");
@@ -2002,7 +1996,7 @@ describe("the app's history", () => {
     render(<App id="claims-portal" auth="oidc" />);
     await screen.findByText(BLOCKED);
     openHistory();
-    for (const [name, text] of [["Versions", "Nothing uploaded yet. Upload with canyon deploy."], ["Reviews", "Not reviewed yet."], ["Secrets", "No secrets set. Add one with canyon secret set."], ["Activity", "Nothing recorded for this app yet."]] as const) {
+    for (const [name, text] of [["Versions", "Nothing uploaded yet. Upload with canyon deploy."], ["Reviews", "Not reviewed yet."], ["Activity", "Nothing recorded for this app yet."]] as const) {
       fireEvent.click(screen.getByRole("tab", { name }));
       expect(await within(screen.getByRole("tabpanel", { name })).findByText(text)).toBeDefined();
     }
@@ -2031,7 +2025,7 @@ describe("the app's history", () => {
     await screen.findByText(BLOCKED);
     openHistory();
     const versions = screen.getByRole("tab", { name: "Versions" });
-    expect(screen.getAllByRole("tab").map((one) => one.getAttribute("tabindex"))).toEqual(["0", "-1", "-1", "-1"]);
+    expect(screen.getAllByRole("tab").map((one) => one.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
     fireEvent.click(versions);
     fireEvent.keyDown(versions, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Reviews" }).getAttribute("aria-selected")).toBe("true");
@@ -2337,7 +2331,7 @@ describe("renaming the app", () => {
   const askRename = async () => {
     fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    return screen.getByLabelText("Name") as HTMLInputElement;
+    return within(screen.getByRole("region", { name: "Rename this app" })).getByLabelText("Name") as HTMLInputElement;
   };
 
   it("saves the new name, says the id stays, and the title follows", async () => {
@@ -2352,7 +2346,7 @@ describe("renaming the app", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Motor claims"));
     expect(sent()).toContain(`${RENAME} {"name":"Motor claims"}`);
-    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Rename this app" })).toBeNull();
   });
 
   it("Enter saves, and a refusal stays in the panel with the name as typed", async () => {
@@ -2362,7 +2356,7 @@ describe("renaming the app", () => {
     fireEvent.change(field, { target: { value: "   " } });
     fireEvent.keyDown(field, { key: "Enter" });
     expect(await screen.findByText("an app's name is one line of plain text, at most 100 characters")).toBeDefined();
-    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("   ");
+    expect((within(screen.getByRole("region", { name: "Rename this app" })).getByLabelText("Name") as HTMLInputElement).value).toBe("   ");
     expect(sent()).toContain(`${RENAME} {"name":"   "}`);
   });
 
@@ -2371,11 +2365,11 @@ describe("renaming the app", () => {
     render(<App id="claims-portal" auth="oidc" />);
     await askRename();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Rename this app" })).toBeNull();
     const field = await askRename();
     await waitFor(() => expect(document.activeElement).toBe(field));
     fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
-    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Rename this app" })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "More actions" }));
     expect(sent().some((request) => request.startsWith("PUT"))).toBe(false);
   });

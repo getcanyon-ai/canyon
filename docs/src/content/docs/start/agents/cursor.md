@@ -88,6 +88,21 @@ Running `canyon skill install` again reports both files `unchanged`, or rewrites
 CLI. To undo it, run `canyon skill uninstall --harness cursor` from the project's root: it removes
 the rule and Canyon's entry in `.cursor/hooks.json`, and leaves the rest of that file as it was.
 
+## Add Canyon's MCP server in one click
+
+Canyon's MCP server, `canyon mcp`, gives Cursor's agent Canyon as tools, with typed arguments and
+results, beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it.
+It runs as the `canyon` you installed, signed in as it is. With `canyon` on your `PATH`, open this link and
+Cursor asks you to install it:
+
+[Add Canyon to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=canyon&config=eyJjb21tYW5kIjoiY2FueW9uIiwiYXJncyI6WyJtY3AiXX0=)
+
+It adds this to Cursor's MCP settings:
+
+```json
+{"mcpServers":{"canyon":{"command":"canyon","args":["mcp"]}}}
+```
+
 ## How Cursor learns your org's rules
 
 When you start a chat, Cursor runs the hook. `canyon manifest --harness cursor` asks the Canyon you

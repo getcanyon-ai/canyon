@@ -105,6 +105,14 @@ canyon secret rm GREETING --env prod
 
 It removes one name from one environment, and doesn't ask first.
 
+## In the dashboard
+
+The app's page has a **Secrets** section, for anyone who can set one: its names in each environment,
+who set each and when, and **Set a secret**, with the same name, environment and runtime-or-build
+choices as the command. The value goes in a password field, is sent once and is emptied as soon as
+Canyon has it. **Replace** fills the form from a row, and **Remove** asks first. A value Canyon sets
+itself says "Canyon sets this one for the app", with neither.
+
 ## Values Canyon sets itself
 
 - **Databases.** An app that declares a database in `canyon.toml` gets `DATABASE_URL` from Canyon,

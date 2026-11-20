@@ -935,6 +935,7 @@ export const SECRETS = {
   build: "Build",
   set: "Set secret",
   nameFirst: "Name the secret first.",
+  valueFirst: "Type the value first.",
   replaces: "Setting a name that's already set replaces its value.",
   setPreview: "Set <name> for preview. It takes effect at the next deploy.",
   setProd: "Set <name> for production. It takes effect at the next promotion.",
@@ -945,7 +946,7 @@ export const SECRETS = {
   cancel: "Cancel",
   removedPreview: "Removed <name> from preview. It takes effect at the next deploy.",
   removedProd: "Removed <name> from production. It takes effect at the next promotion.",
-  canyons: "Canyon sets this one",
+  canyons: "Canyon sets this one for the app",
   none: "No secrets set.",
   unread: "The app's secrets couldn't be read.",
 } as const;

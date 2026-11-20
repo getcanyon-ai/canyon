@@ -41,6 +41,7 @@ export function Secrets({ id }: { id: string }) {
   const [env, setEnv] = useState<Env>("preview");
   const [where, setWhere] = useState<Where>("runtime");
   const value = useRef<HTMLInputElement>(null);
+  const [typed, setTyped] = useState(false); // whether Value holds anything: the value itself is never in state
   const [busy, setBusy] = useState(false);
   const [said_, setSaid] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function Secrets({ id }: { id: string }) {
     try {
       await setSecret(id, name, { value: value.current?.value ?? "", env, where });
       if (value.current !== null) value.current.value = ""; // taken: the field holds it no longer
+      setTyped(false);
       setSaid(named(env === "prod" ? T.setProd : T.setPreview, name));
       setReads((n) => n + 1);
     } catch (err) {
@@ -132,7 +134,7 @@ export function Secrets({ id }: { id: string }) {
           <label htmlFor="secret-name" className={LABEL}>{T.name}</label>
           <input id="secret-name" className={`${FIELD} font-mono`} value={name} autoComplete="off" spellCheck={false} onChange={(event) => setName(event.target.value)} />
           <label htmlFor="secret-value" className={LABEL}>{T.value}</label>
-          <input id="secret-value" ref={value} type="password" className={FIELD} autoComplete="off" data-1p-ignore data-lpignore="true" spellCheck={false} />
+          <input id="secret-value" ref={value} type="password" className={FIELD} autoComplete="off" data-1p-ignore data-lpignore="true" spellCheck={false} onChange={(e) => setTyped(e.currentTarget.value !== "")} />
           <span className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
             <span>
               <label htmlFor="secret-env" className={LABEL}>{T.env}</label>
@@ -153,6 +155,7 @@ export function Secrets({ id }: { id: string }) {
         <span className="mt-1 flex flex-wrap items-center gap-3">
           {busy ? <Button disabled reason="Saving…">{T.set}</Button>
             : name === "" ? <Button disabled reason={T.nameFirst}>{T.set}</Button>
+            : !typed ? <Button disabled reason={T.valueFirst}>{T.set}</Button>
             : <Button variant="primary" onClick={() => void set()}>{T.set}</Button>}
           <span className={NOTE}>{T.replaces}</span>
         </span>

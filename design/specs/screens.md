@@ -997,10 +997,11 @@ name. Canyon keeps each in its vault and never shows one back.`
 
 - **The list**, one row per environment and name: the name, `Preview` or `Production`, `Runtime` or `Build`, its
   version, who set it and when. A row the PUT wrote (`origin: user`) has `Replace` and `Remove`; one a deploy wrote
-  from a declared resource (`provisioned`) says `Canyon sets this one`, with neither, as the routes refuse it (`409
+  from a declared resource (`provisioned`) says `Canyon sets this one for the app`, with neither, as the routes refuse it (`409
   provisioned`). With none: `No secrets set.`
 - **`Set a secret`**: `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
-  the default, or `Build`), then `Set secret`, and under it `Setting a name that's already set replaces its value.`
+  the default, or `Build`), then `Set secret` (until a name and a value are typed, it says `Name the secret first.` or
+  `Type the value first.`), and under it `Setting a name that's already set replaces its value.`
   `Value` is a password field: never filled from anything, sent once in the PUT, emptied when the PUT lands, and held
   in no read, request log or audit row (the audit row names who set which name). Nothing is checked here that the
   route checks: a name, an environment and a `where` are sent as typed, and a refusal is the route's own message, the

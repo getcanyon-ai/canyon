@@ -31,7 +31,7 @@ const form = () => within(screen.getByRole("form", { name: T.form }));
 const value = () => form().getByLabelText(T.value) as HTMLInputElement;
 const fill = (name: string, typed: string) => {
   fireEvent.change(form().getByLabelText(T.name), { target: { value: name } });
-  value().value = typed; // a password field holds what is typed in it, and nothing else does
+  fireEvent.change(value(), { target: { value: typed } }); // the field holds what is typed in it, and nothing else does
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -88,11 +88,18 @@ describe("the app page's Secrets section", () => {
     expect(sent().filter((line) => line.startsWith("PUT"))).toHaveLength(1);
   });
 
-  it("offers no Set while the name is empty", async () => {
+  it("offers no Set until both a name and a value are typed, and says which is missing", async () => {
     server({ [LIST]: { body: { secrets: [] } } });
     render(<Secrets id="claims-portal" />);
     await section().findByText(T.none);
-    expect(form().getByRole("button", { name: T.set })).toHaveProperty("disabled", true);
+    const button = () => form().getByRole("button", { name: T.set });
+    expect(button()).toHaveProperty("disabled", true);
+    expect(form().getByText(T.nameFirst)).toBeDefined();
+    fireEvent.change(form().getByLabelText(T.name), { target: { value: "API_KEY" } });
+    expect(button()).toHaveProperty("disabled", true);
+    expect(form().getByText(T.valueFirst)).toBeDefined();
+    fireEvent.change(value(), { target: { value: "x" } });
+    expect(button()).toHaveProperty("disabled", false);
   });
 
   it("Replace fills the form from its row and puts focus on the value", async () => {

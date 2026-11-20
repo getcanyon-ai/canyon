@@ -404,6 +404,9 @@ func (r *egressReceiver) StreamAccessLogs(stream accesslogv3.AccessLogService_St
 			inner = id.GetLogName() == egresscontrol.InterceptLog
 		}
 		for _, e := range msg.GetHttpLogs().GetLogEntry() {
+			if inner { // PLANTED FAULT: every inner request's entry lost, unseen, to show the subtest's diagnostic red
+				continue
+			}
 			if proto.Size(e) > egressEntryBytes {
 				r.dropped.Add(1)
 				continue

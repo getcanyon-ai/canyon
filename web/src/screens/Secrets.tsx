@@ -56,6 +56,7 @@ export function Secrets({ id }: { id: string }) {
       await setSecret(id, name, { value: value.current?.value ?? "", env, where });
       if (value.current !== null) value.current.value = ""; // taken: the field holds it no longer
       setTyped(false);
+      setName(""); // a name left in the field would invite the next value to overwrite the same secret
       setSaid(named(env === "prod" ? T.setProd : T.setPreview, name));
       setReads((n) => n + 1);
     } catch (err) {

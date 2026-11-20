@@ -58,7 +58,7 @@ describe("the app page's Secrets section", () => {
     expect(await section().findByText(T.none)).toBeDefined();
   });
 
-  it("sets a value once, as typed, empties the field, says where it takes effect, and never shows it back", async () => {
+  it("sets a value once, as typed, empties the name and the value, says where it takes effect, and never shows it back", async () => {
     let rows = listed.secrets;
     const PUT = "PUT /api/v1/projects/claims-portal/secrets/STRIPE_WEBHOOK_SECRET";
     const sent = server({ [LIST]: () => ({ body: { secrets: rows } }), [PUT]: () => { rows = [...rows, { ...provisioned, name: "STRIPE_WEBHOOK_SECRET", env: "prod", origin: "user" }]; return { status: 204, body: null }; } });
@@ -70,6 +70,7 @@ describe("the app page's Secrets section", () => {
     expect(await form().findByRole("status")).toHaveProperty("textContent", "Set STRIPE_WEBHOOK_SECRET for production. It takes effect at the next promotion.");
     expect(sent().filter((line) => line.includes(VALUE))).toEqual([`${PUT} {"value":"${VALUE}","env":"prod","where":"runtime"}`]);
     expect(value().value).toBe("");
+    expect(form().getByLabelText<HTMLInputElement>(T.name).value).toBe(""); // a name left there would invite the next value to overwrite it
     await section().findByText("STRIPE_WEBHOOK_SECRET"); // the list is read again
     expect(container.innerHTML).not.toContain(VALUE);
     expect(value().type).toBe("password");

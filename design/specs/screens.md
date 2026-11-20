@@ -1006,7 +1006,8 @@ name. Canyon keeps each in its vault and never shows one back.`
   in no read, request log or audit row (the audit row names who set which name). Nothing is checked here that the
   route checks: a name, an environment and a `where` are sent as typed, and a refusal is the route's own message, the
   form as it was. Done: `Set <name> for preview. It takes effect at the next deploy.`, for production `Set <name> for
-  production. It takes effect at the next promotion.`
+  production. It takes effect at the next promotion.`, and `Name` is emptied too, so the next value can't overwrite the
+  same secret by accident.
 - **`Replace`** fills the form's name, environment and where from its row, and puts focus on `Value`.
 - **`Remove`** asks `Remove <name> from preview?` (or `production`), `Remove` and `Cancel`; done: `Removed <name> from
   preview. It takes effect at the next deploy.` (`… production. It takes effect at the next promotion.`).

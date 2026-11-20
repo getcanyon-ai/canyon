@@ -58,7 +58,8 @@
     "github": true,
     "group_sync": false,
     "stacks": { "node": 4, "python": 2, "go": 1 },
-    "agents": { "claude_code": 10, "codex": 1, "other": 2 }
+    "agents": { "claude_code": 10, "codex": 1, "other": 2 },
+    "agents_via": { "cli": 9, "mcp_local": 3, "mcp_remote": 1 }
   },
   "state": {
     "enabled": false,

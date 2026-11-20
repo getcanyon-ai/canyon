@@ -45,7 +45,7 @@ PASSED, `canyon deploy` will not block. An agent can rely on that, so it stops g
 
 ## 1. The command surface
 
-Twenty-two commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
+Twenty-three commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
 lists only the ones the binary it is built from actually dispatches, so a short list means a verb
 has not landed yet, never that it was cut.
 
@@ -64,6 +64,7 @@ has not landed yet, never that it was cut.
 | `canyon login` | Sign this machine in to a Canyon host, by device code; the hosts it is already signed in to stay signed in (§8.2) | both |
 | `canyon logout` | Sign this machine out of its default host, or of the one `canyon logout <url>` names: the host ends the session, not just this disk | both |
 | `canyon skill` | Install the Canyon skill into an AI harness | both |
+| `canyon mcp` | Serve Canyon's tools to a coding agent over MCP, on stdin and stdout (§6.15) | builder |
 | `canyon demo` | Start Canyon's demo on this machine with one command, and stop it (§6.14); `canyon demo tour` is the guided tour on it, a chapter at a time (§6.14.1) | both |
 | `canyon pull` | Fetch an app's current package into a directory | both |
 | `canyon db` | Query this app's database as yourself, connect a Postgres client to it, and list or end its database sessions (§6.10) | builder |
@@ -3996,6 +3997,21 @@ before each command; change only what `canyon demo tour plant` writes and the on
 planted; never install, delete or repair anything the text does not name; on "skip" run `canyon demo tour skip`, on "end"
 `canyon demo tour end`; when no host answers, ask the user to run `canyon demo up` in a terminal of their own, because a first start outlasts an agent's command time limit.
 
+### 6.15 `canyon mcp`
+
+**Added 2026-11-20** (design/specs/mcp.md §1, §6 item 1). An MCP server on stdin and stdout, which a coding agent's
+harness starts and talks to; a person never reads its output. It signs in as every other verb does, and never runs a
+login itself: with no session it starts anyway, and every tool answers `isError` with §9's not-signed-in line.
+
+- **Each tool is the verb it stands for**, run in the tool's `dir` (the server's own directory where it has none), so its
+  checks, refusals and lines are the verb's own: `canyon_status` is `canyon status --format json`, `canyon_logs` is
+  `canyon logs --format ai` on the masked read (`redaction=masked`, at most 200 lines, never followed), and
+  `canyon_rules` is `canyon manifest`'s read, the typed manifest as structured content and the agent's rendering as text.
+- **The instructions** are D5's preamble and then the manifest as `canyon manifest --format ai` prints it, read once at
+  start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
+- **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.
+- It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
+
 ## 7. The harness skill
 
 The builder's entire experience. They never learn a command.
@@ -5095,6 +5111,7 @@ SETUP
   login       Sign this machine in to a Canyon host
   logout      Revoke this machine's session on a Canyon host
   skill       Teach your coding agent to use Canyon
+  mcp         Serve Canyon's tools to your coding agent over MCP
   demo        Start, stop or take a tour of Canyon's demo on this machine
   version     Show the CLI version and which Canyon it talks to
   feedback    Ask for a feature or report a problem

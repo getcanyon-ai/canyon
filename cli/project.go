@@ -68,6 +68,22 @@ type project struct {
 	Types []string
 }
 
+// project is the app the verb is about: the one an MCP tool names, else the one canyon.toml names in
+// the verb's directory.
+func (a *app) project() (project, error) {
+	if a.named != "" {
+		if len(a.named) > maxProjectName || !names.ValidProject(a.named) { // readProject's two rules for canyon.toml's
+			return project{}, fmt.Errorf("app %q is not a Canyon app id: lowercase letters, digits and dashes, beginning with a letter, at most %d characters", a.named, maxProjectName)
+		}
+		return project{App: a.named}, nil
+	}
+	dir, err := a.getwd()
+	if err != nil {
+		return project{}, err
+	}
+	return readProject(dir)
+}
+
 func readProject(dir string) (project, error) {
 	path := filepath.Join(dir, projectFile)
 	body, err := os.ReadFile(path) //nolint:gosec // the app's own committed file, at the directory the verb was run in

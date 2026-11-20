@@ -37,7 +37,7 @@ const (
 // says so; an agent or a pipe gets the last lines and the end, because a stream that never ends
 // hangs whatever is waiting on it.
 func runLogs(ctx context.Context, a *app, args []string) int {
-	var env, named string
+	var env, named, redaction string
 	var follow bool
 	var lines int
 	rest, err := a.parse(args, func(fs *flag.FlagSet) {
@@ -45,7 +45,8 @@ func runLogs(ctx context.Context, a *app, args []string) int {
 		fs.StringVar(&named, "app", "", "The app to read, when it is not the one "+projectFile+" names")
 		fs.IntVar(&lines, "lines", logsLines, "How many of the last lines to print first")
 		fs.BoolVar(&follow, "follow", false, "Keep printing new lines until Ctrl-C (the default on a terminal)")
-		fs.BoolVar(&follow, "f", false, "") // --follow's short form, never offered: the skill text named it
+		fs.BoolVar(&follow, "f", false, "")           // --follow's short form, never offered: the skill text named it
+		fs.StringVar(&redaction, "redaction", "", "") // canyon_logs's masked read (design/specs/mcp.md §1.2), never offered: the host refuses any other
 	})
 	if err != nil {
 		return a.usage(err)
@@ -65,7 +66,7 @@ func runLogs(ctx context.Context, a *app, args []string) int {
 	follow = follow || a.tty && a.render.Format == FormatHuman
 	app := named
 	if app == "" {
-		dir, err := os.Getwd()
+		dir, err := a.getwd()
 		if err != nil {
 			return a.usage(err)
 		}
@@ -86,6 +87,9 @@ func runLogs(ctx context.Context, a *app, args []string) int {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	q := url.Values{"env": {env}, "lines": {strconv.Itoa(lines)}, "follow": {strconv.FormatBool(follow)}}
+	if redaction != "" {
+		q.Set("redaction", redaction)
+	}
 	at := "/api/v1/projects/" + url.PathEscape(app) + "/logs?" + q.Encode()
 	body, header, err := client.stream(ctx, at, "text/plain")
 	if err != nil {

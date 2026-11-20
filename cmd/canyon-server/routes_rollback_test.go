@@ -147,7 +147,7 @@ func TestRollbackIsApprovedInTheDashboardUntilProductionChanges(t *testing.T) {
 		t.Fatalf("the approved rollback: %d %s, ran %s", got, lastBody, fake.Ran().Image)
 	}
 	code = askApproval(t, cli, base, review(b))
-	if _, read, _ := do(t, browser, http.MethodGet, base+"/api/v1/promotion-approvals/"+code, ""); read["state"] != "pending" {
+	if _, read, _ := do(t, browser, http.MethodGet, base+"/api/v1/promotion-approvals/"+code, ""); read["state"] != "pending" || read["rollback"] != true {
 		t.Fatalf("the approval while production runs what it replaces: %s", lastBody)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE deploys SET image = $1 WHERE env = 'prod'", "canyon/claims-portal@sha256:"+strings.Repeat("c", 64)); err != nil {

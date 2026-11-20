@@ -373,7 +373,8 @@ const when = (at: string) => new Date(at).toLocaleString([], { dateStyle: "mediu
 export function Sessions({ admin }: { admin: boolean }) {
   const [sessions, setSessions] = useState<ListedSession[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const read = () => listSessions().then((answer) => setSessions(answer.sessions), (err: unknown) => setFailure(said(err)));
+  // An answer without the list draws none: the list is a part of the page, and never takes the rest of it down.
+  const read = () => listSessions().then((answer) => setSessions(Array.isArray(answer?.sessions) ? answer.sessions : null), (err: unknown) => setFailure(said(err)));
   useEffect(() => { void read(); }, []);
   const end = (id: string) => () => void endSession(id).then(read, (err: unknown) => setFailure(said(err)));
   return (

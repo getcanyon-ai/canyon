@@ -70,6 +70,7 @@ has not landed yet, never that it was cut.
 | `canyon db` | Query this app's database as yourself, connect a Postgres client to it, and list or end its database sessions (§6.10) | builder |
 | `canyon resources` | The component types this host can provision, and whether it can yet | platform eng |
 | `canyon manifest` | What this host hands your agents | both |
+| `canyon playbook` | Print one of the org's playbooks by its slug, as its admin wrote it (§6.16) | builder |
 | `canyon version` | This binary's version and the host it will reach | both |
 | `canyon feedback` | A link to open each kind of issue on Canyon's repository (§6.11) | both |
 | `canyon telemetry` | The daily report of counts this Canyon sends: `show`, `off`, `on`, an admin's (§6.12) | platform eng |

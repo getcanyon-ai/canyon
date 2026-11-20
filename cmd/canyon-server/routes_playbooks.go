@@ -75,6 +75,8 @@ type playbookEntry struct {
 	Version   int    `json:"version"`
 	UpdatedBy actor  `json:"updated_by"`
 	UpdatedAt string `json:"updated_at"`
+	Reads     int    `json:"reads"`              // fetches in the last 30 days (playbook_counts.go)
+	Machines  *int   `json:"machines,omitempty"` // a skill's holders of its newest version, in those 30 days
 }
 
 // playbookVersion is one kept version, as an admin reads them.
@@ -138,23 +140,46 @@ func (a *app) getPlaybooks(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, "playbooks", err)
 		return
 	}
+	reads, machines, err := playbookCounts(r.Context(), a.pool)
+	if err != nil {
+		a.internal(w, "playbook counts", err)
+		return
+	}
 	out := make([]playbookEntry, 0, len(all))
 	for _, p := range all {
-		out = append(out, p.entry())
+		e := p.entry()
+		e.Reads = reads[p.Slug]
+		if p.Kind == "skill" {
+			n := machines[p.Slug]
+			e.Machines = &n
+		}
+		out = append(out, e)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"playbooks": out})
 }
 
 func (a *app) getPlaybook(w http.ResponseWriter, r *http.Request) {
+	way := r.URL.Query().Get("read")
+	if !readWays[way] {
+		writeErr(w, http.StatusBadRequest, "bad_request", "read is tool, resource, cli or sync", nil)
+		return
+	}
 	p, removed, found, err := newestPlaybook(r.Context(), a.pool, r.PathValue("slug"))
 	switch {
 	case err != nil:
 		a.internal(w, "playbook", err)
+		return
 	case !found || removed:
 		writeErr(w, http.StatusNotFound, "not_found", "no playbook by that slug", nil)
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{"playbook": p})
+		return
 	}
+	switch way {
+	case "sync":
+		a.recordSyncs(r.Context(), map[string]int{p.Slug: p.Version})
+	case "tool", "resource", "cli":
+		a.countRead(r.Context(), p.Slug, way)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"playbook": p})
 }
 
 func (a *app) getPlaybookVersions(w http.ResponseWriter, r *http.Request) {

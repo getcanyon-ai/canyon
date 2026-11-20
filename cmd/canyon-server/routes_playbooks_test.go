@@ -133,6 +133,7 @@ func TestPlaybookRoutesAnswerTheGolden(t *testing.T) {
 	if detail := lastPlaybookAudit(t, ctx, pool, "restore playbook"); !reflect.DeepEqual(detail, restore["audit"].(map[string]any)["detail"]) {
 		t.Fatalf("the restore's audit row: %s,\nwant the golden's", mustJSON(detail))
 	}
+	countGoldenPlaybooks(t, ctx, pool, base, dana)
 	code, got, _ = do(t, dana, http.MethodGet, base+playbooksAt, "")
 	listed := doc["playbooks"]
 	if code != 200 || len(got["playbooks"].([]any)) != 2 {

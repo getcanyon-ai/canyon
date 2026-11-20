@@ -1,0 +1,68 @@
+CANYON REVIEW — RESULT: BLOCKED
+
+app: claims-portal
+host: http://localhost:7777
+gate run: gr_8f2a (2026-09-02T09:31:04Z)
+findings: 1 · blocking: 1
+outcome: nothing was built and nothing was deployed.
+Every finding with blocks: yes must be fixed before this app can deploy.
+
+--- FINDING 1 of 1 -----------------------------------------------------------
+title: A customer's email is written to the database unencrypted
+severity: high
+blocks: yes
+rule: custom.customer-email-encrypted
+file: apps/api/src/customers.ts
+line: 21
+column: 3
+source:   await db.customers.insert({ email: body.email, name: body.name });
+
+problem:
+  customers.ts inserts body.email into the customers table as it came in. The rule asks that a customer's email is encrypted before it is stored.
+
+required end state:
+  No customer's email reaches a database column or a file unencrypted: every write of one passes through the app's encrypt step.
+
+suggested fix:
+  Encrypt the address with the app's field key before the insert, and decrypt it where it is read.
+
+then:
+  Read the playbook How Meridian writes a service: canyon playbook service-conventions
+
+do not:
+  - hash the address instead where the app needs to read it back
+  - store it in another column or table unencrypted
+  Each of these produces the same finding on the next run.
+
+--- END OF FINDINGS ----------------------------------------------------------
+
+NEXT STEPS — do these in order:
+1. Before your next tool call, tell the user this, in your own words if you like:
+   Canyon's check blocks this code from deploying:
+   - A customer's email is written to the database unencrypted (apps/api/src/customers.ts:21). Suggested fix: Encrypt the address with the app's field key before the insert, and decrypt it where it is read.
+2. Fix each finding with `blocks: yes` that a change to the code can fix. For
+   a line in step 1 that starts `could not check`, do what its suggested fix says.
+   Findings with `blocks: no` do not block; mention them to the user but do not
+   fix them unless the user asks.
+3. Run canyon check again
+   This runs the identical review without deploying. It takes about a minute.
+4. If it prints RESULT: PASSED, run: canyon deploy
+5. Report the "live url" from the deploy output to the user.
+
+If canyon check still prints RESULT: BLOCKED after two full rounds of fixes,
+stop and show the user the remaining findings. Do not keep looping.
+
+Fixing is not the only way through. An admin or a security responder can
+approve a blocking finding with a reason on the app's page in Canyon:
+  http://localhost:7777/#/apps/claims-portal
+Nobody approves a blocking finding of a review they started, so neither you
+nor the user can approve these. If the user wants to ship without the fix,
+tell them to ask an admin or a security responder to approve it. That ends
+the fix loop above: stop, and do not run canyon check or canyon deploy again,
+or look for another way through, until the user says it is approved. Never
+say the finding cannot be skipped.
+
+CANYON REVIEW — RESULT: BLOCKED
+blocking: custom.customer-email-encrypted · apps/api/src/customers.ts:21
+
+exit code: 2

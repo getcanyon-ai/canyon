@@ -107,10 +107,10 @@ func (l *Log) Validate() error {
 	return nil
 }
 
-// ValidateAgainst checks the three things a log cannot be held to without seam 5 in hand
+// ValidateAgainst checks the things a log cannot be held to without seam 5 in hand
 // (contracts/snapshot.md): blocks derived from the rule's state and the finding's severity
-// and nowhere else, every ruleId in the snapshot and inside its producer's namespace, and
-// policy_name the snapshot's name for that rule. It is separate from Validate because a
+// and nowhere else, every ruleId in the snapshot and inside its producer's namespace,
+// policy_name the snapshot's name for that rule, and playbook its rule's playbook. It is separate from Validate because a
 // caller without a snapshot — the redaction tests, a log read back off the wire — still has
 // a profile to check; a gate has both and runs both. Fails closed like everything else: an
 // unknown rule, an unknown producer, or a disagreement is an error. An out-of-namespace result
@@ -202,9 +202,17 @@ func (l *Log) ValidateAgainst(snap policy.Snapshot) error {
 			if c.PolicyName != rule.Name {
 				return fmt.Errorf("run %d result %d: policy_name is not the snapshot's name for this rule", i, j)
 			}
+			if !samePlaybook(c.Playbook, rule.Playbook) { // derived as blocks is (contracts/finding.md, canyon.playbook)
+				return fmt.Errorf("run %d result %d: playbook is not the snapshot's for this rule", i, j)
+			}
 		}
 	}
 	return nil
+}
+
+// samePlaybook is whether a finding's playbook and its rule's in the snapshot are the same, none and none included.
+func samePlaybook(a, b *policy.Playbook) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
 // Blocks is contracts/snapshot.md's one formula: state == blocking && severity ≥ high, and never a
@@ -352,9 +360,11 @@ func Derive(l *Log, snap policy.Snapshot) error {
 		return err
 	}
 	blocks := make([][]bool, len(l.Runs))
+	playbooks := make([][]*policy.Playbook, len(l.Runs))
 	for i := range l.Runs {
 		run := &l.Runs[i]
 		blocks[i] = make([]bool, len(run.Results))
+		playbooks[i] = make([]*policy.Playbook, len(run.Results))
 		for j := range run.Results {
 			c := run.Results[j].Properties.Canyon
 			rule, known := ruleOf(rules, run.Tool.Driver.Name, run.Results[j].RuleID)
@@ -373,11 +383,16 @@ func Derive(l *Log, snap policy.Snapshot) error {
 				return fmt.Errorf("run %d result %d: the snapshot's state for this rule is not off, advisory or blocking", i, j)
 			}
 			blocks[i][j] = Blocks(run.Results[j].RuleID, rule.State, c.Severity)
+			playbooks[i][j] = rule.Playbook
 		}
 	}
 	for i := range l.Runs {
 		for j := range l.Runs[i].Results {
 			l.Runs[i].Results[j].Properties.Canyon.Blocks = &blocks[i][j]
+			l.Runs[i].Results[j].Properties.Canyon.Playbook = nil
+			if pb := playbooks[i][j]; pb != nil { // the rule's, as the snapshot carries it: never a producer's
+				l.Runs[i].Results[j].Properties.Canyon.Playbook = &policy.Playbook{Slug: pb.Slug, Name: pb.Name}
+			}
 		}
 	}
 	return nil

@@ -664,6 +664,9 @@ func (a *app) aiRule(label string) {
 	a.printf("\n%s%s\n", head, strings.Repeat("-", aiRuleWidth-len(head)))
 }
 
+// aiPlaybookStep is a finding's next step after its fix where its custom rule points at a playbook (cli.md §5.2; D5).
+const aiPlaybookStep = "Read the playbook %s: canyon playbook %s"
+
 // aiFinding is one finding's entry, or one Canyon rule's on one file and line that several tools' rules
 // found (cli.md §5.2): a tool's names the Canyon rule its result is mapped to, every tool's rule under
 // found by, and reads the first finding at the highest severity, then each distinct end state, fix and
@@ -717,6 +720,9 @@ func (a *app) aiFinding(e *cveGroup) {
 	}
 	a.aiProse("required end state", strings.Join(ends, "\n"))
 	a.aiProse("suggested fix", strings.Join(fixes, "\n"))
+	if pb := bag.Playbook; pb != nil { // one more step after the fix: where the org explains the rule
+		a.aiProse("then", fmt.Sprintf(aiPlaybookStep, cell(pb.Name), cell(pb.Slug)))
+	}
 	if !blocks {
 		return
 	}

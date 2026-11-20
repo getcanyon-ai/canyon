@@ -1447,6 +1447,13 @@ exit code: 2
 
 Design notes on this format:
 
+- **A finding whose rule points at a playbook names it, after the fix** (**added 2026-11-20**,
+  design/specs/mcp.md §3.4). Where a finding carries `canyon.playbook` (contracts/finding.md) — a
+  custom rule's, the org's own words on how it builds — its entry prints one more section after
+  `suggested fix:`, `then:`, holding D5's `Read the playbook <name>: canyon playbook <slug>`, the
+  name and slug each a cell, so neither can break the block's lines. A finding with none prints no
+  such section (`cli/testdata/ai-blocked-playbook.txt`).
+
 - **The block ends with its recap** (amended 2026-10-10, QA round 9: 11 of 18 agents ran `canyon
   deploy 2>&1 | tail -80`, and the tail cut `RESULT: BLOCKED` and the finding with `blocks: yes` off a
   blocked block's top while the steps at its bottom said to fix it). After the steps and before `exit

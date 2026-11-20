@@ -3,7 +3,11 @@
 // and Validate fails closed on anything the profile requires and a log lacks.
 package finding
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/getcanyon-ai/canyon/gate/policy"
+)
 
 // SchemaURI is the $schema every Canyon SARIF log carries.
 const SchemaURI = "https://json.schemastore.org/sarif-2.1.0.json"
@@ -199,4 +203,8 @@ type Canyon struct {
 	// finding blocks (Log.ValidateAgainst), permitted on any other finding, never forbidden.
 	RequiredEndState string   `json:"required_end_state,omitempty"`
 	DoNot            []string `json:"do_not,omitempty"`
+
+	// Playbook is the org's playbook the result's custom rule points at, as the run's snapshot carries it: the
+	// server's, derived after policy lookup as Blocks is, overwriting whatever a producer wrote (contracts/finding.md).
+	Playbook *policy.Playbook `json:"playbook,omitempty"`
 }

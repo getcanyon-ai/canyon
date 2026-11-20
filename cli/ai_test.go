@@ -388,7 +388,7 @@ func TestAFailedProjectReadDoesNotUnshipADeploy(t *testing.T) {
 func TestAIExplainsA401AtTheRoot(t *testing.T) {
 	page := strings.Replace(buildPage(t, nil, true), `"image_digest":"sha256:`, `"answered":{"status":401,"said":"{\"detail\":\"Sign-in required\"}"},"image_digest":"sha256:`, 1)
 	out, _, code := verbingIn(t, &gateHost{run: aRun("clean", 0, 0), page: page}, projectDir(t), "deploy", "--format", "ai")
-	want := "\nanswered: 401 Unauthorized at / (Canyon's check sends no identity token, so an app that checks it answers 401 here) · {\"detail\":\"Sign-in required\"}\n"
+	want := "\nanswered: 401 Unauthorized at / (Canyon's check sends no identity token, so an app that checks it answers 401 here)\n" + appSays + "\n  {\"detail\":\"Sign-in required\"}\n"
 	if code != exitOK || !strings.Contains(out, want) || strings.Contains(out, "Tell the user first") {
 		t.Errorf("exit %d, want %q in\n%s", code, want, out)
 	}
@@ -398,8 +398,8 @@ func TestAIExplainsA401AtTheRoot(t *testing.T) {
 // a stock Django's 400 is not a clean deploy to report (contracts/routes.md, envs.<env>.answered; #1740).
 func TestAIReportsWhatTheAppAnswered(t *testing.T) {
 	for answered, want := range map[string][2]string{
-		`{"status":400,"said":"<h1>Bad Request (400)</h1>"}`: {"answered: 400 Bad Request at / · <h1>Bad Request (400)</h1>", "answered 400 Bad Request at /"},
-		`{"error":"refused"}`:                                {"answered: no answer at /: refused", "no answer at /: refused"},
+		`{"status":400,"said":"<h1>Bad Request (400)</h1>"}`: {"answered: 400 Bad Request at /\n" + appSays + "\n  <h1>Bad Request (400)</h1>", "answered 400 Bad Request at /"},
+		`{"error":"refused"}`:                                {"answered: no answer at /\n" + appSays + "\n  refused", "gave no answer at /"}, // the app's words only under appSays, never in a step
 	} {
 		page := strings.Replace(buildPage(t, nil, true), `"image_digest":"sha256:`, `"answered":`+answered+`,"image_digest":"sha256:`, 1)
 		out, _, code := verbingIn(t, &gateHost{run: aRun("clean", 0, 0), page: page}, projectDir(t), "deploy", "--format", "ai")
@@ -967,7 +967,12 @@ func lastLines(t *testing.T, out string) string {
 	if i < 0 || j < i {
 		t.Fatalf("no LAST LINES before NEXT STEPS in\n%s", out)
 	}
-	return out[i+strings.Index(out[i:], "\n")+1 : j]
+	lines := out[i+strings.Index(out[i:], "\n")+1 : j]
+	if got, ok := strings.CutPrefix(lines, appSays+"\n"); ok { // a build's or a start's: the app's own lines under appSays
+		return got
+	}
+	t.Fatalf("LAST LINES of a build failure don't start with appSays:\n%s", lines)
+	return ""
 }
 
 // npm writes its error first and its usage after it, so the last 20 lines of the test cluster's npm ci held only its usage

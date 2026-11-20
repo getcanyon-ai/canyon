@@ -750,7 +750,7 @@ func TestStatusSaysAnAnswerBesideReadiness(t *testing.T) {
 		without string
 	}{
 		{"running", &answered{Status: 400}, url + "   1d ago   answered 400 Bad Request at /\n", url + " · deployed 2026-09-01T11:26:40Z · answered 400 Bad Request at /\n", ""},
-		{"", &answered{Error: "refused"}, url + "   1d ago   no answer at /: refused\n", url + " · deployed 2026-09-01T11:26:40Z · no answer at /: refused\n", ""},
+		{"", &answered{Error: "refused"}, url + "   1d ago   no answer at /: refused\n", url + " · deployed 2026-09-01T11:26:40Z · gave no answer at /\n" + appSays + "\n  refused\n", ""}, // the app's words under appSays for an agent
 		{"running", &answered{Status: 200}, url + "   1d ago\n", url + " · deployed 2026-09-01T11:26:40Z\n", "answered"},
 		{"stopped", &answered{Status: 400}, "stopped   canyon logs --env preview says why\n", "stopped · canyon logs --env preview says why\n", "answered"},
 	} {

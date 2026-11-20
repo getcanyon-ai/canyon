@@ -159,7 +159,7 @@ func TestLogsMarkWhenAPersonAllowedADestination(t *testing.T) {
 		var o, e strings.Builder
 		a := logsApp(t, &o, server.URL)
 		a.err, a.clock = &e, clock{now: func() time.Time { return time.Date(2026, 11, 8, 11, 40, 0, 0, time.UTC) }, sleep: func(time.Duration) {}}
-		if code := runLogs(context.Background(), a, []string{"--format", format}); code != exitOK || e.String() != "" || o.String() != want {
+		if code := runLogs(context.Background(), a, []string{"--format", format}); code != exitOK || e.String() != "" || o.String() != map[string]string{"human": want, "ai": asAgent(want)}[format] {
 			t.Errorf("--format %s: exit %d, stderr %q, rendered\n%s\ntestdata/logs-allowed.txt wants\n%s", format, code, e.String(), o.String(), want)
 		}
 		reads := "/api/v1/projects/claims-portal /api/v1/projects/claims-portal/egress /api/v1/egress /api/v1/front-door /api/v1/projects/claims-portal/status"

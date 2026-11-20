@@ -99,9 +99,9 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 	ships := a.version(preview) + cleared(read.Receipt)
 	a.printf("\n  Promoting %s from preview to production. %s\n", ships, replaces) // a version, never a run id (cli.md §6.3)
 	a.printf("  %s\n", a.faint(noRebuild))
-	out := promoted{app: p.App, host: client.page(), version: ships, replaced: replaced, preview: preview.running().answered(), advisory: advisories(read.Receipt.withPatch(preview))}
-	if out.preview != "" { // before the question, never a block: governance is the admin's (#1833)
-		a.printf("  %s Preview %s; check the app before promoting.\n", a.render.glyph(stateWarn), out.preview)
+	out := promoted{app: p.App, host: client.page(), version: ships, replaced: replaced, preview: preview.running().flagged(), advisory: advisories(read.Receipt.withPatch(preview))}
+	if said := preview.running().answered(); said != "" { // before the question, never a block: governance is the admin's (#1833)
+		a.printf("  %s Preview %s; check the app before promoting.\n", a.render.glyph(stateWarn), said)
 	}
 	out.missing, out.unchecked = a.missingInProd(ctx, client, at)
 	out.ask = "Ask the user whether to put " + a.version(preview) + " in production; if they say yes, run canyon deploy --env prod --yes."
@@ -352,7 +352,9 @@ func (a *app) refusedAnswer(name, host, version string, w answered, message stri
 	page, message := host+"/#/apps/"+cell(name), cell(message) // the host's words, or an answer the host sent
 	if a.render.Format == FormatAI {
 		a.aiPromoteHead("REFUSED", name, host)
-		a.printf("version: %s\npreview answered: %s\noutcome: %s\nfleet url: %s\n", version, aiAnswered(w), message, cell(page))
+		a.printf("version: %s\n", version)
+		a.aiAnswered("preview answered", w)
+		a.printf("outcome: %s\nfleet url: %s\n", message, cell(page))
 		a.printf("\n%s\nexit code: %d\n", aiRefusedSteps, exitBlocked)
 		return exitBlocked
 	}

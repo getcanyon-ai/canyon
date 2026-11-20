@@ -131,12 +131,12 @@ func logsRunOn(t *testing.T, h *logsHost, tty bool, args ...string) (out, errs s
 
 func TestLogsRendersAStreamThatEndsByteForByte(t *testing.T) {
 	want := golden(t, "logs-preview.txt")            // before the run moves into the project's directory
-	for _, format := range []string{"human", "ai"} { // no ai block exists for logs, so ai is the human rendering
+	for _, format := range []string{"human", "ai"} { // no ai block exists for logs: ai is the human rendering, appSays heading the app's lines
 		out, errs, code := logsRun(t, &logsHost{lines: []string{"ready on :8080\n", "GET / 200\n"}}, "--format", format)
 		if code != exitOK || errs != "" {
 			t.Errorf("--format %s: exit %d, stderr %q", format, code, errs)
 		}
-		if out != want {
+		if want := map[string]string{"human": want, "ai": asAgent(want)}[format]; out != want {
 			t.Errorf("--format %s rendered\n%s\ntestdata/logs-preview.txt wants\n%s", format, out, want)
 		}
 	}
@@ -458,7 +458,7 @@ func TestLogsShowCanyonsRefusalsAfterTheAppsLines(t *testing.T) {
 		if code != exitOK || errs != "" {
 			t.Errorf("--format %s: exit %d, stderr %q", format, code, errs)
 		}
-		if out != want {
+		if want := map[string]string{"human": asPerson(want), "ai": want}[format]; out != want {
 			t.Errorf("--format %s rendered\n%s\ntestdata/logs-refused.txt wants\n%s", format, out, want)
 		}
 		reads := []string{"/api/v1/projects/claims-portal", "/api/v1/projects/claims-portal/egress", "/api/v1/egress", "/api/v1/front-door"}
@@ -634,3 +634,15 @@ func TestLogsShowCanyonsRefusalsOrSayTheyCouldNotBeRead(t *testing.T) {
 		}
 	}
 }
+
+// asAgent is a logs transcript as an agent reads it: appSays heads the app's own lines, after the heading's blank line.
+func asAgent(person string) string {
+	i := strings.Index(person, "\n\n")
+	if i < 0 {
+		return person
+	}
+	return person[:i+2] + "  " + appSays + "\n" + person[i+2:]
+}
+
+// asPerson is the agent's transcript as a person reads it: no appSays line.
+func asPerson(agent string) string { return strings.Replace(agent, "  "+appSays+"\n", "", 1) }

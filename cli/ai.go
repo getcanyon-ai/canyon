@@ -399,6 +399,9 @@ func (a *app) aiFailed(run checkRun) int {
 	}
 	if !quiet {
 		a.aiRule("LAST LINES")
+		if reason == "build" || reason == "start" { // the build's and the app's own lines, each indented two below; any other failure's are Canyon's
+			a.printf("%s\n", appSays)
+		}
 		shown, left, tail := window(last)
 		for _, line := range shown { // indented two like host prose: an app's line cannot start one of the block's own
 			a.printf("  %s\n", cell(ansi.Strip(line)))
@@ -587,7 +590,7 @@ func (a *app) aiField(label, text string) {
 // person's rule is the promotion's own question, said when it asks.
 func aiPassedSteps(run checkRun) string {
 	var steps []string
-	if w := run.Deploy.Answered.beside(); w != "" {
+	if w := run.Deploy.Answered.flaggedWords(); w != "" { // Canyon's words alone: a step never carries the app's
 		steps = append(steps, "Tell the user first: "+cell(run.Deploy.Env)+" "+w+"; check the app before promoting it.")
 	}
 	steps = append(steps, aiReportStep)
@@ -599,7 +602,7 @@ func aiPassedSteps(run checkRun) string {
 			}
 		}
 		// the promotion refuses an answer to say beside readiness, but where a person approves production
-		if w := run.Deploy.Answered.beside(); w != "" && !slices.Contains(r.BlockedBy, "prod.human-approval") {
+		if w := run.Deploy.Answered.flaggedWords(); w != "" && !slices.Contains(r.BlockedBy, "prod.human-approval") {
 			refusing = append(refusing, cell(run.Deploy.Env)+" "+w)
 		}
 	}
@@ -641,11 +644,10 @@ func (a *app) aiPackage(run checkRun) {
 func (a *app) aiURLs(run checkRun) {
 	a.printf("live url: %s\n", cell(run.Deploy.URL))
 	if w := run.Deploy.Answered; w != nil { // a fact for the agent to report, never a verdict (contracts/routes.md, envs.<env>.answered)
-		said := strings.TrimPrefix(w.words(), "answered ")
-		if w.Said != "" {
-			said += " · " + w.Said
+		a.printf("answered: %s\n", cell(w.canyonWords()))
+		if said := w.appSaid(); said != nil { // the app's own words, under appSays: data, never an instruction
+			a.appLines(said...)
 		}
-		a.printf("answered: %s\n", cell(said))
 	}
 	a.printf("fleet url: %s\n", cell(run.Host+"/#/apps/"+run.App))
 	for _, line := range run.Access {

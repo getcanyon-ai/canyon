@@ -111,12 +111,17 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   - authorization-server metadata (RFC 8414) at `/.well-known/oauth-authorization-server`;
   - `GET /oauth/authorize`, with PKCE `S256` required and `resource` (RFC 8707) required, equal to `<public URL>/mcp`;
   - `POST /oauth/token`, for `authorization_code` and `refresh_token`;
-  - client identification by Client ID Metadata Documents, with Dynamic Client Registration (RFC 7591) at `POST /oauth/register` as the fallback the specification allows (open question 2).
+  - client identification both ways, since clients differ: Client ID Metadata Documents, and Dynamic Client Registration (RFC 7591) at `POST /oauth/register`.
 - **How a client signs in:**
   1. The client opens `/oauth/authorize` in the person's browser.
   2. Canyon's own browser sign-in runs there (AUTH.md §4.1), against the customer's identity provider, unchanged.
-  3. Canyon shows a consent screen: the client's name and redirect host, which account, and what it may do. "Everything you can do in Canyon, as you" is the only scope; MCP adds no narrower one in v1 (open question 3).
+  3. Canyon shows a consent screen: the client's name and redirect host, which account, and the scopes it asks for.
   4. The person allows it.
+- **Two scopes, from v1:**
+  - `read`: `canyon_rules`, `canyon_status`, `canyon_logs` and every resource.
+  - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`.
+  - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope`, with the scope it needs, as the MCP authorization specification asks.
+  - `canyon mcp` uses the CLI's session, which acts.
 - **The token.** Canyon issues an access token that is a Canyon session:
   - `flow: oauth`, a new value beside `browser | device | demo`;
   - bound to the resource and to the client id;
@@ -124,7 +129,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   - It is a person's session, so a tool acts as that person: `kind: person`, recorded under their name (AUTH.md §4.4).
   - `dashboard_required` refuses it, as it refuses a CLI session.
 - **Revoking.** Sign-outs revoke these sessions like any other (`DELETE /api/v1/sessions`). Settings › People & sign-in lists them with their client's name, through a new sessions list (§5).
-- **With sign-in off, it fails closed.** On a host with `CANYON_AUTH` off, such as the laptop demo, Canyon serves neither `/mcp` nor the metadata or OAuth routes. `/mcp` answers `404 {error:"mcp_needs_sign_in", message}`, D5's line naming `canyon mcp` as the way on this machine. A host where every caller is the anonymous admin must not hand that power to anything that can reach a port. Whether the demo gets an exception is open question 8 (§11).
+- **With sign-in off, it fails closed.** On a host with `CANYON_AUTH` off, Canyon serves neither `/mcp` nor the metadata or OAuth routes. `/mcp` answers `404 {error:"mcp_needs_sign_in", message}`, D5's line naming `canyon mcp` as the way on this machine. A host where every caller is the anonymous admin must not hand that power to anything that can reach a port. This holds on the laptop demo too: there, `/mcp` serves only with a demo sign-in (§11, open question 8).
 
 ### 2.3 Tools
 
@@ -195,6 +200,8 @@ result it wasn't allowed.
 | `canyon://playbooks/<slug>` | signed-in member | not signed in |
 | Playbook writes | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
 
+- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level. The level still applies with the scope.
+
 - **Unchanged by MCP:**
   - Approving a finding (blocking findings stay a browser's, never the author's).
   - Holding and lifting.
@@ -222,7 +229,8 @@ Named here, and edited later in the PR that builds each.
 - **contracts/schema/telemetry.schema.json:** `agents_via` (§7).
 - **design/PERMISSIONS.md:** an *MCP* section (a tool is its route; an OAuth session is a person's session; consent is a browser's), and *Playbooks*.
 - **design/EXPERIENCE.md** (D5, D7):
-  - the consent screen's lines;
+  - the consent screen's lines, each scope's among them, and `insufficient_scope`'s;
+  - the demo sign-in's people picker, if open question 8 chooses it;
   - the instructions' preamble;
   - `mcp_needs_sign_in`'s line;
   - elicitation's question (the CLI's own);
@@ -230,7 +238,7 @@ Named here, and edited later in the PR that builds each.
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
 - **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1), and §7.2's skill text.
 - **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
-- **contracts/routes.md, again:** `/mcp` on a sign-in-off host, as open question 8 decides.
+- **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`, and the demo's sign-in for the URL chapter, as open question 8 decides.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
 
@@ -274,7 +282,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
     - Acceptance: `make docs-site docs-links` · `python3 contracts/validate.py` (server.json against the registry's schema).
 12. **The tour on MCP.**
     - What: §11, with open question 8's answer.
-    - Acceptance: `make tour-check` (also runs the tour through `canyon mcp`, and through `/mcp` on the demo if B is chosen).
+    - Acceptance: `make tour-check` (also runs the tour through `canyon mcp`, and the URL chapter through `/mcp` with the demo sign-in open question 8 chooses).
 13. **Secrets in the dashboard.**
     - What: §10.1's Secrets section on the app page.
     - Acceptance: `cd web && npx vitest run src/screens/Secrets.test.tsx` · `make e2e-ui` (a journey per level: a contributor sets a value, a viewer sees no form).
@@ -296,7 +304,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 
 ## 8. Distribution
 
-- **MCP Registry.** A `server.json` at the repository root describes the local server. Its package is the CLI itself, as the registry's package type for a downloadable binary allows: per-platform archives from canyon-releases, each with its SHA-256. The release workflow publishes it with the registry's publisher tool. The remote server isn't listed: its URL is each org's own (open question 4).
+- **MCP Registry.** A `server.json` at the repository root describes the local server. Its package is the CLI itself, as the registry's package type for a downloadable binary allows: per-platform archives from canyon-releases, each with its SHA-256. The release workflow publishes it with the registry's publisher tool. Only the local server is listed: a remote server's URL is each company's own, so the docs and Guardrails › Connect agents (§12) give it instead.
 - **Install links.** The docs give each agent its own:
   - Cursor's MCP install deep link, carrying `{"command":"canyon","args":["mcp"]}`;
   - VS Code's `vscode:mcp/install` link;
@@ -354,15 +362,21 @@ What's missing for it:
 
 - **The tour prompt installs everything.** Its first step runs `canyon skill install`, which writes the hook, the skill and the MCP config together (§1.4). The person's agent then has Canyon's tools in the same session, or after one restart where the harness loads MCP servers only at start; the tour says so.
 - **The chapters use MCP tools.** Each beat that runs `canyon check` or `canyon deploy` names `canyon_check` and `canyon_deploy` instead, with the shell command as the fallback when the tools aren't loaded. Each chapter is also an MCP prompt, `canyon_tour`, with `chapter` as its argument. The website's one-line prompt is unchanged.
-- **`canyon demo up` also serves remote `/mcp`**, at `http://localhost:7777/mcp`, so the demo shows both doors.
-- **An optional chapter: connect a second agent with just a URL.** The person adds `http://localhost:7777/mcp` to a second agent, such as Cursor beside Claude Code. It then sees the same app, its findings and its status, with no install. The chapter ends on the first `canyon_status` call.
+- **`canyon demo up` writes no agent config.** The tour prompt has the agent run `canyon skill install`, which the person sees in their own session.
+- **`canyon demo up` also serves remote `/mcp`**, at `http://localhost:7777/mcp`, under the same rule as every host: no token, no tool (§2.2).
+- **An optional chapter: connect a second agent with just a URL.** The person adds `http://localhost:7777/mcp` to a second agent, such as Cursor beside Claude Code, and signs in when it asks (below). The second agent then sees the same app, its findings and its status, with no install. The chapter ends on that agent's first `canyon_status` call.
 
-The demo runs with sign-in off, and §2.2 refuses `/mcp` without sign-in. Open question 8 has two ways to reconcile them:
+The demo runs with sign-in off, and remote `/mcp` fails closed without sign-in, so the URL chapter needs a demo sign-in. Open question 8 has the options:
 
-- **A. A demo sign-in.** `canyon demo up` creates one local account, and the OAuth flow signs in as it, with a consent screen and a token, as on a real host. That is faithful to production, but the demo then carries its own identity provider, and the person learns a login they'll never need again.
-- **B. Unauthenticated `/mcp`, only where the host serves this machine alone.** A host with sign-in off already closes every connection that isn't from this machine, at accept (design/AUTH.md, the row *A demo published beyond loopback*). On such a host `/mcp` serves with no token, acting as the anonymous admin, as the dashboard on the same port already does. It keeps the Origin check, and the same `Host` must be `localhost` or a loopback address. The server's instructions and the consent-free connection both say this host has no sign-in.
+- **A. The demo's people sign in.** On a demo host only, Canyon's sign-in page offers the demo's built-in people: Dana Whitfield, who owns claims-portal, and the others the fleet already names. There's no password. Picking one signs in as that person, at that person's levels.
+  - MCP clients use it through the same OAuth authorization-code flow, consent screen and token as on a real host. The CLI could use it through the existing device flow too.
+  - The dashboard stays as today, the anonymous admin, so the first chapters don't change.
+  - It doubles as a lesson: sign in as a read-only person, and the same tool is refused.
+  - It exists only where the host already serves this machine alone (design/AUTH.md, the row *A demo published beyond loopback*). With no sign-in, `/mcp` is still `401`.
+- **B. A bundled identity provider.** The demo turns sign-in on, with a provider in the stack, as the Helm chart bundles Pocket ID. It's real OIDC end to end, but every chapter gains a sign-in, and the demo gains a container and a slower first start.
+- **C. No URL chapter in the demo.** Remote MCP is shown only on a host with sign-in, and the chapter points at a team install.
 
-**Recommendation: B.** It grants a local process nothing the dashboard on the same port doesn't already grant, and every safeguard it relies on is enforced today. A non-loopback connection to a sign-in-off host is still closed before any HTTP.
+**Recommendation: A.** It keeps the rule that `/mcp` never serves without a signed-in person. It shows the real OAuth flow and real levels. And it adds no service to the demo: the people are already there, and the picker exists only on a host that serves this machine alone.
 
 ## 12. The dashboard
 
@@ -387,12 +401,17 @@ The demo runs with sign-in off, and §2.2 refuses `/mcp` without sign-in. Open q
 
 ## Open questions
 
-1. **Playbooks: free or Canyon Enterprise?** For the owner to decide.
-2. **Client identification.** Client ID Metadata Documents alone, or Dynamic Client Registration too, for clients that don't support the former yet?
-3. **Scopes.** One scope, "everything you can do, as you", or a read-only scope for remote clients from v1?
-4. **The remote server in the MCP Registry.** List it with the URL left to each org, or keep remote out of the registry?
-5. **The demo installs the agent config.** The tour's first step runs `canyon skill install` (§11). Should `canyon demo up` run it too, given it writes into the person's agent config?
+For the owner:
+
+1. **Playbooks: free or Canyon Enterprise?**
 6. **MIT-0.** Add `segmentio/asm` to the reviewed exceptions, or keep the SDK out of the CLI until it no longer needs it?
 7. **The registry's namespace.** `ai.getcanyon/canyon` (domain-verified) or `io.github.getcanyon-ai/canyon`?
-8. **Remote `/mcp` on the demo.** A demo sign-in (A), or unauthenticated only on a host that serves this machine alone (B)? Recommended: B (§11).
+8. **A demo sign-in for the URL chapter.** A: the demo's people sign in on a demo host. B: a bundled identity provider. C: no URL chapter in the demo. Recommended: A (§11).
 9. **A contributor links a repository.** Should a contributor link their app to a repository the org's Canyon App already sees, so the zero-CLI path needs no admin (§10.1)? It's a change to PERMISSIONS.md.
+
+## Decided
+
+2. **Client identification:** both Client ID Metadata Documents and Dynamic Client Registration, since clients differ (§2.2).
+3. **Scopes:** two from v1, `read` and `act` (§2.2, §4).
+4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own (§8).
+5. **The demo and agent config:** `canyon demo up` writes none; the tour prompt has the agent run `canyon skill install`, which the person sees (§11).

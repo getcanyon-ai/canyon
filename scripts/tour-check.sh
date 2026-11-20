@@ -47,6 +47,17 @@ run() {
   keep "$work/out"
   [ "$code" = "$want" ] || fail "canyon $* exited $code, not $want"
 }
+# tool is an agent calling one of Canyon's tools in the tour folder, through the MCP server canyon skill install
+# configured for Claude Code, and reading what it said: the tour names the tool first (design/specs/mcp.md §11).
+tool() {
+  want=$1 name=$2 args=${3-'{}'}
+  printf '\n> %s %s\n' "$name" "$args"
+  code=0
+  HOME=$work/home "$work/mcpcall" "$name" "$(printf '%s' "$args" | jq -c --arg dir "$PWD" '. + {dir: $dir}')" -- $(server) >"$work/out" 2>&1 || code=$?
+  keep "$work/out"
+  [ "$code" = "$want" ] || fail "$name $args exited $code, not $want"
+}
+server() { jq -r '.mcpServers.canyon | [.command] + .args | join(" ")' "$work/home/.claude.json"; }
 says() { grep -qE "$1" "$work/out" || fail "the last output does not match: $1"; }
 # open <address> [<policy>]: what a browser gets from the app: its page, or the search for a policy.
 open() {
@@ -91,6 +102,8 @@ person() {
   [ "$status" = 200 ] || fail "$1 $2 answered $status, not 200"
 }
 
+go build -o "$work/mcpcall" ./internal/tools/mcpcall
+
 step "a release built from this tree: its images in a registry on this runner, its bundle and SHA256SUMS served beside it"
 cd "$repo"
 docker compose --profile demo-apps build server executor demo-apps
@@ -124,10 +137,13 @@ says 'Canyon is ready at http://localhost:7777$'
 says '^  Next, take the guided tour: canyon demo tour$'
 "$repo/scripts/telemetry-off-check.sh" docker
 
-step "the prompt: canyon demo tour, chapter 1 as the agent reads it, and what is running"
+step "the prompt: canyon demo tour, chapter 1 as the agent reads it, canyon skill install, and what is running"
 cd "$work"
 run 0 demo tour
 says '^CANYON TOUR — CHAPTER 1 of 3: '
+says '^Then run canyon skill install\. '
+run 0 skill install
+[ "$(server)" = "$repo/bin/canyon mcp" ] || fail "canyon skill install configured Claude Code's canyon server as '$(server)', not this canyon's mcp"
 run 1 demo tour next
 says "Chapter 1 isn't done: its files are not planted. Run canyon demo tour plant.$"
 run 0 fleet
@@ -143,7 +159,7 @@ run 0 demo tour plant
 cd "$work/canyon-tour"
 run 1 demo tour next
 says "Chapter 1 isn't done: the app in ./canyon-tour has not been deployed yet. Run canyon deploy there.$"
-run 2 deploy
+tool 2 canyon_deploy
 says '^CANYON REVIEW — RESULT: BLOCKED$'
 says '^blocking: design\.org-system · package\.json:[0-9]+$'
 app=$(sed -n 's/^app: //p' "$work/out" | head -1)
@@ -151,9 +167,9 @@ app=$(sed -n 's/^app: //p' "$work/out" | head -1)
 
 step "chapter 1: canyon demo tour plant again, the page in the design system, canyon check and canyon deploy: live in preview"
 run 0 demo tour plant
-run 0 check
+tool 0 canyon_check
 says '^CANYON REVIEW — RESULT: PASSED$'
-run 0 deploy
+tool 0 canyon_deploy
 says '^CANYON REVIEW — RESULT: PASSED$'
 preview=$(sed -n 's/^live url: //p' "$work/out" | head -1)
 case $preview in "http://$app.preview.localhost:7777") ;; *) fail "canyon deploy named no preview url: '$preview'" ;; esac
@@ -165,7 +181,7 @@ step "chapter 2: canyon demo tour plant, the search, and canyon deploy, unchange
 run 0 demo tour
 says '^CANYON TOUR — CHAPTER 2 of 3: '
 run 0 demo tour plant
-run 2 deploy
+tool 2 canyon_deploy
 says '^CANYON REVIEW — RESULT: BLOCKED$'
 says '^blocking: sql\.string-concat · server\.js:[0-9]+$'
 open "$preview" # a blocked version replaces nothing
@@ -173,18 +189,18 @@ says '<h1>Claims tracker</h1>'
 
 step "chapter 2: the one-line fix, canyon check and canyon deploy"
 put "$(block 1)"
-run 0 check
+tool 0 canyon_check
 says '^CANYON REVIEW — RESULT: PASSED$'
-run 0 deploy
+tool 0 canyon_deploy
 says '^CANYON REVIEW — RESULT: PASSED$'
 answers "$preview"
 run 0 demo tour next
 
-step "chapter 3: canyon status, and canyon deploy --env prod --yes"
+step "chapter 3: canyon_status, and canyon_promote with confirm, as the person asked for production"
 run 0 demo tour
 says '^CANYON TOUR — CHAPTER 3 of 3: '
-run 0 status
-run 0 deploy --env prod --yes
+tool 0 canyon_status
+tool 0 canyon_promote '{"confirm":true}'
 says '^CANYON PROMOTE — RESULT: PROMOTED$'
 prod=$(sed -n 's/^live url: //p' "$work/out" | head -1)
 case $prod in "http://$app.prod.localhost:7777") ;; *) fail "canyon deploy --env prod named no production url: '$prod'" ;; esac
@@ -204,7 +220,7 @@ cd "$work"
 rm -rf canyon-tour
 run 0 demo tour plant
 cd "$work/canyon-tour"
-run 2 deploy
+tool 2 canyon_deploy
 says '^blocking: design\.org-system · package\.json:[0-9]+$'
 again=$(sed -n 's/^app: //p' "$work/out" | head -1)
 [ -n "$again" ] && [ "$again" != "$app" ] || fail "the second tour's app is '$again', and the first's was '$app'"
@@ -221,7 +237,7 @@ says '^CANYON TOUR — CHAPTER 2 of 3: '
 run 0 demo tour plant
 cd "$work/canyon-tour"
 [ -f components.json ] || fail "chapter 2, reached by a skip, planted no components.json"
-run 2 deploy
+run 2 deploy # the shell, as an agent without Canyon's tools loaded runs it
 says '^blocking: sql\.string-concat · server\.js:[0-9]+$'
 
 step "the page: its prompt, the laptop page's install line, and every output it pastes one this run printed"

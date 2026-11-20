@@ -307,9 +307,10 @@ func TestTheCodexHookAndSkillAreClaudeCodesShape(t *testing.T) {
 		t.Errorf("~/.codex/hooks.json holds\n%s", fileBytes(t, filepath.Join(home, ".codex", "hooks.json")))
 	}
 	// Install never trusts its own hook: Codex's trust lives in ~/.codex/config.toml, and only the person,
-	// answering Codex's question at its next start or in /hooks, writes it there (cli.md §7.1).
-	if entries, err := os.ReadDir(filepath.Join(home, ".codex")); err != nil || len(entries) != 1 || entries[0].Name() != "hooks.json" {
-		t.Errorf("~/.codex after install holds %v (%v); want hooks.json alone, no config.toml", entries, err)
+	// answering Codex's question at its next start or in /hooks, writes it there (cli.md §7.1). What install
+	// puts in config.toml is its MCP server's table, and nothing else.
+	if got := fileBytes(t, filepath.Join(home, ".codex", "config.toml")); got != "[mcp_servers.canyon]\ncommand = '/usr/local/bin/canyon'\nargs = ['mcp']\n" {
+		t.Errorf("~/.codex/config.toml after install holds\n%s", got)
 	}
 	text, err := skillText(targetCodex)
 	if err != nil || text != claudeFront+skillBlock(skillBody) || fileBytes(t, filepath.Join(home, ".agents", "skills", "canyon", "SKILL.md")) != text {

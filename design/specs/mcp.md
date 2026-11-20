@@ -87,11 +87,11 @@ hook entries do today (cli.md §7.1).
 |---|---|---|---|
 | Claude Code | `~/.claude/skills/canyon/SKILL.md` | `hooks.SessionStart` in `~/.claude/settings.json` | `mcpServers.canyon` in `~/.claude.json`, user scope: `{"type":"stdio","command":"<this canyon's path>","args":["mcp"]}` |
 | Codex | `~/.agents/skills/canyon/SKILL.md` | `hooks.SessionStart` in `~/.codex/hooks.json` | `[mcp_servers.canyon]` in `~/.codex/config.toml`: `command = "<path>"`, `args = ["mcp"]` |
-| Cursor | `./.cursor/rules/canyon.mdc` | `hooks.sessionStart` in `./.cursor/hooks.json` | `mcpServers.canyon` in `./.cursor/mcp.json`: `{"command":"canyon","args":["mcp"]}`. It names `canyon` bare, as the hook does, because the project file is often committed |
+| Cursor | `./.cursor/rules/canyon.mdc` | `hooks.sessionStart` in `./.cursor/hooks.json` | `mcpServers.canyon` in `./.cursor/mcp.json`: `{"type":"stdio","command":"canyon","args":["mcp"]}`, the shape Cursor's MCP docs give (cursor.com/docs/context/mcp: `type` required, `command` "available on your system path or" a full path). It names `canyon` bare, as the hook does, because the project file is often committed |
 | AGENTS.md | `./AGENTS.md` block | none | none: AGENTS.md names no harness to configure |
 
 - **Parsers.** `~/.claude.json` is Claude Code's own state file, which it rewrites while it runs. Install edits only the `mcpServers.canyon` key, through a real JSON parser, re-reading the file just before the write. `config.toml` is edited through `github.com/pelletier/go-toml/v2`, already in `go.mod`. Neither is ever patched by text.
-- **Paths are verified first.** The build PR checks each of these paths against the harness versions it names, as cli.md §7.1 records for the hooks.
+- **Paths are verified.** Claude Code 2.1.326 reads `~/.claude.json`'s entry (`claude mcp list` connects to it) and Codex 0.166.0 reads `config.toml`'s (`codex mcp list` lists it enabled), as cli.md §7.1 records. Cursor's `./.cursor/mcp.json` is its documented project file; no Cursor CLI was at hand to check it.
 - **The skill's text changes once MCP is installed.** It names the tools first and the CLI second: the CLI stays the fallback when the client hasn't loaded the server.
 
 ## 2. Remote: `/mcp` on canyon-server
@@ -364,7 +364,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
   - **The registry can't pick an architecture.** Its type for a downloadable binary is an MCP Bundle (`mcpb`): a zip with its own manifest, not the CLI's archives, and a bundle names only the operating systems it runs on. One bundle per OS can't choose between arm64 and amd64.
   - When it comes, the name stays `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, which the `io.github.*` namespace accepts with no DNS record. Only the local server is listed: a remote server's URL is each company's own, so the docs and the dashboard (§12) give it instead.
 - **Install links.** The docs give each agent its own:
-  - Cursor's MCP install deep link, carrying `{"command":"canyon","args":["mcp"]}`;
+  - Cursor's MCP install deep link, carrying `{"type":"stdio","command":"canyon","args":["mcp"]}`;
   - VS Code's `vscode:mcp/install` link;
   - `claude mcp add --scope user canyon -- canyon mcp` (user scope, as `skill install` writes it: Claude Code's default scope is the one project);
   - `codex mcp add canyon -- canyon mcp`.

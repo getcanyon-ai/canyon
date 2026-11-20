@@ -6,16 +6,27 @@
       {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon","args":["manifest","--harness","claude-code"]}]}
     It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
   ✓ Claude Code    ~/.claude/settings.json                   written
+  · Canyon's MCP server, in ~/.claude.json under mcpServers.canyon:
+      {"type":"stdio","command":"/usr/local/bin/canyon","args":["mcp"]}
+  ✓ Claude Code    ~/.claude.json                            written
   ✓ Codex          ~/.agents/skills/canyon/SKILL.md          written
   · Canyon's session hook, in ~/.codex/hooks.json under hooks.SessionStart:
       {"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"/usr/local/bin/canyon manifest --harness codex"}]}
     It runs this canyon by its path: if you move it, run canyon skill install again from the new place.
     Codex asks you to trust it the next time it starts; /hooks in Codex shows it any time.
   ✓ Codex          ~/.codex/hooks.json                       written
+  · Canyon's MCP server, in ~/.codex/config.toml:
+      [mcp_servers.canyon]
+      command = '/usr/local/bin/canyon'
+      args = ['mcp']
+  ✓ Codex          ~/.codex/config.toml                      written
   ✓ Cursor         ./.cursor/rules/canyon.mdc                written
   · Canyon's session hook, in ./.cursor/hooks.json under hooks.sessionStart:
       {"command":"canyon manifest --harness cursor"}
   ✓ Cursor         ./.cursor/hooks.json                      written
+  · Canyon's MCP server, in ./.cursor/mcp.json under mcpServers.canyon:
+      {"type":"stdio","command":"canyon","args":["mcp"]}
+  ✓ Cursor         ./.cursor/mcp.json                        written
   ✓ AGENTS.md      ./AGENTS.md                               written
 
   Your agent can now deploy. Try asking it:

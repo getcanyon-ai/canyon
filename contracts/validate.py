@@ -5697,10 +5697,21 @@ def seam3_telemetry(snap):
     v2 = golden["report_v2"]
     if not schema_check("telemetry report, second version", schema, v2):
         return
+    # agents_via (design/specs/mcp.md §7) came after the second version shipped, so a second-version server from before
+    # it sends none: it is optional, the one field a report with period_hours may leave out.
+    optional = {"period_hours", "agents_via"}
     added = [k for k in v2 if k not in report]
     for field in added:
-        if field != "period_hours" and accepts(schema, {k: v for k, v in v2.items() if k != field}):
+        if field not in optional and accepts(schema, {k: v for k, v in v2.items() if k != field}):
             errors.append(f"telemetry: a second-version report without {field} was taken")
+    if not accepts(schema, {k: v for k, v in v2.items() if k != "agents_via"}):
+        errors.append("telemetry: a second-version report from before agents_via, without it, was refused")
+    # Reviews by how they were asked for, never by whom: a client's name is refused, and so is a count left out.
+    via = v2["agents_via"]
+    for probe, where in ((dict(via, cursor=1), "a client's name"), ({k: n for k, n in via.items() if k != "mcp_remote"}, "no mcp_remote"),
+                         (dict(via, cli=1000001), "a count past 1,000,000")):
+        if accepts(schema, dict(v2, agents_via=probe)):
+            errors.append(f"telemetry: agents_via took {where}")
     if not accepts(schema, {k: v for k, v in v2.items() if k not in added}):
         errors.append("telemetry: a first-version report, without period_hours and what it brings, was refused")
     # The licence is its state alone (the owner, 2026-11-15): what it unlocks, its seats, its dates and whose it is never go.

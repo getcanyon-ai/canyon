@@ -311,7 +311,7 @@ func TestOAuthAuthorizeRefusesWhereItCanSendBack(t *testing.T) {
 		c.change(q)
 		at := authorize(t, base, gina, q)
 		if c.page != "" {
-			if at.Host != "" || at.Fragment != "/oauth?invalid="+c.page {
+			if at.Path != "/" || at.Fragment != "/oauth?invalid="+c.page || at.Query().Get("code") != "" {
 				t.Errorf("%s: sent to %s, want Canyon's page for %s", name, at, c.page)
 			}
 			continue
@@ -457,8 +457,10 @@ func TestOAuthIsServedOnlyWithSignInOnOverTLS(t *testing.T) {
 func TestTheSessionsListIsYoursAndAnAdminsAll(t *testing.T) {
 	base, pool, ctx, gina := oauthHost(t)
 	admin := signedIn(t, ctx, pool, base, "sub-ana", "ana@meridian.example", true)
-	if _, err := pool.Exec(ctx, `INSERT INTO sessions (id, actor_kind, actor_subject, actor_display, email, flow, expires_at, oauth_client, oauth_client_name, resource, scope)
-		VALUES ('`+strings.Repeat("ab", 32)+`', 'person', 'sub-gina', 'sub-gina', 'gina@meridian.example', 'oauth', now() + interval '1 day', 'dcr_x', 'Claude Code', 'http://localhost:7777/mcp', '{read}')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO sessions (id, actor_kind, actor_subject, actor_display, email, flow, expires_at, oauth_client, oauth_client_name, resource, scope,
+		access_hash, access_expires_at, refresh_hash)
+		VALUES ('`+strings.Repeat("ab", 32)+`', 'person', 'sub-gina', 'sub-gina', 'gina@meridian.example', 'oauth', now() + interval '1 day', 'dcr_x', 'Claude Code', 'http://localhost:7777/mcp', '{read}',
+		'\x01', now() + interval '1 hour', '\x02')`); err != nil {
 		t.Fatal(err)
 	}
 	var mine struct {

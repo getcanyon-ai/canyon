@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Version is what the User-Agent and `canyon --version` say; cmd/canyon stamps it.
@@ -80,16 +81,20 @@ type app struct {
 	declined bool            // an exit 1 the person chose, not one a host handed back
 	http     *Client
 	conf     *config
-	other    *config          // the hosts/ file http's session came from: nil when config.json holds that host, or hosts/ holds no file for it this CLI will use
-	ignored  map[string]bool  // the files ignore() has named this invocation, each once
-	live     io.Writer        // stdout while park() has the narration parked (park.go)
-	parked   *strings.Builder // the parked transcript under ai; nil under json, which discards it
-	wrote    string           // what §3.2's setup wrote this run, for the ai block to say
-	moved    string           // §3.6's main-moved line when the deploy went on, for the ai block to say
-	notice   *noticeCheck     // the once-a-day check in flight, nil when none is due (notice.go)
-	noticed  bool             // whether this invocation has decided about the notice: once, at the verb's parse
-	wd       string           // the directory the verb runs in: "" is the process's, an MCP tool's dir otherwise (mcp.go)
-	named    string           // the app an MCP tool names, in place of the one canyon.toml names
+	other    *config                                        // the hosts/ file http's session came from: nil when config.json holds that host, or hosts/ holds no file for it this CLI will use
+	ignored  map[string]bool                                // the files ignore() has named this invocation, each once
+	live     io.Writer                                      // stdout while park() has the narration parked (park.go)
+	parked   *strings.Builder                               // the parked transcript under ai; nil under json, which discards it
+	wrote    string                                         // what §3.2's setup wrote this run, for the ai block to say
+	moved    string                                         // §3.6's main-moved line when the deploy went on, for the ai block to say
+	notice   *noticeCheck                                   // the once-a-day check in flight, nil when none is due (notice.go)
+	noticed  bool                                           // whether this invocation has decided about the notice: once, at the verb's parse
+	wd       string                                         // the directory the verb runs in: "" is the process's, an MCP tool's dir otherwise (mcp.go)
+	named    string                                         // the app an MCP tool names, in place of the one canyon.toml names
+	handoff  time.Duration                                  // an MCP tool's: how long a run is followed before the tool hands it off; 0 is the verb's own ceiling
+	onRow    func(timelineRow)                              // an MCP tool's: each row of the run this invocation follows, for its progress
+	ended    *checkRun                                      // the run a verdict was rendered for, which an MCP tool's result carries
+	elicit   func(question, ships string) (asked, yes bool) // an MCP client's answer to production's question about what ships; nil where nothing can ask
 }
 
 // getwd is the directory the verb runs in.

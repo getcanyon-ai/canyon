@@ -205,7 +205,7 @@ $ canyon deploy --env prod --version v1.3 --reason "INC-2231: v1.4 corrupts expo
   Production gets the image it ran on 2 Oct.                                          (proposed)
   Canyon puts back the code, not the data, the secrets or the outbound rules: v1.3 runs against production as v1.4 left it.
 
-  Promote claims-portal to production? [y/N] y
+  Put claims-portal v1.3 back in production, replacing v1.4? [y/N] y
 
   Promote
   │ deploying to production

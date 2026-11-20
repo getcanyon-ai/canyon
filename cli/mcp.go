@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/getcanyon-ai/canyon/internal/mcptools"
@@ -46,12 +49,13 @@ func (nopCloser) Close() error { return nil }
 // mcpServer is the local server: the read tools and resources, and instructions read once, now.
 func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: Version}, &mcp.ServerOptions{Instructions: a.mcpInstructions(ctx)})
-	for _, t := range mcptools.Tools() {
+	for _, t := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
 		t := mcptools.Local(t)
 		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			var args struct {
-				mcptools.LogsArgs        // the widest: the rules' and status's are its app alone
-				Dir               string `json:"dir"`
+			var args struct { // every tool's, each schema taking its own
+				App, Env, Version, Reason, Dir string
+				Lines                          int
+				Confirm                        bool
 			}
 			if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
 				return toolRefused(err), nil
@@ -69,6 +73,16 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 					return toolRefused(err), nil
 				}
 				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: out}}, StructuredContent: json.RawMessage(out)}, nil
+			case mcptools.Check:
+				return a.mcpVerdict(ctx, req, dir, command{name: "check", run: runCheck}), nil
+			case mcptools.Deploy:
+				verb := []string{}
+				if args.App != "" {
+					verb = append(verb, "--app", args.App)
+				}
+				return a.mcpVerdict(ctx, req, dir, command{name: "deploy", run: runDeploy}, verb...), nil
+			case mcptools.Promote:
+				return a.mcpPromote(ctx, req, dir, args.App, args.Version, args.Reason, args.Confirm), nil
 			}
 			verb := []string{"--format", "ai", "--redaction", "masked", "--env", args.Env, "--lines", strconv.Itoa(args.Lines)}
 			if args.App != "" {
@@ -165,13 +179,122 @@ func (a *app) sub(ctx context.Context, dir string) *app {
 // verbIn runs `canyon <verb> <args>` in dir, as the app named when it names one: what it printed, or its refusal.
 func (a *app) verbIn(ctx context.Context, dir, named string, verb command, args ...string) (string, error) {
 	c := a.sub(ctx, dir)
-	c.args, c.named, c.verb = append([]string{verb.name}, args...), named, verb
-	code := verb.run(ctx, c, args)
-	c.remember() // a session it rotated outlives the call that earned it, as main's
-	if code != exitOK {
-		return "", errors.New(strings.TrimSpace(c.out.(*strings.Builder).String() + c.err.(*strings.Builder).String()))
+	c.named = named
+	if code := c.run(verb, args...); code != exitOK {
+		return "", errors.New(c.said())
 	}
 	return c.out.(*strings.Builder).String(), nil
+}
+
+// run runs `canyon <verb> <args>` as this invocation, its exit code.
+func (a *app) run(verb command, args ...string) int {
+	a.args, a.verb = append([]string{verb.name}, args...), verb
+	code := verb.run(a.ctx, a, args)
+	a.remember() // a session it rotated outlives the call that earned it, as main's
+	return code
+}
+
+// said is everything this invocation printed, stdout then stderr.
+func (a *app) said() string {
+	return strings.TrimSpace(a.out.(*strings.Builder).String() + a.err.(*strings.Builder).String())
+}
+
+// mcpVerdict is canyon_check and canyon_deploy: the verb under ai, its block as text, and the verdict typed,
+// with the run's SARIF log as the host serves it. A run followed past the hand-off is state running.
+func (a *app) mcpVerdict(ctx context.Context, req *mcp.CallToolRequest, dir string, verb command, args ...string) *mcp.CallToolResult {
+	c := a.sub(ctx, dir)
+	c.handoff, c.onRow = mcptools.Handoff, progress(ctx, req)
+	code := c.run(verb, append([]string{"--format", "ai"}, args...)...)
+	res := &mcp.CallToolResult{IsError: code == exitError, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
+	run := c.ended
+	if run == nil { // refused before any verdict: the verb's lines alone
+		return res
+	}
+	// Every string as the terminal shows it (cell): a host's or an app's control bytes never reach the client raw.
+	// The SARIF log is the host's JSON byte for byte, as the contract hands it on, and JSON escapes them.
+	v := mcptools.Verdict{Run: cell(run.Run), State: cell(run.Result.State), FailureReason: cell(run.Result.FailureReason), Blocking: run.Result.Blocking, Warnings: run.Result.Warnings}
+	switch {
+	case code == exitStillRunning:
+		v.State, v.FleetURL = "running", cell(run.Host+"/#/apps/"+run.App)
+	case v.State == "clean" || v.State == "blocked":
+		if err := c.http.getUpTo(ctx, "/api/v1/gate-runs/"+url.PathEscape(run.Run)+"/sarif", timelineLimit, &v.Findings); err != nil {
+			res.IsError = true // a verdict without its findings is never handed on as one
+			res.Content = append(res.Content, &mcp.TextContent{Text: c.sub(ctx, dir).refusal(err).Error()})
+			return res
+		}
+	}
+	if d := run.Deploy; d != nil {
+		v.URL = cell(d.URL)
+		for _, line := range run.Access {
+			v.Access = append(v.Access, cell(line))
+		}
+		if w := d.Answered; w != nil {
+			v.Answered, _ = json.Marshal(answered{Status: w.Status, Said: cell(w.Said), Error: cell(w.Error)}) // a struct of strings: it marshals
+		}
+	}
+	res.StructuredContent = v
+	return res
+}
+
+// mcpPromote is canyon_promote: canyon deploy --env prod under ai, with --yes only where confirm says the
+// person asked for production. A client that can ask the person is asked the CLI's question, where the verb
+// would ask it, as an input request (SEP-2322): this call ends before anything is sent, and the client calls
+// again with the answer, which the verb, reading the receipt again, takes as the person's.
+func (a *app) mcpPromote(ctx context.Context, req *mcp.CallToolRequest, dir, named, version, reason string, confirm bool) *mcp.CallToolResult {
+	c := a.sub(ctx, dir)
+	c.named, c.handoff = named, mcptools.Handoff
+	args := []string{"--format", "ai", "--env", "prod"}
+	if version != "" {
+		args = append(args, "--version", version)
+	}
+	if reason != "" {
+		args = append(args, "--reason", reason)
+	}
+	var wanted, id string
+	if caps := req.Session.InitializeParams().Capabilities; caps != nil && caps.Elicitation != nil { // a client that can ask the person always does: confirm is the agent's word, not theirs
+		c.elicit = func(question, ships string) (asked, yes bool) {
+			id = promoteAsk(question, ships)
+			if answer, answered := req.Params.InputResponses[id].(*mcp.ElicitResult); answered { // an answer to this question about this release, and no other
+				return true, answer.Action == "accept"
+			}
+			wanted = question
+			return false, false
+		}
+	} else if confirm {
+		args = append(args, "--yes")
+	}
+	code := c.run(command{name: "deploy", run: runDeploy}, args...)
+	if wanted != "" { // nothing was sent: the person is asked, and the client calls again with the answer
+		return &mcp.CallToolResult{InputRequests: mcp.InputRequestMap{id: &mcp.ElicitParams{Message: wanted,
+			RequestedSchema: &jsonschema.Schema{Type: "object", Properties: map[string]*jsonschema.Schema{}}}}}
+	}
+	return &mcp.CallToolResult{IsError: code == exitError && !c.declined, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
+}
+
+// promoteAsk is production's question's id among a call's input requests: a digest of the question, which names
+// the app and the version, and of what ships under that label. The client answers under it, and a retry takes only
+// the answer to the question it would ask now: where preview moved between the two, the person is asked again.
+func promoteAsk(question, ships string) string {
+	sum := sha256.Sum256([]byte(question + "\x00" + ships))
+	return "promote-" + hex.EncodeToString(sum[:12])
+}
+
+// progress is a tool call's progress notifications, one per progress row of the run it follows; nil where
+// the client asked for none.
+func progress(ctx context.Context, req *mcp.CallToolRequest) func(timelineRow) {
+	token := req.Params.GetProgressToken()
+	if token == nil {
+		return nil
+	}
+	n := 0
+	return func(row timelineRow) {
+		var p struct{ Step, Tool, Status string }
+		if row.Kind != "progress" || json.Unmarshal(row.Data, &p) != nil {
+			return
+		}
+		n++
+		_ = req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{ProgressToken: token, Progress: float64(n), Message: cell(strings.TrimSpace(p.Step+" "+p.Tool) + ": " + p.Status)})
+	}
 }
 
 // refusal is err as the CLI says it: §9's lines, the verb's own where it has some.
@@ -197,9 +320,14 @@ func (a *app) dirApp() string {
 	return p.App
 }
 
-// toolDir is a tool's dir, against the server's own directory where it's relative or omitted.
+// toolDir is a tool's dir, against the server's own directory where it's relative or omitted, links
+// resolved. It must be that directory or one under it: an agent that reaches Canyon only through these
+// tools can't have canyon_deploy package ~/.ssh or the whole home directory.
 func (a *app) toolDir(dir string) (string, error) {
 	wd, err := a.getwd()
+	if err == nil {
+		wd, err = filepath.EvalSymlinks(wd)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -209,5 +337,12 @@ func (a *app) toolDir(dir string) (string, error) {
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(wd, dir)
 	}
-	return filepath.Clean(dir), nil
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("dir %q can't be read: %s", dir, plainly(err))
+	}
+	if rel, err := filepath.Rel(wd, resolved); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("dir %q is outside %s, the directory canyon mcp runs in: a tool reads only that directory and the ones under it", dir, wd)
+	}
+	return resolved, nil
 }

@@ -2567,7 +2567,7 @@ $ canyon deploy --env prod
   Promoting v1.4 (passed review) from preview to production. It replaces v1.3.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
 
-  Promote claims-portal to production? [y/N] y
+  Promote claims-portal v1.4 to production? [y/N] y
 
   Promote
   │ postgres db: creating
@@ -2582,6 +2582,10 @@ $ canyon deploy --env prod
 
   Done in 1.9s
 ```
+
+The question names what ships, the version preview runs as the first line names it (**amended 2026-11-20**,
+design/specs/mcp.md §1.1: the person answering it sees what goes to production): `Promote claims-portal v1.4 to
+production?`. `canyon_promote` asks a person through an MCP client the same question, byte for byte.
 
 `[y/N]` — defaulted to **no**, unlike the setup prompt. Anything that puts code in front of
 customers defaults to no: Enter exits `1` having sent nothing, and a terminal that cannot be asked
@@ -2957,8 +2961,10 @@ that passes, or whose every blocking finding is approved, is followed by its rec
 (`GET /status?run=`). A receipt that refuses is the refusal above. Its `ships` must name the image
 production ran, the one the review was asked for: one that names another, or none, promotes nothing,
 exit `1`: `v1.3's review doesn't name the image production ran, so nothing was promoted`. The lines
-then say what ships — `ships.version` — what it replaces and what is not put back; the question is
-promotion's, and the promotion is the existing route's, of that review's run. Everything after the
+then say what ships — `ships.version` — what it replaces and what is not put back; the question names
+both: `Put claims-portal v1.2 back in production, replacing v1.4?`, or `Put claims-portal v1.2 back in
+production?` where production runs nothing (**amended 2026-11-20**, as §6.3's), and `canyon_promote` asks it
+the same; everything else about it is promotion's, and the promotion is the existing route's, of that review's run. Everything after the
 question — `--yes`, the dashboard's approval and `--wait`, the Promote lines, the PROMOTED,
 WAITING FOR APPROVAL and FAILED blocks — is the promotion's above, `replaced` reading `nothing,
 production runs nothing now` when nothing runs there. Every line that says what to run again names
@@ -4014,6 +4020,17 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   checks, refusals and lines are the verb's own: `canyon_status` is `canyon status --format json`, `canyon_logs` is
   `canyon logs --format ai` on the masked read (`redaction=masked`, at most 200 lines, never followed), and
   `canyon_rules` is `canyon manifest`'s read, the typed manifest as structured content and the agent's rendering as text.
+- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`: the block as text,
+  and the verdict typed, `{run, state, failure_reason?, blocking, warnings, findings}`, `findings` the run's SARIF log as
+  `GET /gate-runs/:id/sarif` serves it, and a deploy's `url`, `answered` and `access`. Each `progress` row of the run is a
+  progress notification. Past 10 minutes the tool stops following: §3.5's still-running block, `state: "running"`, the
+  run and `fleet_url`, and the run goes on.
+- **`canyon_promote`** is `canyon deploy --env prod` under `--format ai`. Where the client can ask the person, §6.3's
+  question goes to them at the point the verb asks it, as an input request, whatever `confirm` says; a no prints
+  `Nothing was promoted.` Where it can't, only `confirm` sends `--yes`, and without it the verb's block has the agent
+  ask the user.
+- **`dir`** is the server's directory or one under it, links resolved; any other is refused before anything is read
+  or sent, so no tool packages a home directory.
 - **The instructions** are D5's preamble and then the manifest as `canyon manifest --format ai` prints it, read once at
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.

@@ -28,6 +28,10 @@ Policies for production only:
 - Approved stacks only (only warns)
 - Every app has an owner (only warns)
 
+Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded.
+- incident-notes: What our incidents taught us. When: Read when you handle a database error or a retry.
+- service-conventions: How Meridian writes a service. When: Read before you add a route or a query to a Meridian service.
+
 Resources an app can declare in canyon.toml: postgres, s3
 
 Approved stacks:

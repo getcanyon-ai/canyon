@@ -4035,6 +4035,23 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.
 - It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
+### 6.15 `canyon playbook`
+
+**Added 2026-11-20** (design/specs/mcp.md §3.3; contracts/routes.md, the playbooks row). It prints one of the org's
+playbooks, its body as its admin wrote it, for an agent whose harness has no MCP and for a finding whose rule points at
+one (§5.2, `then:`). Every member reads it, and the host counts it as a read by the CLI (`?read=cli`):
+
+```
+$ canyon playbook service-conventions
+# Writing a Meridian service
+
+Every route reads its input through the request schema, and every query passes it as a bound parameter:
+…
+```
+
+A slug that names no playbook that stands is `✗ No playbook <slug> in this org. canyon manifest lists its playbooks.`,
+exit 1; no slug is a usage line. A character the host would never send in a body (a control character but a newline
+and a tab) prints visibly, as every host string does. `--format json` prints the host's answer as it came.
 
 ## 7. The harness skill
 
@@ -4866,6 +4883,22 @@ custom rule the host handed `instructions` for (contracts/routes.md: one that bl
 under `Your org's own rules (written by its admins):` as `- <name>`, then its text, every line of it
 indented two spaces, so no line of it reads as a heading of Canyon's. The person's rendering is
 unchanged.
+
+**The org's playbooks** (amended 2026-11-20, design/specs/mcp.md §3.3). After the org's own rules, the agent rendering
+hands each playbook that stands under `Your org's playbooks, how it builds, written by its admins. Before a task, read
+each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are
+loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
+`Playbooks` as `<name>  <kind>  <slug>  version <n>`.
+
+**Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
+hook syncs each playbook that is a `skill` into the harness's own skills, `~/.claude/skills/canyon-<slug>/SKILL.md` and
+`~/.agents/skills/canyon-<slug>/SKILL.md`: frontmatter `name` the slug and `description` its `when`, both as JSON
+strings, then its body. Each directory it writes holds a `.canyon` file, `{host, version}`; the hook touches no
+directory without one, nor one another host's sync wrote. Its manifest request names what it holds,
+`held=<slug>@<version>`, so the host counts this machine; it then fetches only a skill whose version changed
+(`?read=sync`, a sync and no read), writing `SKILL.md` and then the marker, and removes a directory of its own whose
+playbook was removed or became a note. It shares the hook's seconds, gives up when they run out, and never says
+anything or fails the session: the next session tries again. `canyon skill uninstall` removes every marked directory.
 
 **An AI twin is its policy's, said once** (amended 2026-11-07, #2694: in a run of the docs' tour, the
 session listed `No hand-built SQL from user input` under `Policies that block:` and `No hand-built SQL

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,7 @@ type manifest struct {
 	DesignSystem   *designSystem    `json:"design_system"`
 	ProdApproval   bool             `json:"prod_approval"` // a person approves production in the dashboard (contracts/routes.md)
 	AppAdditions   []appAddition    `json:"app_additions"` // the app's own stricter states, asked for with ?app= (contracts/routes.md)
+	Playbooks      []handedPlaybook `json:"playbooks"`     // the org's playbooks, never a body (contracts/routes.md, playbooks[])
 	App            string           `json:"-"`             // the app this directory's canyon.toml names, "" outside one
 	Outbound       bool             `json:"-"`             // the host's via is canyon (GET /api/v1/egress): the agent's manifest says outbound
 }
@@ -60,6 +62,15 @@ type manifestPolicy struct {
 	How          string `json:"how,omitempty"`          // how to pass a Canyon rule, Canyon's own line, where the rule blocks (contracts/routes.md)
 	Instructions string `json:"instructions,omitempty"` // a custom rule's text, as its admin wrote it, where the rule blocks (contracts/routes.md)
 	Says         string `json:"says,omitempty"`         // beside it, on a rule checked by code, the condition Canyon checks (#2639)
+}
+
+// handedPlaybook is one of the org's playbooks as an agent is handed it: by slug, with when to read it.
+type handedPlaybook struct {
+	Slug    string `json:"slug"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	When    string `json:"when"`
+	Version int    `json:"version"`
 }
 
 type stack struct {
@@ -120,6 +131,16 @@ func runManifest(ctx context.Context, a *app, args []string) int {
 	if hook { // a session start never waits on Canyon (#2703)
 		within = hookWithin
 	}
+	skills := skillsDir(a.getenv("HOME"), harness) // the harness's own skills: a playbook that is a skill syncs there (design/specs/mcp.md §3.3)
+	held := map[string]int{}
+	if hook && skills != "" {
+		held = syncedSkills(skills, client.Base)
+		sep := "?"
+		if strings.Contains(at, "?") {
+			sep = "&"
+		}
+		at += sep + "held=" + heldQuery(held)
+	}
 	began := a.clock.now()
 	err = client.do(ctx, http.MethodGet, at, "", nil, 0, nil, http.StatusOK, within, answerLimit, &read)
 	if err == nil && read.Host == "" { // a 200 of some other shape is some other service, not an org with nothing set: the host is the one field the contract never leaves empty
@@ -132,6 +153,9 @@ func runManifest(ctx context.Context, a *app, args []string) int {
 		return a.emit(harness, refreshed+a.hookSays(err))
 	case hook || a.render.Format == FormatAI: // an agent reads it: written for one (cli.md §7.4)
 		read.Outbound = viaCanyon(ctx, client, within-a.clock.now().Sub(began)) // what is left of the hook's seconds
+		if hook {
+			syncSkills(ctx, client, skills, read.Playbooks, held, within-a.clock.now().Sub(began))
+		}
 		return a.emit(harness, refreshed+agentManifest(read, hook))
 	}
 	return a.emit(harness, renderManifest(read))
@@ -316,13 +340,17 @@ func renderManifest(m manifest) string {
 		}
 		app.add(strings.Join(append(line, "set by "+setter(add.SetBy)), "  "))
 	}
+	playbooks := section{label: "Playbooks"}
+	for _, p := range m.Playbooks { // the dashboard's card: name, kind, slug, version
+		playbooks.add(cell(p.Name) + "  " + cell(p.Kind) + "  " + cell(p.Slug) + "  version " + strconv.Itoa(p.Version))
+	}
 	prod := section{label: "Production", lines: []string{"promoted from the CLI or the dashboard"}}
 	if m.ProdApproval {
 		prod.lines = []string{"approved by a person in the dashboard"}
 	}
 	var b strings.Builder
 	b.WriteString("What your agents are handed\n")
-	for _, s := range []section{host, policies, app, types, stacks, ds, prod} {
+	for _, s := range []section{host, policies, app, playbooks, types, stacks, ds, prod} {
 		if len(s.lines) == 0 {
 			continue
 		}
@@ -413,6 +441,10 @@ func foldTwin(scanner, twin manifestPolicy) (manifestPolicy, string, bool) {
 // outboundHanded is what an agent's manifest says of outbound while the host's via is canyon (cli.md §7.4): the
 // names refused in every mode are no one's to allow (design/EGRESS.md §3.3).
 const outboundHanded = "Outbound: an app's environment may be under an allowlist, where Canyon refuses calls to any outside service not on it. Only a person on the app's team can allow a new one, in Canyon's dashboard; you cannot. Never try to reach a refused service another way. Canyon also refuses any call out to the internet to an IP address, a one-word host name or a port other than 80 and 443, and no one can allow it: call a host name on 80 or 443."
+
+// playbooksHanded heads the org's playbooks in an agent's manifest, each then one line (cli.md §7.4; design/specs/mcp.md
+// §3.3): the agent reads one whose when fits its task, by its slug.
+const playbooksHanded = "Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded."
 
 // secretsHanded is what an agent's manifest always says of secrets (cli.md §7.4, #2737).
 const secretsHanded = "Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there."
@@ -523,6 +555,12 @@ func agentManifest(m manifest, hook bool) string {
 	}
 	if len(own) > 0 {
 		b.WriteString("\nYour org's own rules (written by its admins):\n" + strings.Join(own, "\n") + "\n")
+	}
+	if len(m.Playbooks) > 0 {
+		b.WriteString("\n" + playbooksHanded + "\n")
+		for _, p := range m.Playbooks {
+			b.WriteString("- " + cell(p.Slug) + ": " + cell(p.Name) + ". When: " + cell(p.When) + "\n")
+		}
 	}
 	if len(m.AppAdditions) > 0 {
 		b.WriteString("\nThis app (" + cell(m.App) + ") holds these stricter than the org's, set by its team:\n")

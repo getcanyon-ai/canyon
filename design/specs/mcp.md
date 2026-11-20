@@ -31,6 +31,7 @@ because a device code shown inside a tool result would have the agent driving th
 | Tool | Does | Calls | Result |
 |---|---|---|---|
 | `canyon_rules` | The org's rules, and the app's additions with `app` | `GET /api/v1/skill/manifest?app=` | the manifest, typed (`guardrails.schema.json#/properties/manifest`) |
+| `canyon_playbook` | One playbook's body, by `slug` (§3) | `GET /api/v1/playbooks/:slug` | the playbook's Markdown, with its `name`, `kind` and `version` |
 | `canyon_check` | Reviews a directory without deploying, as `canyon check` | `POST …/packages` (a check's), `POST …/gate-runs`, then polls | the verdict (below) |
 | `canyon_deploy` | Deploys a directory to preview, as `canyon deploy` | `POST …/packages`, `POST …/deploys`, then polls | the verdict, and on success the deploy's `url`, `answered` and access line |
 | `canyon_status` | The app's environments, receipt and needs, as `canyon status` | `GET …/status` | the status read, as the caller's level trims it (§4) |
@@ -47,7 +48,7 @@ because a device code shown inside a tool result would have the agent driving th
   - The text `content` is the CLI's `--format ai` block for the same outcome (`design/specs/cli.md` §5.2), so an agent that reads only text reads what it reads today.
   - No tool result is a new shape where an existing one fits.
 - **Annotations.**
-  - `canyon_rules`, `canyon_status` and `canyon_logs` are `readOnlyHint`.
+  - `canyon_rules`, `canyon_playbook`, `canyon_status` and `canyon_logs` are `readOnlyHint`.
   - `canyon_check` writes a check's package and a run.
   - `canyon_deploy` and `canyon_promote` are `destructiveHint: false, idempotentHint: false`.
   - `canyon_promote` is `openWorldHint`, because it changes what customers reach.
@@ -67,12 +68,12 @@ because a device code shown inside a tool result would have the agent driving th
 
 ### 1.3 Instructions and resources
 
-- **The server's `instructions`** are the org manifest as `canyon manifest --harness <h>` renders it today (cli.md §7.4), read once at `initialize`. A client that puts instructions in the model's context therefore gives the agent the org's rules with no hook. The session hook stays where it's installed, because a client may ignore instructions.
+- **The server's `instructions`** are the org manifest as `canyon manifest --harness <h>` renders it today (cli.md §7.4), read once at `initialize`. A client that puts instructions in the model's context therefore gives the agent the org's rules with no hook. The session hook stays where it's installed, because a client may ignore instructions. The instructions list each playbook's name and `when` line, and say to call `canyon_playbook` with its slug (§3).
 - **Resources**, so a client can attach one on demand:
   - `canyon://manifest`: the typed manifest.
   - `canyon://manifest/<app>`: the manifest with that app's additions.
-  - `canyon://playbooks/<slug>`: one playbook's body (§3).
-- A resource read is the same route call as the tool, at the same level.
+  - `canyon://playbooks/<slug>`: one playbook's body (§3), the same as `canyon_playbook`.
+- A resource read is the same route call as the tool, at the same level. Many clients never attach a resource on their own, so nothing depends on one: each resource has a tool that returns the same thing.
 
 ### 1.4 `canyon skill install` writes MCP config too
 
@@ -118,7 +119,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   3. Canyon shows a consent screen: the client's name and redirect host, which account, and the scopes it asks for.
   4. The person allows it.
 - **Two scopes, from v1:**
-  - `read`: `canyon_rules`, `canyon_status`, `canyon_logs` and every resource.
+  - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource.
   - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`.
   - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope`, with the scope it needs, as the MCP authorization specification asks.
   - `canyon mcp` uses the CLI's session, which acts.
@@ -163,24 +164,62 @@ org-managed settings. Docs ship one page per agent (`docs/start/agents/`) with t
 ## 3. Org playbooks
 
 Platform teams keep their own skills and architecture notes in Canyon, and Canyon hands them to
-every agent the way it hands out the rules.
+every agent the way it hands out the rules. Playbooks are part of the free core, not Canyon
+Enterprise (decided).
 
-- **What a playbook is.** `{slug, name, kind, when, body, version, updated_by, updated_at}`:
-  - `kind`: `skill` or `note`;
-  - `when`: one line on when to read it, at most 200 characters, which the manifest carries;
+### 3.1 What a playbook is
+
+- **Its fields:** `{slug, name, kind, when, body, version, updated_by, updated_at}`.
+  - `slug`: 1 to 40 of `a-z`, `0-9` and `-`, beginning with a letter.
+  - `kind`: `skill` or `note`.
+  - `when`: one line on when to read it, at most 200 characters.
   - `body`: Markdown, at most 64 KiB.
-  - An org keeps at most 50.
-- **Where they're kept.** Guardrails › Playbooks. Writing one is an admin's act, a person's, from a browser (`person_required`, `dashboard_required`), as a custom rule's instructions are.
-- **Versions and audit.**
-  - Every save is a new `version`, and every version is kept.
-  - The audit log gets `set playbook` (`detail{slug, version, diff}`) and `remove playbook`.
-  - A removal keeps its versions, readable to admins.
-- **How they reach agents:**
-  - The manifest gains `playbooks[]`: `{slug, name, kind, when, version}`, never the body, so the session hook's context stays small.
-  - MCP serves each body as `canyon://playbooks/<slug>`, and the server `instructions` name them.
-  - `canyon playbook <slug>` prints a body for hook-only harnesses.
-- **What a body must not hold.** It is org-written text handed to a model, so the save refuses one that holds anything Canyon's secret scanners flag, as a custom rule's instructions are held.
-- **Free.** Playbooks are part of the free core, not Canyon Enterprise (decided).
+- **Limits:** an org keeps at most 50.
+- **A playbook never loosens the review.** The gate's AI review never reads playbooks, and no playbook text reaches a rule's evaluation.
+- **A playbook or a rule?** A rule is what Canyon checks, and blocks on. A playbook is how the org builds, which an agent reads and Canyon never checks. A rule may point at a playbook (§3.4).
+
+### 3.2 Authoring: Guardrails › Playbooks
+
+- **The list:** name, kind, `when`, version, updated by and at, and reads in the last 30 days (§3.5).
+- **The editor:** Markdown with a preview, saving a new version each time.
+- **History:** every version is kept, with a diff between any two. A restore saves an old version's text as a new version.
+- **Import:** paste or upload a `SKILL.md`. Its frontmatter `name` fills `slug`, `description` fills `when`, and the rest is the body, as `kind: skill`.
+- **Who writes:** an admin, a person, from a browser (`admin_required`, `person_required`, `dashboard_required`), as a custom rule's instructions are.
+- **Audit:** `set playbook` (`detail{slug, version, diff}`), `restore playbook` and `remove playbook`. A removal keeps its versions, readable to admins.
+- **What a body must not hold.** It is org-written text handed to a model, so a save is refused when Canyon's secret scanners flag anything in it, as a custom rule's instructions are held.
+- **No git sync in v1.** Playbooks live in Canyon alone. Syncing them from a repository is filed as a follow-up only if asked.
+
+### 3.3 How agents get them
+
+- **The manifest** gains `playbooks[]`: `{slug, name, kind, when, version}`, never the body, so the session hook's context stays small. The manifest's text says to read a playbook whose `when` fits, and how.
+- **The tool `canyon_playbook {slug}`**, on both servers: a signed-in member, scope `read`. It returns the body. Delivery never depends on a client attaching resources, which many never do.
+- **The resource `canyon://playbooks/<slug>`** returns the same body, for clients that use resources.
+- **`canyon playbook <slug>`** prints a body, for harnesses with no MCP.
+- **Native skills, where the harness has them.**
+  - A `kind: skill` playbook becomes a real skill:
+    - `~/.claude/skills/canyon-<slug>/SKILL.md` for Claude Code;
+    - `~/.agents/skills/canyon-<slug>/SKILL.md` for Codex, the path cli.md §7.1 records as checked on Codex 0.164.0.
+  - Each file's frontmatter `name` is the slug, its `description` is `when`, and the rest is the body.
+  - **What syncs them.** The session hook (`canyon manifest --harness <h>`) syncs that harness's directory at each session start. It fetches only a playbook whose version changed, and the agent sees a new skill from its next session.
+  - **What it touches.** It writes, updates and removes only the `canyon-*` directories it wrote, each marked by a `.canyon` file inside naming the host and version. A directory without that marker is never touched, so no other skill is. A playbook removed or turned into a note removes its directory.
+  - `canyon skill uninstall` removes them all.
+  - **No files elsewhere.** Cursor and `AGENTS.md` get none: they use the tool or `canyon playbook`. A `kind: note` playbook is never written to disk.
+
+### 3.4 Rules point at playbooks
+
+- **The link.** A custom rule gains an optional `playbook`, a slug. It's written as the rule is (an admin, a person, from a browser), and kept per rule version.
+- **On a finding.** A finding from that rule carries `properties.canyon.playbook` `{slug, name}`. That's a new optional field of the finding profile, beside `fix`, `required_end_state` and `do_not`, in `contracts/finding.md` and `finding.schema.json`.
+- **What the agent is told.** One more next step, after the fix:
+  - `Read the playbook <name>: canyon playbook <slug>`, in the CLI's `--format ai` block (cli.md §5.2) and on the dashboard's finding.
+  - Through MCP, the tool is named first: `Read the playbook <name>: call canyon_playbook with slug <slug>`.
+- **A removed playbook** drops the link. The snapshot carries `playbook` only while the playbook exists, so the finding carries none and the rule keeps working.
+
+### 3.5 Reads
+
+- **What's counted:** each fetch of a playbook, by tool, resource, `canyon playbook` or native-skill sync, counted per playbook per day per way.
+- **What isn't:** no row names a person; it's counts only.
+- **Where it shows:** the list's reads in the last 30 days, so the team sees whether agents use a playbook.
+- **Storage:** migration `playbook_reads`, numbered at merge (§6, item 10).
 
 ## 4. Permissions
 
@@ -197,10 +236,11 @@ result it wasn't allowed.
 | `canyon_check`, `canyon_check_ref` | contributor | `team_required` |
 | `canyon_deploy`, `canyon_deploy_ref` | contributor | `team_required` |
 | `canyon_promote` | contributor, and not held | `team_required` · `409 held` · the approval URL where a person approves production |
-| `canyon://playbooks/<slug>` | signed-in member | not signed in |
-| Playbook writes | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
+| `canyon_playbook`, `canyon://playbooks/<slug>`, `canyon playbook` | signed-in member; scope `read` | not signed in: the CLI's login line |
+| Playbook writes, restores and imports | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
+| A custom rule's `playbook` | as the rule itself: admin, a person, in a browser | as the rule's own refusals |
 
-- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level. The level still applies with the scope.
+- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level. The level still applies with the scope.
 
 - **Unchanged by MCP:**
   - Approving a finding (blocking findings stay a browser's, never the author's).
@@ -219,24 +259,29 @@ Named here, and edited later in the PR that builds each.
   - `/mcp` (POST, GET, DELETE), and the two `.well-known` metadata routes;
   - `/oauth/authorize`, `/oauth/token` and `/oauth/register`;
   - `POST /api/v1/projects/:id/packages/from-repository {ref}`;
-  - the playbook routes (`GET /api/v1/playbooks`, `GET|PUT|DELETE /api/v1/playbooks/:slug`, `GET …/:slug/versions`);
+  - the playbook routes (`GET /api/v1/playbooks`, `GET|PUT|DELETE /api/v1/playbooks/:slug`, `GET …/:slug/versions`, `POST …/:slug/restore {version}`), the reads in the list;
+  - `playbook` on `PUT /api/v1/custom-rules/:slug` and its `GET`;
+  - linking a repository (`PUT …/repository`) at contributor, on a repository the org's Canyon App sees (§10.1);
   - `playbooks[]` on `GET /skill/manifest`;
   - a session's `flow` gaining `oauth`;
   - a sessions list, `GET /api/v1/sessions`, new: a person's own sessions, and every session to an admin, with each OAuth client's name;
   - the `Canyon-Transport` header (§7);
   - each new route's minimum level in the Level table.
 - **contracts/schema/guardrails.schema.json:** `playbook`, `playbook_put` and `playbook_versions`, and `manifest.playbooks`.
+- **contracts/finding.md and finding.schema.json:** `properties.canyon.playbook` `{slug, name}`, optional, beside `fix`, `required_end_state` and `do_not`, with a golden in `contracts/testdata/` (§3.4).
+- **contracts/snapshot.md and snapshot.schema.json:** a custom rule's `playbook`, carried only while the playbook exists (§3.4).
 - **contracts/schema/telemetry.schema.json:** `agents_via` (§7).
-- **design/PERMISSIONS.md:** an *MCP* section (a tool is its route; an OAuth session is a person's session; consent is a browser's), and *Playbooks*.
+- **design/PERMISSIONS.md:** an *MCP* section (a tool is its route; an OAuth session is a person's session; consent is a browser's), *Playbooks*, and linking a repository moving from admin to contributor (§10.1), the first commit of PR 8.
 - **design/EXPERIENCE.md** (D5, D7):
   - the consent screen's lines, each scope's among them, and `insufficient_scope`'s;
   - the instructions' preamble;
   - `mcp_needs_sign_in`'s line;
   - elicitation's question (the CLI's own);
-  - the playbook screen's strings;
+  - the playbook screen's strings, its import and restore among them;
+  - a finding's playbook step, in both forms (§3.4);
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
-- **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1), and §7.2's skill text.
-- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
+- **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1) and the hook's native-skill sync, §7.2's skill text, and §5.2's playbook step.
+- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
 - **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
@@ -268,14 +313,17 @@ Each runs its acceptance in CI, and shows its new checks red first.
    - What: the read tools and `canyon_promote`, instructions and resources, and the sign-in-off refusal.
    - Acceptance: `make test PKG=./cmd/canyon-server RUN=TestMCPRemote` · `go test -tags oidc -run TestMCP ./e2e/oidc/` (the stack with sign-in, an MCP client through the full OAuth flow).
 8. **Packaging a linked repository's ref.**
-   - What: the route, and `canyon_check_ref` and `canyon_deploy_ref`.
-   - Acceptance: `make test PKG=./github-app RUN=TestPackRef` · `make test PKG=./cmd/canyon-server RUN=TestPackagesFromRepository`.
-9. **Playbooks, the server and dashboard.**
-   - What: the schema, routes, Guardrails › Playbooks, the audit, and the manifest's `playbooks[]`.
-   - Acceptance: `make test PKG=./cmd/canyon-server RUN=TestPlaybook` · `cd web && npx vitest run src/screens/Playbooks.test.tsx` · `python3 contracts/validate.py`.
+   - What: PERMISSIONS.md's change first (a contributor links their app to a repository the org's Canyon App sees), then the route, the link's new level, and `canyon_check_ref` and `canyon_deploy_ref`.
+   - Acceptance: `make test PKG=./github-app RUN=TestPackRef` · `make test PKG=./cmd/canyon-server RUN='TestPackagesFromRepository|TestAContributorLinksARepository'`.
+9a. **Playbooks, the server.**
+   - What: the seam commits first (finding.md's `playbook`, snapshot.md's, routes.md's playbook routes and the custom rule's `playbook`, guardrails.schema.json), then the playbooks migration, the routes, the audit, the manifest's `playbooks[]`, the rule link and the finding's step in the CLI's `--format ai` block.
+   - Acceptance: `python3 contracts/validate.py` · `make test PKG=./cmd/canyon-server RUN=TestPlaybook` · `make test PKG=./runs RUN=TestAFindingNamesItsRulesPlaybook` · `make test PKG=./cli RUN=TestAIBlockNamesThePlaybook`.
+9b. **Playbooks, the dashboard.**
+   - What: Guardrails › Playbooks: the list, the editor with preview, history with diff, restore, and import of a `SKILL.md`; the rule editor's playbook field; the finding's playbook step on the app page.
+   - Acceptance: `cd web && npx vitest run src/screens/Playbooks.test.tsx src/screens/CustomRules.test.tsx` · `make e2e-ui` (an admin writes, imports and restores; a contributor reads, and is refused a write).
 10. **Playbooks, handed out.**
-    - What: `canyon playbook`, and the playbook resources on both servers.
-    - Acceptance: `make test PKG=./cli RUN=TestPlaybook` · `make test PKG=./cmd/canyon-server RUN=TestMCPPlaybook`.
+    - What: `canyon_playbook` on both servers, the resource, `canyon playbook`, the hook's native-skill sync and its uninstall, and the read counts with their migration, `playbook_reads`.
+    - Acceptance: `make test PKG=./cli RUN='TestPlaybook|TestSkillSyncTouchesOnlyItsOwn'` · `make test PKG=./cmd/canyon-server RUN='TestMCPPlaybook|TestPlaybookReads'` · `make test PKG=./qa/agent`.
 11. **Distribution.**
     - What: `server.json`, the registry publish in the release workflow, install links, and per-agent docs.
     - Acceptance: `make docs-site docs-links` · `python3 contracts/validate.py` (server.json against the registry's schema).
@@ -354,13 +402,15 @@ A person whose agent has only the remote server's URL can get from code to produ
 What's missing for it:
 
 - **Setting a secret in the dashboard.** A Secrets section on the app page: set or replace a value per environment and `where`, and remove one. It needs contributor, as the route does. The value is typed into a password field, sent once, and never shown back. A new screen; the route is unchanged.
-- **Starting an app from a repository without an admin.** Linking a repository is an admin's act today (PERMISSIONS.md, *Manage access*), and the GitHub import is too. So a contributor on the zero-CLI path waits for an admin once per app. Whether a contributor may link a repository the org's Canyon App already sees is open question 9.
-- **A first deploy with no app yet.** `canyon deploy` makes the app on its first run. A remote agent makes it through the import: the same admin step.
+- **A contributor links their app to a repository** the org's Canyon App already sees (decided). Linking is an admin's act today (PERMISSIONS.md, *Manage access*); PR 8 moves it to contributor, PERMISSIONS.md first.
+- **A first deploy with no app yet.** `canyon deploy` makes the app on its first run, and nothing else does for a remote agent: no screen and no remote tool calls `POST /api/v1/projects`. The GitHub import, which makes an app from a repository, stays an admin's.
 
 ## 11. The demo and the tour
 
 - **The tour prompt installs everything.** Its first step runs `canyon skill install`, which writes the hook, the skill and the MCP config together (§1.4). The person's agent then has Canyon's tools in the same session, or after one restart where the harness loads MCP servers only at start; the tour says so.
 - **The chapters use MCP tools.** Each beat that runs `canyon check` or `canyon deploy` names `canyon_check` and `canyon_deploy` instead, with the shell command as the fallback when the tools aren't loaded. Each chapter is also an MCP prompt, `canyon_tour`, with `chapter` as its argument. The website's one-line prompt is unchanged.
+- **A seeded playbook.** The demo org has one playbook, `claims-portal-conventions`, `kind: skill`: a short note on how claims-portal's routes and queries are written, bound parameters among them, so the native-skill path shows. `demo/apps/run.sh` seeds it over the API, as it sets the design-system rule.
+- **One tour line reads it.** In the security chapter, before the one-line SQL fix, the agent reads the playbook (`canyon_playbook`, or `canyon playbook`). No new chapter.
 - **`canyon demo up` writes no agent config.** The tour prompt has the agent run `canyon skill install`, which the person sees in their own session.
 - **No URL chapter.** The demo has sign-in off, so its `/mcp` fails closed like every such host (§2.2), and the tour uses the local `canyon mcp` tools throughout. Its last beat says that a team install can also connect agents by URL over MCP, and links *Connect your agent* (§13).
 
@@ -371,6 +421,7 @@ What's missing for it:
   - **Per agent:** Claude Code, Codex, Cursor and VS Code each get their one-click install link where one exists (§8), and the CLI line `canyon skill install`.
   - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with this host's URL.
   - **Who sees it.** Every member sees the URL and the per-agent lines; only admins see the org-managed snippets, as they're for rolling out to everyone.
+- **Guardrails › Playbooks**, the authoring screen: §3.2.
 - **What agents receive.** The existing *What agents are told* view gains the two things an agent is now handed besides the rules:
   - the components (`component_types`) and stacks;
   - each playbook's `name`, `when` and version, with its body a click away.
@@ -383,13 +434,12 @@ What's missing for it:
   - **One click:** each agent's install link (§8).
   - **A URL:** on a team install with sign-in, add `https://<canyon>/mcp` to any MCP client, and allow it in the browser. The laptop demo has no sign-in, so it serves no URL: there, use the CLI.
   - The page links each agent's own page (`docs/start/agents/`) for the details, and §10 for what still needs the CLI.
+- **A new docs page, Playbooks** (`docs/org/playbooks.md`), for platform teams: what goes in a playbook and what in a rule, one worked example (a service-conventions skill and the custom rule that points at it), and how each agent gets it: a native skill in Claude Code and Codex, the tool through MCP, `canyon playbook` elsewhere.
 - **The website's FAQ.** The entry "Which coding agents work with Canyon?" answers today that Claude Code, Cursor and Codex connect with one command, `canyon skill install`. Once remote MCP ships, it also names connecting any MCP client with Canyon's URL. The change goes to the website's repository with that release; the wording is the lead's.
 
 ## Open questions
 
-For the owner:
-
-9. **A contributor links a repository.** Should a contributor link their app to a repository the org's Canyon App already sees, so the zero-CLI path needs no admin (§10.1)? It's a change to PERMISSIONS.md.
+None.
 
 ## Decided
 
@@ -401,3 +451,4 @@ For the owner:
 6. **MIT-0:** `segmentio/asm` gets an exception in `internal/tools/thirdparty/main.go`, named by the PR that adds the Go MCP SDK (§9).
 7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record (§8).
 8. **The demo and `/mcp`:** no URL chapter and no demo sign-in. The demo's `/mcp` fails closed like every host with sign-in off; the tour uses `canyon mcp`, and its last beat links *Connect your agent* (§11).
+9. **A contributor links a repository:** yes, to one the org's Canyon App already sees. PERMISSIONS.md changes as PR 8's first commit (§10.1).

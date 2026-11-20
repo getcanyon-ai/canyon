@@ -102,6 +102,9 @@ func runLogs(ctx context.Context, a *app, args []string) int {
 		return a.logsFail(err, app, env)
 	}
 	defer func() { _ = body.Close() }()
+	if got := header.Get("Canyon-Log-Redaction"); redaction != "" && got != redaction { // asked masked, answered otherwise: none of it is printed, as the dashboard refuses it
+		return a.fail(fmt.Errorf("%s answered the log of %s in %s with redaction %q, not %s, so none of it is printed: it wasn't masked", client.Base, app, env, got, redaction))
+	}
 	dot := a.dot()
 	what := fmt.Sprintf("last %d lines", lines)
 	if follow {

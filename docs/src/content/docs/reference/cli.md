@@ -38,6 +38,7 @@ SETUP
   login       Sign this machine in to a Canyon host
   logout      Revoke this machine's session on a Canyon host
   skill       Teach your coding agent to use Canyon
+  mcp         Serve Canyon's tools to your coding agent over MCP
   demo        Start, stop or take a tour of Canyon's demo on this machine
   version     Show the CLI version and which Canyon it talks to
   feedback    Ask for a feature or report a problem
@@ -387,6 +388,17 @@ USAGE
 FLAGS
   --format          auto | human | ai | json | sarif | csv
   --harness         claude-code | codex | cursor | agents-md | all    (default: claude-code, codex and cursor)
+  --host            Canyon host
+```
+
+## canyon mcp
+
+```text
+USAGE
+  canyon mcp [flags]
+
+FLAGS
+  --format          auto | human | ai | json | sarif | csv
   --host            Canyon host
 ```
 

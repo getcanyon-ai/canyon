@@ -30,12 +30,12 @@ because a device code shown inside a tool result would have the agent driving th
 
 | Tool | Does | Calls | Result |
 |---|---|---|---|
-| `canyon_rules` | The org's rules, and the app's additions with `app` | `GET /api/v1/skill/manifest?app=` | the manifest, typed (`guardrails.schema.json#/properties/manifest`) |
+| `canyon_rules` | The org's rules, and the app's additions with `app` | `GET /api/v1/skill/manifest?app=` | the manifest, typed (`guardrails.schema.json#/properties/manifest`), as `structuredContent` with no `outputSchema` |
 | `canyon_playbook` | One playbook's body, by `slug` (§3) | `GET /api/v1/playbooks/:slug` | the playbook's Markdown, with its `name`, `kind` and `version` |
 | `canyon_check` | Reviews a directory without deploying, as `canyon check` | `POST …/packages` (a check's), `POST …/gate-runs`, then polls | the verdict (below) |
 | `canyon_deploy` | Deploys a directory to preview, as `canyon deploy` | `POST …/packages`, `POST …/deploys`, then polls | the verdict, and on success the deploy's `url`, `answered` and access line |
 | `canyon_status` | The app's environments, receipt and needs, as `canyon status` | `GET …/status` | the status read, as the caller's level trims it (§4) |
-| `canyon_logs` | The app's last lines in one environment | `GET …/logs?env=&lines=&redaction=masked` | text, at most 500 lines |
+| `canyon_logs` | The app's last lines in one environment | `GET …/logs?env=&lines=&redaction=masked` | text, at most 200 lines, the masked read's limit |
 | `canyon_promote` | Promotes what preview runs, or puts back an earlier version, as `canyon deploy --env prod [--version]` | `GET …/status`, `POST …/promotions`, then polls | the promote block's fields, or the approval URL when a person approves production |
 
 - **Arguments.**
@@ -44,7 +44,8 @@ because a device code shown inside a tool result would have the agent driving th
   - `canyon_promote` takes `version` and `reason` for a rollback, and `confirm`.
   - Every argument is validated as the CLI validates its flags, and a refusal is the CLI's own line.
 - **Results reuse the findings contract.**
-  - A verdict's `structuredContent` is `{run, state, failure_reason?, blocking, warnings, findings}`. `findings` holds the run's results in Canyon's SARIF profile (`contracts/finding.md`), byte for byte as `GET /gate-runs/:id/sarif` serves them, and each tool's `outputSchema` references `finding.schema.json`.
+  - A verdict's `structuredContent` is `{run, state, failure_reason?, blocking, warnings, findings}`. `findings` holds the run's results in Canyon's SARIF profile (`contracts/finding.md`), byte for byte as `GET /gate-runs/:id/sarif` serves them.
+  - **No tool declares an `outputSchema`.** A client that holds a result to its tool's schema would reject a newer host's answer in an older CLI: the contracts are strict, and the manifest and the findings both gain fields (§3.4). The contracts stay strict where Canyon checks its own output; the tools hand on what the host answered.
   - The text `content` is the CLI's `--format ai` block for the same outcome (`design/specs/cli.md` §5.2), so an agent that reads only text reads what it reads today.
   - No tool result is a new shape where an existing one fits.
 - **Annotations.**
@@ -298,7 +299,7 @@ One PR per independent change, each off `main` and merged before the next starts
 Each runs its acceptance in CI, and shows its new checks red first.
 
 1. **`canyon mcp`, read tools.**
-   - What: `canyon_rules`, `canyon_status`, `canyon_logs`, the instructions and the manifest resources. The SDK dependency is in this PR, and so is the MIT-0 exception for `segmentio/asm` in `exceptions` in `internal/tools/thirdparty/main.go` (§9), named in the PR body.
+   - What: `canyon_rules`, `canyon_status`, `canyon_logs`, the instructions and the manifest resources. The SDK dependency is in this PR, its modules' licences in `internal/tools/thirdparty/licences.go` (§9), named in the PR body.
    - Acceptance: `make test PKG=./cli RUN=TestMCP` (an in-memory MCP client against a stub host) · `make third-party-notices-check` · `make test PKG=./cmd/canyon RUN=TestCLIIsApache`.
 2. **Local write tools.**
    - What: `canyon_check`, `canyon_deploy` and `canyon_promote`, with elicitation and `confirm`, progress, and the 10-minute hand-off.
@@ -374,11 +375,11 @@ Each runs its acceptance in CI, and shows its new checks red first.
 | `github.com/google/jsonschema-go` | MIT | the SDK's tool schemas |
 | `github.com/yosida95/uritemplate/v3` | BSD-3-Clause | resource templates |
 | `github.com/segmentio/encoding` | MIT | the SDK's JSON |
-| `github.com/segmentio/asm` (indirect) | MIT-0 | through segmentio/encoding |
+| `github.com/segmentio/asm` (indirect) | MIT | through segmentio/encoding |
 | `github.com/golang-jwt/jwt/v5` | MIT | the SDK's auth package |
 | `golang.org/x/oauth2`, `x/time`, `x/tools` | BSD-3-Clause | the SDK's |
 
-- **MIT-0 isn't on AGENTS.md's licence list.** It gets an `exceptions` entry in `internal/tools/thirdparty/main.go` (decided), added and named by the PR that adds the SDK (§6, item 1). AGENTS.md's list of exceptions names it in the same PR.
+- **Every licence is on AGENTS.md's list.** `segmentio/asm` v1.1.3, the version the build resolves, carries MIT, not MIT-0, so it needs no exception (corrected by §6, item 1, which read each module's LICENSE).
 - **The CLI stays Apache-2.0.** Every module above is compatible, and `TestCLIIsApache` keeps the CLI's own packages so.
 
 ## 10. What still needs the CLI
@@ -454,7 +455,7 @@ None.
 3. **Scopes:** two from v1, `read` and `act` (§2.2, §4).
 4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own (§8).
 5. **The demo and agent config:** `canyon demo up` writes none; the tour prompt has the agent run `canyon skill install`, which the person sees (§11).
-6. **MIT-0:** `segmentio/asm` gets an exception in `internal/tools/thirdparty/main.go`, named by the PR that adds the Go MCP SDK (§9).
+6. **MIT-0:** no exception. `segmentio/asm` v1.1.3 is MIT (§9), as the PR that adds the SDK found.
 7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record (§8).
 8. **The demo and `/mcp`:** no URL chapter and no demo sign-in. The demo's `/mcp` fails closed like every host with sign-in off; the tour uses `canyon mcp`, and its last beat links *Connect your agent* (§11).
 9. **A contributor links a repository:** yes, to one the org's Canyon App already sees. PERMISSIONS.md changes as PR 8's first commit (§10.1).

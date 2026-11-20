@@ -111,7 +111,7 @@ func runManifest(ctx context.Context, a *app, args []string) int {
 	}
 	var read manifest
 	at := "/api/v1/skill/manifest"
-	if dir, werr := os.Getwd(); werr == nil { // in an app's directory, its own rules too (cli.md §7.4); anywhere else, the org's
+	if dir, werr := a.getwd(); werr == nil { // in an app's directory, its own rules too (cli.md §7.4); anywhere else, the org's
 		if p, perr := readProject(dir); perr == nil {
 			read.App, at = p.App, at+"?app="+url.QueryEscape(p.App)
 		}

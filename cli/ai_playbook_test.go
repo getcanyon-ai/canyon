@@ -49,7 +49,7 @@ func TestAIBlockNamesThePlaybook(t *testing.T) {
 	}
 	var tool strings.Builder
 	viaMCP := aiApp(&tool, "check")
-	viaMCP.tools = true // canyon_check's verdict: the tool named first (design/specs/mcp.md §3.4)
+	viaMCP.transport = transportMCPLocal // canyon_check's verdict: the tool named first (design/specs/mcp.md §3.4)
 	viaMCP.verdict(playbookRun(t))
 	if want := strings.Replace(out.String(), "canyon playbook service-conventions", "call canyon_playbook with slug service-conventions", 1); tool.String() != want {
 		t.Errorf("through MCP the step rendered\n%s\nwant\n%s", tool.String(), want)

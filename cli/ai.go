@@ -725,7 +725,7 @@ func (a *app) aiFinding(e *cveGroup) {
 	a.aiProse("suggested fix", strings.Join(fixes, "\n"))
 	if pb := bag.Playbook; pb != nil { // one more step after the fix: where the org explains the rule
 		step := aiPlaybookStep
-		if a.tools {
+		if a.transport == transportMCPLocal { // canyon mcp's tool: the tool named first
 			step = aiPlaybookTool
 		}
 		a.aiProse("then", fmt.Sprintf(step, cell(pb.Name), cell(pb.Slug)))

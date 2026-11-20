@@ -96,7 +96,9 @@ type app struct {
 	onRow    func(timelineRow)                              // an MCP tool's: each row of the run this invocation follows, for its progress
 	ended    *checkRun                                      // the run a verdict was rendered for, which an MCP tool's result carries
 	elicit   func(question, ships string) (asked, yes bool) // an MCP client's answer to production's question about what ships; nil where nothing can ask
-	tools    bool                                           // an MCP tool's invocation: a next step names the tool, not the verb (design/specs/mcp.md §3.4)
+	// transport is how this invocation's requests were asked for, sent as Canyon-Transport: canyon mcp sets
+	// transportMCPLocal before its first call; every other verb leaves it "", the CLI's (design/specs/mcp.md §7).
+	transport string
 }
 
 // getwd is the directory the verb runs in.
@@ -282,6 +284,7 @@ func (a *app) client() (*Client, error) {
 		}
 		a.http = newClient(host)
 		a.http.Harness = harnessOf(a.getenv)
+		a.http.Transport = a.transport
 		c := a.config()
 		if c.Host != host { // config.json is authoritative for its host; every other is in hosts/ (cli.md §8.4)
 			c = a.hostConfig(host)

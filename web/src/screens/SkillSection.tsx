@@ -45,7 +45,8 @@ function foldTwin(scanner: ManifestPolicy, twin: ManifestPolicy): { folded: Mani
 // cli.md §7.4, written for an agent): the first line, the host, the policies grouped by what they do —
 // a go-live rule, and one off before preview, under production's, but prod.human-approval, which the last line
 // says, each that blocks with the host's line on how to pass it under it — then each custom rule the host
-// handed text for under the org's own heading, every line of it indented — then the resources, stacks and
+// handed text for under the org's own heading, every line of it indented — then the org's playbooks, each by its
+// slug, name and when — then the resources, stacks and
 // design system, a blank line between sections and a section with no values left out, then outbound while the
 // host's via is canyon (outbound: what GET /egress answered), then where production is promoted, always. The panel
 // counts that text so the size an admin sees is the size an agent reads at every session start; the
@@ -87,6 +88,8 @@ export function handed(m: Manifest & { app_additions?: Held[] }, outbound = fals
   const heading = (state: string) => ({ blocking: "Policies that block:", advisory: "Policies that only warn:", off: "Policies for production only:" })[state] ?? `Policies (${state}):`;
   for (const state of [...groups.keys()].sort((a, b) => order(a) - order(b))) sections.push([heading(state), ...(groups.get(state) ?? [])]);
   if (own.length > 0) sections.push(["Your org's own rules (written by its admins):", ...own]);
+  const books = m.playbooks ?? []; // the org's playbooks, by slug, never a body (cli.md §7.4)
+  if (books.length > 0) sections.push(["Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded.", ...books.map((one) => `- ${one.slug}: ${one.name}. When: ${one.when}`)]);
   if (m.component_types.length > 0) sections.push([`Resources an app can declare in canyon.toml: ${m.component_types.join(", ")}`]);
   if (m.stacks.length > 0) sections.push(["Approved stacks:", ...m.stacks.map((one) => `- ${one.language}${one.frameworks.length > 0 ? `: ${one.frameworks.join(", ")}` : ""}`)]);
   const ds = m.design_system;

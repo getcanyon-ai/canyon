@@ -47,7 +47,7 @@ func call(args []string) (int, error) {
 	}
 	for _, c := range res.Content {
 		if text, ok := c.(*mcp.TextContent); ok {
-			fmt.Print(text.Text)
+			fmt.Println(text.Text) // a tool's text ends on no newline, and what the check prints next starts a line
 		}
 	}
 	var verdict struct{ State string }

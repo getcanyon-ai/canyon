@@ -52,7 +52,6 @@ const (
 	egressStreamMemory   = 20 * time.Minute    // a tunnel's caller, from its periodic entries: max_stream_duration 15 min and a flush
 	egressCallersAsked   = 1024                // POST /callers' bound
 	egressAddressesFlush = 4096                // addresses one flush asks about, four POST /callers; the rest's calls are unattributed and counted
-	egressStreams        = 16                  // ALS streams at once: Envoy holds one per worker thread, and runs with --concurrency 8
 	egressCallersWait    = 5 * time.Second     // one POST /callers; past it the chunk's calls are no one's
 	egressLastFlush      = 10 * time.Second    // the flush on the way out
 	egressLastCallers    = time.Second         // one POST /callers on the way out: four at most leave the write six seconds
@@ -61,6 +60,10 @@ const (
 	egressEntryBytes     = 16 << 10            // one entry; a larger one is dropped and counted, never read
 	egressTunnels        = 1 << 14             // tunnels whose caller the receiver keeps between their entries; past it a tunnel is attributed by its last
 )
+
+// egressStreams is the ALS streams the receiver takes at once: two a worker, :3128's log and the interception listener's,
+// at the most workers envoy.sh lets Envoy run.
+const egressStreams = egresscontrol.ReceiverStreams
 
 // call is one access-log entry as the receiver keeps it. source is the address it came from, used to
 // name its caller and never stored; started is when Envoy says the call started, zero when it did not say,

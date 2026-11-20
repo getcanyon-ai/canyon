@@ -30,6 +30,16 @@ const (
 	envoyNode          = "envoy"         // the one Envoy a replica serves, whatever node it names
 )
 
+// The access-log streams Envoy opens to the server's receiver, which takes ReceiverStreams at once (contracts/routes.md,
+// the receiver): each worker holds one for :3128's log and one for the interception listener's (InterceptLog), and
+// deploy/egress/envoy.sh and deploy/k8s/egress.yaml refuse a CANYON_EGRESS_CONCURRENCY over ConcurrencyMost, so one
+// Envoy at its most fits. A test holds envoy.sh's refusal to ConcurrencyMost (deploy/egress, streams_test.go).
+const (
+	ConcurrencyMost = 16                              // the most workers envoy.sh lets Envoy run
+	LogsPerWorker   = 2                               // :3128's access log and the interception listener's
+	ReceiverStreams = LogsPerWorker * ConcurrencyMost // the receiver's streams at once
+)
+
 // intercept serves Envoy the interception listener again from the policy held, called by one goroutine at a time (New,
 // then intercepting): the Injector's, for the policy's signing root and inject destinations — none of either with no
 // policy or no receiver token, as an inner request would go unrecorded — and without an Injector none, so an

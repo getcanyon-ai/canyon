@@ -21,10 +21,6 @@ import (
 	"github.com/getcanyon-ai/canyon/internal/egresscontrol"
 )
 
-// receiverStreams is the most access-log streams the server's receiver takes at once (contracts/routes.md,
-// Egress control): Envoy opens one per worker.
-const receiverStreams = 16
-
 // egressControl is the gateway pod's egress-control container, its second, beside Envoy.
 func egressControl(t *testing.T, d *appsv1.Deployment) corev1.Container {
 	t.Helper()
@@ -99,8 +95,8 @@ func TestTheEgressGatewayRunsDeployEgressAsItIs(t *testing.T) {
 	}
 }
 
-// Every Envoy a rollout runs at once, one access-log stream per worker, stays under the receiver's streams,
-// so a stream that drops reconnects (design/EGRESS.md §2.1).
+// Every Envoy a rollout runs at once, two access-log streams a worker (:3128's and the interception listener's), stays
+// under the receiver's streams, so a stream that drops reconnects (design/EGRESS.md §2.1).
 func TestTheEgressGatewayStaysUnderTheReceiversStreams(t *testing.T) {
 	_, d, _ := egressObjects(t)
 	workers := 0
@@ -116,8 +112,9 @@ func TestTheEgressGatewayStaysUnderTheReceiversStreams(t *testing.T) {
 	if d.Spec.Replicas == nil || d.Spec.Strategy.Type != appsv1.RollingUpdateDeploymentStrategyType || workers < 1 {
 		t.Fatalf("the gateway runs %v replicas by %q with %d workers: name all three", d.Spec.Replicas, d.Spec.Strategy.Type, workers)
 	}
-	if n := (int(*d.Spec.Replicas) + surge) * workers; n >= receiverStreams {
-		t.Errorf("(%d replicas + %d surging) × %d workers = %d streams, not under the receiver's %d", *d.Spec.Replicas, surge, workers, n, receiverStreams)
+	if n := (int(*d.Spec.Replicas) + surge) * workers * egresscontrol.LogsPerWorker; n >= egresscontrol.ReceiverStreams {
+		t.Errorf("(%d replicas + %d surging) × %d workers × %d logs = %d streams, not under the receiver's %d", *d.Spec.Replicas, surge, workers,
+			egresscontrol.LogsPerWorker, n, egresscontrol.ReceiverStreams)
 	}
 }
 

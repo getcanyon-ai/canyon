@@ -229,7 +229,7 @@ services:
     volumes: # an edit to this service, called out against the append-only rule: egress-control reads what Envoy lost (#2374)
       - canyon-egress-admin:/var/run/envoy-admin # the admin socket, a Unix socket and never a port
     labels: # an edit to this service, called out against the append-only rule: compose's config hash reads a config's name, not its contents, so a bootstrap-only upgrade would leave Envoy on the old file (#2125)
-      canyon.egress-config-sha256: ccba627212890e361946714f7b40d7de16a3746cb8b4d592f298cb5c662ceed7 # envoy.sh and envoy.yaml, as the Kubernetes annotation sums them
+      canyon.egress-config-sha256: 32724320652b41fc558709b85197a815dd5e9a1b4dc5baa07bccc8d0f98d5ab5 # envoy.sh and envoy.yaml, as the Kubernetes annotation sums them
   # Egress's check (design/EGRESS.md §3.1): canyon-server egress-control, the server's image as a subcommand, in the
   # holder's network namespace beside Envoy, which asks it on loopback before every call and answers 503 while it
   # does not answer. It pulls the policy from the server on canyon-egress-ctl, where its address is who it is

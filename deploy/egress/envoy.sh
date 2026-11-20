@@ -2,9 +2,9 @@
 # Canyon's Envoy, started in canyon-egress's network namespace: envoy.yaml with the
 # server's receiver, the token Envoy sends it, the upstream resolvers and egress-control's loopback address
 # (127.0.0.1:7783 unset) filled in from the environment, written where only Envoy reads it, then Envoy
-# on it. Any argument is Envoy's: CI's --mode validate checks what runs. Envoy runs one ALS stream per worker,
-# CANYON_EGRESS_CONCURRENCY of them, eight unset, which the receiver's sixteen leave room for: on Kubernetes two
-# replicas run four each (deploy/k8s/egress.yaml).
+# on it. Any argument is Envoy's: CI's --mode validate checks what runs. Envoy runs two ALS streams per worker,
+# :3128's log and the interception listener's, and CANYON_EGRESS_CONCURRENCY workers, eight unset, at most 16, which
+# the receiver's 32 leave room for: on Kubernetes two replicas run four each (deploy/k8s/egress.yaml).
 # A value the server or Envoy would not take stops it, naming the variable, before anything is written.
 set -eu
 
@@ -45,7 +45,7 @@ esac
 case $concurrency in
 '' | *[!0-9]* | 0*) refuse "CANYON_EGRESS_CONCURRENCY is not a positive integer" ;;
 esac
-[ "$concurrency" -le 16 ] || refuse "CANYON_EGRESS_CONCURRENCY is over 16, the receiver's streams"
+[ "$concurrency" -le 16 ] || refuse "CANYON_EGRESS_CONCURRENCY is over 16: the receiver takes 32 streams, two a worker"
 port=${receiver##*:}
 case $port in
 '' | *[!0-9]* | 0*) refuse "CANYON_EGRESS_RECEIVER_ADDR is not ip:port" ;;

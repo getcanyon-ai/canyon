@@ -65,5 +65,9 @@ released.
 - Only admins may create `v*` tags, and every job refuses a commit that isn't on `main`. The rehearsal needs no
   secret and runs in no environment.
 
-If a step fails, re-run the failed job once its cause is fixed outside the tree (a token, a package's access). If
-the fix is in the tree, merge it to `main` and release the next patch version. A published tag is never moved.
+Both repositories' releases are **immutable** once published: their assets and their tag can't change. So each
+release takes all its assets as a draft, and is published only at the end, once everything on it is checked.
+
+If a step fails, re-run the failed job once its cause is fixed outside the tree (a token, a package's access). A
+draft the failed run left is replaced, never a published release. If the fix is in the tree, merge it to `main` and
+release the next patch version. A published tag is never moved.

@@ -1865,8 +1865,8 @@ runs Envoy, `deploy/egress/envoy.yaml` and `envoy.sh` byte for byte, as the Depl
 `canyon` behind the Service `canyon-egress` on 3128 — so a `/run`'s `egress.proxy` there is exactly
 `http://canyon-egress.canyon.svc:3128`, any other `400`, as a shorter name would resolve in the executor's
 namespace and not the app's — its resolvers the pod's own (kube-dns), its receiver the server's.
-Its replicas times its `CANYON_EGRESS_CONCURRENCY` (one access-log stream per worker) stays under the
-receiver's 16 streams. Its NetworkPolicy is the floor (design/EGRESS.md §2.2): in, TCP 3128 from the pods of
+Its replicas, a rollout's surge among them, times its `CANYON_EGRESS_CONCURRENCY`, times two (each worker holds
+`:3128`'s access-log stream and the interception listener's) stays under the receiver's 32 streams. Its NetworkPolicy is the floor (design/EGRESS.md §2.2): in, TCP 3128 from the pods of
 `canyon-apps` labelled `canyon.app` and from the executor's; out, DNS to kube-dns, the server's pods on the
 receiver's port, and TCP 80 and 443 to every address outside the ranges above, and nothing else. **The
 gateway must answer**: with `egress`, before it writes anything the executor opens TCP once to `proxy`'s

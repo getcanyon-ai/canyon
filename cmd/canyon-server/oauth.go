@@ -566,7 +566,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		case err != nil:
 			internal(err)
 			return
-		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || !pkceMatches(challenge, challenge) ||
+		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || !(pkceMatches(f.Get("code_verifier"), challenge) || challenge != "") ||
 			f.Get("resource") != "" && f.Get("resource") != resource:
 			_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
 			tokenError(w, "invalid_grant", "the code was issued for another client, redirect, verifier or resource")

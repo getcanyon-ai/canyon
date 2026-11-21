@@ -80,23 +80,31 @@ func (g *Registration) New(w http.ResponseWriter, r *http.Request) {
 	raw := make([]byte, stateBytes)
 	_, _ = rand.Read(raw) // never fails: the runtime crashes rather than answer short
 	state := hex.EncodeToString(raw)
-	// security_events for code scanning's analyses; the org Canyon keeps code in commits there and makes each app's repository
-	permissions := map[string]string{"checks": "write", "contents": "read", "metadata": "read", "security_events": "read"}
-	if keeps == "true" {
-		permissions["contents"], permissions["administration"] = "write", "write"
-	}
-	m, _ := json.Marshal(map[string]any{ // strings only, so it cannot fail; the permissions and events the courier needs
-		"name": appName(org), "url": g.Public, "redirect_url": g.Public + "/api/v1/github/app/callback",
-		"hook_attributes": map[string]string{"url": g.Public + "/webhooks/github"}, "public": false,
-		"callback_urls":       []string{g.Public + LinkCallback}, // where a person linking their GitHub account returns (#2228)
-		"default_permissions": permissions,
-		"default_events":      []string{"pull_request", "push", "repository"}, // repository keeps links (#1917); installation events reach every App unsubscribed
-	})
+	m := manifest(g.Public, org, keeps == "true")
 	g.setCookie(w, state+"."+imports+"."+org, 3600) // GitHub's code lives an hour; the org and its answer ride with the state
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := form.Execute(w, map[string]string{"Org": org, "State": state, "Manifest": string(m)}); err != nil {
 		g.Log.Printf("canyon-server: github app form: %v", err)
 	}
+}
+
+// manifest is the App GitHub registers for org (docs.github.com, "Registering a GitHub App from a manifest"): the
+// permissions and events the courier needs, every URL the host's public one.
+func manifest(public, org string, keeps bool) []byte {
+	// security_events for code scanning's analyses; pull_requests for the pull_request event, which GitHub refuses a
+	// manifest without; the org Canyon keeps code in commits there and makes each app's repository
+	permissions := map[string]string{"checks": "write", "contents": "read", "metadata": "read", "pull_requests": "read", "security_events": "read"}
+	if keeps {
+		permissions["contents"], permissions["administration"] = "write", "write"
+	}
+	m, _ := json.Marshal(map[string]any{ // strings only, so it cannot fail
+		"name": appName(org), "url": public, "redirect_url": public + "/api/v1/github/app/callback",
+		"hook_attributes": map[string]string{"url": public + "/webhooks/github"}, "public": false,
+		"callback_urls":       []string{public + LinkCallback}, // where a person linking their GitHub account returns (#2228)
+		"default_permissions": permissions,
+		"default_events":      []string{"pull_request", "push", "repository"}, // repository keeps links (#1917); installation events reach every App unsubscribed
+	})
+	return m
 }
 
 // org is one row of GET /api/v1/github.

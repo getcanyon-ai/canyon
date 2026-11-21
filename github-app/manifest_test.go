@@ -127,7 +127,7 @@ func TestTheFormPostsAManifestBuiltFromThePublicURLNeverTheRequestsHost(t *testi
 		"name": "Canyon — acme", "url": public, "redirect_url": public + "/api/v1/github/app/callback",
 		"hook_attributes": map[string]any{"url": public + "/webhooks/github"}, "public": false,
 		"callback_urls":       []any{public + "/api/v1/github/link/callback"},
-		"default_permissions": map[string]any{"checks": "write", "contents": "read", "metadata": "read", "security_events": "read"},
+		"default_permissions": map[string]any{"checks": "write", "contents": "read", "metadata": "read", "pull_requests": "read", "security_events": "read"},
 		"default_events":      []any{"pull_request", "push", "repository"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -141,8 +141,8 @@ func TestTheManifestPostsToTheOrgAndAsksToWriteOnlyWhereItKeepsCode(t *testing.T
 	g, _, _ := registration(t)
 	long := "a" + strings.Repeat("-b", 19) // 39 characters, the most a login has
 	for query, want := range map[string]map[string]any{
-		"org=acme&imports_new=false&keeps_code=false":       {"checks": "write", "contents": "read", "metadata": "read", "security_events": "read"},
-		"org=" + long + "&imports_new=true&keeps_code=true": {"checks": "write", "contents": "write", "administration": "write", "metadata": "read", "security_events": "read"},
+		"org=acme&imports_new=false&keeps_code=false":       {"checks": "write", "contents": "read", "metadata": "read", "pull_requests": "read", "security_events": "read"},
+		"org=" + long + "&imports_new=true&keeps_code=true": {"checks": "write", "contents": "write", "administration": "write", "metadata": "read", "pull_requests": "read", "security_events": "read"},
 	} {
 		org, _, _ := strings.Cut(strings.TrimPrefix(query, "org="), "&")
 		rec, _ := beginFor(g, query)
@@ -150,6 +150,32 @@ func TestTheManifestPostsToTheOrgAndAsksToWriteOnlyWhereItKeepsCode(t *testing.T
 		if rec.Code != 200 || !reflect.DeepEqual(m["default_permissions"], want) || m["name"] != string([]rune("Canyon — " + org)[:min(34, len([]rune("Canyon — "+org)))]) ||
 			!strings.Contains(rec.Body.String(), `action="https://github.com/organizations/`+org+`/settings/apps/new?state=`) {
 			t.Errorf("%s: %d %v", query, rec.Code, m)
+		}
+	}
+}
+
+// GitHub refuses a manifest that subscribes to an event its permissions don't cover ("Default events are not supported
+// by permissions: pull_request"), so no one could register the App. Each event the manifest names needs the permission
+// GitHub's "Webhook events and payloads" lists for a GitHub App, at read or above; an event missing here fails too.
+func TestEveryEventTheManifestNamesHasThePermissionGitHubRequires(t *testing.T) {
+	needs := map[string]string{ // docs.github.com/en/webhooks/webhook-events-and-payloads, each event's Availability
+		"pull_request": "pull_requests",
+		"push":         "contents",
+		"repository":   "metadata",
+	}
+	for _, keeps := range []bool{false, true} {
+		var m struct {
+			Permissions map[string]string `json:"default_permissions"`
+			Events      []string          `json:"default_events"`
+		}
+		if err := json.Unmarshal(manifest("https://canyon.acme.example", "acme", keeps), &m); err != nil || len(m.Events) == 0 {
+			t.Fatalf("keeps code %v: %v, %+v", keeps, err, m)
+		}
+		for _, e := range m.Events {
+			permission, known := needs[e]
+			if level := m.Permissions[permission]; !known || (level != "read" && level != "write") {
+				t.Errorf("keeps code %v: the event %s needs the %q permission (known %v), and the manifest grants %v", keeps, e, permission, known, m.Permissions)
+			}
 		}
 	}
 }

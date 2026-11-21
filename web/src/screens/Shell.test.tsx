@@ -279,6 +279,20 @@ describe("the shell", () => {
     expect(await screen.findByRole("link", { name: "Guardrails" })).toBeDefined();
   });
 
+  // The preferences read the setup gate already makes names the reader's role, so an admin's rail offers Guardrails on its
+  // first paint, before the fleet's read answers (the v0.11.0 role walk caught the rail without it), and a member's never.
+  it("offers Guardrails to an admin from the first paint, before the fleet's read answers", async () => {
+    window.location.hash = "#/audit";
+    server(prefs, () => new Promise<Response>(() => {}) as unknown as Response); // the fleet's read never answers
+    const { unmount } = render(<Shell />);
+    expect(await screen.findByRole("link", { name: "Guardrails" })).toBeDefined();
+    unmount();
+    server({ ...prefs, viewer: { ...prefs.viewer!, role: "member" } }, () => new Promise<Response>(() => {}) as unknown as Response);
+    render(<Shell />);
+    expect(await screen.findByRole("link", { name: "Audit" })).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Guardrails" })).toBeNull();
+  });
+
   // A host in setup answers every read but preferences with 409, so the name is asked for only once
   // onboarding is done; the person who finishes it sees themselves at the foot of the rail.
   it("names the person who finishes onboarding, asking only after it is done", async () => {

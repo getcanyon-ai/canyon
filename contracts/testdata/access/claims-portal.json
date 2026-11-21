@@ -29,7 +29,7 @@
     { "id": "ev_a102", "ts": "2026-09-01T16:20:00Z", "actor": { "kind": "person", "subject": "dana@meridian.example", "display": "Dana Whitfield" }, "action": "dismiss access request", "category": "governance", "project": "claims-portal", "detail": { "email": "kim@meridian.example" } },
     { "id": "ev_a101", "ts": "2026-09-01T16:15:00Z", "actor": { "kind": "person", "subject": "dana@meridian.example", "display": "Dana Whitfield" }, "action": "unshare app", "category": "governance", "project": "claims-portal", "detail": { "kind": "email", "grantee": "lee@meridian.example", "level": "contributor", "roles": [] } }
   ],
-  "team_required": { "error": "team_required", "message": "Ask Dana Whitfield to add you to claims-portal", "owners": [{ "kind": "person", "subject": "dana@meridian.example", "display": "Dana Whitfield" }], "owner_groups": [] },
+  "team_required": { "error": "team_required", "message": "Ask Dana Whitfield to add you to claims-portal's team: on its page in Canyon, use Ask for access.", "owners": [{ "kind": "person", "subject": "dana@meridian.example", "display": "Dana Whitfield" }], "owner_groups": [] },
   "owner_required": { "error": "owner_required", "message": "only the owners of claims-portal and admins can do this: ask Dana Whitfield" },
   "last_owner": { "error": "last_owner", "message": "add a successor first" },
   "groups_unsupported": { "error": "groups_unsupported", "message": "This Canyon doesn't read groups from your sign-in yet. An admin sets the groups claim in Settings." }

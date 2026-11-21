@@ -113,6 +113,7 @@ type ending struct {
 	Tree                                     string // a folder's GitHub tree a push packaged: the link's once its review finishes clean or blocked (#1917)
 	Deploy                                   bool   // the run deploys to preview: its check ends on its verdict, never its build (#1923)
 	Annotations                              []Annotation
+	Refusal                                  error // a tree packCommit refused: errOtherApp, the declarations' error, or ingest's
 }
 
 // check opens the app's `Canyon gate` check, packages and reviews the commit, ends the check with the findings and
@@ -312,9 +313,20 @@ func (c *Courier) pack(ctx context.Context, gh *Client, in Check) (ending, error
 			return ending{Conclusion: "neutral", Title: "No change under " + in.Folder, Summary: "Nothing under " + in.Folder + " changed since this app's last version, so there is nothing new to review."}, nil
 		}
 	}
+	kind := "repo"
+	if in.PullRequest {
+		kind = "repo-pr"
+	}
+	return c.packCommit(fromGitHub(ctx), gh, in, tree, kind, actor(in), "package from github")
+}
+
+// packCommit makes the commit, or the link's folder of it, a package of in.Project as kind, by the actor, with
+// one audit row under action: "repo" the current package, as a push's; "repo-pr" and "check" never the current
+// one, as a pull request's and a check's upload's are. A refused tree is an ending with a failure, nothing packaged.
+func (c *Courier) packCommit(ctx context.Context, gh *Client, in Check, tree, kind string, by events.Actor, action string) (ending, error) {
 	body, err := gh.Tarball(ctx, in.Installation, in.Owner, in.Repo, in.SHA)
 	if err != nil {
-		return ending{}, err
+		return ending{}, fmt.Errorf("%w: %w", ErrGitHub, err)
 	}
 	defer func() { _ = body.Close() }()
 	gz, err := gzip.NewReader(body)
@@ -325,7 +337,7 @@ func (c *Courier) pack(ctx context.Context, gh *Client, in Check) (ending, error
 	var description *string
 	var refused error
 	var named string
-	pkg, err := ingest.IngestFolder(ctx, filepath.Join(c.Repos, in.Project+".git"), gz, c.Exclusions, in.Folder, !in.PullRequest, func(tree string) error {
+	pkg, err := ingest.IngestFolder(ctx, filepath.Join(c.Repos, in.Project+".git"), gz, c.Exclusions, in.Folder, kind == "repo", func(tree string) error {
 		if named = appLine(tree); named != "" && named != in.Project {
 			return errOtherApp
 		}
@@ -339,10 +351,10 @@ func (c *Courier) pack(ctx context.Context, gh *Client, in Check) (ending, error
 		named = strconv.QuoteToGraphic(named)
 		named = named[1 : len(named)-1] // one line of visible characters, unquoted
 		return ending{Conclusion: "failure", Title: "canyon.toml names " + named + ", not " + in.Project,
-			Summary: "This repository feeds " + in.Project + ". Change the app line to " + in.Project + ", or delete it."}, nil
+			Summary: "This repository feeds " + in.Project + ". Change the app line to " + in.Project + ", or delete it.", Refusal: errOtherApp}, nil
 	}
 	if refused != nil || errors.Is(err, ingest.ErrRequest) {
-		return ending{Conclusion: "failure", Title: "Canyon refused this commit", Summary: err.Error()}, nil
+		return ending{Conclusion: "failure", Title: "Canyon refused this commit", Summary: err.Error(), Refusal: err}, nil
 	}
 	if err != nil {
 		return ending{}, err
@@ -355,9 +367,8 @@ func (c *Courier) pack(ctx context.Context, gh *Client, in Check) (ending, error
 	if err := events.LockTx(ctx, tx); err != nil {
 		return ending{}, err
 	}
-	kind, firsts := "repo-pr", []string(nil)
-	if !in.PullRequest {
-		kind = "repo"
+	var firsts []string
+	if kind == "repo" {
 		if declared == nil { // a tree a pull request or a check packaged first: its declarations become the project's with this push
 			if err := tx.QueryRow(ctx, "SELECT resources FROM packages WHERE id = $1 AND project_id = $2 AND source_kind IN ('repo-pr', 'check')", pkg.ID, in.Project).Scan(&declared); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return ending{}, err
@@ -372,14 +383,14 @@ func (c *Courier) pack(ctx context.Context, gh *Client, in Check) (ending, error
 	if _, err := tx.Exec(ctx, `INSERT INTO packages (id, project_id, tree_hash, commit, size_bytes, source_kind, source_ref, source_actor, resources, roles, description, pr_number, pr_branch, created_at) VALUES ($1, $2, $3, $4, $5, $9, $6, $7, $8, $10, $11, $12, $13, GREATEST(now(), (SELECT max(created_at) + interval '1 microsecond' FROM packages WHERE project_id = $2)))
 		ON CONFLICT (id, project_id) DO UPDATE SET source_kind = 'repo', source_ref = EXCLUDED.source_ref, source_actor = EXCLUDED.source_actor, created_at = EXCLUDED.created_at
 		WHERE packages.source_kind IN ('repo-pr', 'check') AND EXCLUDED.source_kind = 'repo'`,
-		pkg.ID, in.Project, pkg.TreeHash, pkg.Commit, pkg.Bytes, in.SHA, actor(in).Subject, declared, kind, roles, description, in.Number, in.Branch); err != nil {
+		pkg.ID, in.Project, pkg.TreeHash, pkg.Commit, pkg.Bytes, in.SHA, by.Subject, declared, kind, roles, description, in.Number, in.Branch); err != nil {
 		return ending{}, err
 	}
-	if err := events.AuditTx(fromGitHub(ctx), tx, actor(in), "package from github", in.Project, "", map[string]any{"package": pkg.ID, "ref": in.SHA, "kind": kind}); err != nil {
+	if err := events.AuditTx(ctx, tx, by, action, in.Project, "", map[string]any{"package": pkg.ID, "ref": in.SHA, "kind": kind}); err != nil {
 		return ending{}, err
 	}
 	for _, name := range firsts {
-		if err := events.AuditTx(fromGitHub(ctx), tx, actor(in), "declare resource", in.Project, "", map[string]any{"name": name, "type": declared[name], "package": pkg.ID}); err != nil {
+		if err := events.AuditTx(ctx, tx, by, "declare resource", in.Project, "", map[string]any{"name": name, "type": declared[name], "package": pkg.ID}); err != nil {
 			return ending{}, err
 		}
 	}

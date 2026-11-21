@@ -21,6 +21,9 @@ jobs:
   paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # reach.sh reads the pull request's labels
     outputs:
       journeys: ${{ steps.reach.outputs.journeys }}
       probes: ${{ steps.reach.outputs.probes }}
@@ -32,6 +35,9 @@ jobs:
           fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
       - id: reach
         run: .github/suites/reach.sh journeys probes egress oidc
+        env: # a labelled pull request of ours leaves its v1 suites to Canyon's private runners (reach.sh; CONTRIBUTING.md, Maintainers)
+          GH_TOKEN: ${{ github.token }}
+          CANYON_PRIVATE_AUTHOR: ${{ github.event_name == 'pull_request' && contains(fromJSON(vars.CANYON_PRIVATE_AUTHORS || '[]'), github.event.pull_request.user.login) }}
 
   scan-dbs:
     needs: paths
@@ -78,21 +84,12 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: e2e/ui/package-lock.json
-      - run: npm ci && npx playwright install --with-deps chromium # the browser's system libraries, which make e2e-ui's install leaves out
-        working-directory: e2e/ui
       - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
-      - run: make e2e-up
-      - run: make e2e-ui SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
-      - name: the shard ran a journey (with --shard, Playwright passes one that found none)
-        run: jq -e '.stats.expected > 0' e2e/ui/.work/run.json
+      - run: scripts/ci-suite.sh journeys-${{ matrix.shard }} # the shard's steps, as Canyon's private runners run them too
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/scan-dbs
         with:
           check: 'true'
-      - name: no journey's build cache is left behind (harness/teardown.ts)
-        run: test -z "$(docker volume ls -q --filter 'name=^canyon-cache-ux-')"
-      - if: failure()
-        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -124,14 +121,11 @@ jobs:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
       - uses: ./.github/actions/scan-dbs # the stack's scanner databases, never downloaded live by the stack (#2496, #2510)
-      - run: make e2e-up
-      - run: go test -tags stack -count=1 -run TestProbesNeverReadClean -v ./e2e/
+      - run: scripts/ci-suite.sh probes # as Canyon's private runners run it too
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/scan-dbs
         with:
           check: 'true'
-      - if: failure()
-        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor
 
 
   egress:
@@ -243,7 +237,7 @@ jobs:
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: oidc-walk # the Secrets section as each person saw it (e2e/ui/secrets); a typed value is a password field's dots
+          name: oidc-walk # the Secrets section (e2e/ui/secrets) and the release's new screens (e2e/ui/release) as each person saw them; a typed value is a password field's dots
           path: e2e/ui/.work/walk
           retention-days: 7
           if-no-files-found: ignore

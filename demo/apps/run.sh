@@ -34,4 +34,13 @@ code=0; (cd "$demo/claims-portal-next" && canyon deploy --force --host "$host") 
 # with. Sign-in is off: no session.
 curl -fsS -o /dev/null -X PUT -H 'Content-Type: application/json' -d '{"design_system_id":"ds_0002"}' "$host/api/v1/preferences" ||
   { echo "The demo's design system could not be set: PUT /api/v1/preferences failed."; echo "$carry_on"; exit 1; }
+# The org's playbook on how the claims apps are written, which the tour's security chapter has the agent read before
+# its fix (design/specs/mcp.md §11): saved once, so a later start adds no version of its own. Sign-in is off: no session.
+playbook="$host/api/v1/playbooks/claims-portal-conventions"
+case $(curl -sS -o /dev/null -w '%{http_code}' "$playbook") in
+  200) ;;
+  404) curl -fsS -o /dev/null -X PUT -H 'Content-Type: application/json' --data-binary "@$demo/claims-portal-conventions.json" "$playbook" ||
+    { echo "The demo's playbook could not be saved: PUT /api/v1/playbooks/claims-portal-conventions failed."; echo "$carry_on"; exit 1; } ;;
+  *) echo "The demo's playbook could not be read: GET /api/v1/playbooks/claims-portal-conventions failed."; echo "$carry_on"; exit 1 ;;
+esac
 echo "The sample apps are running, and claims-portal's next version is blocked at review."

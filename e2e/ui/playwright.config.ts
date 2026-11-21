@@ -58,6 +58,14 @@ export default defineConfig({
       retries: 0,
       use: { baseURL: process.env.E2E_CANYON_URL, trace: "retain-on-failure", viewport: { width: 1360, height: 900 } },
     },
+    // v0.11.0's new screens at each level, which e2e/oidc/release_test.go runs once per person with their session (never
+    // make e2e-ui): levels need sign-in on.
+    {
+      name: "release",
+      testDir: "release",
+      retries: 0,
+      use: { baseURL: process.env.E2E_CANYON_URL, trace: "off", video: "off", viewport: { width: 1360, height: 900 } },
+    },
     // Settings › Patching on the team setup with patching on, which e2e/oidc/patch_test.go runs mid-journey (never make
     // e2e-ui): patching needs sign-in on (design/PATCHING.md §4.5), which the Docker projects' stack has off.
     {

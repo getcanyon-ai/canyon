@@ -1,5 +1,6 @@
 # e2e-ui.yml's oidc: the team setup on one Docker server (deploy/docker/team.yml), signing people in through the stub's
-# issuer, canyon login's code, a deploy, a teammate refused until shared, and the Secrets section as each person.
+# issuer, canyon login's code, a deploy, a teammate refused until shared, and the Secrets section and the release's
+# new screens as each person.
 # what its tests compile (go list -deps -test -tags oidc ./e2e/oidc)
 e2e/oidc/**
 # what it proves: sign-in in the browser and by device code, sessions, sharing, secrets
@@ -14,6 +15,18 @@ cmd/canyon-server/routes_sessions.go
 cmd/canyon-server/routes_access.go
 cmd/canyon-server/routes_secrets.go
 e2e/ui/secrets/**
+# the release's new screens as each person (e2e/oidc/release_test.go, e2e/ui/release)
+e2e/ui/release/**
+web/src/screens/Guardrails*
+web/src/screens/Playbooks*
+web/src/screens/CustomRules*
+web/src/screens/Approve*
+web/src/screens/OrgSettings*
+web/src/screens/Settings*
+web/src/ui/Finding*
+cmd/canyon-server/routes_playbooks.go
+cmd/canyon-server/routes_custom_rules.go
+cmd/canyon-server/routes_promotion_approvals.go
 e2e/ui/harness/**
 e2e/ui/playwright.config.ts
 e2e/ui/package*.json

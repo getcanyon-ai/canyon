@@ -217,6 +217,9 @@ func (a *app) tail(ctx context.Context, host string, body io.Reader) (int, bool)
 	for {
 		piece, err := r.ReadSlice('\n')
 		if n := len(piece); n > 0 && (indent != "  " || string(piece) != keepalive) {
+			if !said && a.render.Format == FormatAI { // an agent reads the app's own lines as data, each indented two below
+				a.printf("  %s\n", appSays)
+			}
 			said = true
 			if piece[n-1] == '\n' {
 				a.printf("%s%s\n", indent, visible(string(piece[:n-1])))

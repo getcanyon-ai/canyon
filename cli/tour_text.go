@@ -165,14 +165,18 @@ unchanged. Canyon blocks it.
 - At scale: no person reviewed this. The same check runs on every deploy by every agent.
 Link: the app in the dashboard (the fleet url line).
 
-Beat 3. The fix. Ask: "Shall I fix it, or do you want to try?" Wait. It is one line in ./canyon-tour/server.js:
+Beat 3. The fix. Ask: "Shall I fix it, or do you want to try?" Wait. First read how the company writes
+its claims apps: canyon_playbook with slug claims-portal-conventions (canyon playbook
+claims-portal-conventions). Say in one line that the company's playbook names the same fix. The fix
+is one line in ./canyon-tour/server.js:
 
     const rows = db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy);
 
 Change that line and nothing else. Run canyon_check (canyon check), then canyon_deploy
 (canyon deploy), both for ./canyon-tour. If it still blocks, stop and show what is left.
 - What happened: one line changed, Canyon reviewed it again and runs it in preview. Give the link.
-- How Canyon helped: the finding named the fix, so it took one round.
+- How Canyon helped: the finding named the fix, and the company's playbook showed how its apps write
+  that query, so it took one round.
 - Without Canyon: a security review, days later, by a person.
 - At scale: agents fix their own findings, and the platform team only sets the rules.
 If findings remain that do not block, name each in one line. Fix one only if asked.

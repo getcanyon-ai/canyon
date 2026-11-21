@@ -164,6 +164,7 @@ func (a *app) playbookResource(ctx context.Context, req *mcp.ReadResourceRequest
 // canyon playbook's own line.
 func (a *app) readPlaybook(ctx context.Context, slug, way string) (playbookRead, json.RawMessage, error) {
 	c := a.sub(ctx, "")
+	c.verb, c.args = command{name: "playbook"}, []string{"playbook", slug} // a refusal's line to run again is canyon playbook's
 	client, err := c.client()
 	if err != nil {
 		return playbookRead{}, nil, c.refusal(err)

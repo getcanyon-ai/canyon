@@ -432,6 +432,12 @@ func (a *app) elsewhere(host string) string {
 		return "canyon login " + host
 	case "logout":
 		return "" // logout refuses --host, and a <url> would name a different host than the one it could not reach
+	case "":
+		return "" // no verb to run again: never canyon with --host alone
+	case "playbook": // its slug too, or the line runs nothing
+		if len(a.args) > 1 && playbookSlug(a.args[len(a.args)-1]) {
+			return "canyon playbook " + a.args[len(a.args)-1] + " --host " + host
+		}
 	}
 	return "canyon " + a.verb.name + " --host " + host
 }

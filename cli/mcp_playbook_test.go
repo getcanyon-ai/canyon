@@ -73,3 +73,13 @@ func TestPlaybookThroughMCPHidesNothing(t *testing.T) {
 		}
 	}
 }
+
+// A host canyon_playbook can't reach is the CLI's line for it, whose line to run again names the verb and the slug:
+// never canyon with --host alone (the bed journeys, v0.11.0).
+func TestPlaybookThroughMCPRetriesWithItsVerb(t *testing.T) {
+	cs, _ := mcpSession(t, "http://127.0.0.1:1") // nothing listens there
+	res, text := callTool(t, cs, mcptools.Playbook, map[string]any{"slug": "service-conventions"})
+	if !res.IsError || !strings.Contains(text, "canyon playbook service-conventions --host https://canyon.example.com") || strings.Contains(text, "canyon  --host") {
+		t.Errorf("isError %v, text:\n%s", res.IsError, text)
+	}
+}

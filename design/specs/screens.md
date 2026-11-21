@@ -998,33 +998,33 @@ On Settings › People & sign-in, directly above the sessions list, so an agent 
 place. Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
 connects it, and each one you connect is listed under Sessions, where you can disconnect it.`
 
-Two parts, then an admin's (amended 2026-11-21: the laptop is the CLI, the cloud the address):
+Two parts, the same for every member (amended 2026-11-21: the laptop is the CLI, the cloud the address, and the address
+is never offered for a laptop):
 
 - **`On your laptop`**: three numbered steps, each a line to run, this host filled in from the page's own address:
   `Install the CLI` (`curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh`),
   `Sign in to this Canyon` (`canyon login <host>`), `Set up your coding agents` (`canyon skill install`); then `The last
   step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's
   tools. They load the next time each agent starts.` Every host shows them, sign-in on or off.
-- **`In the cloud, or without the CLI`**: `Canyon's address for agents`, the protected-resource metadata's `resource`,
-  exactly, read-only, with `Copy` (`Address copied`, or `Couldn't copy. The browser did not allow it.`), and under it
-  `Add it to your coding agent as an MCP server, then sign in from the agent: a browser opens for you to allow it.`
-  Then Claude Code and Codex by their command (Codex's with `codex mcp login canyon`, which signs it in), Cursor and
-  VS Code by `Add to Cursor` and `Add to VS Code`, each for the address. Where the metadata answers `404`, no address
-  and `Agents can't connect to this Canyon by its address, because it isn't served over https. Use the CLI above.`; any
-  other failure is the read's own sentence, and no address. No agent is pointed at `canyon mcp`: the CLI sets that up.
-- **`Roll it out to everyone`**, to an admin alone and only with an `https` address, which Claude Code's managed
-  settings require: `So every machine gets Canyon without anyone adding it. Each person still signs in from their agent
-  the first time.`, then, each checked against the agent's docs (design/specs/mcp.md §2.4):
-  - Claude Code: `In Claude Code's managed settings (Claude Code 2.1.259 or later). It adds Canyon beside each person's
-    own servers.` and the snippet `{"managedMcpServers":{"canyon":{"type":"http","url":"<address>"}}}`. Never
-    `managed-mcp.json`, which switches every other MCP server on the machine off.
-  - Codex: `Codex's managed configuration can allow or block MCP servers, but not add one: each person adds Canyon
-    with the Codex line above.`
-  - Cursor: `In Cursor's dashboard, under Plugins & MCPs, add this address as a team MCP server, then add it to your
-    team marketplace as Default On. Team marketplaces need Cursor's Teams or Enterprise plan.`
-- **Sign-in off.** Under the cloud heading, no address and no rollout: `Sign-in is off on this Canyon, so it gives
-  agents no address: anyone who could reach it would act as an admin. Use the CLI above. A team's Canyon with sign-in
-  gives agents an address.`
+- **`In the cloud`**: `For agents that run on their vendor's machines. They review and deploy what you've pushed to
+  GitHub. On a laptop, use the CLI above: one way per agent.` Then `Canyon's address for agents`, the protected-resource
+  metadata's `resource`, exactly, read-only, with `Copy` (`Address copied`, or `Couldn't copy. The browser did not allow
+  it.`), and `The first time an agent uses it, Canyon opens in your browser and asks you to allow it.` Then each cloud
+  agent (design/specs/mcp.md §2.4):
+  - `Claude Code on the web`: `Add this address as a custom connector in claude.ai. On Team and Enterprise plans, an
+    owner of your claude.ai organization adds it once, and each person connects it. The connector also shows up in
+    Claude Code on laptops, where the server canyon skill install set up stays the one to use.`, then `Anthropic's
+    connector docs`, a link to https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp.
+  - `Cursor's cloud agents`: `A team admin adds this address as a team MCP server in Cursor's dashboard, under Plugins &
+    MCPs.`
+  - Codex: `Codex's cloud tasks can't connect to an MCP server yet. Use Codex on your laptop, with the CLI above.`
+
+  No agent's command, install link or managed settings for the address: each of those reaches a laptop. Where the
+  metadata answers `404`, no address and `Agents can't connect to this Canyon by its address, because it isn't served
+  over https. Use the CLI above.`; any other failure is the read's own sentence, and no address.
+- **Sign-in off.** Under `In the cloud`, no address: `Sign-in is off on this Canyon, so it gives agents no address:
+  anyone who could reach it would act as an admin. Use the CLI above. A team's Canyon with sign-in gives agents an
+  address.`
 
 ### Secrets (design/specs/mcp.md §10.1)
 

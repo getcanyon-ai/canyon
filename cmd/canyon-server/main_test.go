@@ -411,6 +411,12 @@ func TestAuthConfigIsRoutedAndErrorsCarryTheContractShape(t *testing.T) {
 		{http.MethodPost, "/auth/device", 404, notFound},
 		{http.MethodPost, "/auth/device/token", 404, notFound},
 		{http.MethodGet, "/nope", 404, notFound},
+		// The OAuth authorization server's five: 404 with auth off, as every caller is the anonymous admin (oauth_test.go has them live under oidc).
+		{http.MethodGet, "/.well-known/oauth-authorization-server", 404, notFound},
+		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp", 404, notFound},
+		{http.MethodGet, "/oauth/authorize", 404, notFound},
+		{http.MethodPost, "/oauth/register", 404, notFound},
+		{http.MethodPost, "/oauth/token", 404, notFound},
 		// GitHub's deliveries, Open: this host has registered no App.
 		{http.MethodPost, "/webhooks/github", 503, `{"error":"not_configured","message":"no GitHub App is registered on this host"}`},
 		// The GitHub App's registration, under the session: every caller is an admin here, and a callback with no state cookie is refused.

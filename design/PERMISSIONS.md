@@ -527,6 +527,20 @@ sign-in, `403 dashboard_required` from any session but a browser's, and `403 per
 server's environment (`CANYON_TELEMETRY=0`, `DO_NOT_TRACK=1`, `CI`) turns it off whatever an admin sets, and no
 route turns it back on.
 
+## MCP — what an agent's client may do
+
+Decided 2026-11-20 (design/specs/mcp.md §4; design/AUTH.md §4.7). **A tool is its route**: each MCP tool calls a route
+the CLI already calls, at that route's level, with its refusals and its audit rows, and MCP adds no permission and
+widens none. **An OAuth session is a person's session**: a client a person allowed acts as that person, recorded under
+their name, and never more than they may; its scope (`read` or `act`) only narrows what it may ask, and a viewer's
+`act` token still can't deploy. **Consent is a browser's**: a person allows a client in the dashboard, from a browser
+session alone, so no CLI or MCP session ever hands its access to another client.
+
+**Sessions.** Every member sees their own live sessions, each with how it signed in and an MCP client's name, and ends
+any of them; an admin sees everyone's and ends anyone's, and the row names whose (`DELETE /api/v1/sessions/:id`). Ending
+one is a person's, in a browser: `403 person_required` to an agent, `403 dashboard_required` from a CLI or MCP session.
+A member asking to end another person's is answered `404`, as if there were none.
+
 ## Enforcement — one decision point per app
 
 The same code (`identity/`) decides level and roles everywhere:

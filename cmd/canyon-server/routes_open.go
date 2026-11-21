@@ -35,6 +35,7 @@ func routesOpen(mux *http.ServeMux, ready *readiness, logger *log.Logger, bundle
 		writeJSON(w, http.StatusOK, map[string]any{"canyon": true, "auth": mode, "org": o.name, "device": a.auth == authOIDC, "cli": version, "public": a.public, "setup": a.auth == authOIDC && o.setup})
 	})
 	routesAuth(mux, a)
+	routesOAuth(mux, a)
 	mux.Handle("POST /webhooks/github", &githubapp.Courier{Pool: a.pool, Vault: a.vault, Durable: a.durable, Log: logger}) // authenticated by its signature
 	routeDashboard(mux, logger, bundle)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {

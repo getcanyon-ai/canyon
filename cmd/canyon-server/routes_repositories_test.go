@@ -52,8 +52,28 @@ func fakeGitHub(t *testing.T) *[]string {
 		}
 		_, _ = w.Write([]byte(`{"permission":"` + permission + `"}`))
 	})
-	mux.HandleFunc("GET /repos/acme/claims-portal/commits/{ref...}", func(w http.ResponseWriter, r *http.Request) { // claims-portal's trunk and release/2 (TestPackagesFromRepository)
+	mux.HandleFunc("GET /repos/acme/claims-portal/branches/{name...}", func(w http.ResponseWriter, r *http.Request) { // its own branches
+		sha := map[string]string{"trunk": mainSHA, "release/2": releaseSHA}[r.PathValue("name")]
+		if sha == "" {
+			http.Error(w, `{"message":"Branch not found"}`, http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"commit":{"sha":"` + sha + `"}}`))
+	})
+	mux.HandleFunc("GET /repos/acme/claims-portal/git/ref/tags/{name...}", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+	})
+	mux.HandleFunc("GET /repos/acme/claims-portal", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"default_branch":"trunk"}`))
+	})
+	mux.HandleFunc("GET /repos/acme/claims-portal/compare/{basehead}", func(w http.ResponseWriter, _ *http.Request) { // a fork's commit: off trunk
+		_, _ = w.Write([]byte(`{"status":"diverged"}`))
+	})
+	mux.HandleFunc("GET /repos/acme/claims-portal/commits/{ref...}", func(w http.ResponseWriter, r *http.Request) { // claims-portal's trunk and release/2, and any commit id, as GitHub resolves a fork's too (TestPackagesFromRepository)
 		sha := map[string]string{"trunk": mainSHA, "release/2": releaseSHA}[r.PathValue("ref")]
+		if sha == "" && len(r.PathValue("ref")) == 40 {
+			sha = r.PathValue("ref")
+		}
 		if sha == "" {
 			http.Error(w, `{"message":"No commit found"}`, http.StatusUnprocessableEntity)
 			return

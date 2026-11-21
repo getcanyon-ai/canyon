@@ -21,7 +21,13 @@ const named = (text: string, name: string) => text.replace("<name>", () => name)
 // contributor and above alone, as the routes are theirs; below, the reduced page reads no secret. The value lives in its
 // password field and nowhere else: never state, never a prop, never filled; it goes once in the PUT and the field is
 // emptied when the PUT lands. Nothing the route checks is checked here: a refusal is the route's own message.
-export function Secrets({ id }: { id: string }) {
+// A secret's name, as the server takes one (cmd/canyon-server/routes_secrets.go, validSecretName).
+const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+
+// asked is what a link to the section names (#/apps/<app>/secrets?name=&env=, design/specs/mcp.md §2.3, canyon_secret_link):
+// the form opens on that secret, scrolled to with its value's field ready. Only a name a secret may have and an
+// environment there is are taken; a value never comes from a link.
+export function Secrets({ id, asked }: { id: string; asked?: { name: string | null; env: string | null } }) {
   const [rows, setRows] = useState<Secret[] | null>(null);
   const [unread, setUnread] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
@@ -37,8 +43,9 @@ export function Secrets({ id }: { id: string }) {
     return () => { live = false; };
   }, [id, reads]);
 
-  const [name, setName] = useState("");
-  const [env, setEnv] = useState<Env>("preview");
+  const [name, setName] = useState(asked?.name != null && SECRET_NAME.test(asked.name) ? asked.name : "");
+  const [env, setEnv] = useState<Env>(asked?.env === "prod" ? "prod" : "preview");
+  const here = useRef<HTMLElement>(null);
   const [where, setWhere] = useState<Where>("runtime");
   const value = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState(false); // whether Value holds anything: the value itself is never in state
@@ -79,6 +86,12 @@ export function Secrets({ id }: { id: string }) {
     }
     setBusy(false);
   };
+  useEffect(() => {
+    if (asked === undefined) return;
+    here.current?.scrollIntoView?.({ block: "start" });
+    value.current?.focus();
+  }, [asked]);
+
   // Replace fills the form from its row, and the value is the person's to type: focus goes there.
   const replace = (row: Secret) => {
     setName(row.name);
@@ -109,7 +122,7 @@ export function Secrets({ id }: { id: string }) {
   };
 
   return (
-    <section aria-label={T.title} className="grid grid-cols-[minmax(0,1fr)] gap-3">
+    <section ref={here} aria-label={T.title} className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <h2 className={H2}>{T.title}</h2>
       <p className={NOTE}>{T.about}</p>
       {unread !== null && <p role="alert" className="text-base text-critical">{unread}</p>}

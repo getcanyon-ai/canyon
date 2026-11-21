@@ -464,6 +464,8 @@ func (a *app) fail(err error) int {
 		return a.refusedBase(based)
 	case errors.As(err, &stale):
 		a.movedBlock(stale)
+	case errors.As(err, &expired) && a.remote: // on /mcp: the connection's sign-in, the agent's to renew
+		a.errf("\n  %s This connection's sign-in to Canyon has ended.\n\n  Connect Canyon again in your agent's MCP settings, and allow it in the browser.\n", glyph)
 	case errors.As(err, &expired) && !expired.Sent: // before any login, or to another host than the one it signed in to
 		a.errf("\n  %s You're not signed in to %s.\n\n  Run: canyon login %s\n", glyph, expired.Host, expired.Host)
 	case errors.As(err, &expired):

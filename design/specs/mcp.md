@@ -114,8 +114,8 @@ hook entries do today (cli.md §7.1).
 
 ### 2.1 Transport
 
-- **Endpoints.** `POST /mcp` and `GET /mcp` carry MCP's streamable HTTP transport. `DELETE /mcp` ends an `Mcp-Session-Id`.
-- **Origin.** The server validates `Origin` against the host's public URL, as MCP's streamable HTTP transport requires, and refuses any other with `403`.
+- **Endpoints.** `POST /mcp` carries MCP's streamable HTTP transport, **stateless** (amended 2026-11-21): every request stands alone, with no `Mcp-Session-Id`, so any replica behind the ingress answers it, and a tool's progress streams within its own request. `GET` and `DELETE /mcp` answer `405`. Production's question needs no session either: it comes back as an input request, and the retry carrying the answer is bound to it by its digest (§1.1).
+- **Origin.** The server validates `Origin` against the host's public URL, as MCP's streamable HTTP transport requires, and refuses any other with `403`. A request with no `Origin`, a native client's, passes.
 - **Where it's served.** The route serves only on the host's public URL behind TLS. A plain-`http` public URL serves no `/mcp`.
 
 ### 2.2 Authorization
@@ -137,9 +137,9 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   3. Canyon shows a consent screen: the client's name and redirect host, which account, and the scopes it asks for.
   4. The person allows it.
 - **Two scopes, from v1:**
-  - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource.
-  - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`.
-  - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope`, with the scope it needs, as the MCP authorization specification asks.
+  - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs`, `canyon_review`, `canyon_secret_link` and every resource.
+  - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref`, `canyon_promote` and `canyon_create_app`.
+  - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope` with the scope it needs, as the MCP authorization specification asks (amended 2026-11-21): that answer is a courtesy, read off the message by the SDK's own decoder; what refuses is the tool's own check on the call the SDK dispatched, and a fixed list of the methods and routes each scope reaches, so no second reading of the body can let a call through.
   - `canyon mcp` uses the CLI's session, which acts.
 - **The token.** Canyon issues an access token that is a Canyon session:
   - `flow: oauth`, a new value beside `browser | device | demo`;
@@ -153,12 +153,23 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
 ### 2.3 Tools
 
 The remote server has every local tool except `canyon_check` and `canyon_deploy`, which read a local
-directory. It adds two tools that work from a linked repository:
+directory. It adds three tools that work from a repository:
 
 | Tool | Does | Calls |
 |---|---|---|
 | `canyon_check_ref` | Reviews a linked repository's ref without deploying | `POST …/packages/from-repository {ref}` (new, §5), then `POST …/gate-runs` |
 | `canyon_deploy_ref` | Deploys a linked repository's ref to preview | the same package, then `POST …/deploys` |
+| `canyon_review` | Reads a review `canyon_check_ref` or `canyon_deploy_ref` handed off: its verdict and every finding once it ends (amended 2026-11-21) | `GET …/status?run=` (the run is the app's), then `GET /api/v1/gate-runs/:id` |
+| `canyon_secret_link` | The link that opens the app page's Secrets form on one secret, `<public URL>/#/apps/<app>/secrets?name=&env=`, for the person to set its value in their own browser (amended 2026-11-21) | `GET /api/v1/projects/:id` (the caller reads the app) |
+| `canyon_create_app` | Makes an app from a repository the org's Canyon App sees, the caller its owner, linked to it (amended 2026-11-21) | `POST /api/v1/projects {name}`, then `PUT …/repository {full_name, folder}`; when the link is refused, `DELETE /api/v1/projects/:id` |
+
+- **No tool takes a secret's value**, on either server (§1.2). On `/mcp`, where no terminal is in reach, every step the CLI words as "canyon secret set NAME in their own terminal" names `canyon_secret_link`'s link instead, and the instructions' secrets line says to hand the person that link. The Secrets section takes the link's name and environment alone, a name only as a secret may have one, scrolls to its form and readies the value's field; a link never carries a value.
+- **No step on `/mcp` names a CLI command.** The tools say what the CLI's blocks say, word for word, but that each command a step names is the tool that does it on `/mcp`: `canyon check` is `canyon_check_ref`, `canyon deploy` `canyon_deploy_ref`, `canyon deploy --env prod` `canyon_promote`, `canyon status` and `canyon logs` theirs, and "Run" is "Call" (amended 2026-11-21). The CLI's own text is unchanged.
+- **A call is about a minute at most.** An ingress or a web client cuts a longer one before it answers, so on `/mcp` a check, deploy or promotion still running after 45 seconds is handed off with its run's id (locally, after ten minutes), and its steps name `canyon_review` (or `canyon_status` for a promotion), which the agent calls until the verdict is in.
+- **`canyon_create_app {repository, folder?, name?}`** needs `act`. `repository` is `owner/name`, `folder` the link's folder, and `name` the app's display name, the repository's name (or the folder's last part) when omitted; the server picks the id, so an app the link refuses and the tool deletes leaves no name taken.
+  - The link is the *Link a repository* rule's (design/PERMISSIONS.md): the caller's own GitHub account must read the repository. With none linked, the tool deletes the app it made and answers the person's link page, `<public URL>/api/v1/github/link`, to open in their browser; where none of Canyon's GitHub Apps sees the repository, it answers "Ask an admin to give Canyon's GitHub App access to <repository>" and Settings › GitHub's address.
+  - A person makes at most 10 apps a day over `/mcp`: the eleventh is refused before anything is made.
+  - It deletes only the app it made in that call: no tool can delete any other.
 
 - **The server already supports linked repositories.** The GitHub App links an app to a repository or a folder of it (`PUT …/repository`, a contributor's since PR 8, below admin only to a repository their own GitHub account reads: design/PERMISSIONS.md, *Link a repository*), and on a push its check workflow packages the commit (`github-app/work.go`, `pack`). What's missing is packaging a ref on request.
 - **The new route** resolves `ref` to a commit through the app's installation and packages it with the same `pack` path, a folder link's included. It answers `404 not_linked` for an app with no link.
@@ -263,7 +274,8 @@ result it wasn't allowed.
 | Playbook writes, restores and imports | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
 | A custom rule's `playbook` | as the rule itself: admin, a person, in a browser | as the rule's own refusals |
 
-- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level. The level still applies with the scope.
+- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs`, `canyon_review`, `canyon_secret_link` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref`, `canyon_promote` and `canyon_create_app`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level, and reaches nothing past its scope's routes. The level still applies with the scope.
+- **Promotion's question, and its hard control.** `canyon_promote` asks the person through the client (elicitation) wherever the client can; a client that can't ask falls back to `confirm`, which is the agent's word that the person asked for production in the conversation, not the person's own answer. Where an org needs a person's answer whatever the client, the hard control is strict production approval (Guardrails › Production): every promotion from `/mcp`, as from the CLI, then files a request a person approves in the dashboard, and promotes nothing itself.
 
 - **Unchanged by MCP:**
   - Approving a finding (blocking findings stay a browser's, never the author's).
@@ -430,7 +442,7 @@ What's missing for it:
 
 - **Setting a secret in the dashboard.** A Secrets section on the app page: set or replace a value per environment and `where`, and remove one. It needs contributor, as the route does. The value is typed into a password field, sent once, and never shown back. A new screen; the route is unchanged.
 - **A contributor links their app to a repository** the org's Canyon App already sees (decided). Linking is an admin's act today (PERMISSIONS.md, *Manage access*); PR 8 moves it to contributor, PERMISSIONS.md first.
-- **A first deploy with no app yet.** `canyon deploy` makes the app on its first run, and nothing else does for a remote agent: no screen and no remote tool calls `POST /api/v1/projects`. The GitHub import, which makes an app from a repository, stays an admin's.
+- **A first deploy with no app yet.** `canyon deploy` makes the app on its first run; for a remote agent, `canyon_create_app` makes it from the repository and links it (§2.3; amended 2026-11-21). The GitHub import, which makes an ownerless app from a repository, stays an admin's.
 
 ## 11. The demo and the tour
 

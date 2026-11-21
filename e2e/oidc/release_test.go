@@ -198,11 +198,11 @@ const walkRedirect = "http://127.0.0.1:47124/callback"
 // registers, and the person's browser is sent to the consent page, whose request id comes back unanswered.
 func authorize(t *testing.T, browser *http.Client, name, scope string) string {
 	t.Helper()
-	id, _ := authorized(t, browser, name, scope)
+	id, _ := agentRequest(t, browser, name, scope)
 	return id
 }
 
-func authorized(t *testing.T, browser *http.Client, name, scope string) (request, client string) {
+func agentRequest(t *testing.T, browser *http.Client, name, scope string) (request, client string) {
 	t.Helper()
 	res, err := http.Post(host+"/oauth/register", "application/json", strings.NewReader(`{"client_name":"`+name+`","redirect_uris":["`+walkRedirect+`"]}`)) //nolint:noctx,gosec // the stack's own host
 	must(t, err)
@@ -234,7 +234,7 @@ const walkVerifier = "release-walk-verifier-release-walk-verifier-0123"
 // route, from Canyon's origin as the page sends it, and its code redeemed, so Sessions lists it as name (MCP).
 func connect(t *testing.T, browser *http.Client, name string) {
 	t.Helper()
-	request, client := authorized(t, browser, name, "read act")
+	request, client := agentRequest(t, browser, name, "read act")
 	req, err := http.NewRequest(http.MethodPost, host+"/api/v1/oauth/requests/"+url.PathEscape(request)+"/approve", nil) //nolint:noctx // the client's timeout bounds it
 	must(t, err)
 	req.Header.Set("Origin", host)

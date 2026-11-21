@@ -1,0 +1,24 @@
+# old-cli.yml: the latest released CLI against this tree's server on the compose stack (.github/old-cli.sh): a server
+# change an installed CLI can't read breaks people on their next deploy.
+# what it proves: everything the server answers, and what it builds and runs on
+cmd/canyon-server/**
+cmd/canyon-executor/**
+db/**
+events/**
+executor/**
+gate/**
+github-app/**
+identity/**
+ingest/**
+internal/**
+provisioners/**
+runs/**
+vault/**
+webhook/**
+demo/apps/**
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+.github/old-cli.sh
+!**/*.md
+!**/*_test.go

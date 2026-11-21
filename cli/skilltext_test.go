@@ -208,10 +208,12 @@ func TestTheSkillTellsAnAgentToQueryTheDatabase(t *testing.T) {
 	}
 }
 
-func TestSkillNamesCanyonCheckBeforeAFirstDeploy(t *testing.T) {
-	want := "Run `canyon check` before the first `canyon deploy` of a new app, and again after\na change that adds a dependency, a route or a secret."
-	if !strings.Contains(skillBody, want) {
-		t.Errorf("the shipped skill does not say %q", want)
+// canyon check refuses a canyon.toml with no app (cli.md §3.2), which a new app has until its first deploy writes one:
+// the skill sends a new app to canyon deploy first, and canyon check after it (the bed journeys, v0.11.0).
+func TestSkillNamesCanyonCheckAfterAFirstDeploy(t *testing.T) {
+	want := "A new app's first `canyon deploy` reviews it before anything runs, and writes the\napp's id into `canyon.toml`. After that, run `canyon check` after a change that adds\na dependency, a route or a secret"
+	if !strings.Contains(skillBody, want) || strings.Contains(skillBody, "`canyon check` before the first `canyon deploy`") {
+		t.Errorf("the shipped skill does not say %q, or still sends a new app to canyon check first", want)
 	}
 }
 

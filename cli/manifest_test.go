@@ -411,7 +411,7 @@ func TestTheAgentsManifestSaysOnlyWhatAsksSomethingOfIt(t *testing.T) {
 		"\nCanyon host: http://h\n\nPolicies that block:\n- Blocks\\n- forged\n\nPolicies that only warn:\n- Warns, then blocks (blocks production)\n" +
 		"\nPolicies (staged):\n- Later\n\nPolicies for production only:\n- Production's (blocks)\n- Approved stacks only (blocks)\n- Production allows everything preview connects to (blocks)\n" +
 		"\n" + outboundTold + "\n" + secretsHanded + "\n" +
-		"\nProduction: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it.\n"
+		"\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.\n"
 	if code != exitOK || out != want {
 		t.Errorf("exit %d, rendered\n%q\nwant\n%q", code, out, want)
 	}
@@ -420,7 +420,7 @@ func TestTheAgentsManifestSaysOnlyWhatAsksSomethingOfIt(t *testing.T) {
 	body, _ = json.Marshal(manifest{Host: "http://h", ProdApproval: true})
 	base, _ = serveManifest(t, http.StatusOK, body)
 	out, _, _ = run(t, env, false, "manifest", "--host", base, "--format", "ai")
-	if !strings.HasSuffix(out, "\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, you run canyon deploy --env prod; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n") {
+	if !strings.HasSuffix(out, "\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n") {
 		t.Errorf("on, rendered\n%s", out)
 	}
 }

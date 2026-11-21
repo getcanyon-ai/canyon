@@ -4436,9 +4436,10 @@ starting with a letter: `expense-approver`, never `expense_approver`.
 Before you build, run `canyon manifest` and follow what it prints, unless its
 output is already in this session.
 
-Run `canyon check` before the first `canyon deploy` of a new app, and again after
-a change that adds a dependency, a route or a secret. It runs the review a deploy
-runs, without deploying, so you fix what blocks before the deploy.
+A new app's first `canyon deploy` reviews it before anything runs, and writes the
+app's id into `canyon.toml`. After that, run `canyon check` after a change that adds
+a dependency, a route or a secret: it runs the review a deploy runs, without
+deploying, so you fix what blocks before the deploy.
 
 A static single-page app (a Vite app, say) runs no server of its own: give it this
 `project.toml` at its root and Canyon serves the files its build writes.
@@ -4544,8 +4545,9 @@ otherwise run `canyon check` again after that time, never in a loop before it.
 - Leave the `app` line in `canyon.toml` to `canyon deploy`: it writes the id
   Canyon picked, and an id you write may be someone else's app.
 - After a deploy, tell the user who can open the link (the access line).
-- When the user asks for production, you run `canyon deploy --env prod`, adding
-  `--yes` only when they asked for production in this conversation. Before it, run
+- When the user asks for production, call `canyon_promote`, setting `confirm`
+  only when they asked for production in this conversation; where Canyon's tools
+  aren't loaded, run `canyon deploy --env prod`, adding `--yes` only then. Before it, run
   `canyon secret list`: for each runtime secret set for preview and not for
   production, ask the person to set it themselves with
   `canyon secret set NAME --env prod` in their own terminal, or whether
@@ -4900,7 +4902,7 @@ Outbound: an app's environment may be under an allowlist, where Canyon refuses c
 
 Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there.
 
-Production: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it.
+Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.
 ```
 
 **How to pass what blocks** (amended 2026-11-03, #2622: agents were blocked at preview by rules the
@@ -4918,8 +4920,8 @@ unchanged.
 
 **The org's playbooks** (amended 2026-11-20, design/specs/mcp.md §3.3). After the org's own rules, the agent rendering
 hands each playbook that stands under `Your org's playbooks, how it builds, written by its admins. Before a task, read
-each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are
-loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
+each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook
+<slug>.`, one line each, the tool first (amended 2026-11-21: an agent with the tools reads the tool's name first), `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
 `Playbooks` as `<name>  <kind>  <slug>  version <n>`.
 
 **Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
@@ -4977,9 +4979,10 @@ The dashboard's *What agents are told* prints it as the agent reads it.
 
 The last line is the manifest's `prod_approval` (amended 2026-10-07, #1820), always printed, so an
 agent never guesses: off, as above; on, `Production: a person on the app's team approves it in
-Canyon's dashboard. When the user asks for production, you run canyon deploy --env prod; Canyon
-answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it
-yourself.` Each says who runs the command, the agent, in both modes (amended 2026-10-08, QA round 3). The person's rendering carries it as a last section, `Production`, one line:
+Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where
+Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never
+open or approve it yourself.` Each says who runs the command, the agent, in both modes (amended 2026-10-08, QA round 3),
+and names `canyon_promote` first, the shell command where the tools aren't loaded (amended 2026-11-21, the bed journeys). The person's rendering carries it as a last section, `Production`, one line:
 `promoted from the CLI or the dashboard` or `approved by a person in the dashboard`.
 
 Above it, once, while the host's via is `canyon`, the agent's rendering says outbound (amended 2026-11-08, #2708:

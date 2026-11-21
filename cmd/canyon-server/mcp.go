@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +19,7 @@ import (
 )
 
 // mcpNeedsSignIn is /mcp's answer on a host with sign-in off (design/EXPERIENCE.md, D5).
-const mcpNeedsSignIn = "Remote MCP needs sign-in, and this Canyon has it off. On this machine, use canyon mcp."
+const mcpNeedsSignIn = "Connecting by URL needs sign-in, and it's off on this Canyon. On this machine, use canyon mcp instead."
 
 // actTools are the tools a token needs the act scope for: each changes what runs (design/specs/mcp.md §2.2).
 var actTools = []string{mcptools.Promote, mcptools.CheckRef, mcptools.DeployRef}
@@ -49,7 +48,7 @@ func routesMCP(mux *http.ServeMux, api http.Handler, a *app) {
 	// stateless (design/specs/mcp.md §2.1): any replica answers any request, and GET and DELETE are 405
 	served := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server { return a.mcpServer(r, api) }, &mcp.StreamableHTTPOptions{Stateless: true})
 	bearer := auth.RequireBearerToken(a.mcpToken, &auth.RequireBearerTokenOptions{ResourceMetadataURL: a.public + "/.well-known/oauth-protected-resource/mcp"})
-	mux.Handle("/mcp", a.mcpOrigin(bearer(a.mcpScoped(served))))
+	mux.Handle("/mcp", a.mcpOrigin(bearer(served)))
 }
 
 // mcpOrigin refuses a request whose Origin is another site's, before its token is read: a browser page elsewhere
@@ -82,39 +81,6 @@ func (a *app) mcpToken(ctx context.Context, token string, _ *http.Request) (*aut
 	return &auth.TokenInfo{Scopes: scopes, Expiration: expires, UserID: sessionDigest(id), Extra: map[string]any{"caller": mcpCaller{session: s, scopes: scopes}}}, nil
 }
 
-// mcpScoped refuses a tools/call the token's scopes don't reach with 403 insufficient_scope and the scope it needs,
-// so the client can ask the person for more (MCP authorization, scope challenge). Every tool is listed either way.
-func (a *app) mcpScoped(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			next.ServeHTTP(w, r)
-			return
-		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-		if err != nil {
-			writeErr(w, http.StatusRequestEntityTooLarge, "too_large", "the request is over 1 MiB", nil)
-			return
-		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		var call struct { // one JSON-RPC message, as MCP's transport carries one: an array or anything else unreadable is refused
-			Method string `json:"method"`
-			Params struct {
-				Name string `json:"name"`
-			} `json:"params"`
-		}
-		if err := json.Unmarshal(body, &call); err != nil {
-			writeErr(w, http.StatusBadRequest, "bad_request", "the request is not one JSON-RPC message", nil)
-			return
-		}
-		if call.Method == "tools/call" && slices.Contains(actTools, call.Params.Name) && !slices.Contains(auth.TokenInfoFromContext(r.Context()).Scopes, "act") {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope="act", resource_metadata=%q`, a.public+"/.well-known/oauth-protected-resource/mcp"))
-			writeErr(w, http.StatusForbidden, "insufficient_scope", call.Params.Name+" needs the act scope", nil)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // asCaller serves one API request in-process as the MCP caller: the session stage's work done already, by the
 // bearer, so the route sees the person and the channel, mcp, as a cookie's request would carry them.
 func (a *app) asCaller(ctx context.Context, r *http.Request, c mcpCaller, api http.Handler, method, path string, body any) (int, json.RawMessage) {
@@ -135,11 +101,24 @@ func (a *app) asCaller(ctx context.Context, r *http.Request, c mcpCaller, api ht
 func (a *app) mcpServer(r *http.Request, api http.Handler) *mcp.Server {
 	c := auth.TokenInfoFromContext(r.Context()).Extra["caller"].(mcpCaller) // the bearer stage put it there, or the request never got here
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: version}, &mcp.ServerOptions{Instructions: mcptools.Preamble})
-	for _, t := range mcptools.Tools() {
+	for _, t := range append(mcptools.Tools(), mcptools.RemoteOnly()...) {
+		t := mcptools.Remote(t)
 		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if refused := scopeRefusal(t.Name, req); refused != nil {
+				return refused, nil
+			}
 			code, body := a.asCaller(ctx, r, c, api, http.MethodGet, "/skill/manifest", nil)
 			return &mcp.CallToolResult{IsError: code != http.StatusOK, Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
 		})
 	}
 	return s
+}
+
+// scopeRefusal is the insufficient_scope answer of an act tool called with a token that wasn't given act, read off
+// the call the SDK dispatched, so what decides the tool and what decides the scope are one parse; nil where it may run.
+func scopeRefusal(tool string, req *mcp.CallToolRequest) *mcp.CallToolResult {
+	if !slices.Contains(actTools, tool) || req.Extra != nil && req.Extra.TokenInfo != nil && slices.Contains(req.Extra.TokenInfo.Scopes, "act") {
+		return nil
+	}
+	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "insufficient_scope: " + tool + " needs the act scope. Connect again and allow it to check, deploy and promote."}}}
 }

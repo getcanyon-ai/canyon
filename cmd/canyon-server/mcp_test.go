@@ -110,28 +110,33 @@ func TestMCPRemoteRefusesAnotherSitesOrigin(t *testing.T) {
 	}
 }
 
-// A read token lists every tool but calls none that changes what runs: 403 insufficient_scope with the scope to ask
-// for. The scope is read off the JSON-RPC message itself, and a body that isn't one message is refused.
+// A read token lists every tool but runs none that changes what runs: each act tool answers insufficient_scope, judged
+// inside the tool from the call the SDK dispatched, so no spelling of the message reaches one by another parse.
 func TestMCPRemoteActsOnlyWithTheActScope(t *testing.T) {
 	base, _, _, gina := oauthHost(t)
 	const redirect = "https://claude.ai/cb"
 	id := register(t, base, redirect)
 	read, _ := signedInOver(t, base, gina, id, redirect)
-	if code, _, body := mcpCall(t, base, read, mcpList, nil); code != http.StatusOK || !strings.Contains(body, "canyon_promote") {
+	if code, _, body := mcpCall(t, base, read, mcpList, nil); code != http.StatusOK || !strings.Contains(body, "canyon_promote") || !strings.Contains(body, "canyon_deploy_ref") {
 		t.Errorf("a read token's list: %d %s", code, body)
 	}
-	code, h, body := mcpCall(t, base, read, mcpPromote, nil)
-	if code != http.StatusForbidden || !strings.Contains(body, `"error":"insufficient_scope"`) ||
-		!strings.Contains(h.Get("WWW-Authenticate"), `error="insufficient_scope", scope="act"`) {
-		t.Errorf("a read token's promote: %d %q %s", code, h.Get("WWW-Authenticate"), body)
+	call := func(tool string) string {
+		return `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"` + tool + `","arguments":{"app":"claims-portal","ref":"main"}}}`
 	}
-	for name, msg := range map[string]string{"a batch": "[" + mcpPromote + "]", "not JSON": "promote please", "a name of another type": `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":7}}`} {
-		if code, _, _ := mcpCall(t, base, read, msg, nil); code != http.StatusBadRequest {
-			t.Errorf("%s: %d, want 400", name, code)
+	refused := func(name, msg string) {
+		t.Helper()
+		if code, _, body := mcpCall(t, base, read, msg, nil); code == http.StatusOK && !strings.Contains(body, "insufficient_scope") {
+			t.Errorf("%s ran with a read token: %s", name, body)
 		}
 	}
+	for _, tool := range []string{"canyon_promote", "canyon_check_ref", "canyon_deploy_ref"} {
+		refused(tool, call(tool))
+	}
+	refused("a batch", "["+call("canyon_promote")+"]")
+	refused("a mixed-case duplicate key", `{"jsonrpc":"2.0","id":2,"method":"tools/call","Method":"tools/list","params":{"name":"canyon_promote","Name":"canyon_rules","arguments":{"app":"claims-portal"}}}`)
+	refused("a duplicate name", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"canyon_rules","name":"canyon_promote","arguments":{"app":"claims-portal"}}}`)
 	act, _ := signedInOver(t, base, gina, id, redirect, "read", "act")
-	if code, _, body := mcpCall(t, base, act, mcpPromote, nil); code == http.StatusForbidden {
+	if _, _, body := mcpCall(t, base, act, call("canyon_promote"), nil); strings.Contains(body, "insufficient_scope") {
 		t.Errorf("an act token's promote stopped at the scope: %s", body)
 	}
 }

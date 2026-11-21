@@ -123,7 +123,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
 - **Two scopes, from v1:**
   - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource.
   - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`.
-  - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope`, with the scope it needs, as the MCP authorization specification asks.
+  - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers a tool error, `insufficient_scope` and the scope it needs (amended 2026-11-21): the tool judges it from the call the SDK dispatched, never from a second parse of the request body, which could read the message differently.
   - `canyon mcp` uses the CLI's session, which acts.
 - **The token.** Canyon issues an access token that is a Canyon session:
   - `flow: oauth`, a new value beside `browser | device | demo`;
@@ -247,7 +247,7 @@ result it wasn't allowed.
 | Playbook writes, restores and imports | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
 | A custom rule's `playbook` | as the rule itself: admin, a person, in a browser | as the rule's own refusals |
 
-- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level. The level still applies with the scope.
+- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs gets `insufficient_scope` from the tool, whatever the person's level. The level still applies with the scope.
 
 - **Unchanged by MCP:**
   - Approving a finding (blocking findings stay a browser's, never the author's).

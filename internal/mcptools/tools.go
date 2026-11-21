@@ -159,6 +159,47 @@ func LocalOnly() []*mcp.Tool {
 	}
 }
 
+// RemoteOnly are the tools that work from an app's linked repository, which only /mcp serves (design/specs/mcp.md §2.3).
+func RemoteOnly() []*mcp.Tool {
+	ref := &jsonschema.Schema{Type: "string", Description: "A branch, tag or commit of the app's linked repository."}
+	return []*mcp.Tool{
+		{
+			Name:        CheckRef,
+			Title:       "Review a ref without deploying",
+			Description: "Reviews a ref of the app's linked repository without deploying it: the verdict and every finding, with how to fix each.",
+			InputSchema: object(map[string]*jsonschema.Schema{"app": appArg, "ref": ref}),
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
+		},
+		{
+			Name:        DeployRef,
+			Title:       "Deploy a ref to preview",
+			Description: "Reviews a ref of the app's linked repository and, when nothing blocks, builds it and deploys it to preview.",
+			InputSchema: object(map[string]*jsonschema.Schema{"app": appArg, "ref": ref}),
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
+		},
+	}
+}
+
+// RefArgs are canyon_check_ref's and canyon_deploy_ref's.
+type RefArgs struct {
+	App string `json:"app"`
+	Ref string `json:"ref"`
+}
+
+// Remote is t as /mcp serves it: no directory names the app there, so app is required, and ref with it where t takes one.
+func Remote(t *mcp.Tool) *mcp.Tool {
+	c := *t
+	s := *t.InputSchema.(*jsonschema.Schema)
+	s.Properties = maps.Clone(s.Properties)
+	s.Properties["app"] = &jsonschema.Schema{Type: "string", Description: "The app's id."}
+	s.Required = []string{"app"}
+	if _, ok := s.Properties["ref"]; ok {
+		s.Required = append(s.Required, "ref")
+	}
+	c.InputSchema = &s
+	return &c
+}
+
 // Local is t with the local server's dir argument: the directory whose canyon.toml names the app.
 func Local(t *mcp.Tool) *mcp.Tool {
 	c := *t

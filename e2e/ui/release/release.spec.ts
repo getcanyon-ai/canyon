@@ -71,7 +71,7 @@ async function finding(page: Page, who: string) {
     await expect(step).toHaveCount(0);
   } else if (who === "viewer") {
     await expect(page.getByText("Your access: read-only.")).toBeVisible();
-    await expect(page.getByRole("region", { name: "Review" })).toHaveCount(0);
+    await expect(page.getByText(/^Every app carries RELEASE-WALK\.md/)).toHaveCount(0); // no finding: technical detail is contributor and above
     await expect(step).toHaveCount(0);
   } else {
     await expect(step).toBeVisible();

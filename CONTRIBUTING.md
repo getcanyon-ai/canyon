@@ -91,6 +91,34 @@ Working on Canyon itself? Set DO_NOT_TRACK=1 (or CANYON_TELEMETRY=0) so your loc
 - **Keep the docs true.** A change that makes a sentence in the docs false fixes it in the same pull
   request.
 
+## Maintainers: the stack suites on private runners
+
+This section is for maintainers. A pull request from a fork is never affected.
+
+A maintainer's own pull request can run its stack suites on Canyon's private runners instead of GitHub's:
+`scripts/ci-private.sh <pr>`.
+
+- It starts the trusted workflow `private-ci.yml` in Canyon's private CI repository, with the pull request's
+  number and exact head commit. That workflow checks the pull request again, fetches the commit as plain files
+  and runs the suites. Nothing of the pull request's `.github` runs there, and the script pushes no git ref.
+- It labels the pull request `ci:private`, so the stack suites here skip, the way a suite the change doesn't
+  reach skips.
+- It prints the private run's address.
+
+`scripts/ci-private-status.sh <pr>` says whether that run passed for the head as it is now. It exits 0 only when
+it did, so merge on 0. Each new push needs `scripts/ci-private.sh <pr>` again; the label stays.
+
+If the private runners are down, `scripts/ci-private.sh --off <pr>` takes the label off and runs the suites here
+again.
+
+Refused: a pull request from a fork, and one opened by anyone outside `CANYON_PRIVATE_AUTHORS`. The label is
+honoured only on pull requests by those authors.
+
+Both scripts need:
+- `CANYON_PRIVATE_REPO`, the private CI repository as `<owner>/<name>`;
+- `CANYON_PRIVATE_GH_CONFIG_DIR`, the gh login that may start its workflow, when it isn't the one in
+  `GH_CONFIG_DIR`.
+
 ## Style
 
 Solve the problem you can show, with the smallest change that does it. Use real parsers and

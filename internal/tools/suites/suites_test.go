@@ -336,3 +336,80 @@ func TestReachAnswersWhatAChangeReaches(t *testing.T) {
 		}
 	}
 }
+
+// A pull request labelled ci:private leaves the suites Canyon's private runners run (journeys, probes and kind) to them
+// (CONTRIBUTING.md, Maintainers): only one from this repository, by an author the workflow says is one of ours, whose
+// label GitHub answers now. A fork's, another author's, one with no label, one GitHub doesn't answer for, and any event
+// but a pull request run every suite their change reaches.
+func TestReachLeavesALabelledPullRequestToThePrivateRunners(t *testing.T) {
+	top, scratch, bin := root(t), t.TempDir(), t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...) //nolint:gosec // this test's own git commands
+		cmd.Dir = scratch
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.CopyFS(filepath.Join(scratch, ".github", "suites"), os.DirFS(filepath.Join(top, ".github", "suites"))); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q", "-b", "main")
+	git("add", ".")
+	git("commit", "-q", "-m", "base")
+	if err := os.WriteFile(filepath.Join(scratch, "go.mod"), []byte("module x\n"), 0o600); err != nil { // the foundation: every suite
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "go.mod")
+	// gh as reach.sh asks it: the pull request's labels, or GitHub not answering
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte("#!/bin/sh\n[ -n \"$FAKE_LABELS\" ] || exit 1\nprintf '%s\\n' $FAKE_LABELS\n"), 0o700); err != nil { //nolint:gosec // an executable stub
+		t.Fatal(err)
+	}
+	payload := func(head string) string {
+		f := filepath.Join(t.TempDir(), "event.json")
+		body := `{"pull_request":{"number":41,"head":{"repo":{"full_name":"` + head + `"}},"base":{"repo":{"full_name":"getcanyon-ai/canyon"}}}}`
+		if err := os.WriteFile(f, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	names := suites(t, top)
+	reach := func(event, author, labels, eventPath string) map[string]string {
+		t.Helper()
+		cmd := exec.Command(filepath.Join(scratch, ".github", "suites", "reach.sh"), names...) //nolint:gosec // this tree's script
+		cmd.Dir = scratch
+		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_EVENT_NAME="+event, "GITHUB_OUTPUT=",
+			"GITHUB_REPOSITORY=getcanyon-ai/canyon", "GITHUB_EVENT_PATH="+eventPath, "CANYON_PRIVATE_AUTHOR="+author, "FAKE_LABELS="+labels)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("reach.sh: %v", err)
+		}
+		got := map[string]string{}
+		for _, line := range strings.Fields(string(out)) {
+			k, v, _ := strings.Cut(line, "=")
+			got[k] = v
+		}
+		return got
+	}
+	private := map[string]bool{"journeys": true, "probes": true, "kind": true}
+	got := reach("pull_request", "true", "bug ci:private", payload("getcanyon-ai/canyon"))
+	for _, name := range names {
+		if want := map[bool]string{true: "false", false: "true"}[private[name]]; got[name] != want {
+			t.Errorf("a labelled pull request of ours: %s=%s, want %s", name, got[name], want)
+		}
+	}
+	for what, c := range map[string][4]string{
+		"a fork's":                  {"pull_request", "true", "ci:private", payload("mallory/canyon")},
+		"another author's":          {"pull_request", "false", "ci:private", payload("getcanyon-ai/canyon")},
+		"one with no label":         {"pull_request", "true", "bug", payload("getcanyon-ai/canyon")},
+		"one GitHub doesn't answer": {"pull_request", "true", "", payload("getcanyon-ai/canyon")},
+		"a push":                    {"push", "true", "ci:private", payload("getcanyon-ai/canyon")},
+	} {
+		for name, v := range reach(c[0], c[1], c[2], c[3]) {
+			if v != "true" {
+				t.Errorf("%s: %s=%s, want true", what, name, v)
+			}
+		}
+	}
+}

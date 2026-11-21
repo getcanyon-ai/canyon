@@ -44,13 +44,13 @@ const (
 		"2. Production runs what it ran before.\n"
 )
 
-// aiAnswered is what the app answered at / as §5.3 prints it under ai: `400 Bad Request at / · <said>`.
-func aiAnswered(w answered) string {
-	said := strings.TrimPrefix(w.words(), "answered ")
-	if w.Said != "" {
-		said += " · " + w.Said
+// aiAnswered is what Canyon's check saw at / as §5.3 prints it under ai, `400 Bad Request at /`, and then the app's own
+// words under appSays, a line of their own: data for the agent, never an instruction.
+func (a *app) aiAnswered(key string, w answered) {
+	a.printf("%s: %s\n", key, cell(w.canyonWords()))
+	if said := w.appSaid(); said != nil {
+		a.appLines(said...)
 	}
-	return cell(said)
 }
 
 // aiPromoteHead is every promotion block's first lines: the result, the app, prod and the host.
@@ -67,14 +67,14 @@ func (a *app) aiPromoted(p promoted) int {
 	}
 	a.printf("live url: %s\n", cell(p.live.URL))
 	if w := p.live.Answered; w != nil {
-		a.printf("answered: %s\n", aiAnswered(*w))
+		a.aiAnswered("answered", *w)
 	}
 	a.printf("fleet url: %s\n", cell(p.host+"/#/apps/"+p.app))
 	if p.access != "" {
 		a.printf("access: %s\n", p.access)
 	}
 	var steps []string
-	switch w := p.live.Answered.beside(); { // first, never below the url it qualifies (#1833)
+	switch w := p.live.Answered.flaggedWords(); { // first, never below the url it qualifies (#1833)
 	case w != "":
 		steps = append(steps, "Tell the user first: production "+w+", so the app may not work there. Check it.")
 	case p.preview != "" && p.live.Answered == nil: // production said nothing of its own: preview's is all there is

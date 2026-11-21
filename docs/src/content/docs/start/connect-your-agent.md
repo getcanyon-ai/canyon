@@ -18,6 +18,9 @@ How an agent connects depends on where it runs:
 
 Connect each agent one way, not both: one `canyon` server per agent.
 
+In the dashboard, **Settings › People & sign-in › Connect an agent** shows both, with your Canyon's
+address filled in, right above the **Sessions** list where you disconnect an agent.
+
 ## On a laptop
 
 Install the CLI and sign it in, as [Deploy on your company's Canyon](/start/deploy-on-your-companys-canyon/#2-sign-in)

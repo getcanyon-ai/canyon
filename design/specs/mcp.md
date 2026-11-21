@@ -1,7 +1,9 @@
 # Canyon over MCP
 
-Status: proposed. Nothing here is built. The seam changes in §5 ship with their code, each as the
-first commit of the PR that needs it (AGENTS.md, rule 5).
+Status: built for v0.11.0 (2026-11-21): the local server `canyon mcp`, Canyon as the OAuth
+authorization server, the hosted `/mcp` and its tools, playbooks, and the Secrets section. The seam
+changes in §5 shipped with their code, each as the first commit of the PR that needed it (AGENTS.md,
+rule 5).
 
 Canyon reaches a coding agent today through three things `canyon skill install` writes: a skill, a
 session hook that runs `canyon manifest`, and the `canyon` CLI the agent shells out to. MCP adds a
@@ -425,7 +427,7 @@ MCP replaces the CLI as the agent's way in. It doesn't replace the CLI everywher
 | Signing in, for local MCP | `canyon mcp` uses the CLI's session. Remote MCP signs in through OAuth in the browser, with no CLI (§2.2) |
 | The session hook | A harness runs a command at session start, and that command is `canyon manifest`. A remote-only org relies on the server's `instructions` instead (§1.3) |
 | Deploying local files | Only something on the machine can package the working directory: `canyon deploy`, or `canyon mcp`'s `canyon_deploy` |
-| Setting a secret | `canyon secret set` reads the value in the person's terminal, and no tool takes a value (§1.2). **The dashboard can't set a secret today**: `PUT …/secrets/:name` accepts any session, but no screen calls it; the app page shows secrets only as audit rows |
+| Setting a secret | No tool takes a value (§1.2). The person sets it with `canyon secret set` in their own terminal, or in the app page's Secrets section; on `/mcp`, `canyon_secret_link` hands the agent a link to that form, filled in with the name and environment |
 | `canyon demo` | It runs Docker on the person's machine |
 | CI | A pipeline runs `canyon check` or `canyon deploy` with a token, and nothing there speaks MCP |
 | Admin verbs | `canyon undeploy --hold`, `canyon telemetry`, `canyon licence`. Each also has its dashboard screen, or is a responder's or an admin's act from a browser |
@@ -437,13 +439,13 @@ A person whose agent has only the remote server's URL can get from code to produ
 1. Their agent connects to `https://<canyon>/mcp`, and they allow it in the browser (§2.2).
 2. The agent pushes the app's code to a repository linked to a Canyon app.
 3. `canyon_check_ref` and `canyon_deploy_ref` review and deploy the pushed ref (§2.3).
-4. They set the app's secrets in the dashboard.
+4. They set the app's secrets in the dashboard, from `canyon_secret_link`'s link.
 5. `canyon_promote` promotes, or a person does from the app page.
 
-What's missing for it:
+What it took, each built for v0.11.0:
 
-- **Setting a secret in the dashboard.** A Secrets section on the app page: set or replace a value per environment and `where`, and remove one. It needs contributor, as the route does. The value is typed into a password field, sent once, and never shown back. A new screen; the route is unchanged.
-- **A contributor links their app to a repository** the org's Canyon App already sees (decided). Linking is an admin's act today (PERMISSIONS.md, *Manage access*); PR 8 moves it to contributor, PERMISSIONS.md first.
+- **Setting a secret in the dashboard.** The app page's Secrets section: set or replace a value per environment and `where`, and remove one. It needs contributor, as the route does. The value is typed into a password field, sent once, and never shown back.
+- **A contributor links their app to a repository** the org's Canyon App already sees, and only one their own linked GitHub account reads (PERMISSIONS.md, *Link a repository*; PR 8).
 - **A first deploy with no app yet.** `canyon deploy` makes the app on its first run; for a remote agent, `canyon_create_app` makes it from the repository and links it (§2.3; amended 2026-11-21). The GitHub import, which makes an ownerless app from a repository, stays an admin's.
 
 ## 11. The demo and the tour
@@ -469,11 +471,10 @@ What's missing for it:
 
 ## 13. Docs and the website
 
-- **A new docs page, Connect your agent** (`docs/start/connect-your-agent.md`), with three ways in, one section each:
-  - **The CLI:** `canyon skill install` writes the skill, the hook and the MCP config for each agent it finds.
-  - **One click:** each agent's install link (§8).
-  - **A URL:** on a team install with sign-in, add `https://<canyon>/mcp` to any MCP client, and allow it in the browser. The laptop demo has no sign-in, so it serves no URL: there, use the CLI.
-  - The page links each agent's own page (`docs/start/agents/`) for the details, and §10 for what still needs the CLI.
+- **A new docs page, Connect your agent** (`docs/start/connect-your-agent.md`), in two parts (amended 2026-11-21):
+  - **On a laptop:** `canyon login`, then `canyon skill install`, which writes the skill, the hook and the MCP config for each agent it finds; each agent's own command or install link (§8) adds the server alone.
+  - **In the cloud:** on a team install with sign-in, add `https://<canyon>/mcp` to a cloud agent and allow it in the browser, with what that needs and how an admin sets it up once, only where the agent's vendor documents a way (§2.4). The laptop demo has no sign-in, so it serves no URL: there, use the CLI.
+  - The page links each agent's own page (`docs/start/agents/`) for the details, and says what still needs the CLI (§10).
 - **A new docs page, Playbooks** (`docs/org/playbooks.md`), for platform teams: what goes in a playbook and what in a rule, one worked example (a service-conventions skill and the custom rule that points at it), and how each agent gets it: a native skill in Claude Code and Codex, the tool through MCP, `canyon playbook` elsewhere.
 - **The website's FAQ.** The entry "Which coding agents work with Canyon?" answers today that Claude Code, Cursor and Codex connect with one command, `canyon skill install`. Once remote MCP ships, it also names connecting any MCP client with Canyon's URL. The change goes to the website's repository with that release; the wording is the lead's.
 

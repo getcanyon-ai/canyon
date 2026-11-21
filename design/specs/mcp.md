@@ -172,9 +172,9 @@ org-managed settings. Docs ship one page per agent (`docs/start/agents/`) with t
 
 | Harness | MCP server, org-managed | Session hook, org-managed |
 |---|---|---|
-| Claude Code | `managed-mcp.json` beside the managed settings: `{"mcpServers":{"canyon":{"type":"http","url":"https://<canyon>/mcp"}}}` | `hooks.SessionStart` in `managed-settings.json`, as `skill install` writes it today, if the CLI is on those machines |
-| Codex | `[mcp_servers.canyon]` with `url = "https://<canyon>/mcp"` in the managed config | the managed `hooks.json`, where Codex reads one |
-| Cursor | the team's MCP settings, where Cursor's admin plan offers them | `hooks.json` committed to the repositories the team uses |
+| Claude Code | `managedMcpServers` in the managed settings, Claude Code 2.1.259 or later: `{"managedMcpServers":{"canyon":{"type":"http","url":"https://<canyon>/mcp"}}}`. Never `managed-mcp.json`: it takes exclusive control, and every other MCP server on the machine stops loading (code.claude.com/docs/en/managed-mcp, read 2026-11-21) | `hooks.SessionStart` in `managed-settings.json`, as `skill install` writes it today, if the CLI is on those machines |
+| Codex | none: its managed configuration (`requirements.toml`) allows or blocks MCP servers, and can't add one, so each person adds it (learn.chatgpt.com/codex/enterprise/managed-configuration, read 2026-11-21) | the managed `hooks.json`, where Codex reads one |
+| Cursor | Dashboard › Plugins & MCPs: the server as a team MCP server, added to the team marketplace as Default On; Teams and Enterprise plans (cursor.com/docs/context/mcp, read 2026-11-21) | `hooks.json` committed to the repositories the team uses |
 
 - **Remote needs no hook.** A remote-only org needs no CLI on the machine: the server's `instructions` carry the manifest. The hook is for orgs that also run the CLI.
 - **These paths change between harness releases.** The docs PR checks each one against the harness version it names, and none of them is hard-coded in Canyon.
@@ -305,7 +305,7 @@ Named here, and edited later in the PR that builds each.
   - a finding's playbook step, in both forms (§3.4);
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
 - **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1) and the hook's native-skill sync, §7.2's skill text, and §5.2's playbook step.
-- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
+- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Settings › People & sign-in › Connect an agent, and *What agents are told*'s components and playbooks (§12).
 - **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
@@ -357,7 +357,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 13. **Secrets in the dashboard.**
     - What: §10.1's Secrets section on the app page.
     - Acceptance: `cd web && npx vitest run src/screens/Secrets.test.tsx` · `make e2e-ui` (a journey per level: a contributor sets a value, a viewer sees no form).
-14. **Guardrails › Connect agents, and what agents receive.**
+14. **Settings › People & sign-in › Connect an agent, and what agents receive.**
     - What: §12.
     - Acceptance: `cd web && npx vitest run src/screens/ConnectAgents.test.tsx` · `make e2e-ui` (a member's and an admin's view).
 15. **Connect your agent.**
@@ -444,10 +444,10 @@ What's missing for it:
 ## 12. The dashboard
 
 - **Settings › People & sign-in › Connect an agent**, a new panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open):
-  - **The URL.** The protected-resource metadata's `resource`, exactly, with a copy button. Where that read answers `404` (a public URL that isn't `https`), no URL, and one line saying why. On a host with sign-in off it shows `canyon mcp` instead, and says a team install connects agents by URL.
-  - **Per agent:** the CLI line `canyon skill install`, and Claude Code, Codex, Cursor and VS Code each with its command or one-click install link: for the URL where the host serves one, else for `canyon mcp` (§8).
-  - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with the URL, where there is one.
-  - **Who sees it.** Every member sees the URL and the per-agent lines; only admins see the org-managed snippets, as they're for rolling out to everyone.
+  - **On a laptop, the CLI** (amended 2026-11-21): three numbered steps with this host filled in, install the CLI, `canyon login <host>`, `canyon skill install`. Every host shows them.
+  - **In the cloud, the URL.** The protected-resource metadata's `resource`, exactly, with a copy button, and Claude Code, Codex, Cursor and VS Code each with its command or one-click install link for it (§8). Where that read answers `404` (a public URL that isn't `https`), no URL, and one line saying why; on a host with sign-in off, no URL and a line saying why. No agent is pointed at `canyon mcp` here: `canyon skill install` sets that up.
+  - **Org-managed config, for admins:** §2.4's rollout, only with an `https` URL: Claude Code's `managedMcpServers` snippet, and a line each for Codex and Cursor, which have no snippet.
+  - **Who sees it.** Every member sees the steps, the URL and the per-agent lines; only admins see the rollout.
 - **Guardrails › Playbooks**, the authoring screen: §3.2.
 - **What agents receive.** The existing *What agents are told* view gains the two things an agent is now handed besides the rules:
   - the components (`component_types`) and stacks;

@@ -262,22 +262,32 @@ so a round fits inside the access token's hour, and the runner refuses a grant w
 The scorer redacts the token from every scorecard.
 
 Two scenarios need a grant of their own, a template HOME each, given as `--hosted <label>=<dir>`: `home:
-revoke` (a person disconnects it mid-run, which would end a shared grant for every scenario) and `home:
-unlinked` (a team member whose GitHub account isn't linked to Canyon). So a full round is four consents:
-`read` and `act` as the tester, `act` for `revoke`, and `act` as the unlinked member.
+revoke` (its session is ended mid-run, which would end a shared grant for every scenario) and `home:
+unlinked` (a second test member, dave, whose GitHub account isn't linked to Canyon). So a full round is four
+consents: `read` and `act` as the tester, `act` for `revoke`, and `act` as dave. Each grant's client is named
+`Canyon QA runner (<template> <scope>)`, so its session can be told apart in the sessions list.
 
 ```sh
 go run ./qa/agent run --hosted $HOSTED --hosted revoke=$REVOKE --hosted unlinked=$UNLINKED \
-  --repo <owner/name> --push-as $PUSH --unseen-repo <owner/name> --fork-ref <ref> \
+  --repo <owner/name> --push-key $KEY --unseen-repo <owner/name> --fork-ref <ref> \
   $H <run-dir> qa/agent/scenarios/*.md
 ```
 
 - `--repo`: a repository the org's Canyon App sees, `{{REPO}}` in the scenarios. The runner pushes each
   scenario's seed to a branch of its own, `qa/<app>` (`{{BRANCH}}`), links the app to it as the tester, and
   deletes the branch at the end.
-- `--push-as`: a gh config directory whose token pushes to `--repo` and nothing else, a fine-grained token
-  with contents write on that one repository. The runner pushes with it, and the agent's own `git push`
-  does too, through a credential helper in its HOME's `.gitconfig`.
+- `--push-key`: a directory holding `id_ed25519`, a deploy key with write access to `--repo` alone, and
+  `known_hosts` with GitHub's host key. Make it for the round, add it to the one repository, and delete it
+  after:
+
+  ```sh
+  ssh-keygen -q -t ed25519 -N '' -C qa-agent -f $KEY/id_ed25519
+  ssh-keyscan -t ed25519 github.com > $KEY/known_hosts   # check it against GitHub's published fingerprint
+  gh api repos/<owner/name>/keys -f title=qa-agent -f key="$(cat $KEY/id_ed25519.pub)" -F read_only=false
+  ```
+
+  Each clone's git config pushes over SSH with that key alone and the host key pinned, the runner's pushes and
+  the agent's alike.
 - `--unseen-repo`: a repository the App has no access to (`{{UNSEEN_REPO}}`); nothing is pushed there.
 - `--fork-ref`: a ref of a fork's pull request to `--repo` (`{{FORK_REF}}`).
 
@@ -296,8 +306,10 @@ A hosted scenario's lines:
   is made; an admin sets it in the dashboard.
 - `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: the runner sets the secret,
   a made-up value, just before that turn, as the person would in the dashboard, not before the seed.
-- `### N (once a person disconnects the agent)`: the turn waits until the grant is refused, polling `/mcp`;
-  a person disconnects the agent in Canyon meanwhile.
+- `### N (once a person disconnects the agent)`: the turn waits until the grant is refused, polling `/mcp`.
+  Disconnecting is a browser's alone (`DELETE /api/v1/sessions/:id` refuses any other session), so the runner
+  writes `<name>/revoke.sql`, which ends that grant's session by its digest, and says to run it through the
+  one-shot SQL pod; a person's Disconnect in the dashboard ends it as well.
 
 Every scenario with a `secret:` line has a `secret's value` row: a made-up value found in any turn's
 transcript fails it. The remote tools score as the local ones do: `canyon_check_ref` a check,
@@ -308,4 +320,5 @@ What these runs leave to Canyon's own tests, since no model is needed to check i
 registration, consent and the token exchange; refresh rotation and reuse; `insufficient_scope` and its
 header; each scope's tools; a fork's ref refused; `github_link_required` and the App not seeing a repository,
 with the app deleted; `canyon_create_app`'s ten a day; a disconnected grant refused; the 45-second hand-off.
-The journeys check what an agent does with each.
+The journeys check what an agent does with each, and [hand-checks.md](hand-checks.md) what a person sees signing a
+real client in, which REPORT.md lists every round.

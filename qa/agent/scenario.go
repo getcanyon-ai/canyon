@@ -143,7 +143,7 @@ type userTurn struct {
 	OnceRefused bool
 	OnceAllowed bool
 	// OnceSecrets sets the scenario's secret: lines just before the turn, as the person would in the dashboard, in
-	// place of before the seed. OnceDisconnected waits for a person to disconnect the agent's OAuth grant, in Canyon.
+	// place of before the seed. OnceDisconnected waits for the agent's OAuth grant to end (remote.go, revokeSQL).
 	OnceSecrets      bool
 	OnceDisconnected bool
 }

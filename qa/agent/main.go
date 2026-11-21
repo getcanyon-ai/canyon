@@ -33,7 +33,7 @@ func main() {
 	}
 }
 
-const usage = "agent run [--suffix r2] [--keep-apps] [--parallel N] [--hosted [label=]<dir>]… [--repo owner/name --push-as <gh-config-dir>] " +
+const usage = "agent run [--suffix r2] [--keep-apps] [--parallel N] [--hosted [label=]<dir>]… [--repo owner/name --push-key <dir>] " +
 	"[--unseen-repo owner/name] [--fork-ref ref] <tester-home> <run-dir> <scenario.md>… | agent score <run-dir> | " +
 	"agent consent <tester-home> <hosted-home> read|act"
 
@@ -66,7 +66,11 @@ func run(args []string) error {
 			return nil
 		})
 	}
-	flags.StringVar(&o.pushAs, "push-as", "", "a gh config directory whose token pushes to --repo alone")
+	flags.Func("push-key", "a directory holding id_ed25519, a deploy key that writes to --repo alone, and known_hosts", func(v string) error {
+		abs, err := filepath.Abs(v)
+		o.pushKey = abs
+		return err
+	})
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

@@ -41,6 +41,7 @@ func consent(args []string) error {
 		return err
 	}
 	hosted, scope := args[1], args[2]
+	client := "Canyon QA runner (" + filepath.Base(hosted) + " " + scope + ")" // names this grant's session in the sessions list
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
@@ -50,7 +51,7 @@ func consent(args []string) error {
 	var reg struct {
 		ClientID string `json:"client_id"`
 	}
-	if err := postJSON(s.host+"/oauth/register", map[string]any{"client_name": "Canyon QA runner", "redirect_uris": []string{redirect},
+	if err := postJSON(s.host+"/oauth/register", map[string]any{"client_name": client, "redirect_uris": []string{redirect},
 		"grant_types": []string{"authorization_code"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}, &reg); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
@@ -100,7 +101,7 @@ func consent(args []string) error {
 		return err
 	}
 	until := time.Now().Add(time.Duration(tok.Expires) * time.Second).UTC().Format(time.RFC3339)
-	body := strings.Join([]string{tok.Access, until, s.host}, "\n") + "\n" // ponytail: the refresh token is never kept, so nothing can rotate it
+	body := strings.Join([]string{tok.Access, until, s.host, client}, "\n") + "\n" // ponytail: the refresh token is never kept, so nothing can rotate it
 	if err := os.WriteFile(filepath.Join(hosted, tokenDir, "token-"+scope), []byte(body), 0o600); err != nil {
 		return err
 	}
@@ -133,8 +134,8 @@ func random(n int) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// grant is a kept token: its value, until when it holds, and the host it is for.
-type grant struct{ token, host string }
+// grant is a kept token: its value, the host it is for, and the client name its session goes by.
+type grant struct{ token, host, client string }
 
 func readGrant(hosted, scope string) (grant, error) {
 	raw, err := os.ReadFile(filepath.Join(hosted, tokenDir, "token-"+scope))
@@ -142,14 +143,14 @@ func readGrant(hosted, scope string) (grant, error) {
 		return grant{}, fmt.Errorf("no %s grant in %s: run agent consent first: %w", scope, hosted, err)
 	}
 	f := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	if len(f) != 3 {
+	if len(f) != 4 {
 		return grant{}, fmt.Errorf("%s's %s grant does not read: run agent consent again", hosted, scope)
 	}
 	until, err := time.Parse(time.RFC3339, f[1])
 	if err != nil || time.Until(until) < hostedFor {
 		return grant{}, fmt.Errorf("%s's %s grant ends at %s, sooner than a scenario may take: run agent consent again", hosted, scope, f[1])
 	}
-	return grant{f[0], f[2]}, nil
+	return grant{f[0], f[2], f[3]}, nil
 }
 
 // hostedHome copies the hosted template HOME into the scenario's, without the kept grants, and points Claude Code's
@@ -231,15 +232,15 @@ func noCLI(home string, env []string) error {
 	})
 }
 
-// pushSeed pushes the committed seed to a branch of its own in repo, as the operator's push identity: pushAs is a gh
-// config directory whose token reaches that repository alone. The agent's own pushes use the same.
-func pushSeed(app, home, repo, branch, pushAs string) error {
-	helper := "!GH_CONFIG_DIR=" + pushAs + " gh auth git-credential"
+// pushSeed pushes the committed seed to a branch of its own in repo over SSH, with the deploy key in keyDir alone
+// (id_ed25519, write access to that one repository) and GitHub's host key pinned in keyDir/known_hosts. The app's own
+// git config carries both, so the agent's pushes go the same way and nowhere else.
+func pushSeed(app, home, repo, branch, keyDir string) error {
+	if err := origin(app, repo, branch, keyDir); err != nil {
+		return err
+	}
 	for _, args := range [][]string{
-		{"remote", "add", "origin", "https://github.com/" + repo + ".git"},
-		{"checkout", "-qb", branch},
-		{"-c", "credential.helper=", "-c", "credential.helper=" + helper, "push", "-q", "origin", "HEAD:refs/heads/" + branch},
-		{"config", "--file", filepath.Join(home, ".gitconfig"), "credential.https://github.com.helper", helper},
+		{"push", "-q", "origin", "HEAD:refs/heads/" + branch},
 		{"config", "--file", filepath.Join(home, ".gitconfig"), "user.name", "tester"},
 		{"config", "--file", filepath.Join(home, ".gitconfig"), "user.email", "tester@example.com"},
 	} {
@@ -250,10 +251,25 @@ func pushSeed(app, home, repo, branch, pushAs string) error {
 	return nil
 }
 
+// origin points the app's clone at repo over SSH with the deploy key, on the scenario's branch.
+func origin(app, repo, branch, keyDir string) error {
+	ssh := fmt.Sprintf("ssh -i '%s' -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s'",
+		filepath.Join(keyDir, "id_ed25519"), filepath.Join(keyDir, "known_hosts"))
+	for _, args := range [][]string{
+		{"remote", "add", "origin", "git@github.com:" + repo + ".git"},
+		{"config", "core.sshCommand", ssh},
+		{"checkout", "-qb", branch},
+	} {
+		if err := git(app, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // dropBranch deletes the scenario's branch once its turns are over.
-func dropBranch(app, branch, pushAs string) {
-	if err := git(app, "-c", "credential.helper=", "-c", "credential.helper=!GH_CONFIG_DIR="+pushAs+" gh auth git-credential",
-		"push", "-q", "origin", "--delete", branch); err != nil {
+func dropBranch(app, branch string) {
+	if err := git(app, "push", "-q", "origin", "--delete", branch); err != nil {
 		fmt.Printf("%s: branch %s not deleted: %v\n", filepath.Base(app), branch, err)
 	}
 }
@@ -274,7 +290,47 @@ func link(home, app, repo string) error {
 	return nil
 }
 
-// waitDisconnected waits until the grant is refused: a person disconnected the agent in Canyon.
+// revokeSQL writes revoke.sql, which ends the grant's session: the disconnect route is a browser's alone
+// (routes_sessions.go, browserOnly), so a person's click or this, run through the one-shot SQL pod, ends it. The
+// session is found by its client's name in the tester's own sessions list, by its digest, never its secret.
+func revokeSQL(home, dir string, g grant) (string, error) {
+	s, err := signedIn(home)
+	if err != nil {
+		return "", err
+	}
+	a, err := s.call(http.MethodGet, "/api/v1/sessions", nil)
+	if err != nil {
+		return "", err
+	}
+	var list struct {
+		Sessions []struct {
+			ID     string `json:"id"`
+			Flow   string `json:"flow"`
+			Client string `json:"client"`
+		} `json:"sessions"`
+	}
+	if a.status != http.StatusOK || json.Unmarshal([]byte(a.said), &list) != nil {
+		return "", fmt.Errorf("GET /api/v1/sessions: %s", a)
+	}
+	var ids []string
+	for _, ses := range list.Sessions {
+		if ses.Flow == "oauth" && ses.Client == g.client && sessionDigest.MatchString(ses.ID) {
+			ids = append(ids, "'"+ses.ID+"'")
+		}
+	}
+	if len(ids) == 0 {
+		return "", fmt.Errorf("the tester has no live session of %s: run agent consent again", g.client)
+	}
+	path := filepath.Join(dir, "revoke.sql")
+	sql := "UPDATE sessions SET revoked_at = now() WHERE revoked_at IS NULL AND flow = 'oauth'\n" +
+		"  AND 'ses_' || left(encode(sha256(convert_to(id, 'UTF8')), 'hex'), 16) IN (" + strings.Join(ids, ", ") + ");\n"
+	return path, os.WriteFile(path, []byte(sql), 0o600)
+}
+
+// sessionDigest is a session's id as the sessions list shows it (contracts/routes.md, GET /api/v1/sessions).
+var sessionDigest = regexp.MustCompile(`^ses_[0-9a-f]{16}$`)
+
+// waitDisconnected waits until the grant is refused: its session ended.
 func waitDisconnected(ctx context.Context, g grant, wait time.Duration) error {
 	for deadline := time.Now().Add(wait); time.Now().Before(deadline); {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, g.host+"/mcp",

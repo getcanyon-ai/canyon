@@ -58,7 +58,7 @@ type options struct {
 	parallel int               // scenarios at once; 0 is all of them
 	hosted   map[string]string // a hosted scenario's template HOME by its home: label, "" when it names none
 	repos    map[string]string // {{REPO}}, {{UNSEEN_REPO}} and {{FORK_REF}}, as the command line gave them
-	pushAs   string            // a gh config directory whose token pushes to {{REPO}} alone
+	pushKey  string            // a directory holding the deploy key that writes to {{REPO}} alone, and known_hosts
 }
 
 // runAll runs every scenario, all at once unless o.parallel says otherwise, each turn a headless Claude Code or Codex
@@ -92,8 +92,8 @@ func runAll(home, runDir string, o options, files []string) error {
 				return fmt.Errorf("%s names %s: give it on the command line (%s)", f, p, usage)
 			}
 		}
-		if s.Repo != "" && o.pushAs == "" {
-			return fmt.Errorf("%s: linked repo: needs -push-as <gh config dir>, the identity that pushes the seed", f)
+		if s.Repo != "" && o.pushKey == "" {
+			return fmt.Errorf("%s: linked repo: needs --push-key <dir>, the deploy key that pushes the seed", f)
 		}
 		if name := appName(s.Name, o.suffix); len(name) > 55 { // before any turn, so a tooling mistake never reads as the agent's
 			return fmt.Errorf("%s: an app name is at most 55 characters (contracts/routes.md, POST /api/v1/projects); shorten --suffix", name)
@@ -219,10 +219,10 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 		return err
 	}
 	if s.Repo != "" { // the user's code on a branch of its own, which the app is linked to, unless the agent makes the app
-		if err := pushSeed(app, agentHome, repo, "qa/"+name, o.pushAs); err != nil {
+		if err := pushSeed(app, agentHome, repo, "qa/"+name, o.pushKey); err != nil {
 			return err
 		}
-		defer dropBranch(app, "qa/"+name, o.pushAs)
+		defer dropBranch(app, "qa/"+name)
 		if !s.AgentMakesApp {
 			if err := link(home, name, repo); err != nil {
 				return err
@@ -326,7 +326,12 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 			}
 		}
 		if t.OnceDisconnected {
-			fmt.Printf("%s turn %d: waiting for a person to disconnect the agent, in Canyon's settings\n", name, i+1)
+			sql, err := revokeSQL(home, dir, g)
+			if err != nil {
+				return fmt.Errorf("turn %d: %w", i+1, err)
+			}
+			fmt.Printf("%s turn %d: waiting for the agent's grant to end: run %s through the one-shot SQL pod, or disconnect %q in Canyon's dashboard\n",
+				name, i+1, sql, g.client)
 			if err := waitDisconnected(ctx, g, allowedFor); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
@@ -618,8 +623,55 @@ func report(runDir string, list []scenario, errs []error, parallel int, wall tim
 		took, _ := os.ReadFile(filepath.Join(dir, "elapsed"))
 		rows += fmt.Sprintf("| qa-%s | %s · %s | %s | %s | %s |\n", s.Name, s.Agent, way, result, cmp.Or(strings.TrimSpace(string(took)), "–"), oneLine(why))
 	}
-	fmt.Fprintf(&b, "# Agent round\n\nwall: %s · %d scenarios, %d at once · %d passed · %d not\n\n", wall.Round(time.Second), len(list), parallel, passed, len(list)-passed)
+	clients, missing := handChecks(runDir)
+	fmt.Fprintf(&b, "# Agent round\n\nwall: %s · %d scenarios, %d at once · %d passed · %d not · required checks by hand not passed: %d\n\n",
+		wall.Round(time.Second), len(list), parallel, passed, len(list)-passed, missing)
 	b.WriteString("| scenario | agent · way | result | wall | why |\n|---|---|---|---|---|\n" + rows)
+	b.WriteString("\n## Real clients, by hand\n\nThe journeys hand the agent a grant; these are a person signing a real client in (hand-checks.md).\n\n" +
+		"| check | result |\n|---|---|\n" + clients)
 	b.WriteString("\nEach scenario's scorecard.md has its verdict and what the agent did; summary.md has them side by side.\n")
 	return os.WriteFile(filepath.Join(runDir, "REPORT.md"), []byte(b.String()), 0o600)
+}
+
+// requiredByHand are the checks a person makes with a real client that every round's REPORT.md lists, recorded or not:
+// the journeys bypass the client's own OAuth, so this is the proof of it.
+var requiredByHand = []string{"Claude Code: its own /mcp sign-in"}
+
+// handChecks reads <run-dir>/hand-checks.txt, one "pass|fail | <check> | <note>" per line, into REPORT.md's rows,
+// every required check among them, and counts the required ones that didn't pass.
+func handChecks(runDir string) (string, int) {
+	raw, _ := os.ReadFile(filepath.Join(runDir, "hand-checks.txt"))
+	got := map[string]string{}
+	var order []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		f := strings.Split(line, "|")
+		if len(f) < 2 {
+			continue
+		}
+		result, check := strings.TrimSpace(f[0]), strings.TrimSpace(f[1])
+		if result != "pass" && result != "fail" || check == "" {
+			continue
+		}
+		if _, seen := got[check]; !seen {
+			order = append(order, check)
+		}
+		got[check] = strings.TrimSpace(result + " " + strings.TrimSpace(strings.Join(f[2:], "|")))
+	}
+	rows, missing := "", 0
+	for _, c := range requiredByHand {
+		r, ok := got[c]
+		if !ok {
+			r = "not recorded"
+		}
+		if !strings.HasPrefix(r, "pass") {
+			missing++
+		}
+		rows += fmt.Sprintf("| %s (required) | %s |\n", c, oneLine(r))
+	}
+	for _, c := range order {
+		if !slices.Contains(requiredByHand, c) {
+			rows += fmt.Sprintf("| %s | %s |\n", c, oneLine(got[c]))
+		}
+	}
+	return rows, missing
 }

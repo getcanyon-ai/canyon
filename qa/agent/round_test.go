@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -81,7 +82,9 @@ func TestEveryScenarioRunsAtOnceUnderAHomeOfItsOwn(t *testing.T) {
 		t.Errorf("three scenarios shared HOMEs: %v", homes)
 	}
 	report, err := os.ReadFile(filepath.Join(run, "REPORT.md"))
-	if err != nil || !strings.Contains(string(report), "3 scenarios, 3 at once · 3 passed") || !strings.Contains(string(report), "| qa-a | claude-code · CLI | pass |") {
+	if err != nil || !strings.Contains(string(report), "3 scenarios, 3 at once · 3 passed") || !strings.Contains(string(report), "| qa-a | claude-code · CLI | pass |") ||
+		!strings.Contains(string(report), "required checks by hand not passed: 1") ||
+		!strings.Contains(string(report), "| Claude Code: its own /mcp sign-in (required) | not recorded |") {
 		t.Errorf("REPORT.md: %s (%v)", report, err)
 	}
 }
@@ -95,7 +98,7 @@ func hostedTemplate(t *testing.T, host string, until time.Time) string {
 		t.Fatal(err)
 	}
 	for _, scope := range []string{"read", "act"} {
-		body := "tok-" + scope + "\n" + until.UTC().Format(time.RFC3339) + "\n" + host + "\n"
+		body := "tok-" + scope + "\n" + until.UTC().Format(time.RFC3339) + "\n" + host + "\nCanyon QA runner (hosted " + scope + ")\n"
 		if err := os.WriteFile(filepath.Join(dir, tokenDir, "token-"+scope), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -267,5 +270,83 @@ func TestTheAppsTheAgentMadeAreRead(t *testing.T) {
 	}
 	if got := agentApps(dir); len(got) != 1 || got[0] != "lunch-poll-x7k2" {
 		t.Errorf("the apps the agent made: %v", got)
+	}
+}
+
+// The by-hand checks a person records land in REPORT.md, and the required one counts until it passes.
+func TestTheRequiredHandCheckCountsUntilItPasses(t *testing.T) {
+	run := t.TempDir()
+	write := func(body string) {
+		if err := os.WriteFile(filepath.Join(run, "hand-checks.txt"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("fail | Claude Code: its own /mcp sign-in | the consent page never came back\npass | MCP Inspector | read and act\n")
+	rows, missing := handChecks(run)
+	if missing != 1 || !strings.Contains(rows, "| Claude Code: its own /mcp sign-in (required) | fail the consent page never came back |") ||
+		!strings.Contains(rows, "| MCP Inspector | pass read and act |") {
+		t.Errorf("missing %d:\n%s", missing, rows)
+	}
+	write("pass | Claude Code: its own /mcp sign-in | refreshed after its token was expired\n")
+	if _, missing := handChecks(run); missing != 0 {
+		t.Errorf("a passed required check still counts: %d", missing)
+	}
+}
+
+// The grant's session is ended through SQL by its digest alone: the disconnect route is a browser's. Only the
+// sessions of this grant's client are named.
+func TestRevokeSQLNamesOnlyThisGrantsSession(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sessions" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"sessions":[{"id":"ses_0123456789abcdef","flow":"oauth","client":"Canyon QA runner (revoke act)"},
+			{"id":"ses_fedcba9876543210","flow":"oauth","client":"Canyon QA runner (hosted act)"},
+			{"id":"ses_1111111111111111","flow":"device"},
+			{"id":"ses_x'); DROP TABLE sessions; --","flow":"oauth","client":"Canyon QA runner (revoke act)"}]}`))
+	}))
+	defer srv.Close()
+	home, dir := signedInTo(t, srv.URL), t.TempDir()
+	path, err := revokeSQL(home, dir, grant{client: "Canyon QA runner (revoke act)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql, _ := os.ReadFile(path)
+	if !strings.Contains(string(sql), "IN ('ses_0123456789abcdef');") || strings.Contains(string(sql), "fedcba") || strings.Contains(string(sql), "DROP") {
+		t.Errorf("revoke.sql: %s", sql)
+	}
+	if _, err := revokeSQL(home, dir, grant{client: "Canyon QA runner (gone act)"}); err == nil || !strings.Contains(err.Error(), "agent consent again") {
+		t.Errorf("no session of the grant's client: %v", err)
+	}
+}
+
+// The clone pushes over SSH with the deploy key alone, GitHub's host key pinned: the agent's pushes go the same way.
+func TestTheCloneReachesTheRepositoryWithTheDeployKeyAlone(t *testing.T) {
+	app := t.TempDir()
+	if err := git(app, "init", "-q"); err != nil {
+		t.Fatal(err)
+	}
+	if err := git(app, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := origin(app, "org/repo", "qa/qa-x", "/keys"); err != nil {
+		t.Fatal(err)
+	}
+	read := func(args ...string) string {
+		out, err := exec.Command("git", append([]string{"-C", app}, args...)...).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if got := read("remote", "get-url", "origin"); got != "git@github.com:org/repo.git" {
+		t.Errorf("origin: %s", got)
+	}
+	if got := read("config", "core.sshCommand"); got != "ssh -i '/keys/id_ed25519' -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='/keys/known_hosts'" {
+		t.Errorf("core.sshCommand: %s", got)
+	}
+	if got := read("branch", "--show-current"); got != "qa/qa-x" {
+		t.Errorf("branch: %s", got)
 	}
 }

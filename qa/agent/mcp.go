@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -38,6 +39,17 @@ func mcpConfigured(home, agent string) error {
 		}
 		if c, ok := conf.MCPServers["canyon"]; !ok || c.Command == "" || strings.Join(c.Args, " ") != "mcp" {
 			return fmt.Errorf("via: mcp: ~/.claude.json has no mcpServers.canyon running canyon mcp: run canyon skill install in the tester HOME with this release's CLI")
+		}
+		// a copy of the operator's ~/.claude.json brings their own servers, connected, into every turn: a tester has none
+		var others []string
+		for name := range conf.MCPServers {
+			if name != "canyon" {
+				others = append(others, name)
+			}
+		}
+		if len(others) > 0 {
+			slices.Sort(others)
+			return fmt.Errorf("via: mcp: the tester's ~/.claude.json has MCP servers other than canyon (%s), copied with it: remove them from mcpServers", strings.Join(others, ", "))
 		}
 	case agentCodex:
 		raw, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))

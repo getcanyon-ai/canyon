@@ -9,7 +9,8 @@ through Canyon as a signed-in tester would; a scorer reads what Canyon told it a
    release (checksum verified) and a copy of `~/.claude.json` only. On macOS Claude's login is in
    the Keychain, found under `$HOME/Library/Keychains`: link that directory into the tester HOME
    (`ln -s ~/Library/Keychains $H/Library/Keychains`) or headless `claude` is "Not logged in". Then `HOME=$H canyon login <host>` (a person approves the code as a member; a demo with sign-in off asks no one, and the runner calls it with no session),
-   `HOME=$H claude -p hi` once so `~/.claude` exists, and `HOME=$H canyon skill install`.
+   `HOME=$H claude -p hi` once so `~/.claude` exists, and `HOME=$H canyon skill install`. The copied `.claude.json` carries
+   the operator's own MCP servers under `mcpServers`: remove all but `canyon`, or a `via: mcp` scenario refuses to start.
    A batch with a Codex scenario also needs `codex` on the PATH (`codex exec` runs headless) and its
    sign-in in the tester HOME, linked so no copy of the credential is left in the run:
    `mkdir -p $H/.codex && ln -s ~/.codex/auth.json $H/.codex/auth.json` on a machine signed in to

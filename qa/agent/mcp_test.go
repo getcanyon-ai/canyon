@@ -166,6 +166,10 @@ func TestSkillInstallsMCPServerIsChecked(t *testing.T) {
 	if err := mcpConfigured(home, agentClaude); err == nil {
 		t.Error("a ~/.claude.json with no canyon server passed")
 	}
+	write(filepath.Join(home, ".claude.json"), `{"mcpServers":{"canyon":{"type":"stdio","command":"/h/bin/canyon","args":["mcp"]},"stitch":{"command":"x"}}}`)
+	if err := mcpConfigured(home, agentClaude); err == nil || !strings.Contains(err.Error(), "stitch") {
+		t.Errorf("the operator's own server passed: %v", err)
+	}
 	write(filepath.Join(home, ".claude.json"), `{"mcpServers":{"canyon":{"type":"stdio","command":"/h/bin/canyon","args":["mcp"]}}}`)
 	if err := mcpConfigured(home, agentClaude); err != nil {
 		t.Error(err)

@@ -110,7 +110,12 @@ func consent(args []string) error {
 
 func postJSON(at string, body, into any) error {
 	raw, _ := json.Marshal(body)
-	resp, err := http.Post(at, "application/json", strings.NewReader(string(raw)))
+	req, err := http.NewRequest(http.MethodPost, at, strings.NewReader(string(raw)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}

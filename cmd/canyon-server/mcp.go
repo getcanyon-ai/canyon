@@ -238,28 +238,54 @@ func (t *mcpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		writeErr(w, status, code, message, nil)
 	case routed(mcpDelete, in) && !t.madeHere(in):
 		writeErr(w, http.StatusForbidden, "not_allowed", "a tool deletes only an app it made in that call", nil)
-	case in.Method == http.MethodPost && in.URL.Path == "/projects" && !t.mayMake(w, signed):
+	case in.Method == http.MethodPost && in.URL.Path == "/projects":
+		t.make(w, in, signed, setup)
 	default:
 		t.a.serveSigned(w, in, signed, setup, events.Provenance{Via: "mcp", Role: signed.role, Session: sessionDigest(signed.id), Source: t.a.proxies.source(t.r)}, t.api)
-		if in.Method == http.MethodPost && in.URL.Path == "/projects" && w.Code == http.StatusCreated {
-			var made struct {
-				Project struct {
-					ID string `json:"id"`
-				} `json:"project"`
-			}
-			if json.Unmarshal(w.Body.Bytes(), &made) == nil {
-				t.mu.Lock()
-				if t.made == nil {
-					t.made = map[string]bool{}
-				}
-				t.made[made.Project.ID] = true
-				t.mu.Unlock()
-			}
-		}
 	}
 	resp := w.Result()
 	resp.Request = req
 	return resp, nil
+}
+
+// make serves canyon_create_app's POST /projects under the person's lock, held on its own connection across every
+// replica: the day's count and the create are one step, so no two calls at once make an eleventh app.
+func (t *mcpTransport) make(w *httptest.ResponseRecorder, in *http.Request, signed signedSession, setup bool) {
+	ctx := in.Context()
+	conn, err := t.a.pool.Acquire(ctx)
+	if err != nil {
+		t.a.internal(w, "mcp apps a day", err)
+		return
+	}
+	defer conn.Release()
+	key := "mcp apps a day " + signed.act.Subject
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtextextended($1, 0))", key); err != nil {
+		t.a.internal(w, "mcp apps a day", err)
+		return
+	}
+	defer func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtextextended($1, 0))", key)
+	}()
+	if !t.mayMake(w, signed) {
+		return
+	}
+	t.a.serveSigned(w, in, signed, setup, events.Provenance{Via: "mcp", Role: signed.role, Session: sessionDigest(signed.id), Source: t.a.proxies.source(t.r)}, t.api)
+	if w.Code != http.StatusCreated {
+		return
+	}
+	var made struct {
+		Project struct {
+			ID string `json:"id"`
+		} `json:"project"`
+	}
+	if json.Unmarshal(w.Body.Bytes(), &made) == nil {
+		t.mu.Lock()
+		if t.made == nil {
+			t.made = map[string]bool{}
+		}
+		t.made[made.Project.ID] = true
+		t.mu.Unlock()
+	}
 }
 
 // madeHere is whether r deletes an app this request made.
@@ -282,7 +308,7 @@ func (t *mcpTransport) mayMake(w http.ResponseWriter, signed signedSession) bool
 		return false
 	}
 	if made >= mcpAppsADay {
-		writeErr(w, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("You've made %d apps through Canyon's tools today, the most for one day. Make the next one tomorrow, or with canyon deploy from a laptop.", mcpAppsADay), nil)
+		writeErr(w, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("You've made %d apps through Canyon's tools today, the most for one day. Make the next one tomorrow, or from a laptop with the Canyon CLI.", mcpAppsADay), nil)
 		return false
 	}
 	return true

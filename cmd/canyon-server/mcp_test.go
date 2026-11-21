@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -332,11 +333,31 @@ func TestMCPRemoteCreateApp(t *testing.T) {
 	if code, _, _ := mcpCall(t, base, read, create, nil); code != http.StatusForbidden {
 		t.Errorf("a read token's create: %d", code)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO audit_events (id, actor_kind, actor_subject, action, via) SELECT 'ev_cap' || n, 'person', 'sub-carol', 'POST /api/v1/projects', 'mcp' FROM generate_series(1, 9) n`); err != nil {
+	// the day's count and the create are one step: five calls at once at nine made, and one more is made
+	madeToday := "SELECT count(*) FROM audit_events WHERE action = 'POST /api/v1/projects' AND via = 'mcp' AND actor_subject = 'sub-carol'"
+	if _, err := pool.Exec(ctx, `INSERT INTO audit_events (id, actor_kind, actor_subject, action, via) SELECT 'ev_cap' || n, 'person', 'sub-carol', 'POST /api/v1/projects', 'mcp'
+		FROM generate_series(1, $1) n`, 9-count(t, ctx, pool, madeToday)); err != nil {
 		t.Fatal(err)
 	}
-	before := count(t, ctx, pool, "SELECT count(*) FROM projects")
-	if _, _, body := mcpCall(t, base, carol, create, nil); !strings.Contains(body, "the most for one day") || count(t, ctx, pool, "SELECT count(*) FROM projects") != before {
-		t.Errorf("carol's eleventh app today: %s", body)
+	var wg sync.WaitGroup
+	refused := make(chan bool, 5)
+	for range 5 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, body := mcpCall(t, base, carol, create, nil)
+			refused <- strings.Contains(body, "the most for one day")
+		}()
+	}
+	wg.Wait()
+	close(refused)
+	n := 0
+	for r := range refused {
+		if r {
+			n++
+		}
+	}
+	if count(t, ctx, pool, madeToday) != 10 || n != 4 {
+		t.Errorf("five calls at once at nine made: %d made today, %d refused, want 10 and 4", count(t, ctx, pool, madeToday), n)
 	}
 }

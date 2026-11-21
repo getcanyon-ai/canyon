@@ -743,7 +743,7 @@ func registrationSource(addr string) string {
 	if err != nil {
 		return addr
 	}
-	if ip = ip.Unmap(); ip.Is4() || true { // PLANTED FAULT: every IPv6 address its own source
+	if ip = ip.Unmap(); ip.Is4() {
 		return ip.String()
 	}
 	p, _ := ip.Prefix(64) // a valid IPv6 address always has a /64
@@ -769,12 +769,12 @@ func (a *app) registerClient(ctx context.Context, id, name string, redirects []s
 	if err := tx.QueryRow(ctx, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL").Scan(&unused); err != nil {
 		return at, false, err
 	}
-	if unused >= oauthUnusedMost && false { // PLANTED FAULT: no ceiling
+	if unused >= oauthUnusedMost {
 		return at, true, tx.Commit(ctx) // the day-old ones went; nothing else does
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM oauth_clients c WHERE c.id IN (SELECT id FROM (SELECT o.id, row_number() OVER (ORDER BY o.created_at DESC, o.id DESC) AS newest
-			FROM oauth_clients o WHERE o.used_at IS NULL AND (o.source = $1 OR true)) mine WHERE newest >= $2)
-		AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND q.code_expires_at > now() IS NOT FALSE AND q.expires_at > now())`, source, oauthUnusedPerSource); err != nil { // PLANTED FAULT: any request pins, an approved one too
+			FROM oauth_clients o WHERE o.used_at IS NULL AND o.source = $1) mine WHERE newest >= $2)
+		AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND q.session_id IS NOT NULL AND q.code_expires_at > now())`, source, oauthUnusedPerSource); err != nil {
 		return at, false, err
 	}
 	if err := tx.QueryRow(ctx, "INSERT INTO oauth_clients (id, name, redirect_uris, source) VALUES ($1, $2, $3, $4) RETURNING created_at", id, name, redirects, source).Scan(&at); err != nil {

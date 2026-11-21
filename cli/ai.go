@@ -48,13 +48,15 @@ const (
 	aiRotateStep = "\n" + // names the places: an agent piping the output through tail never sees the findings (cli.md §5.2)
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Before the next deploy, ask the user to revoke it. If nothing reads it, delete it\n" +
-		"from the code; otherwise make a new value and store it with canyon secret set NAME,\n" +
-		"NAME being the variable the code reads.\n"
+		"from the code; otherwise the user makes a new value where it is issued and sets it\n" + // the person makes it: never the agent (the bed journeys)
+		"with canyon secret set NAME in their own terminal, NAME being the variable the code\n" +
+		"reads. Never make one up yourself.\n"
 	aiRollbackRotateStep = "\n" + // a rollback's: the deletion is a new version's, never the one put back (its step 2)
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Ask the user to revoke it. If nothing reads it, delete it from the code in a new\n" +
-		"version shipped with canyon deploy, never in %s; otherwise make a new value and\n" +
-		"store it with canyon secret set NAME, NAME being the variable the code reads.\n"
+		"version shipped with canyon deploy, never in %s; otherwise the user makes a new\n" +
+		"value where it is issued and sets it with canyon secret set NAME in their own\n" +
+		"terminal, NAME being the variable the code reads. Never make one up yourself.\n"
 	aiShippedOutcome = "outcome: this app is deployed and serving traffic. Every blocking finding carries an\n" +
 		"approval, which is the only way a blocked run deploys.\n"
 	aiShippedSteps = "NEXT STEPS:\n" +

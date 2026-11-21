@@ -446,7 +446,7 @@ const outboundHanded = "Outbound: an app's environment may be under an allowlist
 
 // playbooksHanded heads the org's playbooks in an agent's manifest, each then one line (cli.md §7.4; design/specs/mcp.md
 // §3.3): the agent reads one whose when fits its task, by its slug.
-const playbooksHanded = "Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded."
+const playbooksHanded = "Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook <slug>."
 
 // secretsHanded is what an agent's manifest always says of secrets (cli.md §7.4, #2737).
 const secretsHanded = "Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there."
@@ -620,9 +620,9 @@ func agentManifest(m manifest, hook bool) string {
 	b.WriteString("\n" + secretsHanded + "\n")
 	// Always said, so an agent never guesses whether its promotion waits for a person (cli.md §7.4).
 	if m.ProdApproval {
-		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, you run canyon deploy --env prod; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
+		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
 	} else {
-		b.WriteString("\nProduction: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it.\n")
+		b.WriteString("\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.\n")
 	}
 	return b.String()
 }

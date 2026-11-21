@@ -45,7 +45,7 @@ PASSED, `canyon deploy` will not block. An agent can rely on that, so it stops g
 
 ## 1. The command surface
 
-Twenty-three commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
+Twenty-four commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
 lists only the ones the binary it is built from actually dispatches, so a short list means a verb
 has not landed yet, never that it was cut.
 
@@ -1440,8 +1440,9 @@ say the finding cannot be skipped.
 
 A blocking finding is a secret that was in the code, so it has leaked: src/lib/stripe.ts:4.
 Before the next deploy, ask the user to revoke it. If nothing reads it, delete it
-from the code; otherwise make a new value and store it with canyon secret set NAME,
-NAME being the variable the code reads.
+from the code; otherwise the user makes a new value where it is issued and sets it
+with canyon secret set NAME in their own terminal, NAME being the variable the code
+reads. Never make one up yourself.
 
 CANYON REVIEW — RESULT: BLOCKED
 blocking: secrets.client-bundle · src/lib/stripe.ts:4
@@ -3068,8 +3069,9 @@ NEXT STEPS:
 
 A blocking finding is a secret that was in the code, so it has leaked: apps/web/src/lib/payments.ts:14.
 Ask the user to revoke it. If nothing reads it, delete it from the code in a new
-version shipped with canyon deploy, never in v1.3; otherwise make a new value and
-store it with canyon secret set NAME, NAME being the variable the code reads.
+version shipped with canyon deploy, never in v1.3; otherwise the user makes a new
+value where it is issued and sets it with canyon secret set NAME in their own
+terminal, NAME being the variable the code reads. Never make one up yourself.
 ```
 
 `production runs nothing` in place of `production still runs v1.4` when nothing runs there.
@@ -4042,12 +4044,14 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   checks, refusals and lines are the verb's own: `canyon_status` is `canyon status --format json` (its text headed by D5's
   line naming the app's fields where the read carries them, design/specs/mcp.md §1.2.1), `canyon_logs` is
   `canyon logs --format ai` on the masked read (`redaction=masked`, at most 200 lines, never followed), and
-  `canyon_rules` is `canyon manifest`'s read, the typed manifest as structured content and the agent's rendering as text.
-- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`: the block as text,
-  and the verdict typed, `{run, state, failure_reason?, blocking, warnings, findings}`, `findings` the run's SARIF log as
-  `GET /gate-runs/:id/sarif` serves it, and a deploy's `url`, `answered` and `access`. Each `progress` row of the run is a
-  progress notification. Past 10 minutes the tool stops following: §3.5's still-running block, `state: "running"`, the
-  run and `fleet_url`, and the run goes on.
+  `canyon_rules` is `canyon manifest`'s read, the agent's rendering as text; the typed manifest is `canyon://manifest`.
+- **Text alone** (amended 2026-11-21, the bed journeys: Claude Code hands a model a tool's `structuredContent` in place
+  of its text, so the NEXT STEPS never reached it). No tool sends `structuredContent`: each result is its verb's output as
+  one text content, every word an agent reads in a terminal.
+- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`, the block as text,
+  a deploy's url, what the app answered and who can open it among it. `canyon_deploy` takes no `app`: `canyon deploy`
+  writes the id Canyon picked, as the skill says. Each `progress` row of the run is a progress notification. Past 10
+  minutes the tool stops following: §3.5's still-running block, its run and its page, and the run goes on.
 - **`canyon_promote`** is `canyon deploy --env prod` under `--format ai`. Where the client can ask the person, §6.3's
   question goes to them at the point the verb asks it, as an input request, whatever `confirm` says; a no prints
   `Nothing was promoted.` Where it can't, only `confirm` sends `--yes`, and without it the verb's block has the agent
@@ -4120,7 +4124,8 @@ $ canyon skill install
   · Cursor, GitHub Copilot's agent, and other agents that read AGENTS.md:
       canyon skill install --harness agents-md      appends to ./AGENTS.md
 
-  Your agent can now deploy. Try asking it:
+  Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.
+  Then try asking it:
     "deploy this app"
 ```
 
@@ -4434,9 +4439,10 @@ starting with a letter: `expense-approver`, never `expense_approver`.
 Before you build, run `canyon manifest` and follow what it prints, unless its
 output is already in this session.
 
-Run `canyon check` before the first `canyon deploy` of a new app, and again after
-a change that adds a dependency, a route or a secret. It runs the review a deploy
-runs, without deploying, so you fix what blocks before the deploy.
+A new app's first `canyon deploy` reviews it before anything runs, and writes the
+app's id into `canyon.toml`. After that, run `canyon check` after a change that adds
+a dependency, a route or a secret: it runs the review a deploy runs, without
+deploying, so you fix what blocks before the deploy.
 
 A static single-page app (a Vite app, say) runs no server of its own: give it this
 `project.toml` at its root and Canyon serves the files its build writes.
@@ -4542,8 +4548,9 @@ otherwise run `canyon check` again after that time, never in a loop before it.
 - Leave the `app` line in `canyon.toml` to `canyon deploy`: it writes the id
   Canyon picked, and an id you write may be someone else's app.
 - After a deploy, tell the user who can open the link (the access line).
-- When the user asks for production, you run `canyon deploy --env prod`, adding
-  `--yes` only when they asked for production in this conversation. Before it, run
+- When the user asks for production, call `canyon_promote`, setting `confirm`
+  only when they asked for production in this conversation; where Canyon's tools
+  aren't loaded, run `canyon deploy --env prod`, adding `--yes` only then. Before it, run
   `canyon secret list`: for each runtime secret set for preview and not for
   production, ask the person to set it themselves with
   `canyon secret set NAME --env prod` in their own terminal, or whether
@@ -4898,7 +4905,7 @@ Outbound: an app's environment may be under an allowlist, where Canyon refuses c
 
 Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there.
 
-Production: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it.
+Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.
 ```
 
 **How to pass what blocks** (amended 2026-11-03, #2622: agents were blocked at preview by rules the
@@ -4916,8 +4923,8 @@ unchanged.
 
 **The org's playbooks** (amended 2026-11-20, design/specs/mcp.md §3.3). After the org's own rules, the agent rendering
 hands each playbook that stands under `Your org's playbooks, how it builds, written by its admins. Before a task, read
-each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are
-loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
+each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook
+<slug>.`, one line each, the tool first (amended 2026-11-21: an agent with the tools reads the tool's name first), `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
 `Playbooks` as `<name>  <kind>  <slug>  version <n>`.
 
 **Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
@@ -4975,9 +4982,10 @@ The dashboard's *What agents are told* prints it as the agent reads it.
 
 The last line is the manifest's `prod_approval` (amended 2026-10-07, #1820), always printed, so an
 agent never guesses: off, as above; on, `Production: a person on the app's team approves it in
-Canyon's dashboard. When the user asks for production, you run canyon deploy --env prod; Canyon
-answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it
-yourself.` Each says who runs the command, the agent, in both modes (amended 2026-10-08, QA round 3). The person's rendering carries it as a last section, `Production`, one line:
+Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where
+Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never
+open or approve it yourself.` Each says who runs the command, the agent, in both modes (amended 2026-10-08, QA round 3),
+and names `canyon_promote` first, the shell command where the tools aren't loaded (amended 2026-11-21, the bed journeys). The person's rendering carries it as a last section, `Production`, one line:
 `promoted from the CLI or the dashboard` or `approved by a person in the dashboard`.
 
 Above it, once, while the host's via is `canyon`, the agent's rendering says outbound (amended 2026-11-08, #2708:
@@ -5591,5 +5599,5 @@ Listed so the next loop doesn't re-propose them.
 - **`--severity-threshold`, per-project rule overrides, inline suppression comments.**
   If the gate is tunable from inside the repo it's being reviewed, it isn't governance. Rules
   are tuned in one place, by the policy owner, with an audit trail. That's the product.
-- **Autocomplete, plugin systems, config profiles, `canyon upgrade`.** Twenty-two commands don't
+- **Autocomplete, plugin systems, config profiles, `canyon upgrade`.** Twenty-four commands don't
   need a plugin system. The release page and §8.5's notice handle upgrades.

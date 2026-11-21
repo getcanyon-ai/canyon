@@ -81,15 +81,11 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 				if appSpoke(out) { // the JSON keeps the host's shape: the first line says which of its words are the app's
 					text = statusAppSays + "\n" + out
 				}
-				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}, StructuredContent: json.RawMessage(out)}, nil
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil // text alone: mcpVerdict says why
 			case mcptools.Check:
 				return a.mcpVerdict(ctx, req, dir, command{name: "check", run: runCheck}), nil
 			case mcptools.Deploy:
-				verb := []string{}
-				if args.App != "" {
-					verb = append(verb, "--app", args.App)
-				}
-				return a.mcpVerdict(ctx, req, dir, command{name: "deploy", run: runDeploy}, verb...), nil
+				return a.mcpVerdict(ctx, req, dir, command{name: "deploy", run: runDeploy}), nil // canyon deploy writes the app's id, never the agent
 			case mcptools.Promote:
 				return a.mcpPromote(ctx, req, dir, args.App, args.Version, args.Reason, args.Confirm), nil
 			}
@@ -143,11 +139,11 @@ func (a *app) mcpPlaybook(t *mcp.Tool) mcp.ToolHandler {
 		if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
 			return toolRefused(err), nil
 		}
-		p, raw, err := a.readPlaybook(ctx, args.Slug, "tool")
+		p, _, err := a.readPlaybook(ctx, args.Slug, "tool")
 		if err != nil {
 			return toolRefused(err), nil
 		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: visible(p.Body)}}, StructuredContent: raw}, nil
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: visible(p.Body)}}}, nil // text alone: mcpVerdict says why
 	}
 }
 
@@ -168,6 +164,7 @@ func (a *app) playbookResource(ctx context.Context, req *mcp.ReadResourceRequest
 // canyon playbook's own line.
 func (a *app) readPlaybook(ctx context.Context, slug, way string) (playbookRead, json.RawMessage, error) {
 	c := a.sub(ctx, "")
+	c.verb, c.args = command{name: "playbook"}, []string{"playbook", slug} // a refusal's line to run again is canyon playbook's
 	client, err := c.client()
 	if err != nil {
 		return playbookRead{}, nil, c.refusal(err)
@@ -196,17 +193,17 @@ func (a *app) mcpInstructions(ctx context.Context) string {
 	return mcptools.Preamble + "\n\n" + agentManifest(m, false)
 }
 
-// mcpRules is canyon_rules: the typed manifest, and the agent's rendering of it as text.
+// mcpRules is canyon_rules: the agent's rendering of the manifest, as the session hook hands it.
 func (a *app) mcpRules(ctx context.Context, dir, named string) *mcp.CallToolResult {
 	c := a.sub(ctx, dir)
 	if named == "" {
 		named = c.dirApp()
 	}
-	m, raw, err := c.readManifest(ctx, named, requestTimeout)
+	m, _, err := c.readManifest(ctx, named, requestTimeout)
 	if err != nil {
 		return toolRefused(c.refusal(err))
 	}
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: agentManifest(m, false)}}, StructuredContent: raw}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: agentManifest(m, false)}}} // text alone: mcpVerdict says why
 }
 
 // manifestResource reads canyon://manifest, the org's, and canyon://manifest/<app>, with that app's additions.
@@ -298,41 +295,15 @@ func (a *app) said() string {
 	return strings.TrimSpace(a.out.(*strings.Builder).String() + a.err.(*strings.Builder).String())
 }
 
-// mcpVerdict is canyon_check and canyon_deploy: the verb under ai, its block as text, and the verdict typed,
-// with the run's SARIF log as the host serves it. A run followed past the hand-off is state running.
+// mcpVerdict is canyon_check and canyon_deploy: the verb under ai, its block as the one text content. No tool sends
+// structuredContent: Claude Code hands a model a result's structuredContent in place of its text, and the block's NEXT
+// STEPS — what to tell the user, when to stop, who approves, what to revoke, the playbook to read, who can open the app —
+// are in the text alone (the bed journeys, v0.11.0).
 func (a *app) mcpVerdict(ctx context.Context, req *mcp.CallToolRequest, dir string, verb command, args ...string) *mcp.CallToolResult {
 	c := a.sub(ctx, dir)
 	c.handoff, c.onRow = mcptools.Handoff, progress(ctx, req)
 	code := c.run(verb, append([]string{"--format", "ai"}, args...)...)
-	res := &mcp.CallToolResult{IsError: code == exitError, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
-	run := c.ended
-	if run == nil { // refused before any verdict: the verb's lines alone
-		return res
-	}
-	// Every string as the terminal shows it (cell): a host's or an app's control bytes never reach the client raw.
-	// The SARIF log is the host's JSON byte for byte, as the contract hands it on, and JSON escapes them.
-	v := mcptools.Verdict{Run: cell(run.Run), State: cell(run.Result.State), FailureReason: cell(run.Result.FailureReason), Blocking: run.Result.Blocking, Warnings: run.Result.Warnings}
-	switch {
-	case code == exitStillRunning:
-		v.State, v.FleetURL = "running", cell(run.Host+"/#/apps/"+run.App)
-	case v.State == "clean" || v.State == "blocked":
-		if err := c.http.getUpTo(ctx, "/api/v1/gate-runs/"+url.PathEscape(run.Run)+"/sarif", timelineLimit, &v.Findings); err != nil {
-			res.IsError = true // a verdict without its findings is never handed on as one
-			res.Content = append(res.Content, &mcp.TextContent{Text: c.sub(ctx, dir).refusal(err).Error()})
-			return res
-		}
-	}
-	if d := run.Deploy; d != nil {
-		v.URL = cell(d.URL)
-		for _, line := range run.Access {
-			v.Access = append(v.Access, cell(line))
-		}
-		if w := d.Answered; w != nil {
-			v.Answered, _ = json.Marshal(answered{Status: w.Status, Said: cell(w.Said), Error: cell(w.Error)}) // a struct of strings: it marshals
-		}
-	}
-	res.StructuredContent = v
-	return res
+	return &mcp.CallToolResult{IsError: code == exitError, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
 }
 
 // mcpPromote is canyon_promote: canyon deploy --env prod under ai, with --yes only where confirm says the

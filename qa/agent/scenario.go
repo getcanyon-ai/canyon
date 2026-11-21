@@ -14,6 +14,25 @@ import (
 // playbookSlug is a playbook's slug as design/specs/mcp.md §3.1 bounds it.
 var playbookSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
+// wordedResults are the RESULTs of more than one word: a promotion a person approves in the dashboard
+// (cli/approval.go), and a run a tool stopped following.
+var wordedResults = []string{"WAITING FOR APPROVAL", "STILL RUNNING"}
+
+// repoName is a GitHub repository's owner/name; homeLabel names a template tester HOME (agent run -home label=dir).
+var (
+	repoName  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$`)
+	homeLabel = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+)
+
+// The run's repositories, given on the command line, which a scenario names by placeholder so no file names an org's:
+// {{REPO}} the test repository the org's Canyon App sees, {{UNSEEN_REPO}} one it doesn't, {{FORK_REF}} a ref of a
+// fork's pull request to it.
+const (
+	repoPlaceholder   = "{{REPO}}"
+	unseenPlaceholder = "{{UNSEEN_REPO}}"
+	forkPlaceholder   = "{{FORK_REF}}"
+)
+
 // placeholders stand for the user's leaked key ({{FAKE_KEY}}) and the rotated one they paste in
 // chat ({{NEW_KEY}}): the runner swaps in keys built at run time, so no key is ever committed.
 var placeholders = []string{"{{FAKE_KEY}}", "{{NEW_KEY}}"}
@@ -51,8 +70,28 @@ type scenario struct {
 	// Playbook is a playbook: line, the slug of an org playbook a custom rule points at: the runner checks it exists
 	// before turn 1, and the scorecard says whether the agent read it and whether the session hook synced it as a skill.
 	Playbook string
-	Seed     []seedFile
-	Turns    []userTurn
+	// Remote is a via: mcp-remote line: the agent reaches Canyon only by URL, https://<host>/mcp, over the OAuth grant a
+	// person gave it (design/specs/mcp.md §2), with no canyon CLI it could reach. Scope is a scope: line, the grant's.
+	Remote bool
+	Scope  string
+	// Repo is a linked repo: line, owner/name or {{REPO}}: the runner pushes the seed to a branch of its own there, and
+	// links the app to it unless AgentMakesApp, an app: agent line, says the agent makes the app (canyon_create_app).
+	Repo          string
+	AgentMakesApp bool
+	// Tools are expect tool: lines: a tool the agent must call, at least once, or exactly once with "once".
+	Tools []expectTool
+	// Home is a home: line, the template tester HOME the scenario's own copy is made from; "" is the run's tester HOME.
+	Home string
+	// ProdApproval is a prod approval: line, the host's prod_approval the scenario needs: an admin's, checked like DBProd.
+	ProdApproval string
+	Seed         []seedFile
+	Turns        []userTurn
+}
+
+// expectTool is an expect tool: line, a tool by its bare name (canyon_check_ref) and whether it is called exactly once.
+type expectTool struct {
+	Name string
+	Once bool
 }
 
 // egressMode is an app env's outbound mode, allowlist, set as its owner may once the seed is deployed.
@@ -103,6 +142,10 @@ type userTurn struct {
 	OnceAsked   bool
 	OnceRefused bool
 	OnceAllowed bool
+	// OnceSecrets sets the scenario's secret: lines just before the turn, as the person would in the dashboard, in
+	// place of before the seed. OnceDisconnected waits for a person to disconnect the agent's OAuth grant, in Canyon.
+	OnceSecrets      bool
+	OnceDisconnected bool
 }
 
 // A turn heading's markers: `### 2 (only if the last result is BLOCKED or FAILED)`, and `### 2 (once
@@ -113,6 +156,8 @@ const (
 	onceAsked     = "(once Canyon asks to approve its fix for production)"
 	onceRefused   = "(once Canyon refuses a call out)"
 	onceAllowed   = "(once a person allows it)"
+	onceSecrets   = "(once the person sets the secrets)"
+	onceGone      = "(once a person disconnects the agent)"
 )
 
 // policy is a rule the app holds to a stricter state than the org's, set before the first turn.
@@ -163,10 +208,11 @@ func parseScenario(path string) (scenario, error) {
 			section = strings.TrimSpace(strings.TrimPrefix(line, "## "))
 		case strings.HasPrefix(line, "### ") && section == "Turns":
 			_, rest, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(line, "### ")), " ")
-			mark = userTurn{IfUnfixed: rest == onlyIfUnfixed, OnceAsked: rest == onceAsked, OnceRefused: rest == onceRefused, OnceAllowed: rest == onceAllowed}
+			mark = userTurn{IfUnfixed: rest == onlyIfUnfixed, OnceAsked: rest == onceAsked, OnceRefused: rest == onceRefused, OnceAllowed: rest == onceAllowed,
+				OnceSecrets: rest == onceSecrets, OnceDisconnected: rest == onceGone}
 			if rest != "" && mark == (userTurn{}) { // a misspelt marker would send the turn whatever the result
 				return scenario{}, fmt.Errorf("%s: turn heading %q: after its number the only text is one of %s", path, line,
-					strings.Join([]string{onlyIfUnfixed, onceAsked, onceRefused, onceAllowed}, ", "))
+					strings.Join([]string{onlyIfUnfixed, onceAsked, onceRefused, onceAllowed, onceSecrets, onceGone}, ", "))
 			}
 			turnOpen = true
 		case (section == "Seed" || section == "Next release") && strings.HasPrefix(line, "File: `"):
@@ -193,10 +239,22 @@ func parseScenario(path string) (scenario, error) {
 		return scenario{}, fmt.Errorf("%s: egress: needs deployed: preview, so the env runs before its mode is set", path)
 	case len(s.Next) > 0 && !s.Released:
 		return scenario{}, fmt.Errorf("%s: ## Next release needs deployed: prod, which releases it", path)
+	case s.Remote && s.Agent != agentClaude: // only Claude Code's MCP config is read for a URL today
+		return scenario{}, fmt.Errorf("%s: via: mcp-remote is run with Claude Code, and this scenario runs %s", path, s.Agent)
+	case s.Remote != (s.Scope != ""):
+		return scenario{}, fmt.Errorf("%s: via: mcp-remote and scope: go together: the grant's scope is what a remote scenario tests", path)
+	case (s.Repo != "" || s.AgentMakesApp || s.Home != "") && !s.Remote:
+		return scenario{}, fmt.Errorf("%s: linked repo:, app: agent and home: are a remote scenario's: add via: mcp-remote", path)
+	case s.AgentMakesApp && (s.Deployed || len(s.Rules) > 0 || len(s.Egress) > 0 || len(s.Secrets) > 0):
+		return scenario{}, fmt.Errorf("%s: app: agent makes the app in a turn, so the runner does nothing to an app before turn 1", path)
 	case s.MCPState != "" && !s.MCP:
 		return scenario{}, fmt.Errorf("%s: expect mcp: needs via: mcp", path)
 	case s.MCPState != "" && s.Agent != agentClaude: // Codex's exec events name no MCP server's state
 		return scenario{}, fmt.Errorf("%s: expect mcp: is read from Claude Code's session init, and this scenario runs %s", path, s.Agent)
+	case slices.ContainsFunc(s.Turns, func(t userTurn) bool { return t.OnceDisconnected }) && (!s.Remote || s.Home == ""):
+		return scenario{}, fmt.Errorf("%s: a turn waits for a person to disconnect the agent, which ends its grant for every scenario on that HOME: give it a home: of its own", path)
+	case slices.ContainsFunc(s.Turns, func(t userTurn) bool { return t.OnceSecrets }) && len(s.Secrets) == 0:
+		return scenario{}, fmt.Errorf("%s: a turn waits for the person to set the secrets, and no secret: line names one", path)
 	case s.PromoteFrom > len(s.Turns):
 		return scenario{}, fmt.Errorf("%s: promote from turn: %d, and the scenario has %d turns", path, s.PromoteFrom, len(s.Turns))
 	case s.Prod == "first release" && (!s.Released || len(s.Next) == 0):
@@ -247,6 +305,11 @@ func (s *scenario) header(line string) error {
 			return fmt.Errorf("%s: names no RESULT", key)
 		}
 		e := expect{Kind: kind, Result: fields[0], Keys: fields[1:]}
+		for _, r := range wordedResults { // a RESULT of more than one word is one RESULT
+			if value == r || strings.HasPrefix(value, r+" ") {
+				e.Result, e.Keys = r, strings.Fields(strings.TrimPrefix(value, r))
+			}
+		}
 		if key == "expect first" {
 			s.First = e
 		} else {
@@ -283,10 +346,46 @@ func (s *scenario) header(line string) error {
 		}
 		s.Secrets = append(s.Secrets, seededSecret{Env: fields[0], Name: fields[1]})
 	case "via":
-		if value != "mcp" {
-			return fmt.Errorf("via: %q: the only way a scenario names is mcp", value)
+		switch value {
+		case "mcp":
+		case "mcp-remote":
+			s.Remote = true
+		default:
+			return fmt.Errorf("via: %q is neither mcp nor mcp-remote", value)
 		}
 		s.MCP = true
+	case "scope":
+		if value != "read" && value != "act" {
+			return fmt.Errorf("scope: %q is neither read nor act (design/specs/mcp.md §2.2)", value)
+		}
+		s.Scope = value
+	case "linked repo":
+		if value != repoPlaceholder && !repoName.MatchString(value) {
+			return fmt.Errorf("linked repo: %q is neither owner/name nor %s", value, repoPlaceholder)
+		}
+		s.Repo = value
+	case "app":
+		if value != "agent" {
+			return fmt.Errorf("app: %q: the only value is agent, an app the agent makes", value)
+		}
+		s.AgentMakesApp = true
+	case "expect tool":
+		name, once := strings.CutSuffix(value, " once")
+		if !strings.HasPrefix(name, "canyon_") || strings.ContainsAny(name, " \t") {
+			return fmt.Errorf("expect tool: %q is not a canyon_ tool, optionally followed by once", value)
+		}
+		s.Tools = append(s.Tools, expectTool{Name: name, Once: once})
+	case "home":
+		if !homeLabel.MatchString(value) {
+			return fmt.Errorf("home: %q is no template label (lowercase letters, digits and dashes)", value)
+		}
+		s.Home = value
+	case "prod approval":
+		if value != "on" && value != "off" {
+			return fmt.Errorf("prod approval: %q is neither on nor off", value)
+		}
+		s.ProdApproval = value
+
 	case "expect mcp":
 		if value != "connected" {
 			return fmt.Errorf("expect mcp: %q: the only state a scenario expects is connected", value)

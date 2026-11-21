@@ -20,8 +20,13 @@ through Canyon as a signed-in tester would; a scorer reads what Canyon told it a
    reads a `.claude/` above it as a project's, so a run under `~` gives every turn your own
    `~/.claude/skills` (2026-11-07: 53 skills a tester doesn't have, one of them on running these journeys).
    The tester HOME may stay under `~`: what counts is where the app is.
-2. **Run**, two scenarios at a time, into a new directory:
-   `go run ./qa/agent run $H <run-dir> qa/agent/scenarios/*.md`. A rerun on a host that already
+2. **Run**, every scenario at once (`--parallel N` caps it), into a new directory:
+   `go run ./qa/agent run $H <run-dir> qa/agent/scenarios/*.md`. Each scenario runs under a HOME of its own,
+   `<run-dir>/<name>/home`, copied from `$H` (links kept as links, the Keychains one among them), so no two
+   sessions write one `~/.claude.json` or `~/.codex`; keep `$H` small, since every scenario copies it. Its app,
+   its run directory and, for a hosted scenario, its branch are its own too; what scenarios share is only read:
+   the host's playbooks and rules, and a hosted template's grants. A Codex sign-in linked into `$H` stays one
+   file every copy links to. A rerun on a host that already
    has the apps takes `--suffix r2` and gets fresh ones, `qa-<name>-r2`: a fresh copy can't deploy
    over an app another copy made. Before a scenario's first turn the runner creates its app as the
    tester, and refuses one that already exists. After its last turn (or ctrl-c) it takes the app
@@ -57,8 +62,10 @@ through Canyon as a signed-in tester would; a scorer reads what Canyon told it a
    scenarios with a new `--suffix`, since their apps are already claimed.
 3. **Score**: the run ends with it; `go run ./qa/agent score <run-dir>` again re-scores. It writes
    `<name>/scorecard.md` and `summary.md`, keeping each scorecard's `## Reviewer notes`.
+   The run also writes `REPORT.md`: each scenario's pass, FAIL (with the verdict rows that missed) or
+   stopped (the runner's error), its wall time, and the round's.
 4. **Review**: write each scorecard's reviewer notes from its transcript (did fixes come from NEXT
-   STEPS or finding text; lines misread or ignored; wording), then `REPORT.md` with a fix list.
+   STEPS or finding text; lines misread or ignored; wording), then add a fix list to `REPORT.md`.
 
 The scorer parses only Canyon's `CANYON REVIEW`, `CANYON PROMOTE` and `CANYON DB QUERY` `— RESULT:` blocks
 (findings, NEXT STEPS; cli.md §5.2–5.3; a query's env and refusal), the `outbound:` and `refused:` lines of a `CANYON STATUS`
@@ -232,3 +239,73 @@ A scenario's MCP lines, each judged in its verdict table and summed up in the su
   in the agent's skills) once the turns were over.
 - `expect first: none`: the agent should get no review, promotion or query result at all, as when it
   only reads an app's logs.
+
+## By URL alone: hosted MCP
+
+A `via: mcp-remote` scenario's agent has Canyon only as `https://<canyon>/mcp` (design/specs/mcp.md §2), with no
+`canyon` it can reach, as a cloud agent has. These run in the same batch as the rest.
+
+**Before the round**, once per grant, a person allows the runner as an OAuth client:
+
+```sh
+go run ./qa/agent consent $H $HOSTED act    # and again with read
+```
+
+It registers a client, prints the consent URL, and waits on a loopback redirect: open the URL in a browser
+signed in as the tester and allow it. It keeps the access token, its expiry and the host in
+`$HOSTED/.canyon-qa/token-<scope>`, mode 600, and never the refresh token. `$HOSTED` is a template HOME like
+`$H`, with Claude Code signed in (the Keychains link) and no `canyon` anywhere in it. Each scenario's copy
+gets Canyon as its one MCP server, `{"type":"http","url":"<host>/mcp","headers":{"Authorization":"Bearer …"}}`,
+without `.canyon-qa`, so a `read` scenario never holds the `act` grant. Nothing refreshes the token: every copy
+sending one rotating refresh token would end the session (a refresh token presented after it rotated does),
+so a round fits inside the access token's hour, and the runner refuses a grant with under 40 minutes left.
+The scorer redacts the token from every scorecard.
+
+Two scenarios need a grant of their own, a template HOME each, given as `--hosted <label>=<dir>`: `home:
+revoke` (a person disconnects it mid-run, which would end a shared grant for every scenario) and `home:
+unlinked` (a team member whose GitHub account isn't linked to Canyon). So a full round is four consents:
+`read` and `act` as the tester, `act` for `revoke`, and `act` as the unlinked member.
+
+```sh
+go run ./qa/agent run --hosted $HOSTED --hosted revoke=$REVOKE --hosted unlinked=$UNLINKED \
+  --repo <owner/name> --push-as $PUSH --unseen-repo <owner/name> --fork-ref <ref> \
+  $H <run-dir> qa/agent/scenarios/*.md
+```
+
+- `--repo`: a repository the org's Canyon App sees, `{{REPO}}` in the scenarios. The runner pushes each
+  scenario's seed to a branch of its own, `qa/<app>` (`{{BRANCH}}`), links the app to it as the tester, and
+  deletes the branch at the end.
+- `--push-as`: a gh config directory whose token pushes to `--repo` and nothing else, a fine-grained token
+  with contents write on that one repository. The runner pushes with it, and the agent's own `git push`
+  does too, through a credential helper in its HOME's `.gitconfig`.
+- `--unseen-repo`: a repository the App has no access to (`{{UNSEEN_REPO}}`); nothing is pushed there.
+- `--fork-ref`: a ref of a fork's pull request to `--repo` (`{{FORK_REF}}`).
+
+A hosted scenario's lines:
+
+- `via: mcp-remote` and `scope: read` or `act`: the grant the agent's server sends. Before turn 1 the runner
+  stops the scenario when a `canyon` is on the agent's PATH or anywhere in its HOME; the agent's PATH is its
+  HOME's `.local/bin`, holding a link to `claude` alone, and the system's directories, and `Bash(canyon:*)`
+  is not allowed.
+- `linked repo: {{REPO}}`: the seed goes to the scenario's branch, and the app is linked to the repository.
+- `app: agent`: the runner makes no app; the agent makes it with `canyon_create_app`. An app it made is read
+  from its turn and taken offline with the run.
+- `home: <label>`: the template, and so the grant and the person, the scenario runs under.
+- `expect tool: <name>`, or `<name> once`: the agent called that tool at least once, or exactly once.
+- `prod approval: on|off`: the host's production approval setting the scenario needs, checked before the app
+  is made; an admin sets it in the dashboard.
+- `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: the runner sets the secret,
+  a made-up value, just before that turn, as the person would in the dashboard, not before the seed.
+- `### N (once a person disconnects the agent)`: the turn waits until the grant is refused, polling `/mcp`;
+  a person disconnects the agent in Canyon meanwhile.
+
+Every scenario with a `secret:` line has a `secret's value` row: a made-up value found in any turn's
+transcript fails it. The remote tools score as the local ones do: `canyon_check_ref` a check,
+`canyon_deploy_ref` a deploy, `canyon_promote` a production deploy, and their text the same block.
+
+What these runs leave to Canyon's own tests, since no model is needed to check it (`cmd/canyon-server`'s
+`oauth_test.go` and `mcp_test.go`, `cli/mcp_remote_test.go`, `github-app/ref_test.go`, `e2e/oidc`): discovery,
+registration, consent and the token exchange; refresh rotation and reuse; `insufficient_scope` and its
+header; each scope's tools; a fork's ref refused; `github_link_required` and the App not seeing a repository,
+with the app deleted; `canyon_create_app`'s ten a day; a disconnected grant refused; the 45-second hand-off.
+The journeys check what an agent does with each.

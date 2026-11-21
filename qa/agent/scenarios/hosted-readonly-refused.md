@@ -3,7 +3,7 @@
 stack: Node
 via: mcp-remote
 scope: read
-linked repo: getcanyon-ai/canyon-qa-hosted
+linked repo: {{REPO}}
 expect mcp: connected
 expect first: none
 expect prod: not promoted
@@ -41,7 +41,7 @@ http.createServer((req, res) => {
 
 ### 1
 ```
-Deploy the desk booking app from our branch to preview.
+Deploy the desk booking app from branch {{BRANCH}} to preview.
 ```
 
 ## What good looks like

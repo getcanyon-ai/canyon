@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -19,7 +20,6 @@ import (
 )
 
 const (
-	parallel    = 2 // a laptop runs two headless sessions at once, not more
 	turnTimeout = 30 * time.Minute
 	settleFor   = 15 * time.Minute // a deploy or promote run left going by a cut-off turn
 	// askedFor bounds a turn's wait for Canyon's patch: the image scan after Live, a rescan tick, the
@@ -51,9 +51,21 @@ var tools = []string{
 	"mcp__canyon", // every tool of Canyon's MCP server, which skill install configures (design/specs/mcp.md §1.4)
 }
 
-// runAll runs every scenario (two at a time), each turn a headless Claude Code or Codex session under the
-// signed-in tester's HOME, then scores the run.
-func runAll(home, runDir, suffix string, keepApps bool, files []string) error {
+// options are agent run's flags.
+type options struct {
+	suffix   string
+	keepApps bool
+	parallel int               // scenarios at once; 0 is all of them
+	hosted   map[string]string // a hosted scenario's template HOME by its home: label, "" when it names none
+	repos    map[string]string // {{REPO}}, {{UNSEEN_REPO}} and {{FORK_REF}}, as the command line gave them
+	pushAs   string            // a gh config directory whose token pushes to {{REPO}} alone
+}
+
+// runAll runs every scenario, all at once unless o.parallel says otherwise, each turn a headless Claude Code or Codex
+// session under a HOME of the scenario's own, copied from the signed-in tester's or a hosted template, then scores
+// the run and writes its REPORT.md.
+func runAll(home, runDir string, o options, files []string) error {
+	began := time.Now()
 	// both absolute before any path is built from them: canyon and claude run in the app, where a relative one names nothing
 	runDir, err := filepath.Abs(runDir)
 	if err != nil {
@@ -71,7 +83,19 @@ func runAll(home, runDir, suffix string, keepApps bool, files []string) error {
 		if err != nil {
 			return err
 		}
-		if name := appName(s.Name, suffix); len(name) > 55 { // before any turn, so a tooling mistake never reads as the agent's
+		if s.Remote && o.hosted[s.Home] == "" {
+			return fmt.Errorf("%s: no hosted template HOME for home: %q: run with -hosted %s", f, s.Home, cmp.Or(s.Home+"=", "")+"<dir>")
+		}
+		src, _ := os.ReadFile(f)
+		for _, p := range []string{repoPlaceholder, unseenPlaceholder, forkPlaceholder} {
+			if strings.Contains(string(src), p) && o.repos[p] == "" {
+				return fmt.Errorf("%s names %s: give it on the command line (%s)", f, p, usage)
+			}
+		}
+		if s.Repo != "" && o.pushAs == "" {
+			return fmt.Errorf("%s: linked repo: needs -push-as <gh config dir>, the identity that pushes the seed", f)
+		}
+		if name := appName(s.Name, o.suffix); len(name) > 55 { // before any turn, so a tooling mistake never reads as the agent's
 			return fmt.Errorf("%s: an app name is at most 55 characters (contracts/routes.md, POST /api/v1/projects); shorten --suffix", name)
 		}
 		list = append(list, s)
@@ -87,7 +111,7 @@ func runAll(home, runDir, suffix string, keepApps bool, files []string) error {
 		}
 	}
 	context.AfterFunc(ctx, stop) // the first signal cancels; a second one ends the runner as usual
-	sem := make(chan struct{}, parallel)
+	sem := make(chan struct{}, cmp.Or(o.parallel, len(list)))
 	var wg sync.WaitGroup
 	errs := make([]error, len(list))
 	for i, s := range list {
@@ -96,16 +120,17 @@ func runAll(home, runDir, suffix string, keepApps bool, files []string) error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			errs[i] = runOne(ctx, home, runDir, files[i], s, suffix, keepApps)
+			errs[i] = runOne(ctx, home, runDir, files[i], s, o)
 		}()
 	}
 	wg.Wait()
 	for i, err := range errs {
 		if err != nil { // scrubbed: a Cursor process's message may carry its key
-			errs[i] = errors.New(scrubbed(appName(list[i].Name, suffix) + ": " + err.Error()))
+			errs[i] = errors.New(scrubbed(appName(list[i].Name, o.suffix) + ": " + err.Error()))
 		}
 	}
-	return errors.Join(append(errs, score(runDir))...) // score what ran, and still fail the batch
+	scored := score(runDir)
+	return errors.Join(append(errs, scored, report(runDir, list, errs, cmp.Or(o.parallel, len(list)), time.Since(began)))...) // score what ran, and still fail the batch
 }
 
 // appName is the scenario's app on the host: qa-<scenario>, and -<suffix> when a rerun asks for fresh
@@ -117,12 +142,15 @@ func appName(scenario, suffix string) string {
 	return "qa-" + scenario + "-" + suffix
 }
 
-func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix string, keepApps bool) error {
+// runOne runs a scenario under a HOME of its own: a copy of the tester's, or for a hosted one a copy of its template
+// with Canyon by URL, while the tester's own sets the app up as its owner. Nothing a scenario changes is another's.
+func runOne(ctx context.Context, template, runDir, file string, s scenario, o options) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	began := time.Now()
 	dir := filepath.Join(runDir, s.Name)
-	name := appName(s.Name, suffix)
+	name := appName(s.Name, o.suffix)
 	app := filepath.Join(dir, name)
 	if _, err := os.Stat(dir); err == nil {
 		return fmt.Errorf("%s exists: use a new run directory", dir)
@@ -130,6 +158,29 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 	if err := os.MkdirAll(app, 0o700); err != nil {
 		return err
 	}
+	defer func() { // the scenario's own wall time, setup and settling included, for REPORT.md
+		_ = os.WriteFile(filepath.Join(dir, "elapsed"), []byte(time.Since(began).Round(time.Second).String()+"\n"), 0o600)
+	}()
+	home, agentHome := filepath.Join(dir, "home"), ""
+	var g grant
+	if s.Remote { // the tester's own HOME sets the app up, read alone; the agent has the hosted copy
+		var err error
+		if agentHome, g, err = hostedHome(o.hosted[s.Home], dir, s.Scope); err != nil {
+			return err
+		}
+		if err := keepToken(dir, g); err != nil {
+			return err
+		}
+		home = template
+	} else {
+		if err := copyHome(template, home); err != nil {
+			return err
+		}
+		agentHome = home
+	}
+	repo := cmp.Or(o.repos[s.Repo], s.Repo)
+	refs := strings.NewReplacer("{{REPO}}", o.repos[repoPlaceholder], "{{UNSEEN_REPO}}", o.repos[unseenPlaceholder],
+		"{{FORK_REF}}", o.repos[forkPlaceholder], "{{BRANCH}}", "qa/"+name)
 	src, err := os.ReadFile(file)
 	if err != nil {
 		return err
@@ -137,19 +188,28 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 	if err := os.WriteFile(filepath.Join(dir, "scenario.md"), src, 0o600); err != nil {
 		return err
 	}
-	if err := hostDBProd(home, s.DBProd); err != nil { // before the app is made: a host set otherwise runs no turn
+	if err := hostDBProd(home, s.DBProd, s.ProdApproval); err != nil { // before the app is made: a host set otherwise runs no turn
 		return err
 	}
-	if err := claim(home, name, s.Rules); err != nil {
-		return err
+	if !o.keepApps { // its transcripts are the record; a batch left running filled the test cluster (2026-10-08)
+		defer func() { // and an app the agent made goes too
+			for _, id := range agentApps(dir) {
+				undeploy(home, dir, filepath.Join(dir, id))
+			}
+		}()
 	}
-	// the app the tester just made, named in canyon.toml as a teammate's clone names it: without the
-	// line, a first deploy makes an app of its own (cli.md §3.2); a seed's canyon.toml replaces it
-	if err := os.WriteFile(filepath.Join(app, "canyon.toml"), []byte("app = \""+name+"\"\n"), 0o600); err != nil {
-		return err
-	}
-	if !keepApps { // its transcripts are the record; a batch left running filled the test cluster (2026-10-08)
-		defer undeploy(home, dir, app)
+	if !s.AgentMakesApp {
+		if err := claim(home, name, s.Rules); err != nil {
+			return err
+		}
+		// the app the tester just made, named in canyon.toml as a teammate's clone names it: without the
+		// line, a first deploy makes an app of its own (cli.md §3.2); a seed's canyon.toml replaces it
+		if err := os.WriteFile(filepath.Join(app, "canyon.toml"), []byte("app = \""+name+"\"\n"), 0o600); err != nil {
+			return err
+		}
+		if !o.keepApps {
+			defer undeploy(home, dir, app)
+		}
 	}
 	keys, err := fakeKeys(dir, src, name)
 	if err != nil {
@@ -158,8 +218,21 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 	if err := seed(app, s.Seed, keys); err != nil {
 		return err
 	}
-	if err := setSecrets(ctx, home, dir, app, s.Secrets); err != nil { // before the deploy, so the running version reads them
-		return err
+	if s.Repo != "" { // the user's code on a branch of its own, which the app is linked to, unless the agent makes the app
+		if err := pushSeed(app, agentHome, repo, "qa/"+name, o.pushAs); err != nil {
+			return err
+		}
+		defer dropBranch(app, "qa/"+name, o.pushAs)
+		if !s.AgentMakesApp {
+			if err := link(home, name, repo); err != nil {
+				return err
+			}
+		}
+	}
+	if !slices.ContainsFunc(s.Turns, func(t userTurn) bool { return t.OnceSecrets }) { // before the deploy, so the running version reads them
+		if err := setSecrets(ctx, home, dir, app, s.Secrets); err != nil {
+			return err
+		}
 	}
 	if s.Deployed {
 		if err := deploySeed(ctx, home, dir, app, "setup.log"); err != nil {
@@ -176,17 +249,21 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 		return err
 	}
 	if s.Agent == agentCodex {
-		if err := installCodex(home, app); err != nil {
+		if err := installCodex(agentHome, app); err != nil {
 			return err
 		}
 		defer func() { // the trust Codex gives the app on turn 1 goes with the scenario, so batches don't pile it up
-			if err := forgetProject(home, app); err != nil {
+			if err := forgetProject(agentHome, app); err != nil {
 				fmt.Printf("%s: Codex still trusts %s: %v\n", name, app, err)
 			}
 		}()
 	}
-	if s.MCP { // after Codex's install, which writes its MCP config: a run with no server scores no tools
-		if err := mcpConfigured(home, s.Agent); err != nil {
+	if s.Remote { // fail closed: an agent that could reach a CLI is no run of the URL
+		if err := noCLI(agentHome, hostedEnv(agentHome, app)); err != nil {
+			return err
+		}
+	} else if s.MCP { // after Codex's install, which writes its MCP config: a run with no server scores no tools
+		if err := mcpConfigured(agentHome, s.Agent); err != nil {
 			return err
 		}
 	}
@@ -195,14 +272,14 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 			return err
 		}
 		defer func() { // what the session hook synced, once the turns are over, however they end
-			if err := recordSkill(home, dir, s.Agent, s.Playbook); err != nil {
+			if err := recordSkill(agentHome, dir, s.Agent, s.Playbook); err != nil {
 				fmt.Printf("%s: the playbook's skill was not recorded: %v\n", name, err)
 			}
 		}()
 	}
 	var cursor cursorApp
 	if s.Agent == agentCursor {
-		if cursor, err = setUpCursorApp(home, dir, app); err != nil {
+		if cursor, err = setUpCursorApp(agentHome, dir, app); err != nil {
 			return err
 		}
 	}
@@ -243,27 +320,38 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 			}
 			continue
 		}
+		if t.OnceSecrets {
+			if err := setSecrets(ctx, home, dir, app, s.Secrets); err != nil {
+				return fmt.Errorf("turn %d: %w", i+1, err)
+			}
+		}
+		if t.OnceDisconnected {
+			fmt.Printf("%s turn %d: waiting for a person to disconnect the agent, in Canyon's settings\n", name, i+1)
+			if err := waitDisconnected(ctx, g, allowedFor); err != nil {
+				return fmt.Errorf("turn %d: %w", i+1, err)
+			}
+		}
 		if t.OnceAsked {
 			fmt.Printf("%s turn %d: waiting for Canyon to ask to approve its fix for production\n", name, i+1)
 			if err := waitAsked(ctx, home, appOf(app), askedFor); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 		}
-		if err := turn(ctx, s.Agent, home, dir, app, i+1, keys.Replace(t.Text)); err != nil {
+		if err := turn(ctx, s.Agent, agentHome, dir, app, i+1, refs.Replace(keys.Replace(t.Text)), s.Remote); err != nil {
 			return err
 		}
 		if s.Agent == agentCodex && i == 0 { // fail closed: a Codex that skipped Canyon's hook is no run of it
-			if err := codexHookRan(home, dir); err != nil {
+			if err := codexHookRan(agentHome, dir); err != nil {
 				return fmt.Errorf("turn 1: %w", err)
 			}
 		}
 		if s.Agent == agentCodex { // and none that trusts a hook the agent made
-			if err := codexTrustsOnlyCanyon(home, app); err != nil {
+			if err := codexTrustsOnlyCanyon(agentHome, app); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 		}
 		if s.Agent == agentCursor { // no hook or permission the agent made, and fail closed: a Cursor Canyon's manifest never reached is no run of it
-			if err := cursorUnchanged(home, app, cursor); err != nil {
+			if err := cursorUnchanged(agentHome, app, cursor); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 			if i == 0 { // ponytail: always stops until the probe's transcript gives it a reader to read the manifest with
@@ -340,11 +428,16 @@ func writeFiles(app string, files []seedFile, keys *strings.Replacer) error {
 
 // turn is one user message: claude -p, codex exec or Cursor's agent -p, in the app directory under the tester's
 // HOME and nothing else of the operator's environment but where the agent is installed, and Cursor's key.
-func turn(ctx context.Context, agent, home, dir, app string, n int, text string) (err error) {
+func turn(ctx context.Context, agent, home, dir, app string, n int, text string, hosted bool) (err error) {
 	name := "claude"
 	args := []string{"-p", text, "--output-format", "stream-json", "--verbose", "--include-hook-events",
 		"--permission-mode", "acceptEdits", "--allowedTools"}
-	args = append(args, tools...)
+	env := testerEnv(home, app)
+	if hosted { // the URL alone: no canyon to allow, and none on the PATH
+		args, env = append(args, slices.DeleteFunc(slices.Clone(tools), func(t string) bool { return t == "Bash(canyon:*)" })...), hostedEnv(home, app)
+	} else {
+		args = append(args, tools...)
+	}
 	if n > 1 {
 		args = append(args, "--continue")
 	}
@@ -358,7 +451,6 @@ func turn(ctx context.Context, agent, home, dir, app string, n int, text string)
 		}
 		name, args = "codex", codexArgs(text, thread)
 	}
-	env := testerEnv(home, app)
 	if agent == agentCursor {
 		chat, cerr := cursorChat(dir) // not err: the scrub below sets the named result
 		if cerr != nil {
@@ -490,4 +582,44 @@ func lastRead(ctx context.Context, home, dir, app string, last expect, first *ou
 			fmt.Printf("%s: %v\n", app, err)
 		}
 	}
+}
+
+// report writes REPORT.md: each scenario passed, failed (a MISS on its scorecard, each row named) or stopped (the
+// runner's error), with its wall time, and the round's.
+func report(runDir string, list []scenario, errs []error, parallel int, wall time.Duration) error {
+	var b strings.Builder
+	passed := 0
+	rows := ""
+	for i, s := range list {
+		dir := filepath.Join(runDir, s.Name)
+		way := "CLI"
+		switch {
+		case s.Remote:
+			way = "by URL, " + s.Scope
+		case s.MCP:
+			way = "canyon mcp"
+		}
+		result, why := "pass", ""
+		card, _ := os.ReadFile(filepath.Join(dir, "scorecard.md"))
+		var missed []string
+		for _, line := range strings.Split(string(card), "\n") {
+			if cells := strings.Split(line, " | "); len(cells) > 2 && strings.Contains(line, "| MISS") {
+				missed = append(missed, strings.TrimPrefix(cells[0], "| "))
+			}
+		}
+		switch {
+		case errs[i] != nil:
+			result, why = "stopped", errs[i].Error()
+		case len(missed) > 0:
+			result, why = "FAIL", strings.Join(missed, ", ")
+		default:
+			passed++
+		}
+		took, _ := os.ReadFile(filepath.Join(dir, "elapsed"))
+		rows += fmt.Sprintf("| qa-%s | %s · %s | %s | %s | %s |\n", s.Name, s.Agent, way, result, cmp.Or(strings.TrimSpace(string(took)), "–"), oneLine(why))
+	}
+	fmt.Fprintf(&b, "# Agent round\n\nwall: %s · %d scenarios, %d at once · %d passed · %d not\n\n", wall.Round(time.Second), len(list), parallel, passed, len(list)-passed)
+	b.WriteString("| scenario | agent · way | result | wall | why |\n|---|---|---|---|---|\n" + rows)
+	b.WriteString("\nEach scenario's scorecard.md has its verdict and what the agent did; summary.md has them side by side.\n")
+	return os.WriteFile(filepath.Join(runDir, "REPORT.md"), []byte(b.String()), 0o600)
 }

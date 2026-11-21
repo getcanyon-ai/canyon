@@ -77,7 +77,11 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 				if err != nil {
 					return toolRefused(err), nil
 				}
-				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: out}}, StructuredContent: json.RawMessage(out)}, nil
+				text := out
+				if appSpoke(out) { // the JSON keeps the host's shape: the first line says which of its words are the app's
+					text = statusAppSays + "\n" + out
+				}
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}, StructuredContent: json.RawMessage(out)}, nil
 			case mcptools.Check:
 				return a.mcpVerdict(ctx, req, dir, command{name: "check", run: runCheck}), nil
 			case mcptools.Deploy:
@@ -255,6 +259,20 @@ func (a *app) sub(ctx context.Context, dir string) *app {
 	render, _ := resolveRender(string(FormatAI), a.getenv, false) // ai is a format resolveRender always takes
 	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir,
 		transport: a.transport}
+}
+
+// appSpoke is whether a status read's JSON carries the app's own words: an environment's answered said or error.
+func appSpoke(read string) bool {
+	var s statusJSON
+	if json.Unmarshal([]byte(read), &s) != nil {
+		return true // a read this build can't tell about is said to be the app's: fail closed
+	}
+	for _, e := range s.Envs {
+		if e != nil && e.Answered != nil && (e.Answered.Said != "" || e.Answered.Error != "") {
+			return true
+		}
+	}
+	return false
 }
 
 // verbIn runs `canyon <verb> <args>` in dir, as the app named when it names one: what it printed, or its refusal.

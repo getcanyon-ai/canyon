@@ -780,7 +780,8 @@ export const APPROVAL = {
   title: "Promote <app> <version> to production?",
   titlePutBack: "Put <app> <version> back in production, replacing <replaces>?",
   titlePutBackNothing: "Put <app> <version> back in production?",
-  titleUnread: "Promote this app to production?", // before the read answers, nothing is known to name
+  // Before the read answers, and when it is refused, nothing is known to name: not even whether it promotes or puts back.
+  titleUnread: "A request to change production",
   asked: "<name> asked from the CLI, <time>.",
   asked_elsewhere: "<name> asked, <time>.",
   now: "In production now",

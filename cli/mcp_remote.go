@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -168,7 +169,12 @@ func (a *app) mcpCreateApp(t *mcp.Tool) mcp.ToolHandler {
 		}
 		var api *APIError
 		if errors.As(err, &api) && api.Message != "" { // any other refusal of the link: the app it made went, and the host's own words say why
-			return toolRefused(fmt.Errorf(linkRefused, cell(api.Message))), nil //nolint:staticcheck // D5's line, said whole
+			said := fmt.Sprintf(linkRefused, cell(api.Message))
+			var other string // another app holds this repository and folder: that app is the one to deploy, not a new one
+			if api.Code == "linked" && json.Unmarshal(api.Extra["app"], &other) == nil && names.ValidProject(other) {
+				said += " " + fmt.Sprintf(deployTheLinked, other)
+			}
+			return toolRefused(errors.New(said)), nil
 		}
 		return toolRefused(c.refusal(err)), nil
 	}
@@ -183,7 +189,8 @@ func isRefusal(err error, status int, code string) bool {
 const (
 	createdApp      = "Made %s (%s), linked to %s. Its page: %s\nNext: canyon_deploy_ref with app %s and the branch to deploy."
 	linkGitHubFirst = "Nothing was made: Canyon reads a repository for you only where your own GitHub account can. Open %s in your browser to link your GitHub account, then ask again."
-	linkRefused     = "Nothing was made: Canyon didn't link the repository: %s."
+	linkRefused     = "Nothing was made. Canyon couldn't link the repository: %s."
+	deployTheLinked = "Deploy it with canyon_deploy_ref and app %s."
 	askForAccess    = "Nothing was made: Canyon's GitHub App doesn't see %s. Ask an admin to give Canyon's GitHub App access to it, in Settings › GitHub: %s"
 )
 

@@ -295,6 +295,11 @@ func TestMCPRemoteCreateAppMakesAndLinksOrUndoes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":"github_link_required","message":"Link your GitHub account first"}`))
 		}, []string{`POST /api/v1/projects {"name":"claims-portal"}`, `PUT /api/v1/projects/quiet-river-4k2/repository {"folder":"","full_name":"acme/claims-portal"}`, `DELETE /api/v1/projects/quiet-river-4k2?confirm=quiet-river-4k2 `},
 			"Nothing was made: Canyon reads a repository for you only where your own GitHub account can. Open " + remoteBase + "/api/v1/github/link in your browser to link your GitHub account, then ask again.", true},
+		{"another app holds it", map[string]any{"repository": "acme/claims-portal"}, func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":"linked","message":"the app claims-portal is linked to this repository and folder","app":"claims-portal"}`))
+		}, []string{`POST /api/v1/projects {"name":"claims-portal"}`, `PUT /api/v1/projects/quiet-river-4k2/repository {"folder":"","full_name":"acme/claims-portal"}`, `DELETE /api/v1/projects/quiet-river-4k2?confirm=quiet-river-4k2 `},
+			"Nothing was made. Canyon couldn't link the repository: the app claims-portal is linked to this repository and folder. Deploy it with canyon_deploy_ref and app claims-portal.", true},
 		{"no App sees it", map[string]any{"repository": "acme/secret"}, func(w http.ResponseWriter) {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"error":"not_found","message":"none of Canyon's GitHub Apps sees that repository"}`))

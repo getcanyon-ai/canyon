@@ -177,9 +177,14 @@ describe("the production approval screen", () => {
     expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
   });
 
-  it("below contributor, the server's ask is the screen", async () => {
-    open(() => answer(403, { error: "team_required", message: "Ask Dana Whitfield to add you to claims-portal", owners: [] }));
-    expect(await screen.findByText("Ask Dana Whitfield to add you to claims-portal")).toBeDefined();
+  // Refused, the page can't tell a promotion from a put-back, so its heading names neither (the v0.11.0 role walk: a
+  // refused put-back read "Promote this app to production?").
+  it("below contributor, the server's ask is the screen, under a heading that names no question", async () => {
+    const ask = "Ask Dana Whitfield to add you to claims-portal's team: on its page in Canyon, use Ask for access.";
+    open(() => answer(403, { error: "team_required", message: ask, owners: [] }));
+    expect(await screen.findByText(ask)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "A request to change production" })).toBeDefined();
+    expect(screen.queryByRole("heading", { name: /^Promote / })).toBeNull();
   });
 
   // A patch approval (contracts/routes.md, Production approvals; design/PATCHING.md §8), Canyon's own ask, as the patch
@@ -291,7 +296,7 @@ describe("the production approval screen", () => {
     await waitFor(() => expect(sent()).toContain(`GET ${APPROVAL}`));
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     answerRead(answer(502, { error: "bad_gateway", message: "bad gateway" }));
-    expect(await screen.findByRole("heading", { name: "Promote this app to production?" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "A request to change production" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(sent()).toEqual([`GET ${APPROVAL}`]);
   });

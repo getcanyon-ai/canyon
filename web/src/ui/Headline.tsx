@@ -180,8 +180,10 @@ export function headline(f: Facts): Band {
     // What preview answered at / is said beside the checks when it is an answer to say beside readiness:
     // promoting it anyway is the person's call, and the CLI's never.
     const odd = oddAnswer(f.preview.answered);
-    if (odd !== null) return { tone: "amber", title: `${v} meets ${checks}, but ${odd}`, text: "Check the app before promoting: the preview card shows what it said. Production runs the same image.", primary: "promote" };
-    return { tone: "teal", title: `${v} is ready for production`, text: `It ${run === null ? "passed review" : cleared(run)}, runs in preview, and meets ${checks}. Production runs the same image, with production's own secrets: nothing is rebuilt.`, primary: "promote" };
+    // A production approval asked says the same with its own step, Review and approve: Promote would ask again, so the
+    // band gives way to it (repeats; the v0.11.0 role walk drew both).
+    if (odd !== null) return { tone: "amber", title: `${v} meets ${checks}, but ${odd}`, text: "Check the app before promoting: the preview card shows what it said. Production runs the same image.", primary: "promote", repeats: ["approval"] };
+    return { tone: "teal", title: `${v} is ready for production`, text: `It ${run === null ? "passed review" : cleared(run)}, runs in preview, and meets ${checks}. Production runs the same image, with production's own secrets: nothing is rebuilt.`, primary: "promote", repeats: ["approval"] };
   }
   // Every blocker approved and the version gone nowhere yet: where it runs, the states above say it.
   if (run !== null && run.state === "blocked" && approved(run) !== null) return { tone: "amber", title: `${v} was approved past its review`, text: `${approved(run)!.replace(/^! /, "")}. Approved is not passed: the findings stand.${keeps}`, review: true };

@@ -82,7 +82,7 @@ func seedTeamApp(t *testing.T, ctx context.Context, pool *pgxpool.Pool, base str
 	}
 }
 
-const teamRequiredBody = `{"error":"team_required","message":"Ask sub-olive to add you to claims-portal","owner_groups":[],"owners":[{"kind":"person","subject":"sub-olive","display":"sub-olive"}]}`
+const teamRequiredBody = `{"error":"team_required","message":"Ask sub-olive to add you to claims-portal's team: on its page in Canyon, use Ask for access.","owner_groups":[],"owners":[{"kind":"person","subject":"sub-olive","display":"sub-olive"}]}`
 
 // viewerTeamRequiredBody is teamRequiredBody to a read-only member, whose page has the button that asks them.
 const viewerTeamRequiredBody = `{"error":"team_required","message":"Ask sub-olive to add you to claims-portal's team: on its page in Canyon, use Ask to join its team.","owner_groups":[],"owners":[{"kind":"person","subject":"sub-olive","display":"sub-olive"}]}`

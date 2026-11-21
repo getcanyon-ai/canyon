@@ -1,0 +1,45 @@
+name: main-health
+
+# A workflow on main that ended red, or never started (startup_failure: GitHub refused the file, so no job ran and
+# nothing of the workflow's own reported it, #70), opens one issue labelled ci per workflow, or comments on the one
+# open, each red run once. Hourly, over the last three hours, so a run is seen even when an hour's job is late.
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: main-health
+  cancel-in-progress: false
+
+jobs:
+  red:
+    if: github.repository == 'getcanyon-ai/canyon'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      actions: read # the runs on main
+      issues: write # the ci issue
+    steps:
+      - name: open or update the ci issue for each red workflow on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create ci --color d73a4a --description "main's CI is red" 2>/dev/null || true # once: it exists after
+          since=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh run list --branch main --limit 100 --json workflowName,conclusion,headSha,url,createdAt \
+            --jq ".[] | select(.createdAt >= \"$since\") | select(.conclusion == \"failure\" or .conclusion == \"startup_failure\") | [.workflowName, .conclusion, .headSha[0:7], .url] | @tsv" |
+          while IFS=$'\t' read -r workflow conclusion sha url; do
+            title="main is red: $workflow"
+            issue=$(gh issue list --label ci --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+            line="$conclusion on $sha: $url"
+            if [ -z "$issue" ]; then
+              gh issue create --label ci --title "$title" --body "$line"
+            elif ! gh issue view "$issue" --json body,comments --jq '[.body, .comments[].body] | join("\n")' | grep -qF "$url"; then
+              gh issue comment "$issue" --body "$line"
+            fi
+          done

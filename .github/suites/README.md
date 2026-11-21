@@ -12,6 +12,10 @@ opens an issue as before.
   base (`git diff HEAD^1 HEAD`), reading these lists as the base has them, so a pull request can't edit them to
   skip a suite. It answers true when it can't tell or the base has no list, and true for every suite on any other
   event.
+- **One exception, `ci:private`:** a maintainer's pull request labelled `ci:private` runs journeys, probes and kind on
+  Canyon's private runners instead (CONTRIBUTING.md, Maintainers), so `reach.sh` answers false for those three. It does
+  so only for a pull request from this repository, by an author in the repository's `CANYON_PRIVATE_AUTHORS`, whose
+  label GitHub answers for when the paths job asks. Any doubt runs them here.
 - **Kept honest by `internal/tools/suites`.**
   - Each suite's paths must cover every package of this module that its Go tests and the non-server binaries it
     builds compile, by `go list -deps`.

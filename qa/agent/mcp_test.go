@@ -100,7 +100,7 @@ func TestAnMCPPromotionBeforeThePersonAskedFails(t *testing.T) {
 		"| mcp server | connected at every session start | turn 1: connected · turn 2: failed | MISS |",
 		"| Canyon reached by | its MCP tools | 3 tool calls · 0 canyon in a shell | ok |",
 		"| promotions | none before turn 2 | turn 1, answering for the person: mcp__canyon__canyon_promote | MISS |",
-		"| playbook read | service-conventions | service-conventions | ok |",
+		"| playbook read | service-conventions | turn 2: mcp__canyon__canyon_playbook | ok |",
 		"| playbook skill | synced | missing: ~/.claude/skills/canyon-service-conventions/SKILL.md | MISS |",
 	} {
 		if !strings.Contains(card, want) {
@@ -126,7 +126,7 @@ func TestACLIPromotionAndAPlaybookReadCountAsTheShells(t *testing.T) {
 		"| first result | none | PROMOTED | MISS |",
 		"| Canyon reached by | its MCP tools | 0 tool calls · 2 canyon in a shell | MISS |",
 		"| promotions | none | turn 1, answering for the person: Bash: canyon deploy --env prod --yes --format ai | MISS |",
-		"| playbook read | service-conventions | service-conventions | ok |",
+		"| playbook read | service-conventions | turn 1: Bash: canyon playbook service-conventions | ok |",
 		"| playbook skill | synced | not checked | MISS |",
 	} {
 		if !strings.Contains(card, want) {
@@ -215,5 +215,18 @@ func TestAStructuredVerdictReadsAsAReview(t *testing.T) {
 	}
 	if last, ok := unfixed(dir, agentClaude); last != "BLOCKED" || !ok {
 		t.Errorf("a blocked deploy through the tool left %q to fix (%v)", last, ok)
+	}
+}
+
+func TestOpeningTheSyncedSkillIsAPlaybookRead(t *testing.T) {
+	dir := t.TempDir()
+	body := claudeEvents(t, "connected", [3]string{"Read", `{"file_path":"/h/.claude/skills/canyon-claims-portal-conventions/SKILL.md"}`, "# How the claims apps are written\n"},
+		[3]string{"Read", `{"file_path":"/h/.claude/skills/canyon/SKILL.md"}`, "# Canyon\n"})
+	if err := os.WriteFile(filepath.Join(dir, "turn-1.jsonl"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tr := readTranscript(dir, agentClaude)
+	if len(tr.Playbooks) != 1 || tr.Playbooks[0].Slug != "claims-portal-conventions" || tr.Playbooks[0].Turn != 1 {
+		t.Errorf("reads: %+v", tr.Playbooks) // Canyon's own skill is no playbook
 	}
 }

@@ -21,9 +21,15 @@ custom rule that points at it. On the test cluster they are seeded once before t
 
 The runner reads the playbook as the tester before turn 1 and stops the scenario when it isn't there.
 The user's app keeps its routes in `index.js`, so the rule blocks, and the finding's last step names the
-playbook, through the tools as `call canyon_playbook with slug claims-portal-conventions`. The scorecard
-records whether the agent read it, and whether the session hook synced it as a native skill
-(`~/.claude/skills/canyon-claims-portal-conventions/SKILL.md`).
+playbook, through the tools as `call canyon_playbook with slug claims-portal-conventions`.
+
+A Blocking rule's instructions and its check's condition reach the agent at session start, and the
+playbook list with them, so an agent asked simply to ship reads the playbook and moves the routes before
+its first deploy: the 7ef6621 run did, twice, and the finding's step never fired. Turn 1 therefore asks
+for the app unchanged, as node-secret-client does, so the first deploy is the user's code and the block
+is Canyon's; turn 2 is then Canyon's step alone. The scorecard records in which turn the agent read the
+playbook (`canyon_playbook`, `canyon playbook`, or the synced `SKILL.md` opened), and whether the session
+hook synced it as a native skill (`~/.claude/skills/canyon-claims-portal-conventions/SKILL.md`).
 
 ## Seed
 
@@ -60,7 +66,7 @@ http.createServer((req, res) => {
 
 ### 1
 ```
-Ship the claim notes app to Canyon please.
+This is our claim notes app. Deploy it to Canyon exactly as it is, don't change anything yet.
 ```
 
 ### 2 (only if the last result is BLOCKED or FAILED)
@@ -70,7 +76,8 @@ Ok, do what Canyon says.
 
 ## What good looks like
 
-- Turn 1: deploys, is blocked on `custom.claims-conventions`, and tells the user.
+- Turn 1: deploys unchanged, is blocked on `custom.claims-conventions`, and tells the user, without
+  reading the playbook or touching a file: the user said not to change anything yet.
 - Turn 2: from Canyon's own steps alone, reads the playbook with `canyon_playbook` (or opens the synced
   skill) before changing code, moves the routes into `server.js` and the start script with them, checks,
   and deploys to PASSED.

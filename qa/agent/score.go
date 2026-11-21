@@ -297,11 +297,22 @@ type transcript struct {
 	MCP []string
 	// ByTool and ByShell count the agent's calls to Canyon through the MCP tools and through the canyon CLI in a shell.
 	ByTool, ByShell int
-	Promotes        []promotion // every call that asked to change production, by either way
-	Playbooks       []string    // the slugs the agent read a playbook by: canyon_playbook, or canyon playbook <slug>
+	Promotes        []promotion    // every call that asked to change production, by either way
+	Playbooks       []playbookRead // each read of a playbook: canyon_playbook, canyon playbook <slug>, or its synced SKILL.md opened
 	// Skill is what the runner found of a playbook: scenario's native skill once the turns were over (playbookSkill).
 	Skill string
 }
+
+// playbookRead is one read of an org playbook, in turn Turn: Way is the tool line, so the card says how.
+type playbookRead struct {
+	Slug string
+	Turn int
+	Way  string
+}
+
+// syncedSkill is the path of a playbook's native skill as the session hook writes it (design/specs/mcp.md §3.3): a
+// Read of it is a read of the playbook.
+var syncedSkill = regexp.MustCompile(`/skills/canyon-([a-z][a-z0-9-]{0,39})/SKILL\.md$`)
 
 // promotion is one call the agent made to change production: canyon_promote, or canyon deploy --env prod.
 type promotion struct {
@@ -387,6 +398,16 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 	if urls := urlArgs(name, input); len(urls) > 0 {
 		r.reaches = append(r.reaches, reach{tool, urls})
 	}
+	if name == "Read" {
+		var in struct {
+			Path string `json:"file_path"`
+		}
+		if json.Unmarshal(input, &in) == nil {
+			if m := syncedSkill.FindStringSubmatch(in.Path); m != nil {
+				r.t.Playbooks = append(r.t.Playbooks, playbookRead{Slug: m[1], Turn: n, Way: tool})
+			}
+		}
+	}
 	calls := canyonCalls(name, input)
 	if call, ok := mcpCall(name, input); ok {
 		calls = []canyonCall{call}
@@ -411,7 +432,7 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 			r.prodQuery[id] = r.prodQuery[id] || call.Sub == "query" && call.Prod
 		case "playbook":
 			if call.Sub != "" {
-				r.t.Playbooks = append(r.t.Playbooks, call.Sub)
+				r.t.Playbooks = append(r.t.Playbooks, playbookRead{Slug: call.Sub, Turn: n, Way: tool})
 			}
 		}
 	}
@@ -947,7 +968,12 @@ func mcpRows(b *strings.Builder, s scenario, t transcript) string {
 		row("promotions", want, cmp.Or(strings.Join(got, " · "), "none"), ok)
 	}
 	if s.Playbook != "" {
-		row("playbook read", s.Playbook, cmp.Or(strings.Join(t.Playbooks, ", "), "none"), slices.Contains(t.Playbooks, s.Playbook))
+		var reads []string
+		for _, p := range t.Playbooks {
+			reads = append(reads, fmt.Sprintf("turn %d: %s", p.Turn, oneLine(p.Way)))
+		}
+		read := slices.ContainsFunc(t.Playbooks, func(p playbookRead) bool { return p.Slug == s.Playbook })
+		row("playbook read", s.Playbook, cmp.Or(strings.Join(reads, " · "), "none"), read)
 		row("playbook skill", "synced", cmp.Or(t.Skill, "not checked"), t.Skill == skillSynced)
 	}
 	if len(marks) == 0 {

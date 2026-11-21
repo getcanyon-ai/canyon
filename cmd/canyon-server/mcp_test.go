@@ -313,8 +313,7 @@ func TestMCPRemoteCreateApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"canyon_secret_link","arguments":{"app":"` + made + `","name":"STRIPE_KEY"}}}`
-	if _, _, body := mcpCall(t, base, carol, link, nil); !strings.Contains(body, "http://localhost:7777/#/apps/"+made+"/secrets?env=preview\u0026name=STRIPE_KEY") &&
-		!strings.Contains(body, "http://localhost:7777/#/apps/"+made+"/secrets?env=preview&name=STRIPE_KEY") {
+	if _, _, body := mcpCall(t, base, carol, link, nil); !strings.Contains(body, "http://localhost:7777/#/apps/"+made+"/secrets?env=preview") || !strings.Contains(body, "name=STRIPE_KEY") {
 		t.Errorf("carol's secret link: %s", body)
 	}
 	unseen := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"canyon_create_app","arguments":{"repository":"acme/secret"}}}`

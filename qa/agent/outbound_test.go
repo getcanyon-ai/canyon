@@ -165,7 +165,7 @@ func TestRelativeRunAndHomeDirectoriesReachEveryProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runAll(rel, filepath.Join("runs", "r1"), "", false, []string{scenario}); err != nil {
+	if err := runAll(rel, filepath.Join("runs", "r1"), options{}, []string{scenario}); err != nil {
 		log, _ := os.ReadFile(filepath.Join("runs", "r1", "reldir", "setup.log"))
 		t.Fatalf("%v\nsetup.log: %s", err, log)
 	}

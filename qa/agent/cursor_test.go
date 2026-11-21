@@ -272,7 +272,7 @@ func TestACursorTurnThatCannotBeScrubbedFails(t *testing.T) {
 	if err := os.MkdirAll(runTmp(filepath.Dir(dir)), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := turn(t.Context(), agentCursor, home, dir, app, 1, "Deploy it."); err == nil || !strings.Contains(err.Error(), "not scrubbed") {
+	if err := turn(t.Context(), agentCursor, home, dir, app, 1, "Deploy it.", false); err == nil || !strings.Contains(err.Error(), "not scrubbed") {
 		t.Errorf("a turn left unscrubbed: %v", err)
 	}
 }

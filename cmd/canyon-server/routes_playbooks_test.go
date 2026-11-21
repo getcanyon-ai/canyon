@@ -238,6 +238,8 @@ func TestPlaybookRefusalsWriteNothing(t *testing.T) {
 		"a control character":       {"svc", ok("n", "skill", "w", "a\u0007b"), "A playbook's body is 1 to 64 KiB of Markdown, with no control character but a newline or a tab."},
 		"a secret in the body":      {"svc", ok("n", "skill", "w", "aws_access_key_id="+key), playbookSecret},
 		"a secret in when":          {"svc", ok("n", "skill", "aws_access_key_id="+key, "b"), playbookSecret},
+		"a tag character":           {"svc", ok("n", "skill", "w", "ok\U000E0041"), "A playbook's body holds U+E0041 at character 3, a character that hides or reorders text: remove it."},
+		"a skill's shell line":      {"svc", ok("n", "skill", "w", "Status: !`git status`"), playbookCommand},
 	} {
 		if code, out, _ := do(t, c, http.MethodPut, base+playbooksAt+"/"+req.slug, req.body); code != 400 || out["error"] != "invalid_playbook" || out["message"] != req.message {
 			t.Errorf("%s: %d %s", name, code, lastBody)

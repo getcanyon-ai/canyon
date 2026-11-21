@@ -163,6 +163,7 @@ var goLicences = map[string]string{
 	"github.com/x448/float16":                                       "MIT",
 	"github.com/xo/terminfo":                                        "MIT",
 	"github.com/yosida95/uritemplate/v3":                            "BSD-3-Clause",
+	"github.com/yuin/goldmark":                                      "MIT",
 	"github.com/zricethezav/gitleaks/v8":                            "MIT",
 	"go.yaml.in/yaml/v2":                                            "Apache-2.0 AND MIT",
 	"go.yaml.in/yaml/v3":                                            "MIT AND Apache-2.0",

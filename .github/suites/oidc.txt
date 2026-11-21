@@ -24,6 +24,11 @@ web/src/screens/Approve*
 web/src/screens/OrgSettings*
 web/src/screens/Settings*
 web/src/ui/Finding*
+web/src/ui/Headline*
+web/src/ui/Need*
+web/src/screens/App.tsx
+web/src/screens/Shell*
+cmd/canyon-server/team.go
 cmd/canyon-server/routes_playbooks.go
 cmd/canyon-server/routes_custom_rules.go
 cmd/canyon-server/routes_promotion_approvals.go

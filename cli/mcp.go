@@ -103,7 +103,32 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	s.AddResource(&mcp.Resource{URI: mcptools.ManifestURI, Name: "manifest", Title: "Canyon's rules", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.ManifestAppTemplate, Name: "manifest-app", Title: "Canyon's rules for one app", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.PlaybookTemplate, Name: "playbook", Title: "One of the org's playbooks", MIMEType: "text/markdown"}, a.playbookResource)
+	s.AddPrompt(&mcp.Prompt{Name: tourPrompt, Title: "Canyon's guided tour", Description: "A chapter of the guided tour on the laptop demo, as canyon demo tour gives it to an agent: 1, 2, 3 or end, the visitor's own chapter when left out.",
+		Arguments: []*mcp.PromptArgument{{Name: "chapter", Description: "1, 2, 3 or end; left out, the chapter the visitor is on"}}}, a.tourPromptChapter)
 	return s
+}
+
+// tourPrompt is canyon_tour: each chapter of canyon demo tour as an MCP prompt (design/specs/mcp.md §11).
+const tourPrompt = "canyon_tour"
+
+var tourChapters = map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd}
+
+// tourPromptChapter is the chapter's instructions, word for word as canyon demo tour prints them for an agent. It
+// moves no place: plant, next, skip and end stay the tour's own forms.
+func (a *app) tourPromptChapter(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	named := req.Params.Arguments["chapter"]
+	chapter, ok := tourChapters[named]
+	if named == "" {
+		state, err := loadTour(a.getenv)
+		if err != nil {
+			return nil, err
+		}
+		chapter, ok = state.Chapter, true
+	}
+	if !ok {
+		return nil, fmt.Errorf("the tour has no chapter %q: it has 1, 2, 3 and end", named)
+	}
+	return &mcp.GetPromptResult{Description: tourTitles[chapter], Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: tourAgent[chapter]}}}}, nil
 }
 
 // mcpPlaybook is canyon_playbook: a playbook's body as its admin wrote it, each character that hides text written

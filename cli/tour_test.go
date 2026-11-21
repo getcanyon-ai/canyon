@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getcanyon-ai/canyon/internal/mcptools"
 )
 
 // tourHost is the two reads canyon demo tour makes of the tour's app: its status and its runs list.
@@ -87,7 +89,7 @@ func TestTourPrintsTheChapterForAnAgentAndForAPerson(t *testing.T) {
 	if code != exitOK || errs != "" || !strings.HasPrefix(out, "CANYON TOUR — CHAPTER 1 of 3: Standards: your agent ignores the design system") {
 		t.Fatalf("exit %d, stderr %q, an agent reads\n%s", code, errs, out)
 	}
-	for _, want := range []string{"Run canyon fleet.", "    What happened:\n    How Canyon helped:\n    Without Canyon:\n    At scale:", "/#/guardrails/policies?rule=design.org-system\n    On the marked row, \"Apps use the org's design system\", choose Blocking.", `not "Save, tightening in 14 days"`, "Build me a claims tracker, and deploy it.", "Run canyon demo tour plant, then run canyon deploy in ./canyon-tour, unchanged.", "  What next?\n  1. Next chapter: Security: your agent writes a flaw", "  2. Skip to the end\n  3. Try this on my own app"} {
+	for _, want := range []string{"Run canyon fleet.", "    What happened:\n    How Canyon helped:\n    Without Canyon:\n    At scale:", "/#/guardrails/policies?rule=design.org-system\n    On the marked row, \"Apps use the org's design system\", choose Blocking.", `not "Save, tightening in 14 days"`, "Build me a claims tracker, and deploy it.", "Then run canyon skill install.", "Run canyon demo tour plant, then canyon_deploy (canyon deploy) for ./canyon-tour,\nunchanged.", "  What next?\n  1. Next chapter: Security: your agent writes a flaw", "  2. Skip to the end\n  3. Try this on my own app"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("chapter 1's instructions lack %q", want)
 		}
@@ -476,6 +478,30 @@ func TestEveryBeatThatDeploysNamesTheTourFolder(t *testing.T) {
 			title, _, _ := strings.Cut(beat, "\n")
 			if (strings.Contains(beat, "canyon check") || strings.Contains(beat, "canyon deploy")) && !strings.Contains(beat, "./"+tourDir) {
 				t.Errorf("chapter %d, beat %s, runs canyon check or deploy without naming ./%s", chapter, title, tourDir)
+			}
+		}
+	}
+}
+
+// Every command a chapter has the agent run against the app is Canyon's tool first, with the shell command in
+// brackets for an agent that has not loaded the tools (design/specs/mcp.md §11), and each tool is one canyon mcp serves.
+func TestEveryAppCommandInTheChaptersNamesItsTool(t *testing.T) {
+	tools := map[string]bool{}
+	for _, tool := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
+		tools[tool.Name] = true
+	}
+	verb := regexp.MustCompile(`(.?)canyon (check|deploy|status)\b`)
+	named := regexp.MustCompile(`\bcanyon_[a-z]+`)
+	for chapter, text := range tourAgent {
+		for _, at := range verb.FindAllStringSubmatchIndex(text, -1) {
+			before := text[max(0, at[0]-40):at[0]]
+			if text[at[2]:at[3]] != "(" || !strings.Contains(before, "canyon_") {
+				t.Errorf("chapter %d runs %q without its tool first: %q", chapter, text[at[0]:at[1]], text[max(0, at[0]-40):at[1]])
+			}
+		}
+		for _, tool := range named.FindAllString(text, -1) {
+			if !tools[tool] {
+				t.Errorf("chapter %d names %s, which canyon mcp does not serve", chapter, tool)
 			}
 		}
 	}

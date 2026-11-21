@@ -8,9 +8,13 @@ name: Release
 # and Opengrep's source packed beside it, goes to getcanyon-ai/canyon-releases, which install.sh reads
 # (scripts/publish-release.sh), and release-smoke
 # installs what was published. Images build on tags alone, never on a pull request, and every job runs on GitHub's
-# runners. One secret publishes it all: CANYON_PUBLISH_TOKEN, the release account's classic token (scopes public_repo
-# and write:packages; a fine-grained token can't push to GHCR), in the release environment, which only a v* tag may
-# use. Only the jobs that push to ghcr.io/getcanyon-ai or write getcanyon-ai/canyon-releases are in it.
+# runners. release, images and canyon-releases each refuse a commit that isn't on main.
+#
+# Credentials (RELEASING.md, The tokens): the images push with each job's own GITHUB_TOKEN (packages: write), which
+# needs this repository to have write access on each of the nine packages. Only canyon-releases holds a secret,
+# CANYON_RELEASES_TOKEN (fine-grained: Contents read and write on getcanyon-ai/canyon-releases alone), in the release
+# environment, which only a v* tag may use; that job checks nothing out and runs none of the tree's code. The packing
+# that runs the tree's scripts is canyon-releases-pack, with no secret.
 #
 # Run by hand (workflow_dispatch), it is a rehearsal that publishes nothing: the CLI, all nine images for both
 # architectures (built to their digests, pushed nowhere), and the chart, the bundle and Opengrep's source packed and
@@ -37,6 +41,15 @@ jobs:
     permissions:
       contents: write # gh release create
     steps:
+      - name: the commit is on main, so only reviewed code is released
+        env:
+          GH_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: | # a blobless fetch of main into a scratch repository: the job's own checkout is never trusted for this
+          set -euo pipefail
+          git init -q --bare "$RUNNER_TEMP/onmain"
+          git -C "$RUNNER_TEMP/onmain" fetch -q --filter=blob:none "$GH_REPO_URL" main
+          git -C "$RUNNER_TEMP/onmain" merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD ||
+            { echo "::error::$GITHUB_SHA is not on main: a release is cut from main alone"; exit 1; }
       - uses: actions/checkout@v4
         with:
           persist-credentials: false # the build never needs the write token on disk; gh reads GH_TOKEN
@@ -76,23 +89,29 @@ jobs:
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
-    environment: ${{ github.event_name == 'push' && 'release' || '' }} # a tag's push to ghcr.io/getcanyon-ai, with CANYON_PUBLISH_TOKEN; the rehearsal pushes nothing and has no environment
     permissions:
       contents: read
+      packages: write # push to ghcr.io/getcanyon-ai/canyon-*, which grants this repository write access
     steps:
+      - name: the commit is on main, so only reviewed code is released
+        env:
+          GH_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: | # a blobless fetch of main into a scratch repository: the job's own checkout is never trusted for this
+          set -euo pipefail
+          git init -q --bare "$RUNNER_TEMP/onmain"
+          git -C "$RUNNER_TEMP/onmain" fetch -q --filter=blob:none "$GH_REPO_URL" main
+          git -C "$RUNNER_TEMP/onmain" merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD ||
+            { echo "::error::$GITHUB_SHA is not on main: a release is cut from main alone"; exit 1; }
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: the tag is a version
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
-      - name: log in to ghcr.io as the release account
+      - name: log in to ghcr.io with this job's own token
         if: env.REHEARSAL != 'true'
         env:
-          CANYON_PUBLISH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }} # this step's alone; the build below never sees it in its environment
-        run: |
-          [ -n "$CANYON_PUBLISH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was pushed"; exit 1; }
-          user=$(GH_TOKEN="$CANYON_PUBLISH_TOKEN" gh api user --jq .login) # the release account the token belongs to
-          echo "$CANYON_PUBLISH_TOKEN" | docker login ghcr.io -u "$user" --password-stdin
+          GH_TOKEN: ${{ github.token }} # this step's alone; packages: write, gone when the job ends
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: build each image for linux/${{ matrix.arch }} and push it by digest, untagged
         if: env.REHEARSAL != 'true'
         env:
@@ -119,23 +138,20 @@ jobs:
   publish-images:
     needs: [release, images]
     if: github.event_name == 'push'
-    environment: release # CANYON_PUBLISH_TOKEN, for the multi-arch index and its tag
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
       contents: write # gh release upload
+      packages: write # the multi-arch index and its tag
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: digests-*
           path: digests # digests/digests-amd64/<name>, digests/digests-arm64/<name>
-      - name: log in to ghcr.io as the release account
+      - name: log in to ghcr.io with this job's own token
         env:
-          CANYON_PUBLISH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }} # this step's alone
-        run: |
-          [ -n "$CANYON_PUBLISH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was tagged"; exit 1; }
-          user=$(GH_TOKEN="$CANYON_PUBLISH_TOKEN" gh api user --jq .login) # the release account the token belongs to
-          echo "$CANYON_PUBLISH_TOKEN" | docker login ghcr.io -u "$user" --password-stdin
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: join each image's two architectures under one digest, tag it, and attach images.txt to the draft
         env:
           GH_TOKEN: ${{ github.token }} # the draft release here
@@ -198,10 +214,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false -R "$GITHUB_REPOSITORY"
 
-  canyon-releases:
+  canyon-releases-pack:
+    # The release's files for canyon-releases, packed and checked by the tree's scripts, with no secret.
     needs: publish
-    if: github.event_name == 'push' && github.repository == 'getcanyon-ai/canyon'
-    environment: release # CANYON_PUBLISH_TOKEN, which only a v* tag may use
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -221,17 +237,48 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/bin" linux-arm64/helm
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: pack and check the release's files, with no publishing token
+      - name: pack and check the release's files, and check every image pulls with no login
         env:
           SOURCE_TOKEN: ${{ github.token }} # reads this repository's release
-        run: PUBLISH_OUT="$RUNNER_TEMP/release" scripts/publish-release.sh "$TAG"
-      - name: publish them on getcanyon-ai/canyon-releases, the only step with the token
+        run: PUBLISH_OUT="$RUNNER_TEMP/canyon-releases" scripts/publish-release.sh "$TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canyon-releases
+          path: ${{ runner.temp }}/canyon-releases/
+          retention-days: 1
+
+  canyon-releases:
+    # The release on getcanyon-ai/canyon-releases, from the packed files: the only job with a secret, and it checks
+    # nothing out and runs none of the tree's code.
+    needs: canyon-releases-pack
+    if: github.event_name == 'push' && github.repository == 'getcanyon-ai/canyon'
+    environment: release # CANYON_RELEASES_TOKEN, which only a v* tag may use
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: the commit is on main, so only reviewed code is released
         env:
-          GH_TOKEN: ${{ secrets.CANYON_PUBLISH_TOKEN }}
+          GH_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
           set -euo pipefail
-          [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_PUBLISH_TOKEN: nothing was published"; exit 1; }
-          PUBLISH_FROM="$RUNNER_TEMP/release" scripts/publish-release.sh "$TAG"
+          git init -q --bare "$RUNNER_TEMP/onmain"
+          git -C "$RUNNER_TEMP/onmain" fetch -q --filter=blob:none "$GH_REPO_URL" main
+          git -C "$RUNNER_TEMP/onmain" merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD ||
+            { echo "::error::$GITHUB_SHA is not on main: a release is cut from main alone"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          name: canyon-releases
+          path: canyon-releases
+      - name: create the release on getcanyon-ai/canyon-releases
+        env:
+          GH_TOKEN: ${{ secrets.CANYON_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_RELEASES_TOKEN: nothing was published"; exit 1; }
+          [ -s canyon-releases/notes.md ] && [ -n "$(ls canyon-releases/assets)" ] || { echo "::error::the packed release is incomplete: nothing was published"; exit 1; }
+          pre=(); [ -e canyon-releases/prerelease ] && pre=(--prerelease)
+          gh release create "$TAG" canyon-releases/assets/* -R getcanyon-ai/canyon-releases --title "canyon $TAG" --notes-file canyon-releases/notes.md "${pre[@]}"
 
   smoke:
     needs: canyon-releases

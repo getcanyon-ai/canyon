@@ -539,3 +539,37 @@ func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
 		t.Errorf("progress %q", told)
 	}
 }
+
+// Each chapter of the tour is the prompt canyon_tour, word for word as canyon demo tour hands it to an agent; with
+// no chapter named, the visitor's own; and a chapter the tour lacks is refused, never answered with another.
+func TestMCPServesEachTourChapterAsAPrompt(t *testing.T) {
+	h := &mcpHost{}
+	cs, env := mcpSession(t, h.serve(t))
+	ctx := context.Background()
+	prompts, err := cs.ListPrompts(ctx, nil)
+	if err != nil || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "canyon_tour" {
+		t.Fatalf("prompts %+v, %v", prompts, err)
+	}
+	said := func(chapter string) (string, error) {
+		res, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "canyon_tour", Arguments: map[string]string{"chapter": chapter}})
+		if err != nil {
+			return "", err
+		}
+		return res.Messages[0].Content.(*mcp.TextContent).Text, nil
+	}
+	for chapter, n := range map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd} {
+		if text, err := said(chapter); err != nil || text != tourAgent[n] {
+			t.Errorf("chapter %s: %v\n%s", chapter, err, text)
+		}
+	}
+	path, err := tourPath(func(k string) string { return env[k] })
+	must(t, err)
+	must(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	must(t, os.WriteFile(path, []byte(`{"chapter":3}`), 0o600))
+	if text, err := said(""); err != nil || text != tourAgent[tourProd] {
+		t.Errorf("no chapter named, on chapter 3: %v\n%s", err, text)
+	}
+	if text, err := said("4"); err == nil || !strings.Contains(err.Error(), `the tour has no chapter "4"`) {
+		t.Errorf("chapter 4: %v\n%s", err, text)
+	}
+}

@@ -221,16 +221,15 @@ func TestMCPInstructionsAreThePreambleAndTheManifest(t *testing.T) {
 	}
 }
 
-// canyon_rules is the host's manifest, byte for byte, as structured content, and the agent's text as text;
-// for the app the directory names, or the one it's given.
-func TestMCPRulesIsTheManifestTypedAndAsText(t *testing.T) {
+// canyon_rules is the agent's text, as canyon manifest --format ai prints it, for the app the directory names, or the
+// one it's given; the typed manifest is the canyon://manifest resource.
+func TestMCPRulesIsTheManifestAsText(t *testing.T) {
 	h, fixture := &mcpHost{}, manifestFixture(t) // read before the directory moves
 	cs, env := mcpSession(t, h.serve(t))
 	manifest, _, _ := run(t, env, false, "manifest", "--format", "ai")
 	res, text := callTool(t, cs, mcptools.Rules, nil)
-	structured, _ := json.Marshal(res.StructuredContent)
-	if res.IsError || text != manifest || !sameJSON(structured, fixture) {
-		t.Errorf("isError %v, text:\n%s\nstructured %s", res.IsError, text, structured)
+	if res.IsError || text != manifest {
+		t.Errorf("isError %v, text:\n%s", res.IsError, text)
 	}
 	callTool(t, cs, mcptools.Rules, map[string]any{"app": "billing"})
 	if asked := h.requests(); !slices.Contains(asked, "GET /api/v1/skill/manifest?app=claims-portal") || !slices.Contains(asked, "GET /api/v1/skill/manifest?app=billing") {
@@ -255,9 +254,8 @@ func TestMCPStatusIsCanyonStatusAsJSON(t *testing.T) {
 		t.Fatalf("canyon status exited %d", code)
 	}
 	res, text := callTool(t, cs, mcptools.Status, nil)
-	structured, _ := json.Marshal(res.StructuredContent)
-	if res.IsError || text != want || !sameJSON(structured, []byte(want)) {
-		t.Errorf("isError %v, text %s, structured %s, want %s", res.IsError, text, structured, want)
+	if res.IsError || text != want {
+		t.Errorf("isError %v, text %s, want %s", res.IsError, text, want)
 	}
 	must(t, os.Mkdir("empty", 0o750))
 	res, text = callTool(t, cs, mcptools.Status, map[string]any{"dir": "empty"})
@@ -339,8 +337,7 @@ func checkIn(t *testing.T, h *gateHost, opts *mcp.ClientOptions) (*mcp.ClientSes
 	return cs, server.URL
 }
 
-// canyon_check is canyon check --format ai as text, and the verdict typed: the run's counts and its SARIF log as
-// the host serves it, byte for byte. A blocked review is a verdict, not a failed call.
+// canyon_check is canyon check --format ai as text, NEXT STEPS and all. A blocked review is a verdict, not a failed call.
 func TestMCPCheckIsCanyonChecksVerdict(t *testing.T) {
 	sarif := string(contracts.GoldenLog)
 	want, _, code := verbingIn(t, &gateHost{run: aRun("blocked", 1, 1, blocker, advisory), sarif: sarif}, projectDir(t), "check", "--format", "ai")
@@ -351,16 +348,8 @@ func TestMCPCheckIsCanyonChecksVerdict(t *testing.T) {
 	cs, host := checkIn(t, h, nil)
 	res, text := callTool(t, cs, mcptools.Check, nil)
 	text = strings.NewReplacer(host, "http://localhost:7777", strings.TrimPrefix(host, "http://"), "localhost:7777").Replace(text)
-	var v mcptools.Verdict
-	structured, _ := json.Marshal(res.StructuredContent)
-	if err := json.Unmarshal(structured, &v); err != nil || res.IsError || v.Run != "gr_8f2a" || v.State != "blocked" || v.Blocking != 1 || v.Warnings != 1 || !sameJSON(v.Findings, []byte(sarif)) {
-		t.Errorf("isError %v, structured %s, %v", res.IsError, structured, err)
-	}
-	if text != strings.TrimSpace(want) {
-		t.Errorf("text:\n%s\nwant canyon check's:\n%s", text, want)
-	}
-	if !slices.Contains(h.asked, "GET /api/v1/gate-runs/gr_8f2a/sarif") {
-		t.Errorf("the SARIF log was never read: %v", h.asked)
+	if res.IsError || text != strings.TrimSpace(want) || !strings.Contains(text, "NEXT STEPS") {
+		t.Errorf("isError %v, text:\n%s\nwant canyon check's:\n%s", res.IsError, text, want)
 	}
 	for _, tool := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
 		if tool.OutputSchema != nil { // a client that held a result to it would refuse a newer host's findings (design/specs/mcp.md §1.1)
@@ -387,10 +376,9 @@ func TestMCPDeployCarriesTheURLAndTheRunsProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var v mcptools.Verdict
-	structured, _ := json.Marshal(res.StructuredContent)
-	if json.Unmarshal(structured, &v) != nil || res.IsError || v.State != "clean" || v.URL != liveURL || len(v.Access) != 1 {
-		t.Errorf("isError %v, structured %s", res.IsError, structured)
+	text := res.Content[0].(*mcp.TextContent).Text
+	if res.IsError || !strings.Contains(text, liveURL) || !strings.Contains(text, "you are an owner") {
+		t.Errorf("isError %v, text:\n%s", res.IsError, text)
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -412,10 +400,8 @@ func TestMCPHandsARunOffAfterTenMinutes(t *testing.T) {
 	clk := clock{now: func() time.Time { mu.Lock(); defer mu.Unlock(); return now }, sleep: func(d time.Duration) { mu.Lock(); defer mu.Unlock(); now = now.Add(d) }}
 	cs, _ := mcpConnect(t, server.URL, clk, nil)
 	res, text := callTool(t, cs, mcptools.Check, nil)
-	var v mcptools.Verdict
-	structured, _ := json.Marshal(res.StructuredContent)
-	if json.Unmarshal(structured, &v) != nil || res.IsError || v.State != "running" || v.Run != "gr_8f2a" || !strings.HasSuffix(v.FleetURL, "/#/apps/claims-portal") || !strings.Contains(text, "after 10 minutes") {
-		t.Errorf("isError %v, structured %s, text:\n%s", res.IsError, structured, text)
+	if res.IsError || !strings.Contains(text, "gr_8f2a") || !strings.Contains(text, "/#/apps/claims-portal") || !strings.Contains(text, "after 10 minutes") {
+		t.Errorf("isError %v, text:\n%s", res.IsError, text)
 	}
 	if followed := clk.now().Sub(start); followed < mcptools.Handoff || followed > mcptools.Handoff+time.Minute {
 		t.Errorf("followed for %s", followed)
@@ -538,10 +524,8 @@ func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var v mcptools.Verdict
-	structured, _ := json.Marshal(res.StructuredContent)
-	if json.Unmarshal(structured, &v) != nil || len(v.Access) != 1 || strings.ContainsAny(strings.Join(v.Access, ""), "\x1b\x07") {
-		t.Errorf("access %q", v.Access)
+	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "you are an owner") || strings.ContainsAny(text, "\x1b\x07") {
+		t.Errorf("text %q", text)
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -594,8 +578,50 @@ func TestMCPStatusSaysWhichWordsAreTheApps(t *testing.T) {
 	cs, _ := mcpSession(t, h.serve(t))
 	res, text := callTool(t, cs, mcptools.Status, nil)
 	first, rest, _ := strings.Cut(text, "\n")
-	structured, _ := json.Marshal(res.StructuredContent)
-	if res.IsError || first != statusAppSays || !sameJSON([]byte(rest), structured) || !strings.Contains(rest, said) {
+	if res.IsError || first != statusAppSays || !json.Valid([]byte(rest)) || !strings.Contains(rest, said) {
 		t.Errorf("isError %v, text:\n%s", res.IsError, text)
+	}
+}
+
+// Claude Code hands a model a tool's structuredContent in place of its text (the bed journeys, v0.11.0), so a client that
+// prefers structuredContent must still read the --format ai block: what to tell the user, when to stop, who approves,
+// what to revoke, the playbook's step and who can open the app. No tool sends structuredContent, and what such a
+// client reads is the text, every word of it.
+func TestMCPAClientThatPrefersStructuredContentReadsTheNextSteps(t *testing.T) {
+	prefers := func(res *mcp.CallToolResult) string { // Claude Code's reading: structuredContent where there is one, else the text
+		if res.StructuredContent != nil {
+			raw, _ := json.Marshal(res.StructuredContent)
+			return string(raw)
+		}
+		var text strings.Builder
+		for _, c := range res.Content {
+			if tc, ok := c.(*mcp.TextContent); ok {
+				text.WriteString(tc.Text)
+			}
+		}
+		return text.String()
+	}
+	h := &mcpHost{}
+	served := h.serve(t) // before the directory moves
+	sarif := string(contracts.GoldenLog)
+	cs, _ := checkIn(t, &gateHost{run: aRun("blocked", 1, 1, blocker, advisory), sarif: sarif}, nil)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: mcptools.Check})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := prefers(res)
+	for _, step := range []string{"NEXT STEPS", "Before your next tool call, tell the user", "after two full rounds of fixes", "an admin or a security responder"} {
+		if !strings.Contains(read, step) {
+			t.Errorf("a client preferring structuredContent never reads %q:\n%s", step, read)
+		}
+	}
+	cs, _ = mcpSession(t, served)
+	for _, tool := range []string{mcptools.Status, mcptools.Rules} {
+		if res, _ := callTool(t, cs, tool, nil); res.StructuredContent != nil {
+			t.Errorf("%s sends structuredContent, which Claude Code reads in place of its text", tool)
+		}
+	}
+	if res, _ := callTool(t, cs, mcptools.Playbook, map[string]any{"slug": "service-conventions"}); res.StructuredContent != nil {
+		t.Errorf("%s sends structuredContent", mcptools.Playbook)
 	}
 }

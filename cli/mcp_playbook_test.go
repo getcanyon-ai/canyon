@@ -12,8 +12,7 @@ import (
 	"github.com/getcanyon-ai/canyon/internal/mcptools"
 )
 
-// canyon_playbook answers a playbook's body, counted as a read by the tool, with the playbook whole as structured
-// content; canyon://playbooks/<slug> answers the same body, counted by the resource; a slug that names none is canyon
+// canyon_playbook answers a playbook's body, counted as a read by the tool; canyon://playbooks/<slug> answers the same body, counted by the resource; a slug that names none is canyon
 // playbook's own line, and a slug that is no slug never reaches the host (design/specs/mcp.md §3.3).
 func TestPlaybookThroughMCP(t *testing.T) {
 	want := playbookFixture(t) // before the directory moves
@@ -26,9 +25,8 @@ func TestPlaybookThroughMCP(t *testing.T) {
 	h := &mcpHost{}
 	cs, _ := mcpSession(t, h.serve(t))
 	res, text := callTool(t, cs, mcptools.Playbook, map[string]any{"slug": "service-conventions"})
-	structured, _ := json.Marshal(res.StructuredContent)
-	if res.IsError || text != golden.Playbook.Body || !strings.Contains(string(structured), `"version":3`) {
-		t.Fatalf("isError %v, text:\n%s\nstructured %s", res.IsError, text, structured)
+	if res.IsError || text != golden.Playbook.Body {
+		t.Fatalf("isError %v, text:\n%s", res.IsError, text)
 	}
 	read, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: mcptools.PlaybookURI + "service-conventions"})
 	if err != nil || len(read.Contents) != 1 || read.Contents[0].Text != golden.Playbook.Body || read.Contents[0].MIMEType != "text/markdown" {

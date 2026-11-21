@@ -84,21 +84,6 @@ type PromoteArgs struct {
 	Confirm bool   `json:"confirm,omitempty"`
 }
 
-// Verdict is a check's or a deploy's structured result. Findings is the run's SARIF log, byte for byte as
-// GET /gate-runs/:id/sarif serves it; URL, Answered and Access are a deploy's that went live.
-type Verdict struct {
-	Run           string          `json:"run"`
-	State         string          `json:"state"`
-	FailureReason string          `json:"failure_reason,omitempty"`
-	Blocking      int             `json:"blocking"`
-	Warnings      int             `json:"warnings"`
-	Findings      json.RawMessage `json:"findings,omitempty"`
-	URL           string          `json:"url,omitempty"`
-	FleetURL      string          `json:"fleet_url,omitempty"` // a run handed off: its page, where it goes on
-	Answered      json.RawMessage `json:"answered,omitempty"`
-	Access        []string        `json:"access,omitempty"`
-}
-
 var appArg = &jsonschema.Schema{Type: "string", Description: "The app's id. Omitted: the app canyon.toml names, where there is one."}
 
 func object(props map[string]*jsonschema.Schema) *jsonschema.Schema {
@@ -171,7 +156,7 @@ func LocalOnly() []*mcp.Tool {
 			Name:        Deploy,
 			Title:       "Deploy to preview",
 			Description: "Reviews the app's code in dir and, when nothing blocks, builds it and deploys it to preview, as canyon deploy.",
-			InputSchema: object(map[string]*jsonschema.Schema{"app": {Type: "string", Description: "The app id a first deploy writes into canyon.toml."}}),
+			InputSchema: object(map[string]*jsonschema.Schema{}), // canyon deploy writes the app's id into canyon.toml: never the agent
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(false)},
 		},
 	}

@@ -4042,12 +4042,14 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   checks, refusals and lines are the verb's own: `canyon_status` is `canyon status --format json` (its text headed by D5's
   line naming the app's fields where the read carries them, design/specs/mcp.md §1.2.1), `canyon_logs` is
   `canyon logs --format ai` on the masked read (`redaction=masked`, at most 200 lines, never followed), and
-  `canyon_rules` is `canyon manifest`'s read, the typed manifest as structured content and the agent's rendering as text.
-- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`: the block as text,
-  and the verdict typed, `{run, state, failure_reason?, blocking, warnings, findings}`, `findings` the run's SARIF log as
-  `GET /gate-runs/:id/sarif` serves it, and a deploy's `url`, `answered` and `access`. Each `progress` row of the run is a
-  progress notification. Past 10 minutes the tool stops following: §3.5's still-running block, `state: "running"`, the
-  run and `fleet_url`, and the run goes on.
+  `canyon_rules` is `canyon manifest`'s read, the agent's rendering as text; the typed manifest is `canyon://manifest`.
+- **Text alone** (amended 2026-11-21, the bed journeys: Claude Code hands a model a tool's `structuredContent` in place
+  of its text, so the NEXT STEPS never reached it). No tool sends `structuredContent`: each result is its verb's output as
+  one text content, every word an agent reads in a terminal.
+- **`canyon_check` and `canyon_deploy`** are `canyon check` and `canyon deploy` under `--format ai`, the block as text,
+  a deploy's url, what the app answered and who can open it among it. `canyon_deploy` takes no `app`: `canyon deploy`
+  writes the id Canyon picked, as the skill says. Each `progress` row of the run is a progress notification. Past 10
+  minutes the tool stops following: §3.5's still-running block, its run and its page, and the run goes on.
 - **`canyon_promote`** is `canyon deploy --env prod` under `--format ai`. Where the client can ask the person, §6.3's
   question goes to them at the point the verb asks it, as an input request, whatever `confirm` says; a no prints
   `Nothing was promoted.` Where it can't, only `confirm` sends `--yes`, and without it the verb's block has the agent

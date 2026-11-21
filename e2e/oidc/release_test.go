@@ -37,8 +37,10 @@ func TestTheReleaseScreensAtEachLevel(t *testing.T) {
 	onboard(t, browser)
 	people := map[string]string{"owner": "olive@e2e.test", "contributor": "carl@e2e.test", "viewer": "vera@e2e.test", "none": "nora@e2e.test", "admin": admin}
 
-	// The org's playbook, and a custom rule checked by code that points at it: a rule checked by code needs a model to
-	// translate it, which this stack has none of, so its version is seeded as e2e/ui's dry-run journey seeds one.
+	// The org's playbook, and a custom rule checked by code that points at it, on in Advisory. This stack has no model: a
+	// rule checked by code needs one to translate it at save, and a custom rule can't be turned on from the API without
+	// one (409 no_model), though a review checks a rule checked by code with none. So its version and its state are
+	// seeded as e2e/ui's dry-run journey seeds a version, the state as the policies row writes one.
 	preferences, policy := host+"/api/v1/preferences", host+"/api/v1/policies/custom."+rule+"?apply=true"
 	send(t, browser, http.MethodPut, host+"/api/v1/playbooks/"+slug, map[string]string{
 		"name": playbookName, "kind": "skill", "when": "Read before you add a route to a release-walk app.",
@@ -47,7 +49,8 @@ func TestTheReleaseScreensAtEachLevel(t *testing.T) {
 	t.Cleanup(func() { send(t, browser, http.MethodDelete, host+"/api/v1/playbooks/"+slug, nil, http.StatusNoContent) })
 	sql(t, `INSERT INTO custom_rule_edits (rule, version, name, instructions, check_by, check_expr, check_says, check_facts_version, set_by_kind, set_by_subject, set_by_display, playbook)
 		VALUES ('custom.`+rule+`', 1, '`+ruleName+`', 'Every app has RELEASE-WALK.md at its root.', 'code', '''RELEASE-WALK.md'' in files', 'The app has RELEASE-WALK.md at its root.', 3, 'person', 'e2e', 'e2e', '`+slug+`')`)
-	send(t, browser, http.MethodPut, policy, map[string]string{"state": "advisory"}, http.StatusOK)
+	sql(t, `INSERT INTO policy_edits (rule, state, names_state, production, grace_days, set_at, effective_at, set_by_kind, set_by_subject, set_by_display, version)
+		SELECT 'custom.`+rule+`', 'advisory', true, NULL, 0, now(), now(), 'person', 'e2e', 'e2e', (SELECT COALESCE(MAX(version), 0) + 1 FROM policy_edits)`)
 	t.Cleanup(func() {
 		send(t, browser, http.MethodPut, preferences, map[string]any{"prod_approval": false}, http.StatusOK)
 		send(t, browser, http.MethodPut, policy, map[string]string{"state": "off"}, http.StatusOK)

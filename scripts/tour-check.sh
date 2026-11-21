@@ -53,7 +53,8 @@ tool() {
   want=$1 name=$2 args=${3-'{}'}
   printf '\n> %s %s\n' "$name" "$args"
   code=0
-  HOME=$work/home "$work/mcpcall" "$name" "$(printf '%s' "$args" | jq -c --arg dir "$PWD" '. + {dir: $dir}')" -- $(server) >"$work/out" 2>&1 || code=$?
+  case $name in canyon_playbook) ;; *) args=$(printf '%s' "$args" | jq -c --arg dir "$PWD" '. + {dir: $dir}') ;; esac # a playbook is the org's: no dir
+  HOME=$work/home "$work/mcpcall" "$name" "$args" -- $(server) >"$work/out" 2>&1 || code=$?
   keep "$work/out"
   [ "$code" = "$want" ] || fail "$name $args exited $code, not $want"
 }
@@ -187,7 +188,9 @@ says '^blocking: sql\.string-concat · server\.js:[0-9]+$'
 open "$preview" # a blocked version replaces nothing
 says '<h1>Claims tracker</h1>'
 
-step "chapter 2: the one-line fix, canyon check and canyon deploy"
+step "chapter 2: the company's playbook, then the one-line fix, canyon check and canyon deploy"
+tool 0 canyon_playbook '{"slug":"claims-portal-conventions"}'
+grep -qF "$(block 1)" "$work/out" || fail "the demo's playbook does not name the fix the page gives: $(block 1)"
 put "$(block 1)"
 tool 0 canyon_check
 says '^CANYON REVIEW — RESULT: PASSED$'

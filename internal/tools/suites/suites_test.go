@@ -31,6 +31,7 @@ var compiles = map[string][]struct{ tags, pkgs string }{
 	"patch":        {{"oidc,patch", "./e2e/oidc"}},
 	"build-arch":   {{"kube", "./executor"}},
 	"executor-e2e": {{"e2e", "./executor"}},
+	"tour":         {{"", "./internal/tools/mcpcall"}},
 }
 
 // foundation is what every suite must run on: what every stack is built from, and what decides what runs.
@@ -270,6 +271,7 @@ func TestReachAnswersWhatAChangeReaches(t *testing.T) {
 		{"cmd/canyon-server/routes_gate.go", map[string]string{"probes": "true", "old-cli": "true"}},
 		{"executor/kube/run.go", map[string]string{"kind": "true", "build-arch": "true", "executor-e2e": "true", "old-cli": "true"}},
 		{"docs/src/content/docs/org/usage-reports.md", map[string]string{}},
+		{"cli/mcp.go", map[string]string{"tour": "true"}}, // the tour's agent steps through canyon mcp (#33)
 		{"go.mod", nil},                    // the foundation: every suite
 		{"cmd/canyon-server/main.go", nil}, // the server's core
 		{"contracts/schema/finding.schema.json", nil},

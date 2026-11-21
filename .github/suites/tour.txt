@@ -1,0 +1,23 @@
+# tour.yml: the docs' Take the tour on the laptop demo built from the tree (make tour-check), its agent's steps through
+# canyon mcp.
+# what it compiles besides the CLI it runs (go list -deps): the MCP client the tour calls Canyon's tools with
+internal/tools/mcpcall/**
+# what it proves: the tour's chapters, the demo it runs on, and the CLI and MCP paths an agent takes through them
+demo/apps/**
+docs/src/content/docs/start/take-the-tour.md
+docs/src/content/docs/start/try-it-on-your-laptop.md
+cli/ai.go
+cli/promote_ai.go
+cli/deploy_prod.go
+cli/cmd_tour.go
+cli/cmd_demo.go
+cli/demo_up.go
+cli/tour_text.go
+cli/testdata/tour/**
+cli/mcp.go
+cli/mcpconfig.go
+cli/skillinstall.go
+gate/design.go
+gate/opengrep/**
+scripts/deploy-bundle.sh
+scripts/tour-check.sh

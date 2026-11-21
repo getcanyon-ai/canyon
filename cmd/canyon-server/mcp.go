@@ -1,14 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -81,22 +82,6 @@ func (a *app) mcpToken(ctx context.Context, token string, _ *http.Request) (*aut
 	return &auth.TokenInfo{Scopes: scopes, Expiration: expires, UserID: sessionDigest(id), Extra: map[string]any{"caller": mcpCaller{session: s, scopes: scopes}}}, nil
 }
 
-// asCaller serves one API request in-process as the MCP caller: the session stage's work done already, by the
-// bearer, so the route sees the person and the channel, mcp, as a cookie's request would carry them.
-func (a *app) asCaller(ctx context.Context, r *http.Request, c mcpCaller, api http.Handler, method, path string, body any) (int, json.RawMessage) {
-	var in io.Reader
-	if body != nil {
-		raw, _ := json.Marshal(body) // the tools' own argument structs
-		in = bytes.NewReader(raw)
-	}
-	req := httptest.NewRequestWithContext(events.WithProvenance(withActor(ctx, c.session), events.Provenance{Via: "mcp", Role: c.session.role,
-		Session: sessionDigest(c.session.id), Source: a.proxies.source(r)}), method, path, in)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	a.serveNoting(w, req, api)
-	return w.Code, w.Body.Bytes()
-}
-
 // mcpServer is one request's server, as its caller sees it: the instructions and the tools.
 func (a *app) mcpServer(r *http.Request, api http.Handler) *mcp.Server {
 	c := auth.TokenInfoFromContext(r.Context()).Extra["caller"].(mcpCaller) // the bearer stage put it there, or the request never got here
@@ -107,8 +92,14 @@ func (a *app) mcpServer(r *http.Request, api http.Handler) *mcp.Server {
 			if refused := scopeRefusal(t.Name, req); refused != nil {
 				return refused, nil
 			}
-			code, body := a.asCaller(ctx, r, c, api, http.MethodGet, "/skill/manifest", nil)
-			return &mcp.CallToolResult{IsError: code != http.StatusOK, Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
+			req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpHost+"/api/v1/skill/manifest", nil)
+			resp, err := (&http.Client{Transport: mcpTransport{a: a, r: r, c: c, api: api}}).Do(req2)
+			if err != nil {
+				return nil, err
+			}
+			defer func() { _ = resp.Body.Close() }()
+			body, _ := io.ReadAll(resp.Body)
+			return &mcp.CallToolResult{IsError: resp.StatusCode != http.StatusOK, Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
 		})
 	}
 	return s
@@ -122,3 +113,33 @@ func scopeRefusal(tool string, req *mcp.CallToolRequest) *mcp.CallToolResult {
 	}
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "insufficient_scope: " + tool + " needs the act scope. Connect again and allow it to check, deploy and promote."}}}
 }
+
+// mcpTransport is the round tripper the CLI's tool handlers get on /mcp: each request served by the API mux in-process
+// as the caller, never sent anywhere, and only under /api/v1, so a tool has no other way to the network.
+type mcpTransport struct {
+	a   *app
+	r   *http.Request // the /mcp request, for its source address
+	c   mcpCaller
+	api http.Handler
+}
+
+func (t mcpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rest, ok := strings.CutPrefix(req.URL.Path, "/api/v1/")
+	if !ok || req.URL.Scheme != "http" || req.URL.Host != mcpHost || path.Clean("/"+rest) != "/"+rest {
+		return nil, fmt.Errorf("an MCP tool reaches this Canyon's /api/v1 alone, not %s", req.URL.Redacted())
+	}
+	in := req.Clone(events.WithProvenance(withActor(req.Context(), t.c.session), events.Provenance{Via: "mcp", Role: t.c.session.role,
+		Session: sessionDigest(t.c.session.id), Source: t.a.proxies.source(t.r)}))
+	in.URL.Path, in.URL.RawPath, in.RequestURI = "/"+rest, strings.TrimPrefix(req.URL.RawPath, "/api/v1"), ""
+	in.Header.Del("Cookie")
+	in.Header.Del("Authorization")
+	in.Header.Set("Canyon-Transport", transportMCPRemote) // the host's word, whatever the handler set
+	w := httptest.NewRecorder()
+	t.a.serveNoting(w, in, t.api)
+	resp := w.Result()
+	resp.Request = req
+	return resp, nil
+}
+
+// mcpHost is the host the CLI's handlers are given on /mcp: a name that resolves nowhere, since nothing is dialled.
+const mcpHost = "canyon.mcp.invalid"

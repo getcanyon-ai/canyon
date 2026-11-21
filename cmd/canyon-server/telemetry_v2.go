@@ -21,7 +21,10 @@ var harnesses = []string{"claude_code", "codex"}
 
 // transportMCPLocal is canyon mcp's Canyon-Transport, kept on a review it starts (runs.transport); a review the host's
 // own /mcp starts is kept as mcp-remote, and one with neither is the CLI's (design/specs/mcp.md §7).
-const transportMCPLocal = "mcp-local"
+const (
+	transportMCPLocal  = "mcp-local"
+	transportMCPRemote = "mcp-remote"
+)
 
 // telemetryPeriodMost is the longest period one report's counts cover: a server that sent nothing for longer, off or
 // unreachable, reports its last week, so one report never lands months of counts in one week's sums.

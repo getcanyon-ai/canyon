@@ -332,8 +332,17 @@ func (a *app) startRun(ctx context.Context, r *http.Request, id, pkg string, dep
 			return runs.Run{}, "", nil, err
 		}
 	}
-	if r.Header.Get("Canyon-Transport") == transportMCPLocal { // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's
-		if _, err := tx.Exec(ctx, "UPDATE runs SET transport = $1 WHERE id = $2", transportMCPLocal, run.ID); err != nil {
+	// the usage report's agents_via (design/specs/mcp.md §7): this host's own /mcp by its session's channel, which only
+	// its bearer stage sets, never by a header a client could send; canyon mcp by the header it sends
+	transport := ""
+	switch {
+	case events.ProvenanceOf(ctx).Via == "mcp":
+		transport = transportMCPRemote
+	case r.Header.Get("Canyon-Transport") == transportMCPLocal:
+		transport = transportMCPLocal
+	}
+	if transport != "" {
+		if _, err := tx.Exec(ctx, "UPDATE runs SET transport = $1 WHERE id = $2", transport, run.ID); err != nil {
 			return runs.Run{}, "", nil, err
 		}
 	}

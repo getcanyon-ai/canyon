@@ -3,9 +3,12 @@ package main
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/events"
 )
 
 // mcpCall posts one JSON-RPC message to /mcp with token as the bearer ("" for none) and the headers given.
@@ -138,5 +141,37 @@ func TestMCPRemoteActsOnlyWithTheActScope(t *testing.T) {
 	act, _ := signedInOver(t, base, gina, id, redirect, "read", "act")
 	if _, _, body := mcpCall(t, base, act, call("canyon_promote"), nil); strings.Contains(body, "insufficient_scope") {
 		t.Errorf("an act token's promote stopped at the scope: %s", body)
+	}
+}
+
+// The CLI's tool handlers on /mcp reach this Canyon's /api/v1 alone, in-process, as the caller over MCP: no other
+// host, no other path, and no credential or transport of the handler's own rides along.
+func TestMCPRemoteToolsReachTheAPIAlone(t *testing.T) {
+	var seen *http.Request
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r; w.WriteHeader(http.StatusNoContent) })
+	caller := mcpCaller{session: signedSession{act: actor{Kind: "person", Subject: "sub-gina", Display: "Gina"}, role: "member", id: "s"}}
+	c := &http.Client{Transport: mcpTransport{a: &app{}, r: httptest.NewRequest(http.MethodPost, "/mcp", nil), c: caller, api: api}}
+	for _, at := range []string{"http://" + mcpHost + "/oauth/token", "http://" + mcpHost + "/api/v1/../oauth/token", "http://" + mcpHost + "/api/v1x/fleet",
+		"https://" + mcpHost + "/api/v1/fleet", "http://169.254.169.254/api/v1/fleet", "http://localhost:7777/api/v1/fleet"} {
+		seen = nil
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, at, nil)
+		if resp, err := c.Do(req); err == nil || seen != nil {
+			_ = resp.Body.Close()
+			t.Errorf("%s: reached the API (%v)", at, seen != nil)
+		}
+	}
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+mcpHost+"/api/v1/projects/claims-portal/status", nil)
+	req.Header.Set("Canyon-Transport", "mcp-local")
+	req.Header.Set("Cookie", "canyon_session=x")
+	req.Header.Set("Authorization", "Bearer x")
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if seen == nil || seen.URL.Path != "/projects/claims-portal/status" || seen.Header.Get("Canyon-Transport") != transportMCPRemote ||
+		seen.Header.Get("Cookie") != "" || seen.Header.Get("Authorization") != "" || actorOf(seen.Context()).Subject != "sub-gina" ||
+		events.ProvenanceOf(seen.Context()).Via != "mcp" {
+		t.Errorf("the API saw %+v", seen)
 	}
 }

@@ -19,7 +19,9 @@ const panel = (page: Page) => page.getByRole("region", { name: "Connect an agent
 const opened = async (page: Page) => {
   await page.goto("/#/settings/people");
   await expect(panel(page).getByLabel("Canyon's address for agents")).toHaveValue(env("CONNECT_ADDRESS"));
-  await expect(panel(page).getByText("canyon skill install", { exact: true })).toBeVisible();
+  const laptop = panel(page).getByRole("region", { name: "On your laptop" });
+  await expect(laptop.getByText(`canyon login ${env("E2E_CANYON_URL")}`, { exact: true })).toBeVisible();
+  await expect(laptop.getByText("canyon skill install", { exact: true })).toBeVisible();
   await expect(panel(page).getByRole("link", { name: "Add to Cursor" })).toBeVisible();
 };
 const walked = (page: Page, who: string) => page.screenshot({ path: `.work/walk/connect-${who}.png`, fullPage: true });
@@ -30,8 +32,10 @@ test("Connect an agent as member", async ({ page }) => {
   await walked(page, "member");
 });
 
+// The stack's address is http on loopback, which Claude Code's managed settings refuse: an admin gets no rollout there.
+// ConnectAgents.test.tsx holds the rollout an https address gets.
 test("Connect an agent as admin", async ({ page }) => {
   await opened(page);
-  await expect(panel(page).getByRole("region", { name: "Roll it out to everyone" }).getByText("managed-mcp.json, beside the managed settings", { exact: false })).toBeVisible();
+  await expect(panel(page).getByRole("region", { name: "Roll it out to everyone" })).toHaveCount(0);
   await walked(page, "admin");
 });

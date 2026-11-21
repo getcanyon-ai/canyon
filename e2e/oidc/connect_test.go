@@ -9,7 +9,8 @@ import (
 )
 
 // Settings › People & sign-in › Connect an agent as a member and as an admin (design/specs/mcp.md §6 item 14, §12):
-// both get Canyon's address for agents and each agent's way to it; only the admin gets the org-managed snippets.
+// both get the laptop's three steps for this host, Canyon's address for agents and each agent's way to it. The stack's
+// address is http on loopback, so neither gets the rollout, which takes https (ConnectAgents.test.tsx holds it).
 func TestConnectAnAgentAsAMemberAndAnAdmin(t *testing.T) {
 	var config struct{ Auth string }
 	if code := get(t, &http.Client{Timeout: 10 * time.Second}, host+"/auth/config", &config); code != http.StatusOK || config.Auth != "oidc" {

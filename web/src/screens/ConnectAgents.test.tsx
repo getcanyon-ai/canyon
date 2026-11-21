@@ -18,61 +18,75 @@ function server(routes: Record<string, Answer>) {
 }
 const panel = () => within(screen.getByRole("region", { name: T.title }));
 const term = (agent: string) => panel().getByText(agent, { selector: "dt" }).nextElementSibling as HTMLElement;
+const laptop = () => within(panel().getByRole("region", { name: T.laptop }));
+const steps = () => laptop().getAllByRole("listitem").map((step) => step.textContent);
+const INSTALL = "curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh";
+// The laptop's three steps, with this host filled in: the CLI, a sign-in to this Canyon, and every agent on the machine.
+const threeSteps = () => [`${T.stepInstall}${INSTALL}`, `${T.stepLogin}canyon login ${location.origin}`, `${T.stepSkill}canyon skill install`];
 const link = (name: string) => panel().getByRole("link", { name }).getAttribute("href") ?? "";
 const served = { status: 200, body: { resource: ADDRESS, authorization_servers: ["https://canyon.example.com"], scopes_supported: ["read", "act"] } };
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Connect an agent", () => {
-  it("gives a member the address to copy, and each agent's way to it, and no org-managed snippets", async () => {
+  it("gives a member the laptop's three steps for this host, the address to copy, and each agent's way to it", async () => {
     server({ [METADATA]: served });
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     render(<ConnectAgents signIn admin={false} />);
+    expect(steps()).toEqual(threeSteps());
     expect(await panel().findByLabelText(T.address)).toHaveProperty("value", ADDRESS);
     fireEvent.click(panel().getByRole("button", { name: `${T.copy} ${T.address.toLowerCase()}` }));
     expect(await panel().findByText(T.copied)).toBeDefined();
     expect(writeText).toHaveBeenCalledWith(ADDRESS);
-    expect(panel().getByText("canyon skill install")).toBeDefined();
     expect(term("Claude Code").textContent).toBe(`claude mcp add --scope user --transport http canyon ${ADDRESS}`);
-    expect(term("Codex").textContent).toBe(`codex mcp add canyon --url ${ADDRESS}`);
+    expect(term("Codex").textContent).toBe(`codex mcp add canyon --url ${ADDRESS}\ncodex mcp login canyon`);
     const cursor = new URL(link(T.addCursor));
     expect([cursor.protocol, cursor.searchParams.get("name"), JSON.parse(atob(cursor.searchParams.get("config") ?? ""))]).toEqual(["cursor:", "canyon", { url: ADDRESS }]);
     expect(JSON.parse(decodeURIComponent(link(T.addVSCode).replace("vscode:mcp/install?", "")))).toEqual({ name: "canyon", type: "http", url: ADDRESS });
+    expect(panel().queryByText(/canyon mcp$/)).toBeNull(); // no agent is pointed at canyon mcp: canyon skill install sets that up
     expect(screen.queryByRole("region", { name: T.managed })).toBeNull();
   });
 
-  it("gives an admin each agent's org-managed settings with the address", async () => {
+  // Claude Code's managed-mcp.json takes exclusive control: every other MCP server on the machine stops loading
+  // (code.claude.com/docs/en/managed-mcp). managedMcpServers adds Canyon beside them; Codex's managed configuration can
+  // only allow or block a server, and Cursor's team marketplace is set in its dashboard, so each is a line, not a snippet.
+  it("gives an admin Claude Code's managedMcpServers, never managed-mcp.json, and a line each for Codex and Cursor", async () => {
     server({ [METADATA]: served });
     render(<ConnectAgents signIn admin />);
     const managed = within(await screen.findByRole("region", { name: T.managed }));
-    const snippets = managed.getAllByText(/canyon/, { selector: "code" }).map((code) => code.textContent);
-    expect(snippets).toEqual([
-      JSON.stringify({ mcpServers: { canyon: { type: "http", url: ADDRESS } } }),
-      `[mcp_servers.canyon]\nurl = "${ADDRESS}"`,
-      JSON.stringify({ mcpServers: { canyon: { url: ADDRESS } } }),
+    expect(managed.getAllByText(/canyon/, { selector: "code" }).map((code) => code.textContent)).toEqual([
+      JSON.stringify({ managedMcpServers: { canyon: { type: "http", url: ADDRESS } } }),
     ]);
-    expect(managed.getByText(`: ${T.managedClaude}`, { exact: false })).toBeDefined();
+    expect(managed.queryByText(/managed-mcp\.json|mcpServers"/)).toBeNull();
+    for (const line of [T.managedClaude, T.managedCodex, T.managedCursor]) expect(managed.getByText(line, { exact: false })).toBeDefined();
   });
 
-  it("says why there is no address on a host that serves none, and gives canyon mcp for each agent", async () => {
-    server({ [METADATA]: { status: 404, body: { error: "not_found" } } });
+  it("rolls nothing out by an address that isn't https: Claude Code refuses one", async () => {
+    server({ [METADATA]: { status: 200, body: { resource: "http://localhost:7777/mcp" } } });
     render(<ConnectAgents signIn admin />);
-    expect(await panel().findByText(T.noAddress)).toBeDefined();
-    expect(panel().queryByLabelText(T.address)).toBeNull();
-    expect(term("Claude Code").textContent).toBe("claude mcp add --scope user canyon -- canyon mcp");
-    expect(term("Codex").textContent).toBe("codex mcp add canyon -- canyon mcp");
-    expect(JSON.parse(atob(new URL(link(T.addCursor)).searchParams.get("config") ?? ""))).toEqual({ command: "canyon", args: ["mcp"] });
+    expect(await panel().findByLabelText(T.address)).toHaveProperty("value", "http://localhost:7777/mcp");
     expect(screen.queryByRole("region", { name: T.managed })).toBeNull();
   });
 
-  it("with sign-in off asks for no address, says why there is none, and gives canyon mcp", () => {
+  it("says why there is no address on a host that serves none, and keeps the laptop's steps", async () => {
+    server({ [METADATA]: { status: 404, body: { error: "not_found" } } });
+    render(<ConnectAgents signIn admin />);
+    expect(await panel().findByText(T.noAddress)).toBeDefined();
+    expect(steps()).toEqual(threeSteps());
+    expect(panel().queryByLabelText(T.address)).toBeNull();
+    expect(panel().queryByText("Claude Code", { selector: "dt" })).toBeNull();
+    expect(screen.queryByRole("region", { name: T.managed })).toBeNull();
+  });
+
+  it("with sign-in off asks for no address, says why there is none, and gives the laptop's steps", () => {
     const asked = server({});
     render(<ConnectAgents signIn={false} admin />);
     expect(panel().getByText(T.signInOff)).toBeDefined();
     expect(asked()).toEqual([]);
+    expect(steps()).toEqual(threeSteps());
     expect(panel().queryByLabelText(T.address)).toBeNull();
-    expect(term("Codex").textContent).toBe("codex mcp add canyon -- canyon mcp");
+    expect(panel().queryByText("Codex", { selector: "dt" })).toBeNull();
     expect(screen.queryByRole("region", { name: T.managed })).toBeNull();
   });
 

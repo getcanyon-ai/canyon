@@ -236,7 +236,7 @@ jobs:
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: oidc-walk # the Secrets section as each person saw it (e2e/ui/secrets); a typed value is a password field's dots
+          name: oidc-walk # the Secrets section (e2e/ui/secrets) and the release's new screens (e2e/ui/release) as each person saw them; a typed value is a password field's dots
           path: e2e/ui/.work/walk
           retention-days: 7
           if-no-files-found: ignore

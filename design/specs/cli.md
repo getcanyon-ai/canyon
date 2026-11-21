@@ -5345,6 +5345,14 @@ Against a host whose `CANYON_AUTH` is off there is nothing to expire: it serves 
 session as the anonymous person and sets no cookie, so `canyon login` proves the host by its
 preferences and stores no session, and the user sees nothing because nothing went wrong.
 
+**A masked log that comes back unmasked** — `canyon logs --redaction masked`, `canyon_logs`'s read (design/specs/mcp.md
+§1.2), whose answer's `Canyon-Log-Redaction` isn't `masked` (an older host, a proxy that drops the header): none of the
+log is shown, exit `1` (**added 2026-11-20**, as the dashboard refuses it):
+
+```
+  ✗ http://localhost:7777 sent claims-portal's preview log without masking its secrets, so none of it is shown.
+```
+
 **Not on the app's team** — any `403 team_required` (contracts/routes.md, *App teams*) names the
 owner who can fix it and the exact command they run, worded as theirs to run, never the reader's (an
 owner's command read as the refused person's own, #1663), exit `1`: `contributor`, the level every route

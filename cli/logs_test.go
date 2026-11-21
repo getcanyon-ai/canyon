@@ -634,3 +634,20 @@ func TestLogsShowCanyonsRefusalsOrSayTheyCouldNotBeRead(t *testing.T) {
 		}
 	}
 }
+
+// A masked read that doesn't come back masked prints none of it: canyon_logs asks for redaction=masked so a secret's
+// value never reaches the model, and a host that answers raw (an older one, a proxy that drops the header) is
+// refused, as the dashboard refuses it (getMaskedLogs).
+func TestAMaskedReadThatIsntMaskedPrintsNothing(t *testing.T) {
+	for _, header := range []string{"none", "", "shipper"} {
+		h := &logsHost{lines: []string{"DATABASE_URL=postgres://app:hunter2@db/app\n"}, redaction: header, noHeader: header == ""}
+		out, errs, code := logsRun(t, h, "--redaction", "masked")
+		if code != exitError || strings.Contains(out+errs, "hunter2") || !strings.Contains(errs, "sent claims-portal's preview log without masking its secrets, so none of it is shown.") {
+			t.Errorf("header %q: exit %d, stdout %q, stderr %q", header, code, out, errs)
+		}
+	}
+	h := &logsHost{lines: []string{"DATABASE_URL=[DATABASE_URL]\n"}, redaction: "masked"}
+	if out, _, code := logsRun(t, h, "--redaction", "masked"); code != exitOK || !strings.Contains(out, "DATABASE_URL=[DATABASE_URL]") {
+		t.Errorf("a masked answer: exit %d, %q", code, out)
+	}
+}

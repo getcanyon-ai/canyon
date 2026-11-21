@@ -129,13 +129,16 @@ promotion an agent asks for then waits for a person to approve it in the dashboa
 
 Only where the agent's vendor offers it:
 
-- **Claude Code on the web:** add Canyon as a connector for your organisation in claude.ai. On Team
-  and Enterprise plans only admins add connectors. Each person allows it once, as above.
+- **Claude Code on the web:** add Canyon as a custom connector under *Organization settings ›
+  Connectors* in claude.ai: on a Team plan an Owner or Primary Owner, on Enterprise also a custom
+  role with *Manage access to Libraries*. Each person connects it with their own account and allows
+  it once, as above ([Claude Code's page](/start/use-it-from-your-coding-agent/#in-the-cloud)).
 - **Cursor:** add it as a team MCP server under **Dashboard › Plugins & MCPs**. Cursor's cloud agents
   get it, and each person allows it once.
 
 Push the address to cloud agents only. On laptops, `canyon skill install` already sets up
-`canyon mcp`. A claude.ai connector also reaches Claude Code on laptops; [its page](/start/use-it-from-your-coding-agent/#in-the-cloud)
+`canyon mcp`. A claude.ai connector also reaches Claude Code on laptops signed in with a claude.ai
+subscription, beside `canyon mcp`; [its page](/start/use-it-from-your-coding-agent/#in-the-cloud)
 shows how to turn it off there.
 
 ## What still needs the CLI

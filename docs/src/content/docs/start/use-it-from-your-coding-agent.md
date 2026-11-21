@@ -115,16 +115,26 @@ connects to your Canyon's MCP server by address, `https://<canyon>/mcp`, and rev
 what you've pushed to GitHub. [In the cloud](/start/connect-your-agent/#in-the-cloud) has what that
 needs: your Canyon reachable from the internet, Canyon's GitHub App, and your GitHub account linked.
 
-Add it as a **connector in claude.ai**, with `https://<canyon>/mcp` as its address. On Team and
-Enterprise plans, an admin adds it once for everyone. Each person then connects it in claude.ai, and
-Canyon asks them in the browser to allow it. Claude Code's cloud sessions use the connector with that
-same permission, and need no network rule for it.
+Add Canyon as a **custom connector in claude.ai**, with `https://<canyon>/mcp` as its address:
 
-**The connector also shows up in Claude Code on your laptop,** in the terminal and the editor, for
-anyone signed in to that claude.ai account. On a laptop where `canyon skill install` set up
-`canyon mcp`, keep using that one: it deploys what you haven't pushed. To turn the connector off in
-Claude Code on that laptop alone, add it to your own `~/.claude/settings.json`, which cloud sessions
-don't read:
+1. **An admin adds it once for the organisation:** *Organization settings › Connectors*
+   (claude.ai/admin-settings/connectors), then *Add › Custom › Web*. On a Team plan only Owners and
+   Primary Owners can; on Enterprise, also a custom role with *Manage access to Libraries*.
+2. **Each person connects it with their own account** in claude.ai, and Canyon asks them in the
+   browser to allow it.
+
+Claude Code's cloud sessions get the organisation's connectors, with that same permission, and need
+no network rule for them. Their calls reach Canyon from Anthropic's servers, which is why your
+Canyon must be reachable from the internet.
+
+**The connector also shows up in Claude Code on your laptop** when Claude Code is signed in with a
+claude.ai subscription. It doesn't with an API key (`ANTHROPIC_API_KEY`), Bedrock, Vertex or a
+setup token. It doesn't replace `canyon mcp`: a server you add in Claude Code takes the place of a
+connector only when both have the same address, so the agent sees both. On a laptop where
+`canyon skill install` set up `canyon mcp`, keep using that one: it deploys what you haven't pushed.
+A connector the agent doesn't use folds under *Show unused connectors* in `/mcp`. To turn Canyon's
+connector off in Claude Code on that laptop alone, add it to your own `~/.claude/settings.json`,
+which cloud sessions don't read:
 
 ```json
 {"deniedMcpServers": [{"serverUrl": "https://<canyon>/mcp"}]}
@@ -134,8 +144,11 @@ Don't roll Canyon out with Claude Code's `managed-mcp.json`. Once that file is d
 loads only the servers it lists and refuses every other one, `canyon mcp` included. A managed file
 on a device doesn't reach a cloud session either.
 
-Checked against Anthropic's Claude Code docs in November 2026:
-[MCP](https://code.claude.com/docs/en/mcp), [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)
+Checked against Anthropic's docs in November 2026:
+[custom connectors](https://support.claude.com/en/articles/11175166),
+[adding one](https://claude.com/docs/connectors/custom/add-unlisted),
+[how connectors reach Claude Code](https://code.claude.com/docs/en/mcp#how-connectors-reach-claude-code),
+[cloud network access](https://code.claude.com/docs/en/cloud-environments#network-access)
 and [managed MCP](https://code.claude.com/docs/en/managed-mcp).
 
 ## Ask it to deploy

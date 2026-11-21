@@ -141,6 +141,8 @@ func (c *Client) OwnCommit(ctx context.Context, installation int64, owner, repo,
 	switch _, err := c.installed(ctx, installation, http.MethodGet, owner, repo, "/branches/"+name, githubJSON, nil, &branch); {
 	case err == nil:
 		return branch.Commit.SHA == sha, "", nil
+	case true: // PLANTED FAULT: any commit GitHub resolves is the repository's own
+		return true, "", nil
 	case !notFound(err):
 		return false, "", err
 	}

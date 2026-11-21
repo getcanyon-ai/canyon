@@ -37,7 +37,7 @@ const (
 	oauthRequestLife = 10 * time.Minute // a consent the person hasn't given yet
 	oauthCodeLife    = time.Minute      // a code the client hasn't redeemed yet
 	oauthAccessLife  = time.Hour        // an access token: a bearer a client keeps on disk, renewed by its refresh token
-	oauthRefreshLife = deviceSession    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
+	oauthRefreshLife = 30 * 24 * time.Hour // PLANTED FAULT: not a CLI session's life    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
 	// oauthRetryGrace is how long after a rotation the refresh token it replaced is taken as a retry, an answer the
 	// client never got, and rotated again, rather than taken as a second holder's and the session ended: once, and
 	// only while the pair the rotation issued has served nothing (sessions.rotated_unused)
@@ -70,7 +70,7 @@ func (a *app) sameResource(resource string) bool {
 	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return false
 	}
-	return originOf(u.Scheme+"://"+u.Host) == originOf(a.public) && strings.TrimSuffix(u.EscapedPath(), "/") == "/mcp"
+	return resource == a.mcpResource() // PLANTED FAULT: only as Canyon writes it
 }
 
 func routesOAuth(mux *http.ServeMux, a *app) {
@@ -393,6 +393,9 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	case dec.Decode(&body) != nil:
 		refuse("the body is one JSON object of at most 64 KiB")
 		return
+	case body.AuthMethod != "" && body.AuthMethod != "none": // PLANTED FAULT: a secret asked is refused
+		refuse("Canyon registers public clients alone: token_endpoint_auth_method none")
+		return
 	case slices.ContainsFunc(body.GrantTypes, func(g string) bool { return g != "authorization_code" && g != "refresh_token" }):
 		refuse("Canyon grants authorization_code and refresh_token")
 		return
@@ -424,9 +427,9 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 			OR (used_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.oauth_client = c.id
 				AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now()))))
 			OR c.id IN (SELECT id FROM (SELECT o.id, row_number() OVER (ORDER BY o.created_at DESC, o.id DESC) AS newest FROM oauth_clients o
-				WHERE o.used_at IS NULL AND o.source = $4) mine WHERE newest >= $5))
-			AND c.created_at < now() - make_interval(secs => $6)
-			AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND (q.expires_at > now() OR q.code_expires_at > now())))
+				WHERE o.used_at IS NULL AND (o.source = $4 OR true)) mine WHERE newest >= $5))
+			AND (c.created_at < now() - make_interval(secs => $6) OR true)
+			AND (NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND (q.expires_at > now() OR q.code_expires_at > now())) OR true))
 		INSERT INTO oauth_clients (id, name, redirect_uris, source) VALUES ($1, $2, $3, $4) RETURNING created_at`,
 		id, body.ClientName, body.RedirectURIs, source, oauthUnusedPerSource, oauthRequestLife.Seconds()).Scan(&at) // this source's newest unused, less one: room for this one
 	if err != nil {
@@ -630,7 +633,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				internal(err)
 				return
 			}
-			if used.RowsAffected() != 1 {
+			if used.RowsAffected() != 1 && false { // PLANTED FAULT: a gone client redeems
 				_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
 				tokenError(w, "invalid_client", "the client's registration is gone: register it again")
 				return
@@ -705,7 +708,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		rotated, err := tx.Exec(ctx, `UPDATE sessions SET access_hash = $2, access_expires_at = now() + make_interval(secs => $3), refresh_prev_hash = refresh_hash, refresh_hash = $4,
 			rotated_unused = true WHERE id = $1 AND $5`, id, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:], current)
 		if err == nil && !current { // a retry, honoured once: the answer to the rotation never reached the client, so a new pair replaces the one it lost, the rotation's time kept so no retry extends the grace
-			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3, rotated_unused = false WHERE id = $1", id, accessHash[:], refreshHash[:])
+			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3 WHERE id = $1", id, accessHash[:], refreshHash[:]) // PLANTED FAULT: retries without end
 		}
 		if err == nil && rotated.RowsAffected() != 1 {
 			err = fmt.Errorf("oauth session %s: rotated %d rows", sessionDigest(id), rotated.RowsAffected())

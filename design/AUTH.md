@@ -554,10 +554,12 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
    is, because the session it hands over would otherwise let a stolen token mint itself more; the page and its routes
    are never framed, and a POST must say it came from Canyon's own page.
 5. `POST /oauth/token` spends the code and makes **one session per consent**: `flow = oauth`, the approver's identity
-   copied as a device token copies it, bound to the client and to `/mcp`, with the scopes. The session lives 30 days
-   from the consent. Its access token lives an hour and its refresh token as long as the session; each refresh
-   rotates both on that row in place and checks the person is still on the membership lists. A refresh token
-   presented again after it rotated means one of its two holders isn't the client, so the session ends.
+   copied as a device token copies it, bound to the client and to `/mcp`, with the scopes. The session lives 7 days
+   from the consent, as a CLI session does (amended 2026-11-21). Its access token lives an hour and its refresh token as
+   long as the session; each refresh rotates both on that row in place and checks the person is still on the
+   membership lists. A refresh token presented again within 10 seconds of its rotation, while the pair that rotation
+   issued has served nothing, is a retry whose answer was lost, and gets a new pair in place of the one it lost, once;
+   any other return of a replaced token means one of its two holders isn't the client, so the session ends.
 
 **Two scopes:** `read` (the rules, playbooks, status, logs and resources) and `act` (those, and check, deploy and
 promote). A scope never widens a level: it only narrows what a token may ask. **The session is the person**, as §4.4
@@ -565,7 +567,12 @@ says of every session: `kind = person`, recorded under their name. `dashboard_re
 session, and no cookie route takes it at all: it is bound to `/mcp`.
 
 **Registrations don't pile up.** A registration counts as used when a code issued to it redeems, and each new
-registration deletes those unused a day after they were made and those with no session live or started in 30 days.
+registration deletes those unused a day after they were made and those with no session live or started in 30 days,
+and, per source address, the oldest unused past that source's newest 100, never another source's, never one younger
+than ten minutes and never one a consent waits on, so no source's flood takes anyone else's sign-in from under them;
+registration is bounded per source address, as the sign-in routes are. A code whose registration is gone redeems
+nothing. A client asking for a secret is registered as the public
+client it is, told `none`.
 
 **Revoking.** An admin's revoke-all of a person (`DELETE /api/v1/sessions?subject=`) ends their OAuth sessions with the
 rest. A person sees their own sessions in Settings › People & sign-in, an admin everyone's, and ends one there by its

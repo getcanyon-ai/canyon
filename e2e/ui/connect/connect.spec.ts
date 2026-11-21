@@ -18,7 +18,8 @@ test.beforeEach(async ({ context }) => {
 const panel = (page: Page) => page.getByRole("region", { name: "Connect an agent" });
 const opened = async (page: Page) => {
   await page.goto("/#/settings/people");
-  await expect(panel(page).getByLabel("Canyon's address for agents")).toHaveValue(env("CONNECT_ADDRESS"));
+  // the textbox alone: the Copy button's label names the address too
+  await expect(panel(page).getByRole("textbox", { name: "Canyon's address for agents", exact: true })).toHaveValue(env("CONNECT_ADDRESS"));
   const laptop = panel(page).getByRole("region", { name: "On your laptop" });
   await expect(laptop.getByText(`canyon login ${env("E2E_CANYON_URL")}`, { exact: true })).toBeVisible();
   await expect(laptop.getByText("canyon skill install", { exact: true })).toBeVisible();

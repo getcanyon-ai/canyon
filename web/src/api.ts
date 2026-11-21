@@ -220,7 +220,7 @@ export interface DeviceGrant { requested_by: string; requested_at: string; expir
 // A production approval as its page reads it (contracts/routes.md, Production approvals): who asked and
 // from where, the version and what it replaces, what became of it, and the receipt for the reader.
 export interface PromotionApproval {
-  code: string; app: string; version: string; replaces: string | null;
+  code: string; app: string; version: string; replaces: string | null; rollback?: true; // a rollback review's: the page asks the put-back question
   requested_by: Actor; requested_via: string; requested_at: string; expires_at: string;
   state: "pending" | "approved" | "denied" | "expired" | "outdated"; decided_by?: Actor; decided_at?: string; run?: string; held?: Omit<Hold, "version">;
   receipt?: Receipt; answered?: Env["answered"]; approver: { display: string; email: string };

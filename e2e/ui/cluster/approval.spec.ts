@@ -36,7 +36,7 @@ test("M10 the CLI asks, alice approves in the dashboard, and production goes liv
     expect(self.status, "the CLI approves its own request").toBe(403);
 
     await page.goto(`/#/approve?code=${asked.approval.code}`);
-    await expect(page.getByRole("heading", { name: `Promote ${app} to production?` })).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(`^Promote ${app} \\S+ to production\\?$`) })).toBeVisible(); // it names the version that ships (D5)
     await expect(page.getByText(/asked from the CLI,/)).toBeVisible();
     await expect(page.getByRole("region", { name: "Approving as" })).toContainText("Approving as ");
     await page.getByRole("button", { name: "Approve" }).click();

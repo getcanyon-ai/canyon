@@ -21,8 +21,12 @@ permissions:
 
 jobs:
   cla:
+    # Dependabot's own pull requests are skipped, by the account that opened them (a skipped required check passes):
+    # its commits are its own, and it can't sign.
     if: >-
       github.repository == 'getcanyon-ai/canyon' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.issue.user.login != 'dependabot[bot]' &&
       (github.event_name == 'pull_request_target' ||
        (github.event.issue.pull_request &&
         (github.event.comment.body == 'recheck' ||
@@ -46,4 +50,6 @@ jobs:
           path-to-document: https://github.com/getcanyon-ai/canyon/blob/main/CLA.md
           path-to-signatures: signatures/v1/cla.json
           branch: cla-signatures
-          allowlist: "*[bot]"
+          # No allowlist: the action matches its patterns, unanchored, against an author's login or, for an email
+          # linked to no account, the git author name a commit claims, so "*[bot]" let a commit authored "x[bot]"
+          # pass unsigned. Dependabot's pull requests are skipped above, by who opened them, which nobody can claim.

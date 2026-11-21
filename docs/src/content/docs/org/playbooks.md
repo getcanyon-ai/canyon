@@ -107,7 +107,14 @@ Every route reads its input through the request schema, and every query passes i
 
 The hook fetches a playbook only when its version changed, and the agent sees a new skill from its next
 session. It writes, updates and removes only the `canyon-*` directories it wrote, each marked by a
-`.canyon` file naming the Canyon and the version, so it never touches another skill. A playbook removed,
+`.canyon` file naming the Canyon and the version, so it never touches another skill. A `canyon-<slug>`
+directory of your own, or a link, is left as it is, and the agent is told Canyon didn't sync that
+playbook.
+
+Claude Code runs a line like `` !`git status` `` in a skill as a shell command before the agent reads it.
+A playbook can't hold one outside a code block: saving it is refused. In the skill file Canyon writes,
+every `` !` `` becomes `` ! ` ``, so nothing in a playbook runs on anyone's machine. `canyon playbook` and
+the tool hand the body as it was saved. A playbook removed,
 or turned into a note, is removed from disk. A note is never written to disk. `canyon skill uninstall`
 removes them all:
 

@@ -106,8 +106,8 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	return s
 }
 
-// mcpPlaybook is canyon_playbook: a playbook's body as its admin wrote it, counted as a read by the tool, and the
-// playbook whole as structured content.
+// mcpPlaybook is canyon_playbook: a playbook's body as its admin wrote it, each character that hides text written
+// visibly (visible), counted as a read by the tool, and the playbook whole as structured content.
 func (a *app) mcpPlaybook(t *mcp.Tool) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var args mcptools.PlaybookArgs
@@ -118,18 +118,21 @@ func (a *app) mcpPlaybook(t *mcp.Tool) mcp.ToolHandler {
 		if err != nil {
 			return toolRefused(err), nil
 		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: p.Body}}, StructuredContent: raw}, nil
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: visible(p.Body)}}, StructuredContent: raw}, nil
 	}
 }
 
 // playbookResource reads canyon://playbooks/<slug>: the same body, counted as a read by the resource.
 func (a *app) playbookResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	slug, _ := strings.CutPrefix(req.Params.URI, mcptools.PlaybookURI)
+	if !playbookSlug(slug) { // the tool's schema holds its slug to this; a resource's URI is the client's to write
+		return nil, fmt.Errorf("%s is no playbook's address: canyon://playbooks/<slug>, a slug of a-z, 0-9 and -", cell(req.Params.URI))
+	}
 	p, _, err := a.readPlaybook(ctx, slug, "resource")
 	if err != nil {
 		return nil, err
 	}
-	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "text/markdown", Text: p.Body}}}, nil
+	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "text/markdown", Text: visible(p.Body)}}}, nil
 }
 
 // readPlaybook is GET /playbooks/:slug counted as way, or its refusal as the CLI says it: a slug that names none is

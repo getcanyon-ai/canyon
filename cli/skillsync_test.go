@@ -265,7 +265,7 @@ func TestSkillSyncLeavesAPersonsSkillAndALinkAlone(t *testing.T) {
 // What a synced skill holds runs nothing and hides nothing: !` is written "! `", which Claude Code doesn't run, code
 // blocks too, and a character that hides text is written visibly, in the body and the description.
 func TestASyncedSkillRunsAndHidesNothing(t *testing.T) {
-	got := string(skillFile(playbookRead{Slug: "a", When: "Read‮me", Body: "Status: !`git status`\n```sh\necho !`date`\n```\nok\U000E0041\n"}))
+	got := string(skillFile(playbookRead{Slug: "a", When: "Read\u202eme", Body: "Status: !`git status`\n```sh\necho !`date`\n```\nok\U000E0041\n"}))
 	want := "---\nname: \"a\"\ndescription: \"Read\\\\u202eme\"\n---\n\nStatus: ! `git status`\n```sh\necho ! `date`\n```\nok\\U000e0041\n"
 	if got != want {
 		t.Errorf("the skill file:\n%s\nwant\n%s", got, want)

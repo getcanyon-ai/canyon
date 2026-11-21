@@ -28,11 +28,15 @@ type mcpHost struct {
 	asked      []string
 	transports []string // each request's Canyon-Transport, in order
 	refuse     func(w http.ResponseWriter)
+	playbook   []byte // GET /api/v1/playbooks/service-conventions's answer; the contract's golden when nil
 }
 
 func (h *mcpHost) serve(t *testing.T) string {
 	t.Helper()
-	manifest, whole, playbook := manifestFixture(t), page(t), playbookFixture(t)
+	manifest, whole, playbook := manifestFixture(t), page(t), h.playbook
+	if playbook == nil {
+		playbook = playbookFixture(t)
+	}
 	var pages []json.RawMessage
 	if json.Unmarshal(whole["gate_runs"], &pages) != nil {
 		t.Fatal("the fixture's gate_runs is not a list of pages")

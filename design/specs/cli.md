@@ -4896,8 +4896,13 @@ loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The per
 **Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
 hook syncs each playbook that is a `skill` into the harness's own skills, `~/.claude/skills/canyon-<slug>/SKILL.md` and
 `~/.agents/skills/canyon-<slug>/SKILL.md`: frontmatter `name` the slug and `description` its `when`, both as JSON
-strings, then its body. Each directory it writes holds a `.canyon` file, `{host, version}`; the hook touches no
-directory without one, nor one another host's sync wrote. Its manifest request names what it holds,
+strings, then its body, every host string written visibly (§9) and each `` !` `` written `` ! ` ``: Claude Code runs
+`` !`cmd` `` in a skill as a shell command before the model reads it (https://code.claude.com/docs/en/skills), and its
+docs don't say a code block is spared (amended 2026-11-21, the item 10 security review). Each directory it writes holds
+a `.canyon` file, `{host, version}`. It `lstat`s each `canyon-<slug>` before it writes or removes there, and touches
+only a real directory, never a link, whose regular-file marker names this host: a person's own skill, a link and
+another host's directory stay byte for byte, and the hook says `Canyon didn't sync the playbook <slug>: <path> is not a
+directory Canyon wrote, so Canyon leaves it alone.` once a session. Its manifest request names what it holds,
 `held=<slug>@<version>`, so the host counts this machine; it then fetches only a skill whose version changed
 (`?read=sync`, a sync and no read), writing `SKILL.md` and then the marker, and removes a directory of its own whose
 playbook was removed or became a note. It shares the hook's seconds, gives up when they run out, and never says

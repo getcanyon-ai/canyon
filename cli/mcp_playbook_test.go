@@ -40,6 +40,11 @@ func TestPlaybookThroughMCP(t *testing.T) {
 	if res, _ := callTool(t, cs, mcptools.Playbook, map[string]any{"slug": "../projects"}); !res.IsError {
 		t.Error("a slug that is no slug was read")
 	}
+	for _, uri := range []string{mcptools.PlaybookURI + "..", mcptools.PlaybookURI + "../projects", mcptools.PlaybookURI} {
+		if _, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri}); err == nil {
+			t.Errorf("%s was read", uri)
+		}
+	}
 	var reads []string
 	for _, r := range h.requests() {
 		if strings.HasPrefix(r, "GET /api/v1/playbooks/") {
@@ -49,5 +54,24 @@ func TestPlaybookThroughMCP(t *testing.T) {
 	if want := []string{"GET /api/v1/playbooks/service-conventions?read=tool", "GET /api/v1/playbooks/service-conventions?read=resource",
 		"GET /api/v1/playbooks/no-such?read=tool"}; !slices.Equal(reads, want) {
 		t.Errorf("asked %q, want %q", reads, want)
+	}
+}
+
+// A body holding a character that hides text reaches no agent path raw: the tool and the resource write it visibly
+// (design/specs/mcp.md §3.3), as canyon playbook does.
+func TestPlaybookThroughMCPHidesNothing(t *testing.T) {
+	body := "ok\U000E0041\u202Eevil\n"
+	quoted, _ := json.Marshal(body)
+	h := &mcpHost{playbook: []byte(`{"playbook":{"slug":"service-conventions","name":"n","kind":"skill","when":"w","body":` + string(quoted) + `,"version":1}}`)}
+	cs, _ := mcpSession(t, h.serve(t))
+	_, text := callTool(t, cs, mcptools.Playbook, map[string]any{"slug": "service-conventions"})
+	read, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: mcptools.PlaybookURI + "service-conventions"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for way, got := range map[string]string{"tool": text, "resource": read.Contents[0].Text} {
+		if got != "ok\\U000e0041\\u202eevil\n" {
+			t.Errorf("the %s handed %q", way, got)
+		}
 	}
 }

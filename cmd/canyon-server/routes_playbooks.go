@@ -264,7 +264,7 @@ func hiddenIn(s string, body bool) (int, rune, bool) {
 	at := 0
 	for _, r := range s {
 		at++
-		if hidesText(r) && !(body && (r == '\n' || r == '\t')) {
+		if hidesText(r) && (!body || r != '\n' && r != '\t') {
 			return at, r, true
 		}
 	}

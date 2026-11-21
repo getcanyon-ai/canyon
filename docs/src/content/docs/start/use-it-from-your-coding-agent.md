@@ -72,7 +72,8 @@ sequenceDiagram
          canyon skill install --harness agents-md      appends to ./AGENTS.md
          canyon skill install --harness codex          Codex's own skill and hook, once Codex has made ~/.codex
 
-     Your agent can now deploy. Try asking it:
+     Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.
+     Then try asking it:
        "deploy this app"
    ```
 

@@ -269,6 +269,14 @@ func (e *env) answered() string {
 	return e.Answered.beside()
 }
 
+// flagged is answered's for a step an agent follows: Canyon's words alone, the app's left out (flaggedWords).
+func (e *env) flagged() string {
+	if e == nil {
+		return ""
+	}
+	return e.Answered.flaggedWords()
+}
+
 // running is the environment when something runs there, nil when nothing does: an environment waiting
 // on its first release (release.schema.json's env_pending alone) has no url and runs nothing yet.
 func (e *env) running() *env {
@@ -1199,12 +1207,12 @@ func (a *app) aiEnv(label, flag string, e *env, absent string, now time.Time) {
 		if e.DeployedAt != "" {
 			parts = append(parts, "deployed "+cell(e.DeployedAt))
 		}
-		parts = append(parts, e.answered())
+		parts = append(parts, e.Answered.flaggedWords()) // Canyon's words; why nothing answered, the app's, follows under appSays
 		if e.patched() {
 			parts = append(parts, strings.TrimSpace("patched by Canyon "+cell(e.Patch.Since)))
 		}
 	default:
-		parts = append(parts, cell(e.URL), "couldn't check whether it runs", e.answered())
+		parts = append(parts, cell(e.URL), "couldn't check whether it runs", e.Answered.flaggedWords())
 	}
 	if line, warn := a.checkIn(e, now); warn {
 		parts = append(parts, line+" (your platform's pods: nothing to do in Canyon)")
@@ -1215,4 +1223,7 @@ func (a *app) aiEnv(label, flag string, e *env, absent string, now time.Time) {
 		parts = append(parts, e.Pending.line(), e.Pending.pulled())
 	}
 	a.printf("%s: %s\n", label, strings.Join(slices.DeleteFunc(parts, func(p string) bool { return p == "" }), " · ")) // a cell the read does not carry, as row skips it
+	if e.Answered.flaggedWords() != "" && e.Answered.Error != "" {
+		a.appLines(e.Answered.Error)
+	}
 }

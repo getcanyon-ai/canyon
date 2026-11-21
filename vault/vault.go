@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const keySize = 32
@@ -283,6 +284,31 @@ func (v *Vault) ValuesHMAC(project string, values map[string]string) (string, in
 		part(values[name])
 	}
 	return hex.EncodeToString(mac.Sum(nil)), active, nil
+}
+
+// Holder is HMAC-SHA256 of a session under a key HKDF derives from the active key file's for one 30-day period since
+// the Unix epoch (contracts/routes.md, the playbooks row; design/specs/mcp.md §3.5): one session is one holder within a
+// period, the key is never stored, and a holder can't be joined back to its session. 32 bytes.
+// ponytail: a session spanning a period boundary is two holders until the older rows age out.
+func (v *Vault) Holder(session string, at time.Time) ([]byte, error) {
+	v.mu.Lock()
+	active := v.active
+	v.mu.Unlock()
+	fileKey, err := v.key(active)
+	if err != nil {
+		return nil, err
+	}
+	if fileKey == nil {
+		return nil, fmt.Errorf("holder: key version %d is not loaded", active)
+	}
+	period := at.Unix() / int64(30*24*time.Hour/time.Second)
+	key, err := hkdf.Key(sha256.New, fileKey, nil, fmt.Sprintf("canyon playbook syncs %d", period), keySize)
+	if err != nil {
+		return nil, err
+	}
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(session))
+	return mac.Sum(nil), nil
 }
 
 // aad is the row as additional data, each field length-prefixed, so no two rows share it

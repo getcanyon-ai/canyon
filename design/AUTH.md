@@ -416,7 +416,7 @@ that the receipt names who did it, would be resting on a test that can be walked
 server cannot distinguish a person at a keyboard from software driving one. It can distinguish a
 session, and a session belongs to a person who signed in.
 
-`flow` (`browser | device | demo`) is still written on the session row, because the org setting in
+`flow` (`browser | device | demo | oauth`) is still written on the session row, because the org setting in
 §4.5 reads it and a column costs nothing. **By default it gates nothing** — but for one override
 (amended 2026-10-08): a promotion of a version whose preview answered an error is refused, and only a
 browser session's `promote_anyway` promotes it anyway (contracts/routes.md, the promotions row; with
@@ -525,6 +525,54 @@ and an organisation settings page, and moves those values into the preferences r
 them in the product. The environment variables become the bootstrap and the override. It is its own
 milestone (M2c) and its own build cut, deliberately: authentication is what unblocks a customer's
 own network, and it should not wait on a settings screen.
+
+### 4.7 MCP clients: Canyon as an OAuth authorization server
+
+**Added 2026-11-20** (design/specs/mcp.md §2.2). `/mcp` is an OAuth 2.1 protected resource, and Canyon is its
+authorization server, as it is the CLI's (§4.2) and for the same reasons: most corporate identity providers don't
+register arbitrary MCP clients, and their tokens would name an audience Canyon doesn't control. The customer's provider
+signs the person in, through §4.1 unchanged; Canyon decides what the client gets.
+
+1. The client reads `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and
+   `/.well-known/oauth-authorization-server` (RFC 8414). It identifies itself one of two ways, since clients differ:
+   a **Client ID Metadata Document** at its own `https` URL, which Canyon fetches at authorization, from public
+   addresses alone, so a client's word never makes the server reach the org's own network; or **Dynamic Client
+   Registration** (RFC 7591), public clients only, no secret. Either way a redirect is `https`, `http` on a
+   loopback host, or a native app's own scheme Canyon names, `cursor` alone, since Cursor receives its sign-in on
+   `cursor://`; nothing else, and never a scheme by pattern.
+2. It sends the person's browser to `GET /oauth/authorize`, PKCE `S256` and `resource=<public URL>/mcp` (RFC 8707)
+   required. Canyon answers every fault on its own page, never at the redirect: a redirect the client didn't name is
+   where an attacker would want the code, and until the person has answered, Canyon sends their browser nowhere a
+   stranger's link names (RFC 9700 §4.11.2), so no one turns its origin into a hop to their own site.
+3. The request waits ten minutes on the **consent page**, `/#/oauth`. A browser with no session signs in first and
+   comes back, as the device page does. The page names the client, where it sends the person back, which account,
+   and the scopes, then where and when the request was made: the client's host (its document's, or a registration's
+   redirect's) and the time. Like the device page, it says to allow only a connection the person started, and a
+   registration's name, the client's own word, is called that.
+4. **Allow** binds the person's browser session to the request and issues a code, single use, for a minute, which the
+   browser carries back with `state` and `iss` (RFC 9207). Consent is a browser's alone, as a device code's approval
+   is, because the session it hands over would otherwise let a stolen token mint itself more; the page and its routes
+   are never framed, and a POST must say it came from Canyon's own page.
+5. `POST /oauth/token` spends the code and makes **one session per consent**: `flow = oauth`, the approver's identity
+   copied as a device token copies it, bound to the client and to `/mcp`, with the scopes. The session lives 30 days
+   from the consent. Its access token lives an hour and its refresh token as long as the session; each refresh
+   rotates both on that row in place and checks the person is still on the membership lists. A refresh token
+   presented again after it rotated means one of its two holders isn't the client, so the session ends.
+
+**Two scopes:** `read` (the rules, playbooks, status, logs and resources) and `act` (those, and check, deploy and
+promote). A scope never widens a level: it only narrows what a token may ask. **The session is the person**, as §4.4
+says of every session: `kind = person`, recorded under their name. `dashboard_required` refuses it as it refuses a CLI
+session, and no cookie route takes it at all: it is bound to `/mcp`.
+
+**Registrations don't pile up.** A registration counts as used when a code issued to it redeems, and each new
+registration deletes those unused a day after they were made and those with no session live or started in 30 days.
+
+**Revoking.** An admin's revoke-all of a person (`DELETE /api/v1/sessions?subject=`) ends their OAuth sessions with the
+rest. A person sees their own sessions in Settings › People & sign-in, an admin everyone's, and ends one there by its
+digest, in a browser alone, so no MCP client and no CLI ever ends a session.
+
+**With sign-in off there is none of it.** A host where every caller is the anonymous admin serves neither the
+metadata nor the OAuth routes, and neither does one whose public URL is plain `http` anywhere but loopback.
 
 ## 5. The data model
 

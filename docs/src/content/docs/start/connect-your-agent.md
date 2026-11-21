@@ -65,6 +65,9 @@ To add only the MCP server to one agent:
 Each agent's page has the details, and [other agents](/start/agents/other-agents/) covers agents
 that read `AGENTS.md`.
 
+Once connected, an agent is also handed your org's [playbooks](/org/playbooks/): how your teams
+build, which it reads when they fit its task.
+
 ## What still needs the CLI
 
 MCP gives your agent Canyon's tools. A few things stay with the `canyon` CLI:

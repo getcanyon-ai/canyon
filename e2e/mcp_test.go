@@ -4,11 +4,11 @@ package e2e
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -17,7 +17,7 @@ import (
 )
 
 // An agent checks and deploys through canyon mcp, the binary make cli builds, as an MCP client: a tiny
-// Node app reviewed clean with its SARIF log, then live in preview (design/specs/mcp.md §6, item 2).
+// Node app reviewed clean, then live in preview, each the CLI's --format ai text alone (design/specs/mcp.md §1.1, §6).
 func TestMCPChecksAndDeploysOnTheStack(t *testing.T) {
 	if !ready() {
 		t.Skipf("no Canyon stack answers %s/ready: start one with make e2e-up", host)
@@ -45,23 +45,22 @@ func TestMCPChecksAndDeploysOnTheStack(t *testing.T) {
 		t.Fatalf("canyon mcp: %v", err)
 	}
 	t.Cleanup(func() { _ = cs.Close() })
-	for _, c := range []struct{ tool, url string }{
-		{mcptools.Check, ""},
-		{mcptools.Deploy, "http://" + app + ".preview.localhost:7777"},
+	for _, c := range []struct{ tool, says string }{
+		{mcptools.Check, "\nCANYON REVIEW — RESULT: PASSED\n"},
+		{mcptools.Deploy, "\nlive url: http://" + app + ".preview.localhost:7777\n"},
 	} {
 		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: c.tool})
 		if err != nil {
 			t.Fatalf("%s: %v", c.tool, err)
 		}
-		var v struct {
-			Run, State, URL string
-			Findings        struct {
-				Runs []json.RawMessage `json:"runs"`
+		var text string
+		if len(res.Content) == 1 {
+			if tc, ok := res.Content[0].(*mcp.TextContent); ok {
+				text = tc.Text
 			}
 		}
-		structured, _ := json.Marshal(res.StructuredContent)
-		if json.Unmarshal(structured, &v) != nil || res.IsError || v.State != "clean" || len(v.Findings.Runs) == 0 || v.URL != c.url {
-			t.Fatalf("%s: isError %v, structured %s, content %+v", c.tool, res.IsError, structured, res.Content)
+		if res.IsError || res.StructuredContent != nil || !strings.Contains("\n"+text+"\n", c.says) {
+			t.Fatalf("%s: isError %v, structured %v, text:\n%s", c.tool, res.IsError, res.StructuredContent, text)
 		}
 	}
 }

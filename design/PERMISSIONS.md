@@ -26,7 +26,7 @@ Everyone else holds, per app, one **level**:
   the app's audit rows, and where the org's platform says each of the app's resources is (its
   `provided` resources' endpoints, #2432): contributor and above read them on the project read, the app
   page and `canyon status`; the reduced row below contributor carries no `resources[]`.
-- *Change it*: upload, check, deploy, undeploy, cancel, secrets.
+- *Change it*: upload, check, deploy, undeploy, cancel, secrets, and linking a repository (*Link a repository*, below).
 - *Promote* includes approving or denying a production approval, when the org has a person approve
   production in the dashboard (design/AUTH.md §4.5); only a browser session does that, whatever the
   level.
@@ -72,8 +72,21 @@ Everyone else holds, per app, one **level**:
   requests, rename the app (its display name alone: its id, address and audit subject stay, #1909), delete the app, turn *Auto-deploy pushes to preview* on or off: a deploy no person
   starts is the app's owners' call (#1923, the approved GitHub plan), and hand the repository Canyon
   keeps the app's code in to developers (*Developers push from now on*, #1938): who writes the
-  app's code is its owners' call too. Linking an app to a repository, or to another one, stays an
-  admin's (#1917).
+  app's code is its owners' call too. Linking an app to a repository is a contributor's, below.
+- *Link a repository* (decided 2026-11-20, the owner, design/specs/mcp.md §10.1, built in its PR 8; #1917): a
+  contributor links their app to a repository, or a folder of it, and unlinks it; an admin links any repository
+  Canyon's App sees. **A member below admin links only a repository that one of their own linked GitHub accounts
+  can read on GitHub now**, asked of GitHub with the installation's token, and names it as `owner/name`. Why: Canyon's
+  App usually sees every repository of an org, and the security reviews of #1917 found that letting any member link
+  one hands them a private repository's code they can't read on GitHub, through its packages, `canyon pull`,
+  findings' snippets and build logs. With no GitHub account of their own linked, the link is refused
+  `github_link_required`; a repository they can't read answers as one no App sees, `not_found`, so no private
+  repository's existence leaks; and the org's list of repositories (`GET /github/repositories`) stays an admin's.
+  **Packaging a ref of the linked repository** (`POST …/packages/from-repository`, and the remote MCP tools
+  `canyon_check_ref` and `canyon_deploy_ref` that call it) asks GitHub again on every call whether the caller's own
+  linked GitHub account reads that repository, an admin's included: another contributor on the app may not read it,
+  and a person who loses access on GitHub loses it here at once. GitHub not answering refuses the call. A push still
+  packages what it pushes, as before.
 - *Hold production* belongs to no level: owning an app lets nobody hold or lift its production.
   A responder or an admin does (below).
 
@@ -513,6 +526,20 @@ so it is a person's, in the dashboard, like every widening (decided 2026-11-12, 
 sign-in, `403 dashboard_required` from any session but a browser's, and `403 person_required` to an agent. The
 server's environment (`CANYON_TELEMETRY=0`, `DO_NOT_TRACK=1`, `CI`) turns it off whatever an admin sets, and no
 route turns it back on.
+
+## MCP — what an agent's client may do
+
+Decided 2026-11-20 (design/specs/mcp.md §4; design/AUTH.md §4.7). **A tool is its route**: each MCP tool calls a route
+the CLI already calls, at that route's level, with its refusals and its audit rows, and MCP adds no permission and
+widens none. **An OAuth session is a person's session**: a client a person allowed acts as that person, recorded under
+their name, and never more than they may; its scope (`read` or `act`) only narrows what it may ask, and a viewer's
+`act` token still can't deploy. **Consent is a browser's**: a person allows a client in the dashboard, from a browser
+session alone, so no CLI or MCP session ever hands its access to another client.
+
+**Sessions.** Every member sees their own live sessions, each with how it signed in and an MCP client's name, and ends
+any of them; an admin sees everyone's and ends anyone's, and the row names whose (`DELETE /api/v1/sessions/:id`). Ending
+one is a person's, in a browser: `403 person_required` to an agent, `403 dashboard_required` from a CLI or MCP session.
+A member asking to end another person's is answered `404`, as if there were none.
 
 ## Enforcement — one decision point per app
 

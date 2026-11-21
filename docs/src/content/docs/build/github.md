@@ -41,8 +41,10 @@ GitHub can't send events to `localhost`, so this needs a Canyon with a public ad
 
 ## Which app a repository feeds
 
-A repository feeds only the apps an admin linked to it, in **Settings › GitHub**. Its name doesn't
-matter: a repository named like an app changes nothing of that app.
+A repository feeds only the apps linked to it. An admin links them in **Settings › GitHub**, and an
+app's contributors from its page, under **Source**, typing the repository as `owner/name`: their own
+GitHub account, linked in Canyon, must be able to read it. Its name doesn't matter: a repository named
+like an app changes nothing of that app.
 
 A link is a whole repository or one folder in it, so one repository can feed several apps, one per
 folder. Each app gets its own check: **Canyon gate** for a whole repository, and

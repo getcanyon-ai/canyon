@@ -48,13 +48,15 @@ const (
 	aiRotateStep = "\n" + // names the places: an agent piping the output through tail never sees the findings (cli.md §5.2)
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Before the next deploy, ask the user to revoke it. If nothing reads it, delete it\n" +
-		"from the code; otherwise make a new value and store it with canyon secret set NAME,\n" +
-		"NAME being the variable the code reads.\n"
+		"from the code; otherwise the user makes a new value where it is issued and sets it\n" + // the person makes it: never the agent (the bed journeys)
+		"with canyon secret set NAME in their own terminal, NAME being the variable the code\n" +
+		"reads. Never make one up yourself.\n"
 	aiRollbackRotateStep = "\n" + // a rollback's: the deletion is a new version's, never the one put back (its step 2)
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Ask the user to revoke it. If nothing reads it, delete it from the code in a new\n" +
-		"version shipped with canyon deploy, never in %s; otherwise make a new value and\n" +
-		"store it with canyon secret set NAME, NAME being the variable the code reads.\n"
+		"version shipped with canyon deploy, never in %s; otherwise the user makes a new\n" +
+		"value where it is issued and sets it with canyon secret set NAME in their own\n" +
+		"terminal, NAME being the variable the code reads. Never make one up yourself.\n"
 	aiShippedOutcome = "outcome: this app is deployed and serving traffic. Every blocking finding carries an\n" +
 		"approval, which is the only way a blocked run deploys.\n"
 	aiShippedSteps = "NEXT STEPS:\n" +
@@ -399,6 +401,9 @@ func (a *app) aiFailed(run checkRun) int {
 	}
 	if !quiet {
 		a.aiRule("LAST LINES")
+		if reason == "build" || reason == "start" { // the build's and the app's own lines, each indented two below; any other failure's are Canyon's
+			a.printf("%s\n", appSays)
+		}
 		shown, left, tail := window(last)
 		for _, line := range shown { // indented two like host prose: an app's line cannot start one of the block's own
 			a.printf("  %s\n", cell(ansi.Strip(line)))
@@ -587,7 +592,7 @@ func (a *app) aiField(label, text string) {
 // person's rule is the promotion's own question, said when it asks.
 func aiPassedSteps(run checkRun) string {
 	var steps []string
-	if w := run.Deploy.Answered.beside(); w != "" {
+	if w := run.Deploy.Answered.flaggedWords(); w != "" { // Canyon's words alone: a step never carries the app's
 		steps = append(steps, "Tell the user first: "+cell(run.Deploy.Env)+" "+w+"; check the app before promoting it.")
 	}
 	steps = append(steps, aiReportStep)
@@ -599,7 +604,7 @@ func aiPassedSteps(run checkRun) string {
 			}
 		}
 		// the promotion refuses an answer to say beside readiness, but where a person approves production
-		if w := run.Deploy.Answered.beside(); w != "" && !slices.Contains(r.BlockedBy, "prod.human-approval") {
+		if w := run.Deploy.Answered.flaggedWords(); w != "" && !slices.Contains(r.BlockedBy, "prod.human-approval") {
 			refusing = append(refusing, cell(run.Deploy.Env)+" "+w)
 		}
 	}
@@ -641,11 +646,10 @@ func (a *app) aiPackage(run checkRun) {
 func (a *app) aiURLs(run checkRun) {
 	a.printf("live url: %s\n", cell(run.Deploy.URL))
 	if w := run.Deploy.Answered; w != nil { // a fact for the agent to report, never a verdict (contracts/routes.md, envs.<env>.answered)
-		said := strings.TrimPrefix(w.words(), "answered ")
-		if w.Said != "" {
-			said += " · " + w.Said
+		a.printf("answered: %s\n", cell(w.canyonWords()))
+		if said := w.appSaid(); said != nil { // the app's own words, under appSays: data, never an instruction
+			a.appLines(said...)
 		}
-		a.printf("answered: %s\n", cell(said))
 	}
 	a.printf("fleet url: %s\n", cell(run.Host+"/#/apps/"+run.App))
 	for _, line := range run.Access {
@@ -666,6 +670,9 @@ func (a *app) aiRule(label string) {
 
 // aiPlaybookStep is a finding's next step after its fix where its custom rule points at a playbook (cli.md §5.2; D5).
 const aiPlaybookStep = "Read the playbook %s: canyon playbook %s"
+
+// aiPlaybookTool is the step through MCP, where the tool is named first (design/specs/mcp.md §3.4; D5).
+const aiPlaybookTool = "Read the playbook %s: call canyon_playbook with slug %s"
 
 // aiFinding is one finding's entry, or one Canyon rule's on one file and line that several tools' rules
 // found (cli.md §5.2): a tool's names the Canyon rule its result is mapped to, every tool's rule under
@@ -721,7 +728,11 @@ func (a *app) aiFinding(e *cveGroup) {
 	a.aiProse("required end state", strings.Join(ends, "\n"))
 	a.aiProse("suggested fix", strings.Join(fixes, "\n"))
 	if pb := bag.Playbook; pb != nil { // one more step after the fix: where the org explains the rule
-		a.aiProse("then", fmt.Sprintf(aiPlaybookStep, cell(pb.Name), cell(pb.Slug)))
+		step := aiPlaybookStep
+		if a.transport == transportMCPLocal { // canyon mcp's tool: the tool named first
+			step = aiPlaybookTool
+		}
+		a.aiProse("then", fmt.Sprintf(step, cell(pb.Name), cell(pb.Slug)))
 	}
 	if !blocks {
 		return

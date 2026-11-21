@@ -16,3 +16,4 @@ runs/egress_ca.go
 executor/egress.go
 # the journeys diff every public table: a new table that changes on its own reddens them all (#1969)
 db/migrations/**
+scripts/ci-suite.sh # its steps, here and on Canyon's private runners (CONTRIBUTING.md, Maintainers)

@@ -593,7 +593,7 @@ export function App({ id, run: pinned = null, auth, outbound = false }: { id: st
                   {project.access.requests !== undefined && <>{" · "}<button type="button" className="text-link hover:underline" aria-label={`${S.share} ${project.name}`} onClick={() => setAccessAsked({ at: Date.now(), share: true })}>{S.share}</button></>}
                 </p>
               )}
-              {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} changed={() => tick.current()} />}
+              {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} team={project.access.level === "owner" || project.access.level === "contributor"} changed={() => tick.current()} />}
             </div>
             {project !== null && !reduced(project) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">

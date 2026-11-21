@@ -186,7 +186,7 @@ func TestSkillInstallRefusesAHookFileThatIsNotJSON(t *testing.T) {
 		if code != exitError || !strings.Contains(errOut, "~/.claude/settings.json cannot be read as JSON") {
 			t.Errorf("%q: exit %d, stderr %q", body, code, errOut)
 		}
-		if !strings.Contains(out, "~/.claude/skills/canyon/SKILL.md") || !strings.Contains(out, "./.cursor/hooks.json") || strings.Contains(out, "Your agent can now deploy") {
+		if !strings.Contains(out, "~/.claude/skills/canyon/SKILL.md") || !strings.Contains(out, "./.cursor/hooks.json") || strings.Contains(out, "Then try asking it") {
 			t.Errorf("%q: a refused hook hid the rows around it:\n%s", body, out)
 		}
 		if info, err := os.Stat(settings); err != nil || fileBytes(t, settings) != body || !info.ModTime().Equal(old) {

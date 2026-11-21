@@ -225,10 +225,10 @@ export function result(event: AuditEvent): { word: string; tone: Tone } | null {
 
 const NOT = <span className="text-text-faint">not recorded</span>;
 // How it was done, in the words the redesign uses under a name.
-export const VIA_WORD: Record<Via, string> = { dashboard: "dashboard", cli: "CLI", github: "GitHub", platform: "platform", canyon: "Canyon" };
-const VIA_RECORD: Record<Via, string> = { dashboard: "The dashboard", cli: "The CLI", github: "GitHub", platform: "The org's platform", canyon: "Canyon" };
+export const VIA_WORD: Record<Via, string> = { dashboard: "dashboard", cli: "CLI", mcp: "MCP", github: "GitHub", platform: "platform", canyon: "Canyon" };
+const VIA_RECORD: Record<Via, string> = { dashboard: "The dashboard", cli: "The CLI", mcp: "An MCP client", github: "GitHub", platform: "The org's platform", canyon: "Canyon" };
 // The Via filter's words for each way of doing.
-export const VIA_FILTER: Record<Via, string> = { dashboard: "From the dashboard", cli: "From the CLI", github: "From GitHub", platform: "From the platform", canyon: "Canyon itself" };
+export const VIA_FILTER: Record<Via, string> = { dashboard: "From the dashboard", cli: "From the CLI", mcp: "From an MCP client", github: "From GitHub", platform: "From the platform", canyon: "Canyon itself" };
 const DT = "text-text-dim";
 const DD = "m-0 min-w-0 break-words";
 

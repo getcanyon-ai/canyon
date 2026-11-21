@@ -233,6 +233,25 @@ func hooked(t *testing.T) (*Registration, *pgxpool.Pool, chan string) {
 		}
 		_, _ = io.WriteString(w, `{"tree":`+tree+`,"truncated":false}`)
 	})
+	fake.HandleFunc("GET /repos/acme/{repo}/collaborators/{login}/permission", func(w http.ResponseWriter, r *http.Request) { // a person's own read (TestPackRef)
+		permission := map[string]string{"carol-gh": "read", "nobody-gh": "none"}[r.PathValue("login")]
+		if permission == "" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = io.WriteString(w, `{"permission":"`+permission+`"}`)
+	})
+	fake.HandleFunc("GET /repos/acme/claims-portal/commits/{ref...}", func(w http.ResponseWriter, r *http.Request) { // the refs PackRef resolves (TestPackRef)
+		sha := refs[r.PathValue("ref")]
+		if sha == "" && len(r.PathValue("ref")) == 40 {
+			sha = r.PathValue("ref")
+		}
+		if sha == "" {
+			http.Error(w, `{"message":"No commit found for SHA: `+r.PathValue("ref")+`"}`, http.StatusUnprocessableEntity)
+			return
+		}
+		_, _ = io.WriteString(w, `{"sha":"`+sha+`"}`)
+	})
 	fake.HandleFunc("GET /repos/acme/claims-portal/code-scanning/", func(w http.ResponseWriter, r *http.Request) {
 		var answer http.HandlerFunc
 		hook(func() { answer = scanning })

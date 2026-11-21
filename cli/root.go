@@ -53,6 +53,7 @@ var commands = []command{
 	{"fleet", "YOUR ORG", "List every app in your org and what needs attention", false, runFleet},
 	{"resources", "YOUR ORG", "List the databases and services this Canyon can create for apps", false, runResources},
 	{"manifest", "YOUR ORG", "Show the instructions this Canyon gives coding agents", false, runManifest},
+	{"playbook", "YOUR ORG", "Print one of your org's playbooks: how it builds", true, runPlaybook},
 	{"login", "SETUP", "Sign this machine in to a Canyon host", false, runLogin},
 	{"logout", "SETUP", "Revoke this machine's session on a Canyon host", false, runLogout},
 	{"skill", "SETUP", "Teach your coding agent to use Canyon", true, runSkill},
@@ -93,7 +94,6 @@ type app struct {
 	named    string                                         // the app an MCP tool names, in place of the one canyon.toml names
 	handoff  time.Duration                                  // an MCP tool's: how long a run is followed before the tool hands it off; 0 is the verb's own ceiling
 	onRow    func(timelineRow)                              // an MCP tool's: each row of the run this invocation follows, for its progress
-	ended    *checkRun                                      // the run a verdict was rendered for, which an MCP tool's result carries
 	elicit   func(question, ships string) (asked, yes bool) // an MCP client's answer to production's question about what ships; nil where nothing can ask
 	// transport is how this invocation's requests were asked for, sent as Canyon-Transport: canyon mcp sets
 	// transportMCPLocal before its first call; every other verb leaves it "", the CLI's (design/specs/mcp.md §7).

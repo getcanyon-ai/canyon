@@ -92,7 +92,7 @@
         "actor": { "$ref": "#/definitions/actor" },
         "action": { "type": "string", "minLength": 1 },
         "category": { "enum": ["governance", "access", "outcome"] },
-        "via": { "enum": ["dashboard", "cli", "github", "platform", "canyon"] }, "role": { "enum": ["admin", "responder", "member"] }, "session": { "type": "string", "pattern": "^ses_[0-9a-f]{16}$" }, "source": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "via": { "enum": ["dashboard", "cli", "mcp", "github", "platform", "canyon"] }, "role": { "enum": ["admin", "responder", "member"] }, "session": { "type": "string", "pattern": "^ses_[0-9a-f]{16}$" }, "source": { "type": "string", "minLength": 1, "maxLength": 64 },
         "project": { "$ref": "#/definitions/projectId" },
         "run": { "$ref": "#/definitions/runId" },
         "detail": { "type": "object" }

@@ -349,6 +349,9 @@ func (a *app) sessionOf(ctx context.Context, r *http.Request, name string) (s si
 		return s, false, prov, false
 	}
 	s, setup, flow, ok := a.sessionFor(ctx, c.Value)
+	if flow == "oauth" { // bound to the MCP resource and its client (design/AUTH.md §4.7): never a cookie's, anywhere
+		return signedSession{}, false, prov, false
+	}
 	// how and from where the request's audit rows were done (contracts/routes.md, the audit read)
 	return s, setup, events.Provenance{Via: viaOf[flow], Role: s.role, Session: sessionDigest(c.Value), Source: a.proxies.source(r)}, ok
 }
@@ -368,8 +371,8 @@ type signedSession struct {
 }
 
 // viaOf is the channel a session's flow is (contracts/routes.md, the audit read): a browser's sign-in is the
-// dashboard, a device grant's the CLI.
-var viaOf = map[string]string{"browser": "dashboard", "device": "cli"}
+// dashboard, a device grant's the CLI, an OAuth client's MCP.
+var viaOf = map[string]string{"browser": "dashboard", "device": "cli", "oauth": "mcp"}
 
 // sessionDigest names a session on the trail without its secret: ses_ and the first 16 hex of its sha256.
 func sessionDigest(secret string) string {

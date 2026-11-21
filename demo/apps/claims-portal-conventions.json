@@ -1,0 +1,6 @@
+{
+  "name": "Claims portal conventions",
+  "kind": "skill",
+  "when": "Before you add or change a route or a query in a claims app.",
+  "body": "# How the claims apps are written\n\nRead this before you add or change a route or a query in a claims app.\n\n- Each route is one `app.get` or `app.post` in `server.js`, and answers JSON with `res.json`.\n- Every query is `db.prepare(...)` with the request's values as bound parameters (`?`), never joined into the SQL text:\n\n  ```js\n  const rows = db.prepare(\"SELECT * FROM claims WHERE policy_number = ?\").all(req.query.policy);\n  ```\n\n- A value from the request reaches the database only as a parameter, and the page only through `res.json`.\n"
+}

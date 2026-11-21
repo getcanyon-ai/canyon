@@ -14,9 +14,12 @@
       "properties": { "kind": { "enum": ["person", "agent", "canyon"] }, "subject": { "type": "string", "minLength": 1 }, "display": { "type": "string" } }
     },
     "playbookEntry": {
-      "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "version", "updated_by", "updated_at"],
+      "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "version", "updated_by", "updated_at", "reads"],
       "properties": { "slug": { "$ref": "#/definitions/playbookSlug" }, "name": { "$ref": "#/definitions/playbookName" }, "kind": { "$ref": "#/definitions/playbookKind" }, "when": { "$ref": "#/definitions/playbookWhen" },
-        "version": { "type": "integer", "minimum": 1 }, "updated_by": { "$ref": "#/definitions/playbookActor" }, "updated_at": { "$ref": "#/definitions/ts" } }
+        "version": { "type": "integer", "minimum": 1 }, "updated_by": { "$ref": "#/definitions/playbookActor" }, "updated_at": { "$ref": "#/definitions/ts" },
+        "reads": { "type": "integer", "minimum": 0, "description": "The fetches counted in the last 30 days, every way summed (routes.md, the playbooks row; design/specs/mcp.md §3.5)." },
+        "machines": { "type": "integer", "minimum": 0, "description": "On a skill alone: the sessions whose native skill holds its newest version, over the last 30 days." } },
+      "if": { "properties": { "kind": { "const": "skill" } } }, "then": { "required": ["machines"] }, "else": { "not": { "required": ["machines"] } }
     },
     "playbook": {
       "type": "object", "additionalProperties": false, "required": ["slug", "name", "kind", "when", "body", "version", "updated_by", "updated_at"],

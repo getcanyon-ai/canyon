@@ -605,7 +605,6 @@ func runNamed(raw json.RawMessage) string {
 // with no answer. The CLI derives no verdict, and refuses one that argues with its own findings:
 // a passing exit on a run carrying a blocker is the one failure this product cannot have.
 func (a *app) verdict(run checkRun) int {
-	a.ended = &run
 	res := run.Result
 	if !a.agrees(run) {
 		return exitError

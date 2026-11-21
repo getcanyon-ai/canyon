@@ -5,11 +5,11 @@ import { AuthCard, AuthHead, AuthNote, CliStep } from "../ui/AuthCard";
 import { buttonClass } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 
-// The pages a sign-in comes back to (design/specs/screens.md, A0): the CLI's device page and the
-// production approval page, each with its code, and an app's no-access page. Kept in this tab for the length of the sign-in, and only ever a
+// The pages a sign-in comes back to (design/specs/screens.md, A0): the CLI's device page, an MCP client's consent page and the
+// production approval page, each with its code or request, and an app's no-access page. Kept in this tab for the length of the sign-in, and only ever a
 // hash of this dashboard, so a kept value can send the browser nowhere else.
 const RETURN = "canyon_return";
-const returnable = /^#\/((device|approve)(\?[^#]*)?|no-access\/[a-z]([a-z0-9-]*[a-z0-9])?)$/;
+const returnable = /^#\/((device|approve|oauth)(\?[^#]*)?|no-access\/[a-z]([a-z0-9-]*[a-z0-9])?)$/;
 
 // A browser that refuses storage (a private window) signs in all the same and lands on the fleet.
 function keep(hash: string) {
@@ -54,11 +54,12 @@ export function SignIn({ reason }: { reason?: Reason }) {
     return () => { live = false; window.removeEventListener("pageshow", back); };
   }, []);
   const cli = window.location.hash.startsWith("#/device");
+  const agent = window.location.hash.startsWith("#/oauth");
   const note = reason === undefined ? null : NOTES[reason];
-  const line = cli ? S.signInForCliLine : AUTH.signInLine.replace("<org> ", () => (org === null ? "" : `${org} `));
+  const line = cli ? S.signInForCliLine : agent ? S.signInForAgentLine : AUTH.signInLine.replace("<org> ", () => (org === null ? "" : `${org} `));
   return (
     <AuthCard org={org}>
-      <AuthHead eyebrow={cli ? <CliStep step={1} /> : undefined} title={cli ? S.signInForCli : AUTH.signIn} line={note === null ? line : undefined} />
+      <AuthHead eyebrow={cli ? <CliStep step={1} /> : undefined} title={cli ? S.signInForCli : agent ? S.signInForAgent : AUTH.signIn} line={note === null ? line : undefined} />
       {note !== null && <AuthNote tone={note.tone} icon={note.icon} title={note.title}>{note.line}</AuthNote>}
       <a className={buttonClass("primary", "block")} href={reason === "signed-out" ? "/auth/start?prompt=select_account" : "/auth/start"} onClick={() => { keep(window.location.hash); setOpening(true); }}>
         {opening ? <><span className="animate-spin"><Icon name="working" /></span>{AUTH.signingIn}</> : reason === "failed" ? AUTH.tryAgain : AUTH.signInGo}

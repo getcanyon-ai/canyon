@@ -102,6 +102,9 @@ func runLogs(ctx context.Context, a *app, args []string) int {
 		return a.logsFail(err, app, env)
 	}
 	defer func() { _ = body.Close() }()
+	if got := header.Get("Canyon-Log-Redaction"); redaction != "" && got != redaction { // asked masked, answered otherwise: none of it is printed, as the dashboard refuses it
+		return a.fail(errors.New(client.Base + " sent " + app + "'s " + env + " log without masking its secrets, so none of it is shown.")) // D5's line, its period included
+	}
 	dot := a.dot()
 	what := fmt.Sprintf("last %d lines", lines)
 	if follow {
@@ -214,6 +217,9 @@ func (a *app) tail(ctx context.Context, host string, body io.Reader) (int, bool)
 	for {
 		piece, err := r.ReadSlice('\n')
 		if n := len(piece); n > 0 && (indent != "  " || string(piece) != keepalive) {
+			if !said && a.render.Format == FormatAI { // an agent reads the app's own lines as data, each indented two below
+				a.printf("  %s\n", appSays)
+			}
 			said = true
 			if piece[n-1] == '\n' {
 				a.printf("%s%s\n", indent, visible(string(piece[:n-1])))

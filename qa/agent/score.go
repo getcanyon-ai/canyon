@@ -301,6 +301,10 @@ type transcript struct {
 	Playbooks       []playbookRead // each read of a playbook: canyon_playbook, canyon playbook <slug>, or its synced SKILL.md opened
 	// Skill is what the runner found of a playbook: scenario's native skill once the turns were over (playbookSkill).
 	Skill string
+	// Tools counts each Canyon MCP tool's calls by its bare name; SecretSeen is whether a value the runner made up for a
+	// secret: line ever reached a transcript.
+	Tools      map[string]int
+	SecretSeen bool
 }
 
 // playbookRead is one read of an org playbook, in turn Turn: Way is the tool line, so the card says how.
@@ -412,6 +416,7 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 	if call, ok := mcpCall(name, input); ok {
 		calls = []canyonCall{call}
 		r.t.ByTool++
+		r.t.Tools[strings.TrimPrefix(name, "mcp__canyon__")]++
 	} else {
 		r.t.ByShell += len(calls)
 	}
@@ -475,7 +480,8 @@ func (r *reader) result(n int, id, text string) {
 
 // readTranscript reads a scenario's turns in the event format of the agent that ran them.
 func readTranscript(dir, agent string) transcript {
-	t := transcript{FirstRead: readOutbound(filepath.Join(dir, outboundFirst)), LastRead: readOutbound(filepath.Join(dir, outboundLast)), Release: prodRelease(dir)}
+	t := transcript{FirstRead: readOutbound(filepath.Join(dir, outboundFirst)), LastRead: readOutbound(filepath.Join(dir, outboundLast)), Release: prodRelease(dir),
+		Tools: map[string]int{}, SecretSeen: secretSeen(dir)}
 	if skill, err := os.ReadFile(filepath.Join(dir, playbookSkillFile)); err == nil {
 		t.Skill = strings.TrimSpace(string(skill))
 	}
@@ -632,6 +638,8 @@ type canyonCall struct {
 var mcpTools = map[string]string{
 	"canyon_rules": "manifest", "canyon_playbook": "playbook", "canyon_check": "check", "canyon_deploy": "deploy",
 	"canyon_status": "status", "canyon_logs": "logs", "canyon_promote": "deploy",
+	// the remote server's alone (design/specs/mcp.md §2.3): a ref reviewed or deployed counts as the local ones do
+	"canyon_check_ref": "check", "canyon_deploy_ref": "deploy", "canyon_review": "review", "canyon_create_app": "create",
 }
 
 // mcpCall is the canyon call a tool call to Canyon's MCP server makes, read from its arguments: the playbook's slug,
@@ -781,6 +789,9 @@ func score(runDir string) error {
 		keys, _ := os.ReadFile(filepath.Join(dir, ".fakekey"))
 		for _, key := range strings.Fields(string(keys)) { // the notes too: a reviewer may have quoted one
 			card = strings.ReplaceAll(card, key, "sk_live_<redacted>")
+		}
+		if tok, _ := os.ReadFile(filepath.Join(dir, ".token")); len(strings.TrimSpace(string(tok))) > 0 { // a hosted grant's
+			card = strings.ReplaceAll(card, strings.TrimSpace(string(tok)), "<grant redacted>")
 		}
 		card = sessionValue.ReplaceAllString(card, "${1}<redacted>") // an agent may paste the tester's own session
 		card = scrubbed(card)                                        // and print Cursor's key from its environment
@@ -949,7 +960,25 @@ func mcpRows(b *strings.Builder, s scenario, t transcript) string {
 		row("mcp server", s.MCPState+" at every session start", cmp.Or(strings.Join(t.MCP, " · "), "no session init read"), connected)
 	}
 	if s.MCP {
-		row("Canyon reached by", "its MCP tools", fmt.Sprintf("%d tool calls · %d canyon in a shell", t.ByTool, t.ByShell), t.ByTool > 0 && t.ByShell == 0)
+		want := "its MCP tools"
+		if s.Remote {
+			want = "its tools at Canyon's URL"
+		}
+		row("Canyon reached by", want, fmt.Sprintf("%d tool calls · %d canyon in a shell", t.ByTool, t.ByShell), t.ByTool > 0 && t.ByShell == 0)
+	}
+	for _, e := range s.Tools {
+		want, n := e.Name, t.Tools[e.Name]
+		if e.Once {
+			want += " once"
+		}
+		row("tool", want, fmt.Sprintf("%s: %d calls", e.Name, n), n == 1 || n > 1 && !e.Once)
+	}
+	if len(s.Secrets) > 0 {
+		got := "never"
+		if t.SecretSeen {
+			got = "in a transcript"
+		}
+		row("secret's value", "never in a transcript", got, !t.SecretSeen)
 	}
 	if s.PromoteFrom != 0 {
 		want, ok := "none", true

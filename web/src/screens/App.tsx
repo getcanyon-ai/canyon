@@ -110,7 +110,7 @@ function cleared(run: RunRead | Error | undefined): Cell {
 // One app: what runs where, the button that moves preview to production, and the checklist that
 // decides it. The checklist, its verdicts and the stage are the server's, never worked out here.
 // `run` pins the findings to that run; the promote button still sends the newest.
-export function App({ id, run: pinned = null, auth, outbound = false }: { id: string; run?: string | null; auth: "oidc" | "off" | null; outbound?: boolean }) {
+export function App({ id, run: pinned = null, auth, outbound = false, secret }: { id: string; run?: string | null; auth: "oidc" | "off" | null; outbound?: boolean; secret?: { name: string | null; env: string | null } }) {
   const { viewer, admin } = useContext(RailContext);
   const [project, setProject] = useState<AppRead | Reduced | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
@@ -788,7 +788,7 @@ export function App({ id, run: pinned = null, auth, outbound = false }: { id: st
             {/* What Canyon adds under the app, as its known-vulnerable check reads it: a contributor's and up (design/PERMISSIONS.md). */}
             <SystemLibraries id={id} envs={status.envs} />
             {/* The app's secrets by name, and the form that sets one: a contributor's and up (design/specs/mcp.md §10.1). */}
-            <Secrets id={id} />
+            <Secrets id={id} asked={secret} />
             <AppSections project={project} envs={status.envs} refreshed={() => void tick.current()} />
           </>
         )}

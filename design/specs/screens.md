@@ -278,7 +278,9 @@ wider, headed `Production approval`.
 - **The heading is the question, naming what ships** (amended 2026-11-20, D5): `Promote <app> <version> to
   production?`, or for a rollback review's approval (the read's `rollback`) `Put <app> <version> back in production,
   replacing <version>?`, without `, replacing …` where production runs nothing: the CLI's question and
-  `canyon_promote`'s, byte for byte. Before the read answers, `Promote this app to production?`. A rollback's says `Canyon puts back the code, not the data, the secrets or the outbound rules.` under
+  `canyon_promote`'s, byte for byte. Before the read answers, and when it is refused, `A request to change production`: the
+  page can't tell a promotion from a put-back then (amended 2026-11-21, the v0.11.0 role walk: a refused put-back read
+  `Promote this app to production?`). A rollback's says `Canyon puts back the code, not the data, the secrets or the outbound rules.` under
   the versions where a promotion says D5's no-rebuild sentence: it puts back production's own earlier image, never preview's.
 - **Who asked, and from where, comes first**: `<name> asked from the CLI, <time>.` beside the
   asker's initials — the request's actor and channel. A person who did not expect a request has the
@@ -991,6 +993,40 @@ An environment the read answers `404` (nothing deployed) or `403` has no region;
 whole, says `Canyon couldn't read what runs in <env>: <error>`, never nothing found. While every environment reads
 `not_scanned` there is no card: the rule is off by default and Canyon lists no image then. A read-only member and a
 responder with no grant never read it, nor see the card (the reduced page reads no image).
+
+### Connect an agent (design/specs/mcp.md §12)
+
+On Settings › People & sign-in, directly above the sessions list, so an agent is connected and disconnected in one
+place. Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
+connects it, and each one you connect is listed under Sessions, where you can disconnect it.`
+
+Two parts, the same for every member (amended 2026-11-21: the laptop is the CLI, the cloud the address, and the address
+is never offered for a laptop):
+
+- **`On your laptop`**: three numbered steps, each a line to run, this host filled in from the page's own address:
+  `Install the CLI` (`curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh`),
+  `Sign in to this Canyon` (`canyon login <host>`), `Set up your coding agents` (`canyon skill install`); then `The last
+  step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's
+  tools. They load the next time each agent starts.` Every host shows them, sign-in on or off.
+- **`In the cloud`**: `For agents that run on their vendor's machines. They review and deploy what you've pushed to
+  GitHub. On a laptop, use the CLI above: one way per agent.` Then `Canyon's address for agents`, the protected-resource
+  metadata's `resource`, exactly, read-only, with `Copy` (`Address copied`, or `Couldn't copy. The browser did not allow
+  it.`), and `The first time an agent uses it, Canyon opens in your browser and asks you to allow it.` Then each cloud
+  agent (design/specs/mcp.md §2.4):
+  - `Claude Code on the web`: `Add this address as a custom connector in claude.ai. On Team and Enterprise plans, an
+    owner of your claude.ai organization adds it once, and each person connects it. The connector also shows up in
+    Claude Code on laptops, where the server canyon skill install set up stays the one to use.`, then `Anthropic's
+    connector docs`, a link to https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp.
+  - `Cursor's cloud agents`: `A team admin adds this address as a team MCP server in Cursor's dashboard, under Plugins &
+    MCPs.`
+  - Codex: `Codex's cloud tasks can't connect to an MCP server yet. Use Codex on your laptop, with the CLI above.`
+
+  No agent's command, install link or managed settings for the address: each of those reaches a laptop. Where the
+  metadata answers `404`, no address and `Agents can't connect to this Canyon by its address, because it isn't served
+  over https. Use the CLI above.`; any other failure is the read's own sentence, and no address.
+- **Sign-in off.** Under `In the cloud`, no address: `Sign-in is off on this Canyon, so it gives agents no address:
+  anyone who could reach it would act as an admin. Use the CLI above. A team's Canyon with sign-in gives agents an
+  address.`
 
 ### Secrets (design/specs/mcp.md §10.1)
 

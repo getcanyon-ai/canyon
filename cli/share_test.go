@@ -239,7 +239,7 @@ func TestTeamRequiredNamesTheOwnerAndTheCommandTheyRun(t *testing.T) {
 		{refusal, http.StatusOK, "Ask Dana Whitfield, an owner of claims-portal, to run: canyon share tomas@meridian.example --level contributor --app claims-portal"},
 		{ownerless, http.StatusOK, "Ask an admin to run: canyon share tomas@meridian.example --level contributor --app claims-portal"},
 		{grouped, http.StatusOK, "Ask a member of the claims-team group, which owns claims-portal, to run: canyon share tomas@meridian.example --level contributor --app claims-portal"},
-		{refusal, http.StatusInternalServerError, "Ask Dana Whitfield to add you to claims-portal"},
+		{refusal, http.StatusInternalServerError, "Ask Dana Whitfield to add you to claims-portal's team: on its page in Canyon, use Ask for access."}, // the host's own sentence
 	} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/api/v1/preferences" {

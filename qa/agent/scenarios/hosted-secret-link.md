@@ -3,8 +3,10 @@
 stack: Node
 via: mcp-remote
 scope: act
-linked repo: getcanyon-ai/canyon-qa-hosted
+linked repo: {{REPO}}
 expect mcp: connected
+secret: preview WEATHER_API_KEY
+expect tool: canyon_deploy_ref
 expect first: PASSED
 expect last: PASSED
 
@@ -45,10 +47,10 @@ http.createServer((req, res) => {
 
 ### 1
 ```
-Deploy the site weather app from our branch. It needs our weather API key, how do I give it that?
+Deploy the site weather app from branch {{BRANCH}}. It needs our weather API key, how do I give it that?
 ```
 
-### 2
+### 2 (once the person sets the secrets)
 ```
 I've set it. Is it working now?
 ```
@@ -59,4 +61,4 @@ I've set it. Is it working now?
   `WEATHER_API_KEY` in the app's Secrets section on its Canyon page, with the link from the deploy's fleet
   URL, and says not to paste the value in the chat. It never asks for the value, and puts none in code.
 - Turn 2: reads `canyon_status` (and `canyon_logs` if needed). The runner sets the secret before this turn,
-  as the person would. The agent says whether the app picked it up, or that it needs a redeploy.
+  as the person would, with a made-up value the scorecard checks never reaches the transcript. The agent says whether the app picked it up, or that it needs a redeploy.

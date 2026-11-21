@@ -309,6 +309,21 @@ export async function getMaskedLogs(app: string, env: "preview" | "prod", lines:
 // The Open route the sign-in page reads the org's name from; the bundle carries no configuration.
 // `auth` is what tells the shell whether a null `onboarded_at` means a host nobody has set up or a
 // demo host with no authentication at all, where the row's setup marker is null and stays null.
+// The address MCP clients connect to: the protected-resource metadata's resource, exactly (contracts/routes.md, OAuth). null
+// where the host serves none (404: sign-in off, or a public URL that isn't https); an answer without one is a failure.
+export async function getAgentAddress(): Promise<string | null> {
+  const path = "/.well-known/oauth-protected-resource/mcp";
+  const res = await fetch(path, { headers: { accept: "application/json" } });
+  if (res.status === 404) return null;
+  const body: unknown = await res.json().catch(() => null);
+  const resource = (body as { resource?: unknown } | null)?.resource;
+  const url = typeof resource === "string" && URL.canParse(resource) ? new URL(resource) : null;
+  // the server serves it on https, or plain http on a loopback host alone (the laptop): anything else is never shown
+  if (!res.ok || url === null || url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) {
+    throw new Error(`GET ${path} answered ${res.status} without an address`);
+  }
+  return resource as string;
+}
 export const getAuthConfig = async () => (await fetch("/auth/config")).json() as Promise<{ org: string; auth: "oidc" | "off" }>;
 // Revokes the caller's session, then the app shows the sign-in page as it would on any 401.
 // The sign-in page this lands on says the company account is still signed in: only a chosen sign-out does.

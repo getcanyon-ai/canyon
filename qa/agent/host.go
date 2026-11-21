@@ -243,8 +243,8 @@ func restrict(home, app string, modes []egressMode) error {
 // hostDBProd refuses a host whose db_prod, as the preferences read answers it to the tester (contracts/routes.md,
 // GET /api/v1/preferences), is not want, a db prod: line; "" wants nothing. Only an admin sets it, from a browser, so a
 // batch runs the scenarios its host's setting serves, and a scenario on another stops before its app is made.
-func hostDBProd(home, want string) error {
-	if want == "" {
+func hostDBProd(home, want, approval string) error {
+	if want == "" && approval == "" {
 		return nil
 	}
 	s, err := signedIn(home)
@@ -256,13 +256,17 @@ func hostDBProd(home, want string) error {
 		return err
 	}
 	var p struct {
-		DBProd *string `json:"db_prod"`
+		DBProd       *string `json:"db_prod"`
+		ProdApproval *bool   `json:"prod_approval"`
 	}
-	if a.status != http.StatusOK || json.Unmarshal([]byte(a.said), &p) != nil || p.DBProd == nil {
-		return fmt.Errorf("GET /api/v1/preferences names no db_prod: %s", a)
+	if a.status != http.StatusOK || json.Unmarshal([]byte(a.said), &p) != nil || p.DBProd == nil || p.ProdApproval == nil {
+		return fmt.Errorf("GET /api/v1/preferences names no db_prod or prod_approval: %s", a)
 	}
-	if *p.DBProd != want {
+	if want != "" && *p.DBProd != want {
 		return fmt.Errorf("db prod: %s, and the host's db_prod is %s: no screen sets it yet (#2121), so set it on the host, then run this scenario in its own batch", want, *p.DBProd)
+	}
+	if on := approval == "on"; approval != "" && *p.ProdApproval != on {
+		return fmt.Errorf("prod approval: %s, and the host's is otherwise: an admin sets it in the dashboard, then run this scenario in its own batch", approval)
 	}
 	return nil
 }

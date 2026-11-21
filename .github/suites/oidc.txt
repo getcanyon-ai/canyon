@@ -24,6 +24,11 @@ web/src/screens/Approve*
 web/src/screens/OrgSettings*
 web/src/screens/Settings*
 web/src/ui/Finding*
+web/src/ui/Headline*
+web/src/ui/Need*
+web/src/screens/App.tsx
+web/src/screens/Shell*
+cmd/canyon-server/team.go
 cmd/canyon-server/routes_playbooks.go
 cmd/canyon-server/routes_custom_rules.go
 cmd/canyon-server/routes_promotion_approvals.go
@@ -33,6 +38,22 @@ e2e/ui/package*.json
 web/src/screens/Secrets*
 web/src/api.ts
 web/src/strings.ts
+# an MCP client through Canyon's OAuth and its own /mcp (e2e/oidc/oauth_test.go, e2e/ui/consent): consent, tokens, the tools
+e2e/ui/consent/**
+cmd/canyon-server/oauth.go
+cmd/canyon-server/mcp.go
+cmd/canyon-server/session.go
+cmd/canyon-server/routes_packages_ref.go
+cmd/canyon-server/routes_projects.go
+cmd/canyon-server/routes_repositories.go
+cli/mcp.go
+cli/mcp_remote.go
+internal/mcptools/**
+github-app/ref.go
+web/src/screens/Consent*
+web/src/screens/SignIn*
+db/migrations/0147_oauth.sql
+db/migrations/0148_oauth_rotation.sql
 # the team setup and the stack it runs on: its Caddyfile is the guide's own block
 deploy/docker/**
 docs/src/content/docs/self-host/docker.md

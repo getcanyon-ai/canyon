@@ -3,7 +3,7 @@
 stack: Node
 via: mcp-remote
 scope: act
-linked repo: getcanyon-ai/canyon-qa-hosted
+linked repo: {{REPO}}
 deployed: preview
 expect mcp: connected
 expect first: PROMOTED prod

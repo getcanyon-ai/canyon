@@ -79,6 +79,22 @@ func TestPackRef(t *testing.T) {
 		rows(t, pool, "SELECT count(*) FROM packages WHERE id = '"+checked.Package+"' AND source_kind = 'check'") != 1 {
 		t.Fatalf("a check's package is never current: the current one is %s (%v)", current, err)
 	}
+	// GitHub resolves a commit id across the repository's whole network, a fork's pull request's head among them: a
+	// commit id is taken when it's on the default branch, and a branch or tag of the repository itself always
+	if byID, err := courier.PackRef(ctx, "claims-portal", refs["main"], false, carol, action); err != nil || byID.Package != got.Package {
+		t.Errorf("main's commit by its id: %+v %v", byID, err)
+	}
+	const forked = "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0"
+	for _, check := range []bool{false, true} {
+		out, err := courier.PackRef(ctx, "claims-portal", forked, check, carol, action)
+		if err != nil || out.Refused != "not_own" || out.Package != "" ||
+			out.Message != "f0f0f0f isn't on acme/claims-portal's own branches: name one of its branches or tags, or a commit on main." {
+			t.Errorf("a commit off the repository's branches, check %v: %+v %v", check, out, err)
+		}
+	}
+	if rows(t, pool, "SELECT count(*) FROM packages WHERE source_ref = '"+forked+"'") != 0 {
+		t.Error("a fork's commit was packaged")
+	}
 	if _, err := courier.PackRef(ctx, "claims-portal", "no-such-branch", false, carol, action); !errors.Is(err, ErrRefNotFound) {
 		t.Errorf("a ref GitHub doesn't know: %v", err)
 	}

@@ -89,7 +89,7 @@ func runFeedback(_ context.Context, a *app, args []string) int {
 // askS3 adds the ask line under an upload refused while canyon.toml declares an s3 resource this host
 // doesn't provision: the refusal's code and the host's own menu say so, never the message's words.
 func (a *app) askS3(ctx context.Context, client *Client, dir string, err error) {
-	if _, refused := refusal(err, http.StatusBadRequest, "invalid_resources"); !refused {
+	if _, refused := refusal(err, http.StatusBadRequest, "invalid_resources"); !refused || a.remote { // on /mcp there is no canyon.toml to read
 		return
 	}
 	if p, perr := readProject(dir); perr != nil || !slices.Contains(p.Types, "s3") {

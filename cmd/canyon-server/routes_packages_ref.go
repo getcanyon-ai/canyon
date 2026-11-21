@@ -85,6 +85,9 @@ func (a *app) packageFromRepository(w http.ResponseWriter, r *http.Request) {
 	}
 	var refused *declarationError
 	switch {
+	case got.Refused == "not_own": // a commit off the repository's own branches, a fork's: as no such ref of it
+		writeErr(w, http.StatusNotFound, "ref_not_found", got.Message, nil)
+		return
 	case got.Refused == "folder_not_found":
 		writeErr(w, http.StatusNotFound, "folder_not_found", got.Message, nil)
 		return

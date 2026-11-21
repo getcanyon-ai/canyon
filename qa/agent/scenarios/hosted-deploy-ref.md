@@ -3,9 +3,10 @@
 stack: Node
 via: mcp-remote
 scope: act
-linked repo: getcanyon-ai/canyon-qa-hosted
+linked repo: {{REPO}}
 expect mcp: connected
 expect tool: canyon_check_ref
+expect tool: canyon_deploy_ref
 expect first: BLOCKED secrets.client-bundle
 expect last: PASSED
 
@@ -70,7 +71,7 @@ window.teamStats = {
 
 ### 1
 ```
-I pushed the lunch poll to our branch. Have Canyon check it, and deploy it if it's fine.
+I pushed the lunch poll to branch {{BRANCH}}. Have Canyon check it, and deploy it if it's fine.
 ```
 
 ### 2 (only if the last result is BLOCKED or FAILED)

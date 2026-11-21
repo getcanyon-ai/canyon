@@ -98,10 +98,18 @@ type app struct {
 	// transport is how this invocation's requests were asked for, sent as Canyon-Transport: canyon mcp sets
 	// transportMCPLocal before its first call; every other verb leaves it "", the CLI's (design/specs/mcp.md §7).
 	transport string
+	// remote is a tool call on canyon-server's /mcp (RemoteServer): there is no directory, no home and no file of
+	// this machine's there, so getwd refuses, config is empty, getenv answers nothing, and every request goes to the
+	// client RemoteServer was given.
+	remote bool
+	ref    string // a remote check or deploy's: the ref of the app's linked repository Canyon packages, in place of a directory
 }
 
 // getwd is the directory the verb runs in.
 func (a *app) getwd() (string, error) {
+	if a.remote {
+		return "", errNoDirectory
+	}
 	if a.wd != "" {
 		return a.wd, nil
 	}

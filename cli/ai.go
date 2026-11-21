@@ -49,14 +49,13 @@ const (
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Before the next deploy, ask the user to revoke it. If nothing reads it, delete it\n" +
 		"from the code; otherwise the user makes a new value where it is issued and sets it\n" + // the person makes it: never the agent (the bed journeys)
-		"with canyon secret set NAME in their own terminal, NAME being the variable the code\n" +
+		"with %s, NAME being the variable the code\n" +
 		"reads. Never make one up yourself.\n"
 	aiRollbackRotateStep = "\n" + // a rollback's: the deletion is a new version's, never the one put back (its step 2)
 		"A blocking finding is a secret that was in the code, so it has leaked: %s.\n" +
 		"Ask the user to revoke it. If nothing reads it, delete it from the code in a new\n" +
 		"version shipped with canyon deploy, never in %s; otherwise the user makes a new\n" +
-		"value where it is issued and sets it with canyon secret set NAME in their own\n" +
-		"terminal, NAME being the variable the code reads. Never make one up yourself.\n"
+		"value where it is issued and sets it with %s, NAME being the variable the code reads. Never make one up yourself.\n"
 	aiShippedOutcome = "outcome: this app is deployed and serving traffic. Every blocking finding carries an\n" +
 		"approval, which is the only way a blocked run deploys.\n"
 	aiShippedSteps = "NEXT STEPS:\n" +
@@ -84,13 +83,13 @@ const (
 		"1. Read the last lines above: they are the build's own and say what failed. Fix the app's code if the error is in it; if the build lacked a library or tool, tell the user, since the host may have to add it. It is not a policy block.\n" +
 		"2. Run: canyon deploy\n"
 	aiStartSteps = "NEXT STEPS:\n" +
-		"1. Fix why the app stopped (the lines above), or set a value it needs with canyon secret set.\n" +
+		"1. Fix why the app stopped (the lines above), or set a value it needs with %s.\n" +
 		"2. Run: canyon deploy\n"
 	aiBuildQuietSteps = "NEXT STEPS:\n" +
-		"1. The build failed without output: run canyon deploy again in a terminal to see the log, then fix it.\n" +
+		"1. The build failed without output: %s, then fix it.\n" +
 		"2. Run: canyon deploy\n"
 	aiStartQuietSteps = "NEXT STEPS:\n" +
-		"1. The app stopped without output: run canyon deploy again in a terminal to see its log, then fix it, or set a value it needs with canyon secret set.\n" +
+		"1. The app stopped without output: %s, then fix it, or set a value it needs with %s.\n" +
 		"2. Run: canyon deploy\n"
 	aiAgainSteps = "NEXT STEPS:\n" +
 		"1. Run the same command again.\n"
@@ -180,9 +179,9 @@ func (a *app) aiVerdict(run checkRun, code int) int {
 		}
 		switch {
 		case len(leaked) > 0 && run.Rollback != nil: // a version put back's leaked as much as any
-			steps += fmt.Sprintf(aiRollbackRotateStep, strings.Join(leaked, ", "), run.Rollback.version)
+			steps += fmt.Sprintf(aiRollbackRotateStep, strings.Join(leaked, ", "), run.Rollback.version, a.secretSet("canyon secret set NAME in their own\nterminal", ""))
 		case len(leaked) > 0: // a fixed leak still leaked (#1675)
-			steps += fmt.Sprintf(aiRotateStep, strings.Join(leaked, ", "))
+			steps += fmt.Sprintf(aiRotateStep, strings.Join(leaked, ", "), a.secretSet("canyon secret set NAME in their own terminal", ""))
 		}
 		var rules []string // one line a rule, its places beside it in the block's order: one a place repeated the id (#2890)
 		places := map[string][]string{}
@@ -374,16 +373,16 @@ func (a *app) aiFailed(run checkRun) int {
 	case reason == "detect":
 		steps = aiDetectSteps(run.Result.Errored, len(run.NotPacked) > 0)
 	case reason == "build" && quiet:
-		steps = aiBuildQuietSteps
+		steps = fmt.Sprintf(aiBuildQuietSteps, a.seeTheLog("the log"))
 	case reason == "build":
 		steps = aiBuildSteps
 		if dep, ok := pinned(last); ok {
 			steps = "NEXT STEPS:\n1. The app pins " + cmp.Or(dep, "a version") + " that this build doesn't offer; the line above lists the ones it does. Change the pin to one of them. This is not a policy block.\n2. Run: canyon deploy\n"
 		}
 	case reason == "start" && quiet:
-		steps = aiStartQuietSteps
+		steps = fmt.Sprintf(aiStartQuietSteps, a.seeTheLog("its log"), a.secretSet("canyon secret set", ""))
 	case reason == "start":
-		steps = aiStartSteps
+		steps = fmt.Sprintf(aiStartSteps, a.secretSet("canyon secret set", ""))
 	case reason == "no_room":
 		steps = aiNoRoomSteps
 	case reason == "scan_no_room":

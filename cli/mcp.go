@@ -20,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/getcanyon-ai/canyon/internal/mcptools"
+	"github.com/getcanyon-ai/canyon/internal/names"
 )
 
 // runMCP serves Canyon's tools to a coding agent over MCP on stdin and stdout (design/specs/mcp.md §1),
@@ -56,49 +57,7 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 			continue
 		}
 		t := mcptools.Local(t)
-		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			var args struct { // every tool's, each schema taking its own
-				App, Env, Version, Reason, Dir string
-				Lines                          int
-				Confirm                        bool
-			}
-			if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
-				return toolRefused(err), nil
-			}
-			dir, err := a.toolDir(args.Dir)
-			if err != nil {
-				return toolRefused(err), nil
-			}
-			switch t.Name {
-			case mcptools.Rules:
-				return a.mcpRules(ctx, dir, args.App), nil
-			case mcptools.Status:
-				out, err := a.verbIn(ctx, dir, args.App, command{name: "status", json: true, run: runStatus}, "--format", "json")
-				if err != nil {
-					return toolRefused(err), nil
-				}
-				text := out
-				if appSpoke(out) { // the JSON keeps the host's shape: the first line says which of its words are the app's
-					text = statusAppSays + "\n" + out
-				}
-				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil // text alone: mcpVerdict says why
-			case mcptools.Check:
-				return a.mcpVerdict(ctx, req, dir, command{name: "check", run: runCheck}), nil
-			case mcptools.Deploy:
-				return a.mcpVerdict(ctx, req, dir, command{name: "deploy", run: runDeploy}), nil // canyon deploy writes the app's id, never the agent
-			case mcptools.Promote:
-				return a.mcpPromote(ctx, req, dir, args.App, args.Version, args.Reason, args.Confirm), nil
-			}
-			verb := []string{"--format", "ai", "--redaction", "masked", "--env", args.Env, "--lines", strconv.Itoa(args.Lines)}
-			if args.App != "" {
-				verb = append(verb, "--app", args.App)
-			}
-			out, err := a.verbIn(ctx, dir, "", command{name: "logs", run: runLogs}, verb...)
-			if err != nil {
-				return toolRefused(err), nil
-			}
-			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: out}}}, nil
-		})
+		s.AddTool(t, a.mcpTool(t))
 	}
 	s.AddResource(&mcp.Resource{URI: mcptools.ManifestURI, Name: "manifest", Title: "Canyon's rules", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.ManifestAppTemplate, Name: "manifest-app", Title: "Canyon's rules for one app", MIMEType: "application/json"}, a.manifestResource)
@@ -106,6 +65,67 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	s.AddPrompt(&mcp.Prompt{Name: tourPrompt, Title: "Canyon's guided tour", Description: "A chapter of the guided tour on the laptop demo, as canyon demo tour gives it to an agent: 1, 2, 3 or end, the visitor's own chapter when left out.",
 		Arguments: []*mcp.PromptArgument{{Name: "chapter", Description: "1, 2, 3 or end; left out, the chapter the visitor is on"}}}, a.tourPromptChapter)
 	return s
+}
+
+// mcpTool is a tool's handler on either server: the verb it stands for, in the tool's directory locally, and on
+// /mcp for the app it names, which there is always given.
+func (a *app) mcpTool(t *mcp.Tool) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args struct { // every tool's, each schema taking its own
+			App, Env, Version, Reason, Dir, Ref, Run string
+			Lines                                    int
+			Confirm                                  bool
+		}
+		if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
+			return toolRefused(err), nil
+		}
+		dir := ""
+		if a.remote { // no directory names the app on /mcp: the tool does, as an app id, but canyon_rules may name none
+			if (args.App != "" || t.Name != mcptools.Rules) && (!names.ValidProject(args.App) || len(args.App) > maxProjectName) {
+				return toolRefused(fmt.Errorf("app %q is not a Canyon app id: lowercase letters, digits and dashes, beginning with a letter, at most %d characters", args.App, maxProjectName)), nil
+			}
+		} else {
+			var err error
+			if dir, err = a.toolDir(args.Dir); err != nil {
+				return toolRefused(err), nil
+			}
+		}
+		switch t.Name {
+		case mcptools.Rules:
+			return a.mcpRules(ctx, dir, args.App), nil
+		case mcptools.Status:
+			out, err := a.verbIn(ctx, dir, args.App, command{name: "status", json: true, run: runStatus}, "--format", "json")
+			if err != nil {
+				return toolRefused(err), nil
+			}
+			text := out
+			if appSpoke(out) { // the JSON keeps the host's shape: the first line says which of its words are the app's
+				text = statusAppSays + "\n" + out
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil // text alone: mcpVerdict says why
+		case mcptools.Check:
+			return a.mcpVerdict(ctx, req, dir, "", "", command{name: "check", run: runCheck}), nil
+		case mcptools.Deploy:
+			return a.mcpVerdict(ctx, req, dir, "", "", command{name: "deploy", run: runDeploy}), nil // canyon deploy writes the app's id, never the agent
+		case mcptools.CheckRef:
+			return a.mcpVerdict(ctx, req, "", args.App, args.Ref, command{name: "check", run: runCheck}), nil
+		case mcptools.Review:
+			return a.mcpReview(ctx, args.App, args.Run), nil
+		case mcptools.DeployRef:
+			return a.mcpVerdict(ctx, req, "", args.App, args.Ref, command{name: "deploy", run: runDeploy}), nil
+		case mcptools.Promote:
+			return a.mcpPromote(ctx, req, dir, args.App, args.Version, args.Reason, args.Confirm), nil
+		}
+		verb := []string{"--format", "ai", "--redaction", "masked", "--env", args.Env, "--lines", strconv.Itoa(args.Lines)}
+		if args.App != "" {
+			verb = append(verb, "--app", args.App)
+		}
+		out, err := a.verbIn(ctx, dir, "", command{name: "logs", run: runLogs}, verb...)
+		if err != nil {
+			return toolRefused(err), nil
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: out}}}, nil
+	}
 }
 
 // tourPrompt is canyon_tour: each chapter of canyon demo tour as an MCP prompt (design/specs/mcp.md §11).
@@ -245,7 +265,7 @@ func (a *app) readManifest(ctx context.Context, named string, within time.Durati
 		return m, nil, err
 	}
 	a.remember()
-	m.App, m.Outbound = named, viaCanyon(ctx, client, within-a.clock.now().Sub(began))
+	m.App, m.Outbound, m.Remote = named, viaCanyon(ctx, client, within-a.clock.now().Sub(began)), a.remote
 	return m, raw, nil
 }
 
@@ -254,8 +274,12 @@ func (a *app) readManifest(ctx context.Context, named string, within time.Durati
 func (a *app) sub(ctx context.Context, dir string) *app {
 	var out, errs strings.Builder
 	render, _ := resolveRender(string(FormatAI), a.getenv, false) // ai is a format resolveRender always takes
-	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir,
+	c := &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir,
 		transport: a.transport}
+	if a.remote { // on /mcp: the server's client, its own cookie-less copy per call, and still nothing of this machine's
+		c.http, c.conf, c.noticed, c.remote, c.wd = remoteClient(a.http.Base, a.http.HTTP.Transport), &config{}, true, true, ""
+	}
+	return c
 }
 
 // appSpoke is whether a status read's JSON carries the app's own words: an environment's answered said or error.
@@ -299,9 +323,10 @@ func (a *app) said() string {
 // structuredContent: Claude Code hands a model a result's structuredContent in place of its text, and the block's NEXT
 // STEPS — what to tell the user, when to stop, who approves, what to revoke, the playbook to read, who can open the app —
 // are in the text alone (the bed journeys, v0.11.0).
-func (a *app) mcpVerdict(ctx context.Context, req *mcp.CallToolRequest, dir string, verb command, args ...string) *mcp.CallToolResult {
+func (a *app) mcpVerdict(ctx context.Context, req *mcp.CallToolRequest, dir, named, ref string, verb command, args ...string) *mcp.CallToolResult {
 	c := a.sub(ctx, dir)
-	c.handoff, c.onRow = mcptools.Handoff, progress(ctx, req)
+	c.named, c.ref = named, ref // on /mcp: the app the tool names, and the ref of its linked repository Canyon packages
+	c.handoff, c.onRow = handoffOf(a), progress(ctx, req)
 	code := c.run(verb, append([]string{"--format", "ai"}, args...)...)
 	return &mcp.CallToolResult{IsError: code == exitError, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
 }
@@ -312,7 +337,7 @@ func (a *app) mcpVerdict(ctx context.Context, req *mcp.CallToolRequest, dir stri
 // again with the answer, which the verb, reading the receipt again, takes as the person's.
 func (a *app) mcpPromote(ctx context.Context, req *mcp.CallToolRequest, dir, named, version, reason string, confirm bool) *mcp.CallToolResult {
 	c := a.sub(ctx, dir)
-	c.named, c.handoff = named, mcptools.Handoff
+	c.named, c.handoff = named, handoffOf(a)
 	args := []string{"--format", "ai", "--env", "prod"}
 	if version != "" {
 		args = append(args, "--version", version)
@@ -321,7 +346,7 @@ func (a *app) mcpPromote(ctx context.Context, req *mcp.CallToolRequest, dir, nam
 		args = append(args, "--reason", reason)
 	}
 	var wanted, id string
-	if caps := req.Session.InitializeParams().Capabilities; caps != nil && caps.Elicitation != nil { // a client that can ask the person always does: confirm is the agent's word, not theirs
+	if p := req.Session.InitializeParams(); p != nil && p.Capabilities != nil && p.Capabilities.Elicitation != nil { // a client that can ask the person always does: confirm is the agent's word, not theirs
 		c.elicit = func(question, ships string) (asked, yes bool) {
 			id = promoteAsk(question, ships)
 			if answer, answered := req.Params.InputResponses[id].(*mcp.ElicitResult); answered { // an answer to this question about this release, and no other

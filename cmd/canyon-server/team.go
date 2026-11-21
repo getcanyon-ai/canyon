@@ -161,9 +161,11 @@ func (a *app) teamRequired(ctx context.Context, w http.ResponseWriter, q querier
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return true
 	}
-	said := "Ask " + askWho(owners, groups) + " to add you to " + id
-	if level == "viewer" { // the read-only member's page has the button that asks them (#2774)
-		said += "'s team: on its page in Canyon, use Ask to join its team."
+	// Each says the button on the app's page that asks: the read-only member's (#2774), and the no-access page's
+	// (the v0.11.0 role walk), so a refusal shown anywhere ends in a next step.
+	said := "Ask " + askWho(owners, groups) + " to add you to " + id + "'s team: on its page in Canyon, use Ask for access."
+	if level == "viewer" {
+		said = "Ask " + askWho(owners, groups) + " to add you to " + id + "'s team: on its page in Canyon, use Ask to join its team."
 	}
 	writeErr(w, http.StatusForbidden, "team_required", said, map[string]any{"owners": owners, "owner_groups": groups})
 	deny(ctx, "team_required", id)

@@ -37,6 +37,9 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Who is reading, for the foot of the rail on every page. Only a host with sign-in has somebody to
   // name; the fleet read is where the contract answers it (routes.md, `viewer` on GET /fleet).
   const [viewer, setViewer] = useState<Viewer | null>(null);
+  // The reader's role as the setup gate's preferences read names it, which answers before the fleet's: the rail offers an
+  // admin Guardrails on its first paint (the v0.11.0 role walk). The fleet's viewer, once read, is the one that counts.
+  const [role, setRole] = useState<string | null>(null);
   const fleet = !["#/apps/", "#/guardrails", "#/audit", "#/settings", "#/device", "#/approve", "#/oauth", "#/no-access/"].some((screen) => hash.startsWith(screen));
   const away = useRef(false);
   // The name is read again on each return to the fleet: a rename under Guardrails is the heading on
@@ -55,6 +58,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
       if (live) { setOrg(config.org); setAuth(config.auth); }
       if (config.auth !== "oidc") return null;
       const record = await getPreferences();
+      if (live) setRole(record.viewer?.role ?? null);
       answered();
       return record.onboarded_at === null ? record : null;
     };
@@ -97,7 +101,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Finishing writes the row, so the host has left the setup state and the fleet is served.
   if (setup !== null) return <Onboarding record={setup} done={() => setSetup(null)} />;
   // Guardrails is offered once the reader is known to be an admin: everyone is, on a host with sign-in off.
-  return <RailContext value={{ org, viewer, admin: auth === "off" || viewer?.role === "admin", needs }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
+  return <RailContext value={{ org, viewer, admin: auth === "off" || (viewer?.role ?? role) === "admin", needs }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
 }
 
 function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "oidc" | "off" | null }) {
@@ -106,9 +110,10 @@ function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "
   // screen an id it would have to invent a request around.
   if (hash.startsWith("#/apps/")) {
     // #/apps/<id>/outbound is the link an egress refusal carries (contracts/routes.md, The check): the app's page,
-    // at its Outbound card. An app id never holds a slash.
+    // at its Outbound card; #/apps/<id>/secrets?name=&env= canyon_secret_link's, at its Secrets form. An app id never holds a slash.
     const [id = "", section] = hash.slice("#/apps/".length).split("?")[0]!.split("/");
-    if (id !== "") return <App key={hash} id={id} run={new URLSearchParams(hashQuery()).get("run")} auth={auth} outbound={section === "outbound"} />;
+    const q = new URLSearchParams(hashQuery());
+    if (id !== "") return <App key={hash} id={id} run={q.get("run")} auth={auth} outbound={section === "outbound"} secret={section === "secrets" ? { name: q.get("name"), env: q.get("env") } : undefined} />;
   }
   if (hash.startsWith("#/guardrails")) return <Guardrails />;
   if (hash.startsWith("#/audit")) return <AuditTrail key={hash} query={hashQuery()} />;

@@ -99,7 +99,7 @@
     "team_required": {
       "type": "object", "additionalProperties": false, "required": ["error", "message", "owners", "owner_groups"],
       "properties": {
-        "error": { "const": "team_required" }, "message": { "type": "string", "pattern": "^Ask .+ to add you to [a-z]([a-z0-9-]*[a-z0-9])?('s team: on its page in Canyon, use Ask to join its team\\.)?$" },
+        "error": { "const": "team_required" }, "message": { "type": "string", "pattern": "^Ask .+ to add you to [a-z]([a-z0-9-]*[a-z0-9])?'s team: on its page in Canyon, use (Ask to join its team|Ask for access)\\.$" },
         "owners": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["kind", "subject", "display"], "properties": { "kind": { "const": "person" }, "subject": { "type": "string" }, "display": { "type": "string", "minLength": 1 } } } },
         "owner_groups": { "description": "The groups holding a grant at owner, by name, sorted (routes.md, App teams): whom to ask when no person owns the app.", "type": "array", "items": { "type": "string", "minLength": 1 } }
       }

@@ -65,6 +65,13 @@ func (c *Courier) PackRef(ctx context.Context, project, ref string, check bool, 
 	if err != nil {
 		return Packed{}, fmt.Errorf("%w: %w", ErrGitHub, err)
 	}
+	own, onto, err := gh.OwnCommit(ctx, in.Installation, owner, repo, ref, sha)
+	if err != nil {
+		return Packed{}, fmt.Errorf("%w: %w", ErrGitHub, err)
+	}
+	if !own { // a fork's commit, which the webhook never packages either (hook.go): nothing is packaged, a check's neither
+		return Packed{Commit: sha, Refused: "not_own", Message: sha[:7] + " isn't on " + fullName + "'s own branches: name one of its branches or tags, or a commit on " + onto + "."}, nil
+	}
 	in.Owner, in.Repo, in.SHA, in.Project = owner, repo, sha, project
 	tree := ""
 	if in.Folder != "" {
@@ -115,4 +122,57 @@ func (c *Client) Commit(ctx context.Context, installation int64, owner, repo, re
 		return "", fmt.Errorf("github: %s/%s's %s answered no commit", owner, repo, ref)
 	}
 	return out.SHA, nil
+}
+
+// OwnCommit is whether ref names sha in owner/repo itself: one of its branches or tags, or a commit on its default
+// branch, which it answers too. GitHub resolves a commit id, and a ref such as pull/1/head, across the repository's
+// whole network, a fork's pull request's head among them, so what Commit resolved proves nothing of whose it is.
+func (c *Client) OwnCommit(ctx context.Context, installation int64, owner, repo, ref, sha string) (own bool, defaultBranch string, err error) {
+	segments := strings.Split(ref, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+	name := strings.Join(segments, "/")
+	var branch struct {
+		Commit struct {
+			SHA string `json:"sha"`
+		} `json:"commit"`
+	}
+	switch _, err := c.installed(ctx, installation, http.MethodGet, owner, repo, "/branches/"+name, githubJSON, nil, &branch); {
+	case err == nil:
+		return branch.Commit.SHA == sha, "", nil
+	case !notFound(err):
+		return false, "", err
+	}
+	switch _, err := c.installed(ctx, installation, http.MethodGet, owner, repo, "/git/ref/tags/"+name, githubJSON, nil, nil); {
+	case err == nil:
+		return true, "", nil
+	case !notFound(err):
+		return false, "", err
+	}
+	var r struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if _, err := c.installed(ctx, installation, http.MethodGet, owner, repo, "", githubJSON, nil, &r); err != nil {
+		return false, "", err
+	}
+	if r.DefaultBranch == "" {
+		return false, "", fmt.Errorf("github: %s/%s names no default branch", owner, repo)
+	}
+	var cmp struct {
+		Status string `json:"status"`
+	}
+	if _, err := c.installed(ctx, installation, http.MethodGet, owner, repo, "/compare/"+url.PathEscape(r.DefaultBranch)+"..."+sha, githubJSON, nil, &cmp); err != nil {
+		if notFound(err) {
+			return false, r.DefaultBranch, nil
+		}
+		return false, "", err
+	}
+	return cmp.Status == "identical" || cmp.Status == "behind", r.DefaultBranch, nil // behind: the commit is in the default branch's history
+}
+
+// notFound is GitHub's 404 or 422 for a name it has no such thing under.
+func notFound(err error) bool {
+	status := statusError(0)
+	return errors.As(err, &status) && (status == http.StatusNotFound || status == http.StatusUnprocessableEntity)
 }

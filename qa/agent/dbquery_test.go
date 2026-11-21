@@ -59,7 +59,7 @@ func TestADBQueryJourneyScoresOnItsBlocks(t *testing.T) {
 // TestADBProdLineStopsAHostSetOtherwise: a db prod: line is checked against the host's db_prod as the tester reads it,
 // and a host set otherwise, or one that names none, stops the scenario before its app is made.
 func TestADBProdLineStopsAHostSetOtherwise(t *testing.T) {
-	answer := `{"db_prod":"off"}`
+	answer := `{"db_prod":"off","prod_approval":false}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/preferences" {
 			w.WriteHeader(http.StatusNotFound)
@@ -76,17 +76,24 @@ func TestADBProdLineStopsAHostSetOtherwise(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(conf, "config.json"), []byte(`{"host":"`+srv.URL+`","session":""}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := hostDBProd(home, "off"); err != nil {
+	if err := hostDBProd(home, "off", ""); err != nil {
 		t.Errorf("db prod: off on a host set off: %v", err)
 	}
-	if err := hostDBProd(home, "read"); err == nil || !strings.Contains(err.Error(), "the host's db_prod is off") {
+	if err := hostDBProd(home, "read", ""); err == nil || !strings.Contains(err.Error(), "the host's db_prod is off") {
 		t.Errorf("db prod: read on a host set off: %v", err)
 	}
 	answer = `{"org_name":"x"}`
-	if err := hostDBProd(home, "off"); err == nil || !strings.Contains(err.Error(), "names no db_prod") {
+	if err := hostDBProd(home, "off", ""); err == nil || !strings.Contains(err.Error(), "names no db_prod") {
 		t.Errorf("a host whose preferences name no db_prod: %v", err)
 	}
-	if err := hostDBProd(home, ""); err != nil {
+	if err := hostDBProd(home, "", ""); err != nil {
 		t.Errorf("a scenario with no db prod: line: %v", err)
+	}
+	answer = `{"db_prod":"off","prod_approval":false}`
+	if err := hostDBProd(home, "", "on"); err == nil || !strings.Contains(err.Error(), "prod approval: on") {
+		t.Errorf("prod approval: on, on a host with it off: %v", err)
+	}
+	if err := hostDBProd(home, "", "off"); err != nil {
+		t.Errorf("prod approval: off, on a host with it off: %v", err)
 	}
 }

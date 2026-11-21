@@ -541,6 +541,15 @@ any of them; an admin sees everyone's and ends anyone's, and the row names whose
 one is a person's, in a browser: `403 person_required` to an agent, `403 dashboard_required` from a CLI or MCP session.
 A member asking to end another person's is answered `404`, as if there were none.
 
+**Remote `/mcp`** (added 2026-11-21, design/specs/mcp.md §2). Any member whose OAuth session is live: each tool runs as
+that person through the route it stands for, so a member below contributor on an app is refused `canyon_status`'s
+contributor reads and every change there, as in the dashboard. `canyon_promote`, `canyon_check_ref` and
+`canyon_deploy_ref` also need the session's `act` scope; with `read` alone they answer `insufficient_scope`, whatever
+the person's level. `canyon_create_app` (act) is any member's, as `POST /api/v1/projects` is: they become the new app's
+owner, and its link is *Link a repository*'s, their own GitHub account reading the repository; it makes at most 10 apps
+a person a day, and deletes only the app it made when the link is refused. With sign-in off there is no `/mcp`: every
+caller would be the anonymous admin.
+
 ## Enforcement — one decision point per app
 
 The same code (`identity/`) decides level and roles everywhere:

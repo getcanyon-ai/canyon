@@ -310,12 +310,7 @@ func (a *app) session(next http.Handler) http.Handler {
 		}
 		ctx := r.Context()
 		if signed, setup, prov, ok := a.sessionOf(ctx, r, name); ok {
-			ctx = events.WithProvenance(withActor(ctx, signed), prov)
-			if setup && a.auth == authOIDC && (r.URL.Path != "/preferences" || (r.Method != http.MethodGet && r.Method != http.MethodPut)) { // the fleet is not served until setup is complete (contracts/routes.md, the setup state): every route but the preferences read and the PUT that completes it, after the session, before the handler, no audit row, the pipeline's one log line naming the person
-				writeErr(w, http.StatusConflict, "setup_required", "Canyon is being set up", nil)
-				return
-			}
-			a.serveNoting(w, r.WithContext(ctx), next)
+			a.serveSigned(w, r, signed, setup, prov, next)
 			return
 		}
 		if a.auth == authOIDC { // sessions are minted only by the sign-in routes (contracts/routes.md): the refusal comes before the handler and before the catch-all, with no row of any kind
@@ -328,6 +323,18 @@ func (a *app) session(next http.Handler) http.Handler {
 		role := a.role("", false, false, org{}) // no session, so no channel to name: its rows carry no via
 		a.serveNoting(w, r.WithContext(events.WithProvenance(withActor(ctx, signedSession{act: actor{Kind: "person", Subject: anonymousSubject}, role: role, issuer: a.bindingIssuer()}), events.Provenance{Role: role, Source: a.proxies.source(r)})), next)
 	})
+}
+
+// serveSigned is the session stage's for a request whose session it has read, valid: the person and how they came
+// ride in the context from here on, and until setup is complete only the preferences read and the PUT that completes
+// it are served. The cookie's requests and /mcp's tools (mcp.go) both come through here.
+func (a *app) serveSigned(w http.ResponseWriter, r *http.Request, signed signedSession, setup bool, prov events.Provenance, next http.Handler) {
+	ctx := events.WithProvenance(withActor(r.Context(), signed), prov)
+	if setup && a.auth == authOIDC && (r.URL.Path != "/preferences" || (r.Method != http.MethodGet && r.Method != http.MethodPut)) { // the fleet is not served until setup is complete (contracts/routes.md, the setup state): every route but the preferences read and the PUT that completes it, after the session, before the handler, no audit row, the pipeline's one log line naming the person
+		writeErr(w, http.StatusConflict, "setup_required", "Canyon is being set up", nil)
+		return
+	}
+	a.serveNoting(w, r.WithContext(ctx), next)
 }
 
 // setSessionCookie sets the session cookie the browser sign-in issues: no

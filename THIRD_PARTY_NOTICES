@@ -174,7 +174,7 @@ github.com/google/gnostic-models
 github.com/google/go-containerregistry
     Apache-2.0; in canyon-server, canyon-executor, canyon-executor-kube
 github.com/google/jsonschema-go
-    MIT; in canyon
+    MIT; in canyon, canyon-server
 github.com/google/uuid
     BSD-3-Clause; in canyon, canyon-server, canyon-executor-kube
 github.com/gorilla/websocket
@@ -238,7 +238,7 @@ github.com/mitchellh/reflectwalk
 github.com/moby/spdystream
     Apache-2.0 AND BSD-3-Clause; in canyon-executor-kube
 github.com/modelcontextprotocol/go-sdk
-    Apache-2.0 AND MIT; in canyon
+    Apache-2.0 AND MIT; in canyon, canyon-server
 github.com/modern-go/concurrent
     Apache-2.0; in canyon-server, canyon-executor-kube
 github.com/modern-go/reflect2
@@ -280,9 +280,9 @@ github.com/sagikazarmark/locafero
 github.com/santhosh-tekuri/jsonschema/v6
     Apache-2.0; in canyon, canyon-server
 github.com/segmentio/asm
-    MIT; in canyon
+    MIT; in canyon, canyon-server
 github.com/segmentio/encoding
-    MIT; in canyon
+    MIT; in canyon, canyon-server
 github.com/sergi/go-diff
     MIT; in canyon-server
 github.com/shopspring/decimal
@@ -324,7 +324,7 @@ github.com/x448/float16
 github.com/xo/terminfo
     MIT; in canyon, canyon-server
 github.com/yosida95/uritemplate/v3
-    BSD-3-Clause; in canyon
+    BSD-3-Clause; in canyon, canyon-server
 github.com/yuin/goldmark
     MIT; in canyon-server
 github.com/zricethezav/gitleaks/v8
@@ -390,7 +390,7 @@ k8s.io/streaming
 k8s.io/utils
     Apache-2.0 AND BSD-3-Clause; in canyon-server, canyon-executor-kube
 mvdan.cc/sh/v3
-    BSD-3-Clause; in canyon
+    BSD-3-Clause; in canyon, canyon-server
 sigs.k8s.io/json
     Apache-2.0 AND BSD-3-Clause; in canyon-server, canyon-executor-kube
 sigs.k8s.io/randfill

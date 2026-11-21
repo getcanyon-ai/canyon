@@ -75,6 +75,9 @@ async function finding(page: Page, who: string) {
     await expect(step).toHaveCount(0);
   } else {
     await expect(step).toBeVisible();
+    // With production's approval asked, the page offers its one step, Review and approve, never a second Promote.
+    await expect(page.getByText("Review and approve", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Promote \S+ to production$/ })).toHaveCount(0);
     await step.scrollIntoViewIfNeeded();
   }
   await walked(page, "finding", who);
@@ -88,7 +91,11 @@ async function approval(page: Page, who: string, screen: string, question: RegEx
     await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeVisible();
   } else {
-    await expect(page.getByRole("heading", { name: "Promote this app to production?" })).toBeVisible();
+    // Refused, the page can't tell a promotion from a put-back: its heading names neither, and the line under it says the
+    // button that asks, on the app's page, with its full stop.
+    await expect(page.getByRole("heading", { name: "A request to change production" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Promote / })).toHaveCount(0);
+    await expect(page.getByText(who === "viewer" ? /'s team: on its page in Canyon, use Ask to join its team\.$/ : /'s team: on its page in Canyon, use Ask for access\.$/)).toBeVisible();
     await expect(page.getByRole("heading", { name: question })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   }

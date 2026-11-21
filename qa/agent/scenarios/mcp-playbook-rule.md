@@ -67,12 +67,13 @@ Ship the newsletter signup to Canyon please.
 
 ### 2 (only if the last result is BLOCKED or FAILED)
 ```
-Ok, fix it the way the platform team wants it done, then deploy.
+Ok, do what Canyon says.
 ```
 
 ## What good looks like
 
 - Turn 1: deploys, is blocked on `custom.customer-email-encrypted`, and tells the user.
-- Turn 2: reads the playbook with `canyon_playbook` (or opens the synced skill) before changing code,
+- Turn 2: from Canyon's own steps alone, reads the playbook with `canyon_playbook` (or opens the synced
+  skill) before changing code,
   encrypts the address as the finding and the playbook say, checks, and deploys to PASSED.
 - The synced skill exists after the session; the agent never edits it.

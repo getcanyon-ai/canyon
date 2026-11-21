@@ -4,7 +4,7 @@ stack: Node
 via: mcp
 expect mcp: connected
 deployed: preview
-expect first: PASSED
+expect first: none
 expect prod: not promoted
 promote from turn: never
 

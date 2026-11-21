@@ -204,3 +204,30 @@ patch (a newer run image on the host) is the operator's, outside the turns.
 become `sk_live_…` keys built at run time (`{{APP}}` becomes the app's name, for a seeded
 `canyon.toml`), kept mode 600 in `<name>/.fakekey`, redacted from
 scorecards.
+
+## Through Canyon's MCP tools
+
+From the release that ships `canyon mcp`, `canyon skill install` also writes Canyon's MCP server into each
+agent's config: `mcpServers.canyon` in Claude Code's `~/.claude.json`, `[mcp_servers.canyon]` in Codex's
+`~/.codex/config.toml` (design/specs/mcp.md §1.4). Every Claude turn allows the server's tools
+(`mcp__canyon`), and the scorer reads a call to one as it reads the CLI verb it stands for:
+`canyon_check` a check, `canyon_deploy` a deploy, `canyon_promote` a production deploy, its text result
+the same `--format ai` block. Codex's `mcp_tool_call` items read the same way.
+
+A scenario's MCP lines, each judged in its verdict table and summed up in the summary's `mcp` column:
+
+- `via: mcp`: the agent should reach Canyon through the tools. Before turn 1 the runner refuses a tester
+  HOME whose agent config has no canyon server running `canyon mcp`. The scorecard counts tool calls
+  against `canyon` commands in a shell, and passes only on tools alone.
+- `expect mcp: connected` (Claude Code alone): every turn's session init lists the `canyon` server
+  connected.
+- `promote from turn: N`, or `never`: the first turn whose user asked for production. A promotion in an
+  earlier turn, by `canyon_promote` or `canyon deploy --env prod`, fails it, and the scorecard says
+  whether the call answered for the person (`confirm`, or `--yes`).
+- `playbook: <slug>`: an org playbook a custom rule points at. An admin writes both in the dashboard
+  before the batch; the runner checks the playbook exists as the tester and stops the scenario
+  otherwise. The scorecard says whether the agent read it (`canyon_playbook`, or `canyon playbook`),
+  and whether the session hook synced it as a skill (`canyon-<slug>/SKILL.md` and its `.canyon` marker
+  in the agent's skills) once the turns were over.
+- `expect first: none`: the agent should get no review, promotion or query result at all, as when it
+  only reads an app's logs.

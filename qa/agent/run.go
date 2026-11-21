@@ -48,6 +48,7 @@ var tools = []string{
 	"Bash(python3:*)", "Bash(python:*)", "Bash(pip:*)", "Bash(pip3:*)",
 	"Bash(go:*)", "Bash(gofmt:*)",
 	"Read", "Edit", "Write", "Glob", "Grep",
+	"mcp__canyon", // every tool of Canyon's MCP server, which skill install configures (design/specs/mcp.md §1.4)
 }
 
 // runAll runs every scenario (two at a time), each turn a headless Claude Code or Codex session under the
@@ -181,6 +182,21 @@ func runOne(ctx context.Context, home, runDir, file string, s scenario, suffix s
 		defer func() { // the trust Codex gives the app on turn 1 goes with the scenario, so batches don't pile it up
 			if err := forgetProject(home, app); err != nil {
 				fmt.Printf("%s: Codex still trusts %s: %v\n", name, app, err)
+			}
+		}()
+	}
+	if s.MCP { // after Codex's install, which writes its MCP config: a run with no server scores no tools
+		if err := mcpConfigured(home, s.Agent); err != nil {
+			return err
+		}
+	}
+	if s.Playbook != "" {
+		if err := playbookExists(home, s.Playbook); err != nil {
+			return err
+		}
+		defer func() { // what the session hook synced, once the turns are over, however they end
+			if err := recordSkill(home, dir, s.Agent, s.Playbook); err != nil {
+				fmt.Printf("%s: the playbook's skill was not recorded: %v\n", name, err)
 			}
 		}()
 	}

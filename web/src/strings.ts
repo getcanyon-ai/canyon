@@ -976,6 +976,29 @@ export const SECRETS = {
   unread: "The app's secrets couldn't be read.",
 } as const;
 
+// Settings › People & sign-in's Connect an agent (design/specs/screens.md, Connect an agent; design/specs/mcp.md §12;
+// EXPERIENCE.md D5): every member's, its org-managed snippets an admin's alone.
+export const CONNECT = {
+  title: "Connect an agent",
+  about: "Give your coding agents Canyon's tools. An agent acts as the person who connects it, and each one you connect is listed under Sessions, where you can disconnect it.",
+  address: "Canyon's address for agents",
+  addressNote: "Add it to your coding agent as an MCP server. The first time it connects, a browser opens for you to allow it.",
+  copy: "Copy",
+  copied: "Address copied",
+  noAddress: "Agents can't connect to this Canyon by its address, because it isn't served over https. Use the CLI below.",
+  cli: "With the CLI",
+  cliNote: "Sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools.",
+  each: "Or add it to one agent",
+  addCursor: "Add to Cursor",
+  addVSCode: "Add to VS Code",
+  managed: "Roll it out to everyone",
+  managedNote: "For your org's managed settings, so every machine gets Canyon without anyone adding it.",
+  managedClaude: "managed-mcp.json, beside the managed settings",
+  managedCodex: "the managed config.toml",
+  managedCursor: "the team's MCP settings",
+  signInOff: "This Canyon has sign-in off, so it gives agents no address: anything that could reach it would act as its admin. Agents on this machine use the CLI's own server, canyon mcp, which canyon skill install sets up. A team's Canyon, with sign-in, gives agents an address.",
+} as const;
+
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's
 // image read in its own words beside its mark, then what it counts, one card a package, where it is in a developer's
 // words (never its class), its notes and what Canyon's patches fixed in it.

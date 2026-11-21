@@ -9,6 +9,7 @@ import { Rail } from "../ui/Rail";
 import { GitHubSettings } from "./GitHub";
 import { IntegrationsSettings } from "./Integrations";
 import { HandOff } from "./HandOff";
+import { ConnectAgents } from "./ConnectAgents";
 import { isAdmin, OrganisationSettings, PeopleSettings } from "./OrgSettings";
 import { pendingLine } from "../ui/pending";
 import { AllowedLine, allowedLine, Refusals, wouldRefuse } from "./Outbound";
@@ -141,6 +142,7 @@ export function Settings() {
             {/* With sign-in off there is nobody to admit and every caller is an admin: forms here
                 would do nothing (the audit's C9). */}
             {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
+            {auth !== null && <ConnectAgents signIn={auth === "oidc"} admin={admin} />}
           </section>
         )}
         {read !== null && record !== null && page === "hosting" && read.runtime === "kubernetes" && (

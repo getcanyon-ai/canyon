@@ -183,9 +183,6 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	if status != 200 || retried["refresh_token"] == renewed["refresh_token"] || retried["access_token"] == renewed["access_token"] {
 		t.Fatalf("a retry within the grace: %d %s", status, lastBody)
 	}
-	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {renewed["refresh_token"].(string)}, "client_id": {id}}); status != 400 {
-		t.Errorf("the pair a retry replaced still refreshes: %d %s", status, lastBody)
-	}
 	renewed = retried
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, "already used") {
 		t.Errorf("a second retry: %d %s, want the session ended", status, lastBody)
@@ -769,5 +766,25 @@ func TestOAuthARetryAfterTheNewPairServedEndsTheSession(t *testing.T) {
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}}); status != 400 ||
 		countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NOT NULL") != 1 {
 		t.Errorf("the replaced token after the new pair served: %d %s, want the session ended", status, lastBody)
+	}
+}
+
+// The pair a retry replaced was lost to the client that asked again: if it ever comes back, someone else received it,
+// and the session ends.
+func TestOAuthThePairARetryReplacedComingBackEndsTheSession(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect = "https://claude.ai/cb"
+	id := register(t, base, redirect)
+	_, first := signedInOver(t, base, gina, id, redirect)
+	refresh := func(token string) int {
+		status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}, "client_id": {id}})
+		return status
+	}
+	_, lost := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}})
+	if refresh(first) != 200 { // the retry, honoured once
+		t.Fatalf("the retry: %s", lastBody)
+	}
+	if refresh(lost["refresh_token"].(string)) != 400 || countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NOT NULL") != 1 {
+		t.Errorf("the pair the retry replaced came back: %s, want the session ended", lastBody)
 	}
 }

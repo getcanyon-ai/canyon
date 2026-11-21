@@ -137,7 +137,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   3. Canyon shows a consent screen: the client's name and redirect host, which account, and the scopes it asks for.
   4. The person allows it.
 - **Two scopes, from v1:**
-  - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource.
+  - `read`: `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs`, `canyon_review`, `canyon_secret_link` and every resource.
   - `act`: `read`'s tools plus `canyon_check_ref`, `canyon_deploy_ref`, `canyon_promote` and `canyon_create_app`.
   - A scope never widens a level: a viewer's `act` token still can't deploy (§4). A tool outside the token's scope answers `403 insufficient_scope` with the scope it needs, as the MCP authorization specification asks (amended 2026-11-21): that answer is a courtesy, read off the message by the SDK's own decoder; what refuses is the tool's own check on the call the SDK dispatched, and a fixed list of the methods and routes each scope reaches, so no second reading of the body can let a call through.
   - `canyon mcp` uses the CLI's session, which acts.
@@ -274,7 +274,8 @@ result it wasn't allowed.
 | Playbook writes, restores and imports | admin, a person, in a browser | `admin_required` · `person_required` · `dashboard_required` |
 | A custom rule's `playbook` | as the rule itself: admin, a person, in a browser | as the rule's own refusals |
 
-- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref` and `canyon_promote`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level, and reaches nothing past its scope's routes. The level still applies with the scope.
+- **Scopes, on remote tokens.** `read` covers `canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs`, `canyon_review`, `canyon_secret_link` and every resource. `act` covers those plus `canyon_check_ref`, `canyon_deploy_ref`, `canyon_promote` and `canyon_create_app`. A token without the scope a tool needs is `403 insufficient_scope`, whatever the person's level, and reaches nothing past its scope's routes. The level still applies with the scope.
+- **Promotion's question, and its hard control.** `canyon_promote` asks the person through the client (elicitation) wherever the client can; a client that can't ask falls back to `confirm`, which is the agent's word that the person asked for production in the conversation, not the person's own answer. Where an org needs a person's answer whatever the client, the hard control is strict production approval (Guardrails › Production): every promotion from `/mcp`, as from the CLI, then files a request a person approves in the dashboard, and promotes nothing itself.
 
 - **Unchanged by MCP:**
   - Approving a finding (blocking findings stay a browser's, never the author's).

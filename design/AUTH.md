@@ -559,7 +559,8 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
    long as the session; each refresh rotates both on that row in place and checks the person is still on the
    membership lists. A refresh token presented again within 10 seconds of its rotation, while the pair that rotation
    issued has served nothing, is a retry whose answer was lost, and gets a new pair in place of the one it lost, once;
-   any other return of a replaced token means one of its two holders isn't the client, so the session ends.
+   any other return of a replaced token, the lost pair's included, means one of its two holders isn't the client,
+   so the session ends.
 
 **Two scopes:** `read` (the rules, playbooks, status, logs and resources) and `act` (those, and check, deploy and
 promote). A scope never widens a level: it only narrows what a token may ask. **The session is the person**, as §4.4

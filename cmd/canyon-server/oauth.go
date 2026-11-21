@@ -658,8 +658,8 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		hash := sha256.Sum256([]byte(f.Get("refresh_token")))
 		var current, retried bool // the token is the session's refresh token now; or the one it replaced, within the grace, its rotation's pair unused and no retry honoured yet
 		// the last rotation's time is its access token's: each rotation, and nothing else, sets access_expires_at an access life ahead
-		err := tx.QueryRow(ctx, `SELECT s.id, s.oauth_client, s.scope, s.refresh_hash = $1, s.rotated_unused AND s.access_expires_at > now() + make_interval(secs => $2), `+approverColumns+` FROM sessions s
-			WHERE (s.refresh_hash = $1 OR s.refresh_prev_hash = $1) AND s.flow = 'oauth' AND s.revoked_at IS NULL AND s.expires_at > now() FOR UPDATE`, hash[:], (oauthAccessLife - oauthRetryGrace).Seconds()).
+		err := tx.QueryRow(ctx, `SELECT s.id, s.oauth_client, s.scope, s.refresh_hash = $1, s.refresh_prev_hash = $1 AND s.rotated_unused AND s.access_expires_at > now() + make_interval(secs => $2), `+approverColumns+` FROM sessions s
+			WHERE (s.refresh_hash = $1 OR s.refresh_prev_hash = $1 OR s.refresh_lost_hash = $1) AND s.flow = 'oauth' AND s.revoked_at IS NULL AND s.expires_at > now() FOR UPDATE`, hash[:], (oauthAccessLife - oauthRetryGrace).Seconds()).
 			Scan(append([]any{&id, &client, &scopes, &current, &retried}, p.dest()...)...)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -702,7 +702,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		rotated, err := tx.Exec(ctx, `UPDATE sessions SET access_hash = $2, access_expires_at = now() + make_interval(secs => $3), refresh_prev_hash = refresh_hash, refresh_hash = $4,
 			rotated_unused = true WHERE id = $1 AND $5`, id, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:], current)
 		if err == nil && !current { // a retry, honoured once: the answer to the rotation never reached the client, so a new pair replaces the one it lost, the rotation's time kept so no retry extends the grace
-			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3, rotated_unused = false WHERE id = $1", id, accessHash[:], refreshHash[:])
+			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_lost_hash = refresh_hash, refresh_hash = $3, rotated_unused = false WHERE id = $1", id, accessHash[:], refreshHash[:]) // the pair it replaces, a tripwire: back, it's a second holder's
 		}
 		if err == nil && rotated.RowsAffected() != 1 {
 			err = fmt.Errorf("oauth session %s: rotated %d rows", sessionDigest(id), rotated.RowsAffected())

@@ -19,5 +19,7 @@
     Run real workloads            Canyon on your own Kubernetes cluster. Canyon's docs, under
                                   Self-host, have the install and what production needs.
 
+  To give your other coding agents Canyon's tools: Canyon's docs, Get started, Connect your agent.
+
   To stop the demo: canyon demo down.
   canyon demo tour reset starts the tour again.

@@ -24,14 +24,19 @@ import (
 // mcpHost is a stub Canyon: the manifest fixture, the status page fixture and a log, each as routes.md
 // answers it, with every request it was asked recorded; refuse, when set, answers every route.
 type mcpHost struct {
-	mu     sync.Mutex
-	asked  []string
-	refuse func(w http.ResponseWriter)
+	mu         sync.Mutex
+	asked      []string
+	transports []string // each request's Canyon-Transport, in order
+	refuse     func(w http.ResponseWriter)
+	playbook   []byte // GET /api/v1/playbooks/service-conventions's answer; the contract's golden when nil
 }
 
 func (h *mcpHost) serve(t *testing.T) string {
 	t.Helper()
-	manifest, whole := manifestFixture(t), page(t)
+	manifest, whole, playbook := manifestFixture(t), page(t), h.playbook
+	if playbook == nil {
+		playbook = playbookFixture(t)
+	}
 	var pages []json.RawMessage
 	if json.Unmarshal(whole["gate_runs"], &pages) != nil {
 		t.Fatal("the fixture's gate_runs is not a list of pages")
@@ -39,6 +44,7 @@ func (h *mcpHost) serve(t *testing.T) string {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.mu.Lock()
 		h.asked = append(h.asked, r.Method+" "+r.URL.RequestURI())
+		h.transports = append(h.transports, r.Header.Get("Canyon-Transport"))
 		refuse := h.refuse
 		h.mu.Unlock()
 		if refuse != nil {
@@ -48,6 +54,11 @@ func (h *mcpHost) serve(t *testing.T) string {
 		switch path := r.URL.Path; {
 		case path == "/api/v1/skill/manifest":
 			_, _ = w.Write(manifest)
+		case path == "/api/v1/playbooks/service-conventions":
+			_, _ = w.Write(playbook)
+		case strings.HasPrefix(path, "/api/v1/playbooks/"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":"not_found","message":"no playbook by that slug"}`)
 		case path == "/api/v1/egress":
 			_, _ = io.WriteString(w, `{"via":"canyon","mode":"observe"}`)
 		case path == "/auth/config":
@@ -118,8 +129,9 @@ func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]
 	return res, text.String()
 }
 
-// The six tools, each with the local server's dir, the three reads read-only and the three that act not,
-// promotion's alone open-world; and the two manifest resources.
+// The seven tools: canyon_playbook by a slug alone, the org's, and the rest each with the local server's dir; the
+// four reads read-only and the three that act not, promotion's alone open-world; the two manifest resources, and a
+// playbook's.
 func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 	h := &mcpHost{}
 	cs, _ := mcpSession(t, h.serve(t))
@@ -131,9 +143,9 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
 		schema, _ := json.Marshal(tool.InputSchema)
-		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs
+		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs || tool.Name == mcptools.Playbook
 		hints := tool.Annotations
-		if hints == nil || hints.ReadOnlyHint != reads || !bytes.Contains(schema, []byte(`"dir"`)) ||
+		if hints == nil || hints.ReadOnlyHint != reads || bytes.Contains(schema, []byte(`"dir"`)) == (tool.Name == mcptools.Playbook) || // a playbook is the org's: no dir
 			!reads && (hints.DestructiveHint == nil || *hints.DestructiveHint != (tool.Name == mcptools.Promote) || hints.IdempotentHint ||
 				hints.OpenWorldHint == nil || *hints.OpenWorldHint != (tool.Name == mcptools.Promote)) { // promotion alone replaces what customers reach
 			t.Errorf("%s: annotations %+v, input schema %s", tool.Name, hints, schema)
@@ -142,7 +154,7 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 			t.Errorf("%s declares an outputSchema", tool.Name)
 		}
 	}
-	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Promote, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
+	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Playbook, mcptools.Promote, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
 		t.Errorf("tools %v, want %v", names, want)
 	}
 	resources, err := cs.ListResources(context.Background(), nil)
@@ -150,7 +162,8 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 		t.Errorf("resources %+v, %v", resources, err)
 	}
 	templates, err := cs.ListResourceTemplates(context.Background(), nil)
-	if err != nil || len(templates.ResourceTemplates) != 1 || templates.ResourceTemplates[0].URITemplate != mcptools.ManifestAppTemplate {
+	if err != nil || len(templates.ResourceTemplates) != 2 || templates.ResourceTemplates[0].URITemplate != mcptools.ManifestAppTemplate ||
+		templates.ResourceTemplates[1].URITemplate != mcptools.PlaybookTemplate {
 		t.Errorf("templates %+v, %v", templates, err)
 	}
 }
@@ -524,5 +537,39 @@ func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
 	defer mu.Unlock()
 	if len(told) != 1 || strings.ContainsAny(told[0], "\x1b\x07") || !strings.Contains(told[0], `trivy\x1b]0;owned\x07`) {
 		t.Errorf("progress %q", told)
+	}
+}
+
+// Each chapter of the tour is the prompt canyon_tour, word for word as canyon demo tour hands it to an agent; with
+// no chapter named, the visitor's own; and a chapter the tour lacks is refused, never answered with another.
+func TestMCPServesEachTourChapterAsAPrompt(t *testing.T) {
+	h := &mcpHost{}
+	cs, env := mcpSession(t, h.serve(t))
+	ctx := context.Background()
+	prompts, err := cs.ListPrompts(ctx, nil)
+	if err != nil || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "canyon_tour" {
+		t.Fatalf("prompts %+v, %v", prompts, err)
+	}
+	said := func(chapter string) (string, error) {
+		res, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "canyon_tour", Arguments: map[string]string{"chapter": chapter}})
+		if err != nil {
+			return "", err
+		}
+		return res.Messages[0].Content.(*mcp.TextContent).Text, nil
+	}
+	for chapter, n := range map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd} {
+		if text, err := said(chapter); err != nil || text != tourAgent[n] {
+			t.Errorf("chapter %s: %v\n%s", chapter, err, text)
+		}
+	}
+	path, err := tourPath(func(k string) string { return env[k] })
+	must(t, err)
+	must(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	must(t, os.WriteFile(path, []byte(`{"chapter":3}`), 0o600))
+	if text, err := said(""); err != nil || text != tourAgent[tourProd] {
+		t.Errorf("no chapter named, on chapter 3: %v\n%s", err, text)
+	}
+	if text, err := said("4"); err == nil || !strings.Contains(err.Error(), `the tour has no chapter "4"`) {
+		t.Errorf("chapter 4: %v\n%s", err, text)
 	}
 }

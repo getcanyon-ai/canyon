@@ -249,7 +249,7 @@ wider, headed `Production approval`.
 │      🔒 canyon.meridian.example                          │
 │ ──────────────────────────────────────────────────────── │
 │ Production approval                                      │
-│ Promote claims-portal to production?                     │
+│ Promote claims-portal v1.4 to production?                │
 │ (CD) Carol Diaz asked from the CLI, 14:22 today.         │
 │ ┌──────────────────────────────────────────────────────┐ │
 │ │ In production now          →         Goes live       │ │
@@ -275,6 +275,11 @@ wider, headed `Production approval`.
 └──────────────────────────────────────────────────────────┘
 ```
 
+- **The heading is the question, naming what ships** (amended 2026-11-20, D5): `Promote <app> <version> to
+  production?`, or for a rollback review's approval (the read's `rollback`) `Put <app> <version> back in production,
+  replacing <version>?`, without `, replacing …` where production runs nothing: the CLI's question and
+  `canyon_promote`'s, byte for byte. Before the read answers, `Promote this app to production?`. A rollback's says `Canyon puts back the code, not the data, the secrets or the outbound rules.` under
+  the versions where a promotion says D5's no-rebuild sentence: it puts back production's own earlier image, never preview's.
 - **Who asked, and from where, comes first**: `<name> asked from the CLI, <time>.` beside the
   asker's initials — the request's actor and channel. A person who did not expect a request has the
   one fact that tells them so.
@@ -1359,7 +1364,7 @@ That tightening sentence — *policies gate promotion, never running apps* — i
 - **Import:** a `SKILL.md` chosen from disk or pasted. Its YAML frontmatter, read by a YAML parser, gives the name and the slug (editable before the first save), its `description` the `when` line, the rest the body, as a skill; the editor opens on it, unsaved: `Its name becomes the playbook's name and slug, its description when to read it, and the rest the body. Nothing is saved until you save it.` A file with no frontmatter reads `This isn't a SKILL.md: it needs a frontmatter block between two --- lines.`; one without a name or a description `The SKILL.md's frontmatter needs a name and a description.`
 - **Remove** asks first, `Remove <name>? Agents stop being handed it. Its versions are kept.`, with `Remove` and `Keep it`.
 - **A rule's playbook:** a custom rule's editor has `Playbook`, `None` or one of the playbooks that stand, under it `A finding of this rule tells the agent to read this playbook after its fix.`; a rule pointing at one reads `Its findings tell the agent to read the playbook <slug>.` on its card. A finding of such a rule carries the step `Then` on its card, and `then:` in *Copy for your agent*, in the CLI's words (`Read the playbook <name>: canyon playbook <slug>`).
-- Each playbook's reads in the last 30 days, and a skill's machines, join the card with design/specs/mcp.md §6 item 10, which counts them.
+- **Two counts** on each card, neither naming anyone (design/specs/mcp.md §3.5): `<n> reads in 30 days`, its fetches by the MCP tool, the resource and `canyon playbook`, and on a skill's alone `on <n> machines`, the sessions whose native skill holds its newest version. While a skill is listed, a line under the tab's says what the second can't see: `Canyon can't see an agent reading its local copy of a skill: "on N machines" says where the current version is, not how often it's read.`
 
 **Not on this screen:** a policy editor, YAML, a rule DSL, a "custom policy" builder, an import/export of policy-as-code, a policy marketplace. The brief says *tune guardrails, don't write them*. Four dials that ship on. If someone needs a fifth policy in v1, they file an issue and we write it — that's a healthier signal than a DSL nobody uses correctly.
 

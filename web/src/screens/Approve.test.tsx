@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Receipt } from "../api";
+import { S } from "../strings";
 import { Shell } from "./Shell";
 
 // The receipt is the golden's, read for a person in the dashboard; nothing here writes a rule down.
@@ -56,7 +57,7 @@ afterEach(() => {
 describe("the production approval screen", () => {
   it("says who asked and from where, what goes live, the checks and who is approving, and approves nothing until the click", async () => {
     const sent = open();
-    expect(await screen.findByRole("heading", { name: "Promote claims-portal to production?" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "Promote claims-portal v1.4 to production?" })).toBeDefined();
     expect(screen.getByText("Production approval")).toBeDefined();
     expect(screen.getByText((_, node) => node?.tagName === "P" && (node.textContent ?? "").startsWith("Carol Diaz asked from the CLI,"))).toBeDefined();
     const versions = within(screen.getByRole("region", { name: "What changes" }));
@@ -270,9 +271,34 @@ describe("the production approval screen", () => {
     expect(screen.queryByText(/production already runs/i)).toBeNull();
   });
 
+  // The approver reads what ships, as the CLI's question names it (D5): a rollback's names the version going back and
+  // what it replaces, or none where production runs nothing.
+  it.each([
+    [{ rollback: true, version: "v1.2", replaces: "v1.4" }, "Put claims-portal v1.2 back in production, replacing v1.4?"],
+    [{ rollback: true, version: "v1.2", replaces: null }, "Put claims-portal v1.2 back in production?"],
+  ])("a rollback's question names both versions: %j", async (change, title) => {
+    open(() => answer(200, { ...pending, ...change }));
+    expect(await screen.findByRole("heading", { name: title })).toBeDefined();
+    expect(screen.getByText(S.putBackCodeBare)).toBeDefined(); // production's own earlier image, never preview's
+    expect(screen.queryByText(S.promoteConfirm)).toBeNull();
+  });
+
+  // Nobody approves without seeing what ships: until the read names the version, there is nothing to approve, while it
+  // is on its way and when it fails alike.
+  it("offers no Approve until the read names the version", async () => {
+    let answerRead: (r: Response) => void = () => {};
+    const sent = open(() => new Promise<Response>((resolve) => { answerRead = resolve; }) as unknown as Response);
+    await waitFor(() => expect(sent()).toContain(`GET ${APPROVAL}`));
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    answerRead(answer(502, { error: "bad_gateway", message: "bad gateway" }));
+    expect(await screen.findByRole("heading", { name: "Promote this app to production?" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(sent()).toEqual([`GET ${APPROVAL}`]);
+  });
+
   it("a person's approval carries no patch part", async () => {
     open();
-    await screen.findByRole("heading", { name: "Promote claims-portal to production?" });
+    await screen.findByRole("heading", { name: "Promote claims-portal v1.4 to production?" });
     expect(screen.queryByRole("region", { name: "What the patch fixes" })).toBeNull();
     expect(screen.queryByText("The app's own files are byte for byte the ones in production.")).toBeNull();
     expect(screen.queryByText(/^(run )?image /)).toBeNull();

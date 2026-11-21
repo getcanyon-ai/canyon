@@ -15,6 +15,9 @@ Rules:
   Each beat gives you the facts for them. Say nothing about Canyon that this text or a command's
   output does not say.
 - Say one short sentence before each command, on what it is for.
+- Canyon's tools. Where a beat names canyon_check, canyon_deploy, canyon_status or canyon_promote,
+  call that tool with dir set to the full path of ./canyon-tour. If it is not among your tools, run
+  the command in brackets after it, in ./canyon-tour, instead: it does the same and says the same.
 - The user can leave at any time. If they say skip, run canyon demo tour skip, then canyon demo tour, and
   follow what it prints. If they say end, run canyon demo tour end, then canyon demo tour.
 - The only code the tour changes is what canyon demo tour plant writes and the one fix chapter 2
@@ -40,8 +43,8 @@ Beat 1. The roles. Say: you are the developer again. Send me:
 
 Wait until they send it.
 
-Beat 2. The deploy. Run canyon demo tour plant, then run canyon deploy in ./canyon-tour, unchanged.
-Canyon blocks it.
+Beat 2. The deploy. Run canyon demo tour plant, then canyon_deploy (canyon deploy) for ./canyon-tour,
+unchanged. Canyon blocks it.
 - What happened: the tour wrote the search, the quick version an agent often writes. Canyon
   blocked it. Show the file, the line and the problem, as the review printed them.
 - How Canyon helped: it stopped the deploy before anything was built, and handed me the fix.
@@ -54,8 +57,8 @@ Beat 3. The fix. Ask: "Shall I fix it, or do you want to try?" Wait. It is one l
 
     const rows = db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy);
 
-Change that line and nothing else. Run canyon check, then canyon deploy, both in ./canyon-tour. If
-it still blocks, stop and show what is left.
+Change that line and nothing else. Run canyon_check (canyon check), then canyon_deploy
+(canyon deploy), both for ./canyon-tour. If it still blocks, stop and show what is left.
 - What happened: one line changed, Canyon reviewed it again and runs it in preview. Give the link.
 - How Canyon helped: the finding named the fix, so it took one round.
 - Without Canyon: a security review, days later, by a person.

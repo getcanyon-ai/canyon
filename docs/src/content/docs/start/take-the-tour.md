@@ -69,13 +69,18 @@ It ends on these two lines, and then you tell the agent Canyon is ready:
 ```
 
 The tour's words ship in the CLI, so the prompt stays this short: `canyon demo tour` prints the chapter
-you're on as instructions for the agent, and the agent follows them. It reports every step in the
+you're on as instructions for the agent, and the agent follows them. Its first step is
+`canyon skill install`, which gives your agent Canyon's skill, its session hook and Canyon's tools over
+MCP. The agent then reviews, deploys and promotes with those tools: `canyon_check`, `canyon_deploy` and
+`canyon_promote`. Where your agent loads tools only when it starts, it uses the same commands in the
+shell until its next start; the tour says so. It reports every step in the
 same four lines: what happened, how Canyon helped, what would have happened without Canyon, and
 what that means at scale.
 
 **In Cursor and other agents,** have the agent run `canyon demo tour --format ai`. The CLI recognises
 only Claude Code and Codex, so anywhere else `canyon demo tour` prints the chapter for a person reading
-along, with the commands to walk it by hand.
+along, with the commands to walk it by hand. An agent with Canyon's tools can also read a chapter as
+the MCP prompt `canyon_tour`.
 
 ## The three chapters
 
@@ -97,8 +102,8 @@ You decide how much of it you take:
 
 ## What happens
 
-These are the CLI's own outputs from a run of the tour, as Claude Code and Codex read them, and we
-check them against a fresh run on the demo. `⋯` marks lines left out. Your app gets a name of its
+These are Canyon's own outputs from a run of the tour, as your agent reads them from Canyon's tools or
+the CLI, which say the same, and we check them against a fresh run on the demo. `⋯` marks lines left out. Your app gets a name of its
 own where this run's is `fluffy-raven-dq7`.
 
 **You set a rule.** Chapter 1 starts in the dashboard, because only a person changes a policy. The
@@ -154,7 +159,7 @@ says so:
   The tour wrote the page again, in the org's design system: components.json names its registry, and public/canyon.css is its theme. In a real project the shadcn CLI fetches these from the registry; this demo's registry is not online, so the tour hands them over.
 ```
 
-`canyon check` runs the same review without deploying, and the second deploy is live in preview:
+`canyon_check` runs the same review without deploying, and the second deploy is live in preview:
 
 ```text wrap
 CANYON REVIEW — RESULT: PASSED
@@ -191,7 +196,7 @@ the policy number as a bound parameter:
 const rows = db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy);
 ```
 
-After `canyon check` and `canyon deploy`, open the preview address and search for `MRD-1002`. The
+After `canyon_check` and `canyon_deploy`, open the preview address and search for `MRD-1002`. The
 app's `/claims` answers:
 
 ```text wrap
@@ -226,6 +231,7 @@ in the dashboard, and the agent can only ask. The fleet address shows both block
 ones that passed and the promotion on the app's page, and every step in the audit trail.
 
 **The end** is a recap and four ways on: your own app, your pipeline, your team, and real workloads.
+[Connect your agent](/start/connect-your-agent/) gives your other coding agents Canyon's tools.
 
 ## Run it again
 

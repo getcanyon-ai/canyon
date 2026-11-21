@@ -498,12 +498,16 @@ func waiting(t *testing.T, reason string, want []string) {
 }
 
 // A cancel asked during the scans lands before the next step: the scans in flight end, nothing is
-// asked again, the gate never runs, and the run ends interrupted.
+// asked again, the gate never runs, and the run ends interrupted. The busy answer waits for the cancel, so the busy
+// tool's next ask, a Retry-After later, always finds it: without that, an attach later than the Retry-After let the
+// retry ask before the cancel landed, a third scan (#25), which the attach's own delay below makes certain.
 func TestACancelDuringTheScansEndsTheRunBeforeTheGate(t *testing.T) {
 	p, ctx, f, snap := scanning(t)
 	f.Busy.Store(1) // the first ask answers busy, so a run the cancel missed would ask again
 	attach, attaching, cancelled := pipe.Attach, make(chan struct{}, 2), make(chan struct{})
+	f.HoldBusy.Store(&cancelled)
 	pipe.Attach = func(c context.Context, project, pkg, tool string, raw []byte, unloaded, unparsed []string, ev Evidence, by events.Actor) (int64, error) {
+		time.Sleep(1500 * time.Millisecond) // the race at its worst (#25): this scan reaches its attach after the busy one's Retry-After of 1 s
 		attaching <- struct{}{}
 		<-cancelled // the scan is mid-step until the cancel is asked
 		return attach(c, project, pkg, tool, raw, unloaded, unparsed, ev, by)

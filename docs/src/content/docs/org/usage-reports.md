@@ -17,7 +17,8 @@ It's on by default. Any admin can turn it off.
 - **How old the install is,** as a range, such as 7–27 days.
 - **How many apps** the server has, and how many had a review in the last week and the last month.
 - **Reviews since the last report,** usually a day's, by result: passed, passed with advice, blocked.
-  Also by who asked for it: a person or a coding agent, and which agent when Canyon can tell.
+  Also by who asked for it: a person or a coding agent, and which agent when Canyon can tell. And by
+  how it was asked for: the `canyon` command, `canyon mcp`, or Canyon's own MCP server.
 - **Deploys** to preview and production, reviews and deploys that failed and why, and releases handed to
   your own platform and how they ended.
 - **The milestones** the server has reached, and how long after the install started each came, as a

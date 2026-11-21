@@ -19,6 +19,10 @@ import (
 // harnesses are the coding agents a review is kept under (runs.harness), as the CLI's Canyon-Harness names them.
 var harnesses = []string{"claude_code", "codex"}
 
+// transportMCPLocal is canyon mcp's Canyon-Transport, kept on a review it starts (runs.transport); a review the host's
+// own /mcp starts is kept as mcp-remote, and one with neither is the CLI's (design/specs/mcp.md §7).
+const transportMCPLocal = "mcp-local"
+
 // telemetryPeriodMost is the longest period one report's counts cover: a server that sent nothing for longer, off or
 // unreachable, reports its last week, so one report never lands months of counts in one week's sums.
 const telemetryPeriodMost = 7 * 24 * time.Hour
@@ -99,6 +103,14 @@ type agentCounts struct {
 	ClaudeCode int `json:"claude_code"`
 	Codex      int `json:"codex"`
 	Other      int `json:"other"`
+}
+
+// transportCounts are the period's reviews by how they were asked for (runs.transport): the CLI, canyon mcp, or the
+// host's own /mcp.
+type transportCounts struct {
+	CLI       int `json:"cli"`
+	MCPLocal  int `json:"mcp_local"`
+	MCPRemote int `json:"mcp_remote"`
 }
 
 // bucketOf is a size as the schema buckets it (definitions.bucket).
@@ -240,8 +252,8 @@ func (a *app) telemetryV2(ctx context.Context, q querier, r *telemetryReport, si
 		return err
 	}
 	r.PeopleTotal = bucketOf(people)
-	// The period's deploys, its reviews by who asked for them (runs.author_kind is a patch run's alone) and by agent, and
-	// failures; apps active in 7 and 28 days.
+	// The period's deploys, its reviews by who asked for them (runs.author_kind is a patch run's alone), by agent and by
+	// how they were asked for, and failures; apps active in 7 and 28 days.
 	if err := q.QueryRow(ctx, `SELECT
 		count(*) FILTER (WHERE kind = 'gate' AND deploy_started_at > $1),
 		count(*) FILTER (WHERE kind = 'promote' AND deploy_started_at > $1),
@@ -250,10 +262,14 @@ func (a *app) telemetryV2(ctx context.Context, q querier, r *telemetryReport, si
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND harness = 'claude_code'),
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND harness = 'codex'),
 		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND harness IS NULL AND started_by_kind = 'agent'),
+		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport IS NULL),
+		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport = 'mcp-local'),
+		count(*) FILTER (WHERE kind = 'gate' AND state IN ('clean', 'blocked') AND ended_at > $1 AND transport = 'mcp-remote'),
 		count(DISTINCT project_id) FILTER (WHERE kind = 'gate' AND created_at > now() - interval '7 days'),
 		count(DISTINCT project_id) FILTER (WHERE kind = 'gate' AND created_at > now() - interval '28 days')
 		FROM runs`, since).Scan(&r.Deploys.Preview, &r.Deploys.Prod, &r.Authors.Person, &r.Authors.Agent,
-		&r.Agents.ClaudeCode, &r.Agents.Codex, &r.Agents.Other, &r.AppsActive.D7, &r.AppsActive.D28); err != nil {
+		&r.Agents.ClaudeCode, &r.Agents.Codex, &r.Agents.Other, &r.AgentsVia.CLI, &r.AgentsVia.MCPLocal, &r.AgentsVia.MCPRemote,
+		&r.AppsActive.D7, &r.AppsActive.D28); err != nil {
 		return err
 	}
 	rows, err := q.Query(ctx, `SELECT failure_reason, coalesce(failed_in, ''), count(*)::int FROM runs

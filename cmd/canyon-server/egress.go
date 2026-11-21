@@ -52,7 +52,6 @@ const (
 	egressStreamMemory   = 20 * time.Minute    // a tunnel's caller, from its periodic entries: max_stream_duration 15 min and a flush
 	egressCallersAsked   = 1024                // POST /callers' bound
 	egressAddressesFlush = 4096                // addresses one flush asks about, four POST /callers; the rest's calls are unattributed and counted
-	egressStreams        = 16                  // ALS streams at once: Envoy holds one per worker thread, and runs with --concurrency 8
 	egressCallersWait    = 5 * time.Second     // one POST /callers; past it the chunk's calls are no one's
 	egressLastFlush      = 10 * time.Second    // the flush on the way out
 	egressLastCallers    = time.Second         // one POST /callers on the way out: four at most leave the write six seconds
@@ -61,6 +60,10 @@ const (
 	egressEntryBytes     = 16 << 10            // one entry; a larger one is dropped and counted, never read
 	egressTunnels        = 1 << 14             // tunnels whose caller the receiver keeps between their entries; past it a tunnel is attributed by its last
 )
+
+// egressStreams is the ALS streams the receiver takes at once: two a worker, :3128's log and the interception listener's,
+// at the most workers envoy.sh lets Envoy run.
+const egressStreams = egresscontrol.ReceiverStreams
 
 // call is one access-log entry as the receiver keeps it. source is the address it came from, used to
 // name its caller and never stored; started is when Envoy says the call started, zero when it did not say,
@@ -252,6 +255,7 @@ type egressReceiver struct {
 	open    chan struct{}           // a slot per ALS stream at once
 	dropped atomic.Int64            // calls turned away, counted
 	unread  atomic.Int64            // messages too large to read: their calls no one counted
+	refused atomic.Int64            // streams refused past egressStreams: what Envoy wrote to each no one counted
 	entry   atomic.Int64            // when the last entry arrived, Unix nanoseconds; 0 before any
 	envoy   envoyLost               // what egress-control reported Envoy lost
 	tunnels map[tunnel]streamCaller // run's alone
@@ -376,14 +380,15 @@ func receiveEgress(ctx context.Context, ln net.Listener, apps netip.Prefix, r *e
 
 // StreamAccessLogs takes Envoy's entries; every one becomes a call before anything else reads it. A call
 // the buffer has no room for, or an entry over egressEntryBytes, is counted, and a message too large to
-// read is noted; its flush records each as a gap. Past egressStreams at once a stream is refused: Envoy
-// retries it. Envoy names the log a stream carries in its first message: the interception listener's, InterceptLog,
+// read is noted; its flush records each as a gap. Past egressStreams at once a stream is refused, and noted too: Envoy
+// opens another at its next flush, and what it wrote to this one is lost, so the flush records a gap no one counted. Envoy names the log a stream carries in its first message: the interception listener's, InterceptLog,
 // is inner requests; any other, :3128's calls.
 func (r *egressReceiver) StreamAccessLogs(stream accesslogv3.AccessLogService_StreamAccessLogsServer) error {
 	select {
 	case r.open <- struct{}{}:
 		defer func() { <-r.open }()
 	default:
+		r.refused.Add(1) // Envoy opens another at its next flush; what it wrote to this one is lost, a gap (#35)
 		return status.Error(codes.ResourceExhausted, "too many access-log streams")
 	}
 	inner := false
@@ -600,7 +605,7 @@ func (r *egressReceiver) flush(ctx context.Context, batch []call) error {
 	if n := r.dropped.Swap(0); n > 0 {
 		r.gap(egressGap{from: from, to: to, reason: "dropped", calls: n})
 	}
-	if r.unread.Swap(0) > 0 {
+	if unread, refused := r.unread.Swap(0), r.refused.Swap(0); unread > 0 || refused > 0 {
 		r.gap(egressGap{from: from, to: to, reason: "dropped", uncounted: true})
 	}
 	lost, uncounted := r.envoy.take()

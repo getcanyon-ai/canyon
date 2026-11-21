@@ -332,6 +332,11 @@ func (a *app) startRun(ctx context.Context, r *http.Request, id, pkg string, dep
 			return runs.Run{}, "", nil, err
 		}
 	}
+	if r.Header.Get("Canyon-Transport") == transportMCPLocal { // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's // canyon mcp asked, for the usage report's agents_via (design/specs/mcp.md §7); mcp-remote is the host's own to record, never a client's
+		if _, err := tx.Exec(ctx, "UPDATE runs SET transport = $1 WHERE id = $2", transportMCPLocal, run.ID); err != nil {
+			return runs.Run{}, "", nil, err
+		}
+	}
 	detail := map[string]any{"package": pkg}
 	if rollbackTo != "" { // a rollback review's: what it would put back, and why (contracts/routes.md, the gate-runs row)
 		detail["rollback_to"] = rollbackTo

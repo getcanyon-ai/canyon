@@ -523,9 +523,9 @@ func TestAForgedHeaderCannotMoveACall(t *testing.T) {
 	}
 }
 
-// What the receiver holds is bounded, and what a bound turns away is counted, never lost unseen: streams
-// past egressStreams are refused for Envoy to retry, an entry past egressEntryBytes and a call past the
-// buffer are dropped gaps, addresses past egressAddressesFlush are unattributed gaps, and tunnels past
+// What the receiver holds is bounded, and what a bound turns away is counted, never lost unseen: a stream past
+// egressStreams is refused, and as what Envoy wrote to it is lost, a dropped gap no one counted (#35); an entry past
+// egressEntryBytes and a call past the buffer are dropped gaps, addresses past egressAddressesFlush are unattributed gaps, and tunnels past
 // egressTunnels are attributed by their last entry instead of remembered.
 func TestTheReceiverBoundsWhatItHolds(t *testing.T) {
 	f := newEgressFixture(t)
@@ -548,7 +548,7 @@ func TestTheReceiverBoundsWhatItHolds(t *testing.T) {
 	f.r.calls = make(chan call, 2)
 	f.send(t, big, entry("10.0.4.7", corev3.RequestMethod_CONNECT, "", "a.example.com:443", 200), entry("10.0.4.7", corev3.RequestMethod_CONNECT, "", "b.example.com:443", 200),
 		entry("10.0.4.7", corev3.RequestMethod_CONNECT, "", "c.example.com:443", 200))
-	if got, want := f.gapsOf(t), []string{"dropped:2"}; !slices.Equal(got, want) { // the big entry and the call past the buffer of two
+	if got, want := f.gapsOf(t), []string{"dropped:2", "dropped:-"}; !slices.Equal(got, want) { // the big entry and the call past the buffer of two; the refused stream, no one counted
 		t.Fatalf("gaps %v, want %v", got, want)
 	}
 	if rows := f.rowsOf(t, "egress_destinations"); len(rows) != 2 || strings.Contains(strings.Join(rows, " "), "api.example.com") {
@@ -564,7 +564,7 @@ func TestTheReceiverBoundsWhatItHolds(t *testing.T) {
 	if n := f.exec.CallersAsks.Load() - asks; n != egressAddressesFlush/egressCallersAsked {
 		t.Errorf("one flush asked POST /callers %d times, want %d", n, egressAddressesFlush/egressCallersAsked)
 	}
-	if got, want := f.gapsOf(t), []string{"dropped:2", "unattributed:4097"}; !slices.Equal(got, want) { // the 4,097th address unasked, and no one holds the rest
+	if got, want := f.gapsOf(t), []string{"dropped:2", "dropped:-", "unattributed:4097"}; !slices.Equal(got, want) { // the 4,097th address unasked, and no one holds the rest
 		t.Fatalf("gaps %v, want %v", got, want)
 	}
 	for i := range egressTunnels {

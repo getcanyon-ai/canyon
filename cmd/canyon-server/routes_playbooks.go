@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +18,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	mdtext "github.com/yuin/goldmark/text"
 
 	"github.com/getcanyon-ai/canyon/events"
 	"github.com/getcanyon-ai/canyon/gate"
@@ -75,6 +81,8 @@ type playbookEntry struct {
 	Version   int    `json:"version"`
 	UpdatedBy actor  `json:"updated_by"`
 	UpdatedAt string `json:"updated_at"`
+	Reads     int    `json:"reads"`              // fetches in the last 30 days (playbook_counts.go)
+	Machines  *int   `json:"machines,omitempty"` // a skill's holders of its newest version, in those 30 days
 }
 
 // playbookVersion is one kept version, as an admin reads them.
@@ -138,23 +146,46 @@ func (a *app) getPlaybooks(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, "playbooks", err)
 		return
 	}
+	reads, machines, err := playbookCounts(r.Context(), a.pool)
+	if err != nil {
+		a.internal(w, "playbook counts", err)
+		return
+	}
 	out := make([]playbookEntry, 0, len(all))
 	for _, p := range all {
-		out = append(out, p.entry())
+		e := p.entry()
+		e.Reads = reads[p.Slug]
+		if p.Kind == "skill" {
+			n := machines[p.Slug]
+			e.Machines = &n
+		}
+		out = append(out, e)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"playbooks": out})
 }
 
 func (a *app) getPlaybook(w http.ResponseWriter, r *http.Request) {
+	way := r.URL.Query().Get("read")
+	if !readWays[way] {
+		writeErr(w, http.StatusBadRequest, "bad_request", "read is tool, resource, cli or sync", nil)
+		return
+	}
 	p, removed, found, err := newestPlaybook(r.Context(), a.pool, r.PathValue("slug"))
 	switch {
 	case err != nil:
 		a.internal(w, "playbook", err)
+		return
 	case !found || removed:
 		writeErr(w, http.StatusNotFound, "not_found", "no playbook by that slug", nil)
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{"playbook": p})
+		return
 	}
+	switch way {
+	case "sync":
+		a.recordSyncs(r.Context(), map[string]int{p.Slug: p.Version})
+	case "tool", "resource", "cli":
+		a.countRead(r.Context(), p.Slug, way)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"playbook": p})
 }
 
 func (a *app) getPlaybookVersions(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +218,7 @@ func (a *app) getPlaybookVersions(w http.ResponseWriter, r *http.Request) {
 
 // playbookProblem is the first thing the routes row refuses in a playbook, in D5's words, or "".
 func playbookProblem(slug string, t playbookText) (string, error) {
-	line := func(s string) bool { return !strings.ContainsFunc(s, unicode.IsControl) }
+	line := func(s string) bool { return !strings.ContainsFunc(s, unicode.IsControl) } // and hiddenIn, below, naming the character
 	body := func(s string) bool {
 		return !strings.ContainsFunc(s, func(c rune) bool { return unicode.IsControl(c) && c != '\n' && c != '\t' })
 	}
@@ -203,6 +234,14 @@ func playbookProblem(slug string, t playbookText) (string, error) {
 	case t.Body == "" || len(t.Body) > maxPlaybookBody || !body(t.Body):
 		return "A playbook's body is 1 to 64 KiB of Markdown, with no control character but a newline or a tab.", nil
 	}
+	for _, f := range []struct{ field, text string }{{"name", t.Name}, {"when line", t.When}, {"body", t.Body}} {
+		if at, r, ok := hiddenIn(f.text, f.field == "body"); ok {
+			return fmt.Sprintf(playbookHides, f.field, r, at), nil
+		}
+	}
+	if commandOutsideCode(t.Body) {
+		return playbookCommand, nil
+	}
 	for _, s := range []string{t.Name, t.When, t.Body} {
 		secret, err := gate.HasSecret(s)
 		if err != nil || secret {
@@ -210,6 +249,55 @@ func playbookProblem(slug string, t playbookText) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// The refusals of a character an agent's reader can't see, and of a skill's shell line (D5).
+const (
+	playbookHides   = "A playbook's %s holds U+%04X at character %d, a character that hides or reorders text: remove it."
+	playbookCommand = "A playbook's body can't hold !` outside a code block: Claude Code runs it as a shell command in every member's session. Put it in a code block."
+)
+
+// hiddenIn is the first character in s that can hide or reorder text around it (hidesText: a bidi override, a
+// zero-width or tag character), at its 1-based character position; a body keeps its newlines and tabs. An agent reads
+// the text as its bytes, a person reads it as it shows, and the two must be the same text.
+func hiddenIn(s string, body bool) (int, rune, bool) {
+	at := 0
+	for _, r := range s {
+		at++
+		if hidesText(r) && (!body || r != '\n' && r != '\t') {
+			return at, r, true
+		}
+	}
+	return 0, 0, false
+}
+
+// commandOutsideCode is whether body holds !` outside a fenced or indented code block, as goldmark parses its
+// Markdown: Claude Code runs !`cmd` in a skill as a shell command before the model reads it
+// (https://code.claude.com/docs/en/skills), and a playbook that is a skill is synced as one to every member's machine.
+// ponytail: !` inside an inline code span counts as outside; an admin puts such a line in a fenced block.
+func commandOutsideCode(body string) bool {
+	src := []byte(body)
+	var inCode [][2]int
+	_ = ast.Walk(goldmark.DefaultParser().Parse(mdtext.NewReader(src)), func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering && (n.Kind() == ast.KindFencedCodeBlock || n.Kind() == ast.KindCodeBlock) {
+			lines := n.Lines()
+			for i := 0; i < lines.Len(); i++ {
+				seg := lines.At(i)
+				inCode = append(inCode, [2]int{seg.Start, seg.Stop})
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	for at := 0; ; at++ {
+		i := bytes.Index(src[at:], []byte("!`"))
+		if i < 0 {
+			return false
+		}
+		at += i
+		if !slices.ContainsFunc(inCode, func(r [2]int) bool { return at >= r[0] && at < r[1] }) {
+			return true
+		}
+	}
 }
 
 // playbookInDashboard refuses a playbook's change from any session but a browser's on a host with sign-in

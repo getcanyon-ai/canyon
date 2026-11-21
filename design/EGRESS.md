@@ -287,8 +287,8 @@ it, §7) with `deploy/egress/envoy.yaml`, checked in CI by `envoy --mode validat
   TCP 3128 to `canyon-egress` pods; `publicEgress(80, 443)` goes. Envoy's own NetworkPolicy admits
   public 80/443 (the `private` ranges and 169.254/16 excepted — IMDS with a hop limit of 1 is out of
   reach either way), kube-dns and the server's receiver. Built (#2097): a `/run` without `egress` — via
-  `off` — keeps `publicEgress(80, 443)`; `canyon-egress` is two replicas of four workers each, so a rollout's
-  three stay under the receiver's 16 streams (`CANYON_EGRESS_CONCURRENCY`, §2.1); before a `/run` with
+  `off` — keeps `publicEgress(80, 443)`; `canyon-egress` is two replicas of four workers each, two access-log streams a
+  worker, so a rollout's three, 24 streams, stay under the receiver's 32 (`CANYON_EGRESS_CONCURRENCY`, §2.1; #35); before a `/run` with
   `egress` writes anything the executor opens TCP to the gateway, which proves Envoy answers — the app's
   own path is `TestKindAppReachesOnlyEnvoy`'s; a failed `/run` puts the app's previous policy back with
   its template, a wider one only once the failed rollout's pods are gone, else the narrower stays (fail

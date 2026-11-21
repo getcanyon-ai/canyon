@@ -1,0 +1,8 @@
+# helm.yml: the chart packaged, linted and installed on kind.
+deploy/helm/**
+deploy/k8s/**
+scripts/chart-package.sh
+scripts/release-archives-check.sh
+.github/kind/chart.sh
+.github/fetch.sh
+docs/src/content/docs/self-host/backup-and-upgrade.md

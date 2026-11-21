@@ -32,6 +32,9 @@ Rules:
   Each beat gives you the facts for them. Say nothing about Canyon that this text or a command's
   output does not say.
 - Say one short sentence before each command, on what it is for.
+- Canyon's tools. Where a beat names canyon_check, canyon_deploy, canyon_status or canyon_promote,
+  call that tool with dir set to the full path of ./canyon-tour. If it is not among your tools, run
+  the command in brackets after it, in ./canyon-tour, instead: it does the same and says the same.
 - The user can leave at any time. If they say skip, run canyon demo tour skip, then canyon demo tour, and
   follow what it prints. If they say end, run canyon demo tour end, then canyon demo tour.
 - The only code the tour changes is what canyon demo tour plant writes and the one fix chapter 2
@@ -66,6 +69,11 @@ var tourAgent = map[int]string{
 Open with two lines, before beat 1: Canyon checks AI-built apps at three stages: when a coding
 agent deploys, on every pull request, and before production. The three chapters show three kinds
 of rule: the company's standards, security, and what production needs.
+
+Then run canyon skill install. Say in one line what it wrote: Canyon's skill, the session hook that
+hands you the company's rules, and Canyon's tools for you. Say in one more that the tools load in
+this session, or after a restart where you load tools only at start, and that until then the tour
+uses the same commands in the shell.
 
 Then ask, and wait: "The full tour (three chapters), or the short one (security only)? Either
 takes minutes. You can also say skip or end at any time." On short: run canyon demo tour skip,
@@ -103,8 +111,8 @@ Send me:
 
 Wait until they send it.
 
-Beat 4. The deploy. Run canyon demo tour plant, then run canyon deploy in ./canyon-tour, unchanged.
-Canyon blocks it. That is the chapter working.
+Beat 4. The deploy. Run canyon demo tour plant, then canyon_deploy (canyon deploy) for ./canyon-tour,
+unchanged. Canyon blocks it. That is the chapter working.
 - What happened: the tour wrote the app, the quick version an agent often writes, so every visitor
   gets the same code. Canyon's server reviewed the upload and rejected it: the page is hand-built
   and uses nothing from the company's design system. Show the finding's title and file.
@@ -114,8 +122,8 @@ Canyon blocks it. That is the chapter working.
 Link: the app in the dashboard (the fleet url line). Then ask: "Shall I rebuild the page in the
 design system?" Wait.
 
-Beat 5. The fix. Run canyon demo tour plant once more, then canyon check, then canyon deploy, both
-in ./canyon-tour. If it still blocks, stop and show what is left.
+Beat 5. The fix. Run canyon demo tour plant once more, then canyon_check (canyon check), then
+canyon_deploy (canyon deploy), both for ./canyon-tour. If it still blocks, stop and show what is left.
 - What happened: the page is rebuilt in the design system and runs in preview. Give the preview
   link and who can open it (the access line). Say once: in a real project I fetch the components
   from the company's registry; this demo's registry is not online, so the tour handed them over.
@@ -147,8 +155,8 @@ Beat 1. The roles. Say: you are the developer again. Send me:
 
 Wait until they send it.
 
-Beat 2. The deploy. Run canyon demo tour plant, then run canyon deploy in ./canyon-tour, unchanged.
-Canyon blocks it.
+Beat 2. The deploy. Run canyon demo tour plant, then canyon_deploy (canyon deploy) for ./canyon-tour,
+unchanged. Canyon blocks it.
 - What happened: the tour wrote the search, the quick version an agent often writes. Canyon
   blocked it. Show the file, the line and the problem, as the review printed them.
 - How Canyon helped: it stopped the deploy before anything was built, and handed me the fix.
@@ -161,8 +169,8 @@ Beat 3. The fix. Ask: "Shall I fix it, or do you want to try?" Wait. It is one l
 
     const rows = db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy);
 
-Change that line and nothing else. Run canyon check, then canyon deploy, both in ./canyon-tour. If
-it still blocks, stop and show what is left.
+Change that line and nothing else. Run canyon_check (canyon check), then canyon_deploy
+(canyon deploy), both for ./canyon-tour. If it still blocks, stop and show what is left.
 - What happened: one line changed, Canyon reviewed it again and runs it in preview. Give the link.
 - How Canyon helped: the finding named the fix, so it took one round.
 - Without Canyon: a security review, days later, by a person.
@@ -178,9 +186,9 @@ If findings remain that do not block, name each in one line. Fix one only if ask
 
 	tourProd: "CANYON TOUR — CHAPTER 3 of 3: Production: the company's rules decide\n\n" + tourRules + `
 Beat 1. What production needs. If ./canyon-tour is missing or was never deployed, the chapters
-that build the app were skipped: run canyon demo tour plant, then canyon deploy in ./canyon-tour, and
-say in one line that the tour handed over the finished app. Then run canyon status in
-./canyon-tour. Show the production checklist, one line per rule.
+that build the app were skipped: run canyon demo tour plant, then canyon_deploy (canyon deploy) for
+./canyon-tour, and say in one line that the tour handed over the finished app. Then run
+canyon_status (canyon status) for ./canyon-tour. Show the production checklist, one line per rule.
 - What happened: the app runs in preview, and Canyon checked it against the company's production rules.
 - How Canyon helped: the chapters before were about the code. This one is about the company: a
   passing review, a person who asked, an owner, an approved stack.
@@ -193,8 +201,11 @@ Beat 2. The roles. Say: you are still the developer. Send me:
 
 Wait until they send it. Never promote on something they said earlier.
 
-Beat 3. The promotion. In ./canyon-tour, run canyon deploy --env prod --yes: they asked for it in
-this conversation. If Canyon refuses, show what it printed and stop. Then run canyon fleet.
+Beat 3. The promotion. Never set confirm on your own: only the person's yes in this conversation
+sets it, and their message in beat 2 is that yes. With it, call canyon_promote with confirm true
+(canyon deploy --env prod --yes) for ./canyon-tour. If the client asks them itself, let them answer
+there. Without it, ask whether to put the claims tracker in production, and wait. If Canyon refuses,
+show what it printed and stop. Then run canyon fleet.
 - What happened: the reviewed version runs in production. Give the link and who can open it.
 - How Canyon helped: it promoted the exact version that passed, and recorded who asked.
 - Without Canyon: either version Canyon blocked could have been the one that shipped.
@@ -233,6 +244,9 @@ Then offer these four ways on, once, each as one line, and let the user pick or 
   4. Run real workloads. Canyon on their own Kubernetes cluster, with their registry, gateway,
      identity provider and Postgres. Canyon's docs, under Self-host, have what production needs.
 
+Then say in one line: Canyon's docs, under Get started, Connect your agent, show how to give any of
+their coding agents Canyon's tools.
+
 Last, say that canyon demo down stops the demo and frees the disk. Run it only if asked.
 `,
 }
@@ -256,6 +270,7 @@ var tourHuman = map[int]string{
 
   To walk through it by hand instead:
 
+    canyon skill install       Canyon's skill, hook and tools for your coding agent
     canyon fleet               what is running, and the link to the dashboard
     (open http://localhost:7777/#/guardrails/policies?rule=design.org-system, set the marked
      row to Blocking, and press Save)
@@ -317,6 +332,8 @@ var tourHuman = map[int]string{
                                   under Self-host, have one Kubernetes node and one Linux server.
     Run real workloads            Canyon on your own Kubernetes cluster. Canyon's docs, under
                                   Self-host, have the install and what production needs.
+
+  To give your other coding agents Canyon's tools: Canyon's docs, Get started, Connect your agent.
 
   To stop the demo: canyon demo down.
   canyon demo tour reset starts the tour again.

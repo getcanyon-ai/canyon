@@ -5,17 +5,6 @@ name: e2e
 
 on:
   pull_request:
-    paths:
-      - 'executor/**'
-      - 'gate/testdata/apps/**'
-      - 'Dockerfile'
-      - 'Dockerfile.executor'
-      - 'docker-compose.yml'
-      - 'Makefile'
-      - 'go.mod'
-      - '.github/workflows/e2e.yml'
-      - '.github/pack-download-test.py'
-      - '.github/fetch.sh'
   push: # main re-runs nothing a pull request ran (#2173): it only writes executor-e2e's build cache, once per go.sum
     branches: [main]
     paths:
@@ -31,8 +20,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      executor-e2e: ${{ steps.reach.outputs.executor-e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh executor-e2e
+
   compose-build:
-    if: github.event_name == 'pull_request'
+    needs: paths
+    if: (github.event_name == 'pull_request') && needs.paths.outputs.executor-e2e == 'true'
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; Dockerfile.executor carries pack's arm64 pin
     timeout-minutes: 20
     steps:
@@ -40,7 +42,8 @@ jobs:
       - run: docker compose build
 
   pack-download: # pack's release download outlives GitHub's 504s and still checks the pin, in make pack-fetch and Dockerfile.executor alike (#2755)
-    if: github.event_name == 'pull_request'
+    needs: paths
+    if: (github.event_name == 'pull_request') && needs.paths.outputs.executor-e2e == 'true'
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 10
     steps:
@@ -48,7 +51,8 @@ jobs:
       - run: python3 .github/pack-download-test.py
 
   executor-e2e:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.executor-e2e == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; the builder, paketobuildpacks/ubuntu-noble-builder, is multi-arch (#1025)
     timeout-minutes: 45 # ten real buildpack builds, a stock Next 16 among them (#1240), and the Paketo samples' image scans (#2216): the test step ran 23 min
     steps:

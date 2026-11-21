@@ -60,6 +60,15 @@ func (a *app) skillUninstall(args []string) int {
 			status, err := uninstallHook(t.hook)
 			row(t.name, t.hook.shown, status, err)
 		}
+		if t.mcp != nil {
+			status, err := uninstallMCP(t.mcp)
+			row(t.name, t.mcp.shown, status, err)
+		}
+		if dir := skillsDir(a.getenv("HOME"), t.harness); dir != "" { // the playbooks the session hook synced (design/specs/mcp.md §3.3)
+			for _, name := range removeSyncedSkills(dir) {
+				row(t.name, skillsShown[t.harness]+name+"/", "removed", nil)
+			}
+		}
 	}
 	a.sandboxed(denied)
 	switch {

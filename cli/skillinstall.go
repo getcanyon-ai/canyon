@@ -25,6 +25,7 @@ type skillTarget struct {
 	path                 string
 	whole                bool         // Canyon owns the file: a copy with no block is replaced, never appended to
 	hook                 *sessionHook // the session hook beside the skill (hooks.go); nil for AGENTS.md, which the skill's own sentence reaches
+	mcp                  *mcpConfig   // canyon mcp in the harness's MCP config (mcpconfig.go); nil for AGENTS.md, which names no harness
 }
 
 // startClaude is how a machine with no harness gets one: Claude Code makes ~/.claude on its first start,
@@ -82,12 +83,17 @@ func (a *app) skillTargets() []skillTarget {
 	}
 	cursor := &sessionHook{"./.cursor/hooks.json", filepath.Join(".cursor", "hooks.json"), "sessionStart",
 		`{"command":"canyon manifest --harness ` + targetCursor + `"}`, `{"version":1}`, ""}
+	// The MCP server, the same way: this binary by its path in the machine's own files, by name in Cursor's
+	// project file (design/specs/mcp.md §1.4).
+	claudeMCP := &mcpConfig{"~/.claude.json", filepath.Join(home, ".claude.json"), Self, true, false}
+	codexMCP := &mcpConfig{"~/.codex/config.toml", filepath.Join(home, ".codex", "config.toml"), Self, false, true}
+	cursorMCP := &mcpConfig{"./.cursor/mcp.json", filepath.Join(".cursor", "mcp.json"), "canyon", true, false}
 	return []skillTarget{
-		{"Claude Code", targetClaude, "~/.claude/skills/canyon/SKILL.md", filepath.Join(home, ".claude"), "~/.claude", filepath.Join(home, ".claude", "skills", "canyon", "SKILL.md"), true, claude},
+		{"Claude Code", targetClaude, "~/.claude/skills/canyon/SKILL.md", filepath.Join(home, ".claude"), "~/.claude", filepath.Join(home, ".claude", "skills", "canyon", "SKILL.md"), true, claude, claudeMCP},
 		// Codex is found by ~/.codex, and reads its skills from ~/.agents/skills, which it does not make
-		{"Codex", targetCodex, "~/.agents/skills/canyon/SKILL.md", filepath.Join(home, ".codex"), "~/.codex", filepath.Join(home, ".agents", "skills", "canyon", "SKILL.md"), true, codex},
-		{"Cursor", targetCursor, "./.cursor/rules/canyon.mdc", ".cursor", "./.cursor", filepath.Join(".cursor", "rules", "canyon.mdc"), true, cursor},
-		{"AGENTS.md", targetAgents, "./AGENTS.md", "", "", "AGENTS.md", false, nil},
+		{"Codex", targetCodex, "~/.agents/skills/canyon/SKILL.md", filepath.Join(home, ".codex"), "~/.codex", filepath.Join(home, ".agents", "skills", "canyon", "SKILL.md"), true, codex, codexMCP},
+		{"Cursor", targetCursor, "./.cursor/rules/canyon.mdc", ".cursor", "./.cursor", filepath.Join(".cursor", "rules", "canyon.mdc"), true, cursor, cursorMCP},
+		{"AGENTS.md", targetAgents, "./AGENTS.md", "", "", "AGENTS.md", false, nil, nil},
 	}
 }
 
@@ -165,6 +171,10 @@ func (a *app) skillInstall(args []string) int {
 		if t.hook != nil {
 			status, err := a.installHook(t.hook)
 			row(t.name, t.hook.shown, status, err)
+		}
+		if t.mcp != nil {
+			status, err := a.installMCP(t.mcp)
+			row(t.name, t.mcp.shown, status, err)
 		}
 		agents = agents || (t.own == "" && err == nil) // a refused AGENTS.md is still offered the hint
 		codex = codex || t.harness == targetCodex

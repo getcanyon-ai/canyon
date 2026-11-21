@@ -102,6 +102,10 @@ export const S = {
   playbookImportNoFrontmatter: "This isn't a SKILL.md: it needs a frontmatter block between two --- lines.",
   playbookImportNoName: "The SKILL.md's frontmatter needs a name and a description.",
   playbookRestore: "Restore this version",
+  // Each playbook's two counts on its card, and the line under the tab's that says what the second can't see (§3.5).
+  playbookReads: "<n> reads in 30 days",
+  playbookMachines: "on <n> machines",
+  playbookCountsMean: "Canyon can't see an agent reading its local copy of a skill: \"on N machines\" says where the current version is, not how often it's read.",
   // The custom rule editor's playbook field and the rule's line naming it (contracts/routes.md, the custom-rules row).
   rulePlaybook: "Playbook",
   rulePlaybookMeans: "A finding of this rule tells the agent to read this playbook after its fix.",
@@ -815,7 +819,11 @@ export const SESSIONS = {
 // switch on Settings › People & sign-in that turns it on (design/AUTH.md §4.5).
 export const APPROVAL = {
   eyebrow: "Production approval",
-  title: "Promote <app> to production?",
+  // The question names what ships, as the CLI's and canyon_promote's do, byte for byte (design/EXPERIENCE.md D5).
+  title: "Promote <app> <version> to production?",
+  titlePutBack: "Put <app> <version> back in production, replacing <replaces>?",
+  titlePutBackNothing: "Put <app> <version> back in production?",
+  titleUnread: "Promote this app to production?", // before the read answers, nothing is known to name
   asked: "<name> asked from the CLI, <time>.",
   asked_elsewhere: "<name> asked, <time>.",
   now: "In production now",

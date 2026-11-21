@@ -48,6 +48,16 @@ describe("Guardrails › Playbooks", () => {
     expect((await card(notes.name)).getByText("Note")).toBeDefined();
   });
 
+  // Two counts, neither naming anyone (design/specs/mcp.md §3.5): reads on every card, machines on a skill's alone, and
+  // one line saying what machines can't see.
+  it("shows each playbook's reads in 30 days, and a skill's machines", async () => {
+    server(routes);
+    render(<Playbooks />);
+    expect((await card(service.name)).getByText(`${service.reads} reads in 30 days · on ${service.machines} machines`)).toBeDefined();
+    expect((await card(notes.name)).getByText(`${notes.reads} reads in 30 days`)).toBeDefined();
+    expect(screen.getByText(/Canyon can't see an agent reading its local copy of a skill/)).toBeDefined();
+  });
+
   it("says when the org has none", async () => {
     server({ [`GET ${AT}`]: { body: { playbooks: [] } } });
     render(<Playbooks />);

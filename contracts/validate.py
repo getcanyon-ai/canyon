@@ -2030,7 +2030,7 @@ def seam3_playbooks(customs):
                 (one["updated_by"], one["updated_at"]) != (newest["set_by"], newest["set_at"]):
             out.append("the read is not the newest version")
         entry = next((e for e in listed if e["slug"] == one["slug"]), None)
-        if entry is None or {k: v for k, v in one.items() if k != "body"} != entry:
+        if entry is None or {k: v for k, v in one.items() if k != "body"} != {k: v for k, v in entry.items() if k not in ("reads", "machines")}:
             out.append("the list's entry is not the read without its body")
         put = d["playbook_put"]
         got, detail = put["response"]["playbook"], put["audit"]["detail"]

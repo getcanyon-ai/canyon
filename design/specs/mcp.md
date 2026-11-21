@@ -98,8 +98,8 @@ hook entries do today (cli.md §7.1).
 
 ### 2.1 Transport
 
-- **Endpoints.** `POST /mcp` and `GET /mcp` carry MCP's streamable HTTP transport. `DELETE /mcp` ends an `Mcp-Session-Id`.
-- **Origin.** The server validates `Origin` against the host's public URL, as MCP's streamable HTTP transport requires, and refuses any other with `403`.
+- **Endpoints.** `POST /mcp` carries MCP's streamable HTTP transport, **stateless** (amended 2026-11-21): every request stands alone, with no `Mcp-Session-Id`, so any replica behind the ingress answers it, and a tool's progress streams within its own request. `GET` and `DELETE /mcp` answer `405`. Production's question needs no session either: it comes back as an input request, and the retry carrying the answer is bound to it by its digest (§1.1).
+- **Origin.** The server validates `Origin` against the host's public URL, as MCP's streamable HTTP transport requires, and refuses any other with `403`. A request with no `Origin`, a native client's, passes.
 - **Where it's served.** The route serves only on the host's public URL behind TLS. A plain-`http` public URL serves no `/mcp`.
 
 ### 2.2 Authorization

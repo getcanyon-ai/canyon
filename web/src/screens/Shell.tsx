@@ -37,6 +37,9 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Who is reading, for the foot of the rail on every page. Only a host with sign-in has somebody to
   // name; the fleet read is where the contract answers it (routes.md, `viewer` on GET /fleet).
   const [viewer, setViewer] = useState<Viewer | null>(null);
+  // The reader's role as the setup gate's preferences read names it, which answers before the fleet's: the rail offers an
+  // admin Guardrails on its first paint (the v0.11.0 role walk). The fleet's viewer, once read, is the one that counts.
+  const [role, setRole] = useState<string | null>(null);
   const fleet = !["#/apps/", "#/guardrails", "#/audit", "#/settings", "#/device", "#/approve", "#/oauth", "#/no-access/"].some((screen) => hash.startsWith(screen));
   const away = useRef(false);
   // The name is read again on each return to the fleet: a rename under Guardrails is the heading on
@@ -55,6 +58,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
       if (live) { setOrg(config.org); setAuth(config.auth); }
       if (config.auth !== "oidc") return null;
       const record = await getPreferences();
+      if (live) setRole(record.viewer?.role ?? null);
       answered();
       return record.onboarded_at === null ? record : null;
     };
@@ -97,7 +101,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Finishing writes the row, so the host has left the setup state and the fleet is served.
   if (setup !== null) return <Onboarding record={setup} done={() => setSetup(null)} />;
   // Guardrails is offered once the reader is known to be an admin: everyone is, on a host with sign-in off.
-  return <RailContext value={{ org, viewer, admin: auth === "off" || viewer?.role === "admin", needs }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
+  return <RailContext value={{ org, viewer, admin: auth === "off" || (viewer?.role ?? role) === "admin", needs }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
 }
 
 function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "oidc" | "off" | null }) {

@@ -1304,7 +1304,7 @@ def seam3_access():
     groups = sorted(e["grantee"] for e in before["entries"] if e["kind"] == "group" and e["level"] == "owner")
     who = owners[0] if owners else f"a member of the {groups[0]} group" if groups else "an admin"
     tr, orq = doc["team_required"], doc["owner_required"]
-    if [o["display"] for o in tr["owners"]] != owners or tr["owner_groups"] != groups or tr["message"] != f"Ask {who} to add you to {doc['project']}":
+    if [o["display"] for o in tr["owners"]] != owners or tr["owner_groups"] != groups or tr["message"] != f"Ask {who} to add you to {doc['project']}'s team: on its page in Canyon, use Ask for access.":
         errors.append(f"access: team_required answers {tr['message']!r} with {tr['owners']} and {tr['owner_groups']}; the owners are {owners} and {groups}")
     if orq["message"] != f"only the owners of {doc['project']} and admins can do this: ask {who}":
         errors.append(f"access: owner_required answers {orq['message']!r}; it asks {who}")

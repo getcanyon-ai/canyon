@@ -78,11 +78,12 @@ approver's routes (the level table's `contributor, or a responder` row) admit th
 
 Two refusals, after the session stage and before the handler reads anything of the app but its team
 — one `denied` row once answered (the audit read), one log line; an unknown or deleted project is `404` before either:
-`403 {error:"team_required", message:"Ask <who> to add you to <app>", owners[], owner_groups[]}` when the
+`403 {error:"team_required", message:"Ask <who> to add you to <app>'s team: on its page in Canyon, use Ask for access.", owners[], owner_groups[]}` when the
 caller's level is below a `contributor` route's — `owners[]` the project read's, `owner_groups[]` the project read's, and `<who>` whom to ask: the first owner's display, else `a member of the <group> group`
 for the first of `owner_groups[]`, else `an admin`; a read-only caller's (`viewer`) message is `Ask <who> to add you to
 <app>'s team: on its page in Canyon, use Ask to join its team.`, the button that asks them (amended 2026-11-12, the
-v0.9.0 walkthrough) · `403 {error:"owner_required", message:"only the owners of <app> and admins can do this: ask <who>"}`
+v0.9.0 walkthrough), and a caller with no level's names the no-access page's button, `Ask for access` (amended 2026-11-21,
+the v0.11.0 role walk: the approval page showed the bare line to a person with no access, with no next step and no full stop) · `403 {error:"owner_required", message:"only the owners of <app> and admins can do this: ask <who>"}`
 when the route's minimum is `owner` and the caller is not one, `<who>` as team_required's (amended 2026-10-12: a
 refusal says whom to ask).
 

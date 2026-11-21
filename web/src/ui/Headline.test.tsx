@@ -232,6 +232,15 @@ describe("the band beside the needs", () => {
     const refuses = { ...need("will_refuse", "prod", 6), blocks: true };
     expect(leads(ready, [refuses])).toEqual({ band: ready, first: false, needs: [refuses] });
   });
+  // A person asked for production, so its approval is the one thing to do: the ready band's Promote would ask again for
+  // what is already asked (the v0.11.0 role walk drew both), so the band gives way to the approval's Review and approve.
+  it("gives way to a production approval asked, so Promote is never beside Review and approve", () => {
+    const ready = headline(facts({ ...at("preview"), run: run({}), preview: env("pkg_14", "v1.4"), previewName: "v1.4" }));
+    expect(ready.primary).toBe("promote");
+    const asked = need("approval", "prod", 5);
+    expect(leads(ready, [asked])).toEqual({ band: null, first: false, needs: [asked] });
+    expect(leads(ready, [unowned]).band).toBe(ready);
+  });
   // Production's green gives way to a need of production that ranks 6 or above; below that it stays, the needs under it.
   it("keeps production's green over needs that rank 7 and below, and draws them under it", () => {
     const green = headline(facts(live));

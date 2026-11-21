@@ -19,3 +19,4 @@ docker-compose.yml
 e2e/compose.e2e.yml
 e2e/fixtures/**
 e2e/stub/**
+scripts/ci-suite.sh # its steps, here and on Canyon's private runners (CONTRIBUTING.md, Maintainers)

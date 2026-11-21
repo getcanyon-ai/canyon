@@ -178,14 +178,16 @@ directory. It adds three tools that work from a repository:
 
 ### 2.4 Pushing it to an org's agents
 
-A platform team rolls out the remote server, and optionally the session hook, through each agent's
-org-managed settings. Docs ship one page per agent (`docs/start/agents/`) with the exact block.
+A platform team rolls out the remote server to its **cloud** agents, and optionally the session hook, where each
+agent's vendor offers an org-wide way. The address is for cloud agents alone (amended 2026-11-21): a laptop's agents
+use `canyon mcp`, which `canyon skill install` sets up, so no rollout that also reaches laptops is offered. Docs ship
+one page per agent (`docs/start/agents/`) with the exact steps.
 
 | Harness | MCP server, org-managed | Session hook, org-managed |
 |---|---|---|
-| Claude Code | `managed-mcp.json` beside the managed settings: `{"mcpServers":{"canyon":{"type":"http","url":"https://<canyon>/mcp"}}}` | `hooks.SessionStart` in `managed-settings.json`, as `skill install` writes it today, if the CLI is on those machines |
-| Codex | `[mcp_servers.canyon]` with `url = "https://<canyon>/mcp"` in the managed config | the managed `hooks.json`, where Codex reads one |
-| Cursor | the team's MCP settings, where Cursor's admin plan offers them | `hooks.json` committed to the repositories the team uses |
+| Claude Code | a custom connector in claude.ai, which an owner of the claude.ai organization adds on Team and Enterprise plans and each person connects; Claude Code on the web uses it (https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp, read 2026-11-21). It also shows up in Claude Code on laptops, where `canyon mcp` stays the one to use. Never managed settings, `managedMcpServers` or `managed-mcp.json`: they reach every Claude Code that receives them, laptops included, and `managed-mcp.json` switches every other MCP server off (code.claude.com/docs/en/managed-mcp, read 2026-11-21) | `hooks.SessionStart` in `managed-settings.json`, as `skill install` writes it today, if the CLI is on those machines |
+| Codex | none: Codex's cloud tasks have no documented MCP, and its managed configuration (`requirements.toml`) allows or blocks servers without adding one; Codex users use the laptop steps (learn.chatgpt.com/codex/extend/mcp.md, learn.chatgpt.com/codex/enterprise/managed-configuration, read 2026-11-21) | the managed `hooks.json`, where Codex reads one |
+| Cursor | a team MCP server under Dashboard › Plugins & MCPs, which Cursor's cloud agents get; each person allows it once (cursor.com/docs/context/mcp, read 2026-11-21) | `hooks.json` committed to the repositories the team uses |
 
 - **Remote needs no hook.** A remote-only org needs no CLI on the machine: the server's `instructions` carry the manifest. The hook is for orgs that also run the CLI.
 - **These paths change between harness releases.** The docs PR checks each one against the harness version it names, and none of them is hard-coded in Canyon.
@@ -317,7 +319,7 @@ Named here, and edited later in the PR that builds each.
   - a finding's playbook step, in both forms (§3.4);
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
 - **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1) and the hook's native-skill sync, §7.2's skill text, and §5.2's playbook step.
-- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Guardrails › Connect agents, and *What agents are told*'s components and playbooks (§12).
+- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Settings › People & sign-in › Connect an agent, and *What agents are told*'s components and playbooks (§12).
 - **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
@@ -369,7 +371,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 13. **Secrets in the dashboard.**
     - What: §10.1's Secrets section on the app page.
     - Acceptance: `cd web && npx vitest run src/screens/Secrets.test.tsx` · `make e2e-ui` (a journey per level: a contributor sets a value, a viewer sees no form).
-14. **Guardrails › Connect agents, and what agents receive.**
+14. **Settings › People & sign-in › Connect an agent, and what agents receive.**
     - What: §12.
     - Acceptance: `cd web && npx vitest run src/screens/ConnectAgents.test.tsx` · `make e2e-ui` (a member's and an admin's view).
 15. **Connect your agent.**
@@ -455,11 +457,10 @@ What's missing for it:
 
 ## 12. The dashboard
 
-- **Guardrails › Connect agents**, a new panel:
-  - **The URL.** The server's `/mcp` URL, with a copy button. On a host with sign-in off it shows `canyon mcp` instead, and says a team install connects agents by URL.
-  - **Per agent:** Claude Code, Codex, Cursor and VS Code each get their one-click install link where one exists (§8), and the CLI line `canyon skill install`.
-  - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with this host's URL.
-  - **Who sees it.** Every member sees the URL and the per-agent lines; only admins see the org-managed snippets, as they're for rolling out to everyone.
+- **Settings › People & sign-in › Connect an agent**, a new panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open):
+  - **On a laptop, the CLI** (amended 2026-11-21): three numbered steps with this host filled in, install the CLI, `canyon login <host>`, `canyon skill install`. Every host shows them.
+  - **In the cloud, the URL**, for cloud agents alone: the protected-resource metadata's `resource`, exactly, with a copy button, then §2.4's way for each cloud agent: Claude Code on the web by a claude.ai connector, with a link to Anthropic's connector docs; Cursor's cloud agents by a team MCP server; and Codex, whose cloud tasks have no MCP, sent to the laptop steps. Nothing offers the URL for a laptop: no agent's command, no install link, no managed settings. Where the metadata read answers `404` (a public URL that isn't `https`), no URL, and one line saying why; on a host with sign-in off, no URL and a line saying why.
+  - **Who sees it.** Every member, the same panel: each cloud agent's line says who adds the address.
 - **Guardrails › Playbooks**, the authoring screen: §3.2.
 - **What agents receive.** The existing *What agents are told* view gains the two things an agent is now handed besides the rules:
   - the components (`component_types`) and stacks;

@@ -39,7 +39,7 @@ func TestTheSecretsSectionAtEachLevel(t *testing.T) {
 		if who != "owner" {
 			browser = signIn(t, people[who])
 		}
-		walkSecrets(t, browser, who, app)
+		walk(t, browser, "secrets", who, "SECRETS_APP="+app)
 		if who == "contributor" {
 			var read struct {
 				Secrets []struct{ Name, Env, Where string } `json:"secrets"`
@@ -58,7 +58,9 @@ func TestTheSecretsSectionAtEachLevel(t *testing.T) {
 }
 
 // walkSecrets runs e2e/ui's secrets project in Chromium as who, their session cookie handed over.
-func walkSecrets(t *testing.T, browser *http.Client, who, app string) {
+// walk runs the Playwright project's test for who in that person's browser session: <PROJECT>_COOKIE_NAME and _VALUE
+// carry the session, and env the project's own settings.
+func walk(t *testing.T, browser *http.Client, project, who string, env ...string) {
 	t.Helper()
 	u, err := url.Parse(host)
 	must(t, err)
@@ -71,12 +73,13 @@ func walkSecrets(t *testing.T, browser *http.Client, who, app string) {
 	if session == nil {
 		t.Fatalf("%s's browser holds no session", who)
 	}
-	cmd := exec.Command("npx", "playwright", "test", "--project=secrets", "--grep", "as "+who+"$") //nolint:gosec // the harness's own runner
+	prefix := strings.ToUpper(project)
+	cmd := exec.Command("npx", "playwright", "test", "--project="+project, "--grep", "as "+who+"$") //nolint:gosec // the harness's own runner
 	cmd.Dir = filepath.Join("..", "ui")
-	cmd.Env = append(os.Environ(), "E2E_CANYON_URL="+host, "SECRETS_COOKIE_NAME="+session.Name, "SECRETS_COOKIE_VALUE="+session.Value, "SECRETS_APP="+app)
+	cmd.Env = append(append(os.Environ(), "E2E_CANYON_URL="+host, prefix+"_COOKIE_NAME="+session.Name, prefix+"_COOKIE_VALUE="+session.Value), env...)
 	out, err := cmd.CombinedOutput()
-	t.Logf("playwright, the Secrets section as %s:\n%s", who, out)
+	t.Logf("playwright, %s as %s:\n%s", project, who, out)
 	if err != nil {
-		t.Fatalf("the Secrets section as %s: %v", who, err)
+		t.Fatalf("%s as %s: %v", project, who, err)
 	}
 }

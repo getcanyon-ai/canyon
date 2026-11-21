@@ -1031,6 +1031,34 @@ export const SECRETS = {
   unread: "The app's secrets couldn't be read.",
 } as const;
 
+// Settings › People & sign-in's Connect an agent (design/specs/screens.md, Connect an agent; design/specs/mcp.md §12;
+// EXPERIENCE.md D5): every member's, its org-managed snippets an admin's alone.
+export const CONNECT = {
+  title: "Connect an agent",
+  about: "Give your coding agents Canyon's tools. An agent acts as the person who connects it, and each one you connect is listed under Sessions, where you can disconnect it.",
+  laptop: "On your laptop",
+  stepInstall: "Install the CLI",
+  stepLogin: "Sign in to this Canyon",
+  stepSkill: "Set up your coding agents",
+  laptopNote: "The last step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools. They load the next time each agent starts.",
+  cloud: "In the cloud",
+  cloudNote: "For agents that run on their vendor's machines. They review and deploy what you've pushed to GitHub. On a laptop, use the CLI above: one way per agent.",
+  address: "Canyon's address for agents",
+  addressNote: "The first time an agent uses it, Canyon opens in your browser and asks you to allow it.",
+  copy: "Copy",
+  copied: "Address copied",
+  noAddress: "Agents can't connect to this Canyon by its address, because it isn't served over https. Use the CLI above.",
+  claudeWeb: "Claude Code on the web",
+  claudeWebHow: "Add this address as a custom connector in claude.ai. On Team and Enterprise plans, an owner of your claude.ai organization adds it once, and each person connects it. The connector also shows up in Claude Code on laptops, where the server canyon skill install set up stays the one to use.",
+  claudeDocs: "Anthropic's connector docs",
+  cursorCloud: "Cursor's cloud agents",
+  cursorCloudHow: "A team admin adds this address as a team MCP server in Cursor's dashboard, under Plugins & MCPs.",
+  codexCloud: "Codex's cloud tasks can't connect to an MCP server yet. Use Codex on your laptop, with the CLI above.",
+  signInOff: "Sign-in is off on this Canyon, so it gives agents no address: anyone who could reach it would act as an admin. Use the CLI above. A team's Canyon with sign-in gives agents an address.",
+} as const;
+// Anthropic's docs for adding a claude.ai connector, which Claude Code on the web uses (Connect an agent).
+export const CONNECTOR_DOCS = "https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp";
+
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's
 // image read in its own words beside its mark, then what it counts, one card a package, where it is in a developer's
 // words (never its class), its notes and what Canyon's patches fixed in it.

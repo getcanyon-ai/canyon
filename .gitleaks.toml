@@ -23,6 +23,11 @@ description = "the app page's Secrets section (design/specs/mcp.md §10.1): a sy
 condition = "AND"
 paths = ['''web/src/screens/Secrets\.test\.tsx''', '''e2e/ui/secrets/secrets\.spec\.ts''']
 regexes = ['''sk_test_51Hplanted0000000000000000''', '''sk_test_51Hjourney0000000000000000''']
+[[rules.allowlists]]
+description = "the release walk's secret link: a synthetic Stripe-shaped value the link carries, which the walk proves never reaches the page"
+condition = "AND"
+paths = ['''e2e/ui/release/release\.spec\.ts''']
+regexes = ['''sk_test_51Hlinked000000000000000000''']
 
 [[rules]]
 id = "generic-api-key"

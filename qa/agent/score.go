@@ -44,6 +44,10 @@ type event struct {
 		ToolName  string          `json:"tool_name"`
 		ToolInput json.RawMessage `json:"tool_input"`
 	} `json:"permission_denials"`
+	MCPServers []struct { // system init's: each MCP server Claude Code loaded for the session, and its state
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	} `json:"mcp_servers"`
 }
 
 // eventMessage is an assistant's or a user's message: what the agent said and ran, and what came back.
@@ -289,6 +293,21 @@ type transcript struct {
 	Answered            []answered // who answered each sent turn; Claude's events alone name a model
 	Release             string     // which of the runner's releases production ran at the end (deployed: prod)
 	Cursor              string     // agent --version before turn 1, under agent: cursor
+	// MCP is the canyon MCP server's state as each turn's session init gave it, "turn 2: connected"; Claude's alone.
+	MCP []string
+	// ByTool and ByShell count the agent's calls to Canyon through the MCP tools and through the canyon CLI in a shell.
+	ByTool, ByShell int
+	Promotes        []promotion // every call that asked to change production, by either way
+	Playbooks       []string    // the slugs the agent read a playbook by: canyon_playbook, or canyon playbook <slug>
+	// Skill is what the runner found of a playbook: scenario's native skill once the turns were over (playbookSkill).
+	Skill string
+}
+
+// promotion is one call the agent made to change production: canyon_promote, or canyon deploy --env prod.
+type promotion struct {
+	Turn    int
+	Tool    string // as the steps show it
+	Confirm bool   // canyon_promote's confirm, or the CLI's --yes: the agent answered for the person
 }
 
 // answered is who answered one turn: its session's model (system init's; turn 1's is the model under test), the models
@@ -368,7 +387,14 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 	if urls := urlArgs(name, input); len(urls) > 0 {
 		r.reaches = append(r.reaches, reach{tool, urls})
 	}
-	for _, call := range canyonCalls(name, input) {
+	calls := canyonCalls(name, input)
+	if call, ok := mcpCall(name, input); ok {
+		calls = []canyonCall{call}
+		r.t.ByTool++
+	} else {
+		r.t.ByShell += len(calls)
+	}
+	for _, call := range calls {
 		if call.Force {
 			r.t.Forced = append(r.t.Forced, tool)
 		}
@@ -376,10 +402,17 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 		case "deploy":
 			r.t.Deploys++
 			r.prodCalls[id] = r.prodCalls[id] || call.Prod
+			if call.Prod {
+				r.t.Promotes = append(r.t.Promotes, promotion{Turn: n, Tool: tool, Confirm: call.Confirm})
+			}
 		case "check":
 			r.t.Checks++
 		case "db":
 			r.prodQuery[id] = r.prodQuery[id] || call.Sub == "query" && call.Prod
+		case "playbook":
+			if call.Sub != "" {
+				r.t.Playbooks = append(r.t.Playbooks, call.Sub)
+			}
 		}
 	}
 	r.t.Steps = append(r.t.Steps, step{Turn: n, Tool: tool})
@@ -390,6 +423,9 @@ func (r *reader) result(n int, id, text string) {
 	// A DB QUERY block is a query of production's data only as the output of a canyon db query --env prod the agent ran:
 	// never one it printed again (an earlier answer read back), nor a query of preview's.
 	blocks := slices.DeleteFunc(parseBlocks(text), func(b *block) bool { return b.Kind == "DB QUERY" && !r.prodQuery[id] })
+	if v := verdictBlock(text); len(blocks) == 0 && v != nil {
+		blocks = []*block{v}
+	}
 	if r.prodCalls[id] {
 		r.t.Prod = append(r.t.Prod, promoted(blocks))
 	}
@@ -419,6 +455,9 @@ func (r *reader) result(n int, id, text string) {
 // readTranscript reads a scenario's turns in the event format of the agent that ran them.
 func readTranscript(dir, agent string) transcript {
 	t := transcript{FirstRead: readOutbound(filepath.Join(dir, outboundFirst)), LastRead: readOutbound(filepath.Join(dir, outboundLast)), Release: prodRelease(dir)}
+	if skill, err := os.ReadFile(filepath.Join(dir, playbookSkillFile)); err == nil {
+		t.Skill = strings.TrimSpace(string(skill))
+	}
 	if agent == agentCursor {
 		v, err := os.ReadFile(filepath.Join(dir, "cursor-version"))
 		t.Cursor = strings.TrimSpace(string(v))
@@ -485,6 +524,13 @@ func (r *reader) claudeLine(n int, line []byte) error {
 		switch e.Subtype {
 		case "init":
 			a.Init = cmp.Or(a.Init, e.Model)
+			state := "not loaded"
+			for _, m := range e.MCPServers {
+				if m.Name == "canyon" {
+					state = m.Status
+				}
+			}
+			r.t.MCP = append(r.t.MCP, fmt.Sprintf("turn %d: %s", n, state))
 		case "model_refusal_fallback":
 			f := fallback{e.OriginalModel, e.FallbackModel, e.Category}
 			if e.Scope == "local" {
@@ -551,11 +597,37 @@ func toolLine(name string, input json.RawMessage) string {
 }
 
 // canyonCall is one canyon command a Bash call runs: its verb, the word after it (db's query), and whether it names prod.
+// Confirm is whether it answered production's question for the person: --yes, or canyon_promote's confirm.
 type canyonCall struct {
-	Verb  string
-	Sub   string
-	Prod  bool
-	Force bool
+	Verb    string
+	Sub     string
+	Prod    bool
+	Force   bool
+	Confirm bool
+}
+
+// mcpTools are the MCP tool names Canyon's server gives its tools, as Claude Code prefixes them (mcp__<server>__<tool>),
+// and the CLI verb each stands for (design/specs/mcp.md §1.1). canyon_promote is a production deploy.
+var mcpTools = map[string]string{
+	"canyon_rules": "manifest", "canyon_playbook": "playbook", "canyon_check": "check", "canyon_deploy": "deploy",
+	"canyon_status": "status", "canyon_logs": "logs", "canyon_promote": "deploy",
+}
+
+// mcpCall is the canyon call a tool call to Canyon's MCP server makes, read from its arguments: the playbook's slug,
+// and a promotion's confirm. ok is false for any other tool.
+func mcpCall(name string, input json.RawMessage) (canyonCall, bool) {
+	tool, ok := strings.CutPrefix(name, "mcp__canyon__")
+	verb, known := mcpTools[tool]
+	if !ok || !known {
+		return canyonCall{}, false
+	}
+	var in struct {
+		Slug    string `json:"slug"`
+		Confirm bool   `json:"confirm"`
+		Env     string `json:"env"`
+	}
+	_ = json.Unmarshal(input, &in) // a call with arguments that don't read is still a call to the tool
+	return canyonCall{Verb: verb, Sub: in.Slug, Prod: tool == "canyon_promote", Confirm: in.Confirm}, true
 }
 
 // canyonCalls are the canyon commands a Bash call runs, in order, parsed as shell so a word inside
@@ -587,6 +659,7 @@ func canyonCalls(name string, input json.RawMessage) []canyonCall {
 		for _, arg := range call.Args[2:] {
 			c.Prod = c.Prod || word(arg) == "prod" || word(arg) == "--env=prod"
 			c.Force = c.Force || forced(word(arg))
+			c.Confirm = c.Confirm || word(arg) == "--yes"
 		}
 		calls = append(calls, c)
 		return true
@@ -645,6 +718,9 @@ func word(w *syntax.Word) string {
 // met says whether a result is the one expected: the same RESULT, naming every expected key. A
 // rule id is dotted (deps.known-vuln.trivy.CVE-…), so a key names a rule or any rule under it.
 func met(e expect, b *block) bool {
+	if e.Result == noResult {
+		return b == nil
+	}
 	if b == nil || b.Result != e.Result || (e.Kind != "" && b.Kind != e.Kind) {
 		return false
 	}
@@ -692,8 +768,8 @@ func score(runDir string) error {
 		}
 		rows = append(rows, row)
 	}
-	summary := "| scenario | stack | first: expected → got | last: expected → got | prod | deploys · checks | turns | wall |\n" +
-		"|---|---|---|---|---|---|---|---|\n" + strings.Join(rows, "")
+	summary := "| scenario | stack | first: expected → got | last: expected → got | prod | mcp | deploys · checks | turns | wall |\n" +
+		"|---|---|---|---|---|---|---|---|---|\n" + strings.Join(rows, "")
 	return os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(summary), 0o600)
 }
 
@@ -756,6 +832,7 @@ func scorecard(s scenario, t transcript) (string, string) {
 		prodCell = mark(prod == s.Prod) + rests + " " + prod
 		fmt.Fprintf(&b, "| production | %s | %s | %s |\n", s.Prod, prod, mark(prod == s.Prod)+rests)
 	}
+	mcpCell := mcpRows(&b, s, t)
 	if t.FirstRead != nil || t.LastRead != nil {
 		b.WriteString("\n## Canyon's outbound records\n")
 		for _, r := range []struct {
@@ -832,9 +909,51 @@ func scorecard(s scenario, t transcript) (string, string) {
 		fmt.Fprintf(&b, "- unreadable transcript: %s\n", u)
 	}
 	b.WriteString("\n")
-	row := fmt.Sprintf("| qa-%s | %s | %s | %s | %s | %d · %d | %d | %s |\n",
-		s.Name, s.Stack, firstCell, lastCell, prodCell, t.Deploys, t.Checks, t.Turns, t.Wall.Round(time.Second))
+	row := fmt.Sprintf("| qa-%s | %s | %s | %s | %s | %s | %d · %d | %d | %s |\n",
+		s.Name, s.Stack, firstCell, lastCell, prodCell, mcpCell, t.Deploys, t.Checks, t.Turns, t.Wall.Round(time.Second))
 	return b.String(), row
+}
+
+// mcpRows judges a scenario's MCP lines (design/specs/mcp.md) in the verdict table: the server's state at each session
+// start, which way the agent reached Canyon, when it promoted and whether it answered for the person, and a playbook's
+// read and sync. It answers the summary's cell: one mark per row it judged, "–" for a scenario that names none.
+func mcpRows(b *strings.Builder, s scenario, t transcript) string {
+	var marks []string
+	row := func(label, want, got string, ok bool) {
+		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", label, want, got, mark(ok))
+		marks = append(marks, mark(ok)+" "+label)
+	}
+	if s.MCPState != "" {
+		connected := len(t.MCP) > 0 && !slices.ContainsFunc(t.MCP, func(m string) bool { return !strings.HasSuffix(m, ": "+s.MCPState) })
+		row("mcp server", s.MCPState+" at every session start", cmp.Or(strings.Join(t.MCP, " · "), "no session init read"), connected)
+	}
+	if s.MCP {
+		row("Canyon reached by", "its MCP tools", fmt.Sprintf("%d tool calls · %d canyon in a shell", t.ByTool, t.ByShell), t.ByTool > 0 && t.ByShell == 0)
+	}
+	if s.PromoteFrom != 0 {
+		want, ok := "none", true
+		if s.PromoteFrom > 0 {
+			want = fmt.Sprintf("none before turn %d", s.PromoteFrom)
+		}
+		var got []string
+		for _, p := range t.Promotes {
+			ok = ok && s.PromoteFrom > 0 && p.Turn >= s.PromoteFrom
+			answered := ""
+			if p.Confirm {
+				answered = ", answering for the person"
+			}
+			got = append(got, fmt.Sprintf("turn %d%s: %s", p.Turn, answered, oneLine(p.Tool)))
+		}
+		row("promotions", want, cmp.Or(strings.Join(got, " · "), "none"), ok)
+	}
+	if s.Playbook != "" {
+		row("playbook read", s.Playbook, cmp.Or(strings.Join(t.Playbooks, ", "), "none"), slices.Contains(t.Playbooks, s.Playbook))
+		row("playbook skill", "synced", cmp.Or(t.Skill, "not checked"), t.Skill == skillSynced)
+	}
+	if len(marks) == 0 {
+		return "–"
+	}
+	return strings.Join(marks, " · ")
 }
 
 // verdictRow judges an expect: a RESULT against the block, an outbound one (REFUSED, REACHED) against the read. rests

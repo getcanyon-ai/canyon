@@ -31,8 +31,12 @@ jobs:
           set -euo pipefail
           gh label create ci --color d73a4a --description "main's CI is red" 2>/dev/null || true # once: it exists after
           since=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-          gh run list --branch main --limit 100 --json workflowName,conclusion,headSha,url,createdAt \
-            --jq ".[] | select(.createdAt >= \"$since\") | select(.conclusion == \"failure\" or .conclusion == \"startup_failure\") | [.workflowName, .conclusion, .headSha[0:7], .url] | @tsv" |
+          # this repository's own main alone: a fork's pull request from a branch named main also lists under branch=main,
+          # under a workflow name its own file chose, so only push, schedule and dispatch runs whose head is this repository count
+          for event in push schedule workflow_dispatch; do
+            gh api -X GET "repos/$GH_REPO/actions/runs" -f branch=main -f event="$event" -f created=">=$since" -f per_page=100 \
+              --jq '.workflow_runs[] | select(.head_repository.full_name == env.GH_REPO) | select(.conclusion == "failure" or .conclusion == "startup_failure") | [.name, .conclusion, .head_sha[0:7], .html_url] | @tsv'
+          done |
           while IFS=$'\t' read -r workflow conclusion sha url; do
             title="main is red: $workflow"
             issue=$(gh issue list --label ci --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)

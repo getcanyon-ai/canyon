@@ -189,3 +189,24 @@ func TestSkillInstallsMCPServerIsChecked(t *testing.T) {
 		t.Errorf("synced skill read as %q", got)
 	}
 }
+
+// Claude Code hands the model a tool's structuredContent, as JSON, in place of its text: the verdict reads as a block.
+func TestAStructuredVerdictReadsAsAReview(t *testing.T) {
+	text := `{"run":"gr_93ba","state":"blocked","blocking":1,"warnings":1,"findings":{"runs":[{"results":[` +
+		`{"ruleId":"secrets.client-bundle.gitleaks.stripe-access-token","locations":[{"physicalLocation":{"artifactLocation":{"uri":"public/teamstats.js"},"region":{"startLine":1}}}],"properties":{"canyon":{"blocks":true}}},` +
+		`{"ruleId":"auth.unauthenticated-route","locations":[{"physicalLocation":{"artifactLocation":{"uri":"server.js"},"region":{"startLine":7}}}],"properties":{"canyon":{"blocks":false}}}]}]}}`
+	b := verdictBlock(text)
+	if b == nil || b.Result != "BLOCKED" || b.Run != "gr_93ba" || !met(expect{Result: "BLOCKED", Keys: []string{"secrets.client-bundle"}}, b) || len(b.Advisory) != 1 {
+		t.Fatalf("read: %+v", b)
+	}
+	if verdictBlock(`{"state":"blocked"}`) != nil || verdictBlock("CANYON REVIEW — RESULT: PASSED") != nil {
+		t.Error("read a verdict out of text that is none")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "turn-1.jsonl"), []byte(claudeEvents(t, "connected", [3]string{"mcp__canyon__canyon_deploy", `{}`, text})), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if last, ok := unfixed(dir, agentClaude); last != "BLOCKED" || !ok {
+		t.Errorf("a blocked deploy through the tool left %q to fix (%v)", last, ok)
+	}
+}

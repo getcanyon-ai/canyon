@@ -423,6 +423,9 @@ func (r *reader) result(n int, id, text string) {
 	// A DB QUERY block is a query of production's data only as the output of a canyon db query --env prod the agent ran:
 	// never one it printed again (an earlier answer read back), nor a query of preview's.
 	blocks := slices.DeleteFunc(parseBlocks(text), func(b *block) bool { return b.Kind == "DB QUERY" && !r.prodQuery[id] })
+	if v := verdictBlock(text); len(blocks) == 0 && v != nil {
+		blocks = []*block{v}
+	}
 	if r.prodCalls[id] {
 		r.t.Prod = append(r.t.Prod, promoted(blocks))
 	}

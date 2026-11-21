@@ -97,3 +97,62 @@ func recordSkill(home, dir, agent, slug string) error {
 	}
 	return os.WriteFile(filepath.Join(dir, playbookSkillFile), []byte(got+"\n"), 0o600)
 }
+
+// verdictStates are a structured verdict's state (design/specs/mcp.md §1.1) as the RESULT the CLI's block names.
+var verdictStates = map[string]string{
+	"passed": "PASSED", "approved": "APPROVED", "blocked": "BLOCKED", "failed": "FAILED", "running": "STILL RUNNING", "unknown": "UNKNOWN",
+}
+
+// verdictBlock reads a canyon_check or canyon_deploy result whose text is its structured verdict, {run, state,
+// failure_reason?, blocking, warnings, findings}, findings in Canyon's SARIF profile: Claude Code hands the model a
+// tool's structuredContent, as JSON, in place of its text, so no CANYON REVIEW block is there to parse. nil for any
+// other text.
+func verdictBlock(text string) *block {
+	var v struct {
+		Run      string `json:"run"`
+		State    string `json:"state"`
+		Reason   string `json:"failure_reason"`
+		Findings struct {
+			Runs []struct {
+				Results []struct {
+					RuleID    string `json:"ruleId"`
+					Locations []struct {
+						Physical struct {
+							Artifact struct {
+								URI string `json:"uri"`
+							} `json:"artifactLocation"`
+							Region struct {
+								Line int `json:"startLine"`
+							} `json:"region"`
+						} `json:"physicalLocation"`
+					} `json:"locations"`
+					Properties struct {
+						Canyon struct {
+							Blocks bool `json:"blocks"`
+						} `json:"canyon"`
+					} `json:"properties"`
+				} `json:"results"`
+			} `json:"runs"`
+		} `json:"findings"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(text)), &v) != nil || v.Run == "" || verdictStates[v.State] == "" {
+		return nil
+	}
+	b := &block{Kind: "REVIEW", Result: verdictStates[v.State], Run: v.Run, Reason: v.Reason,
+		Head: []string{"gate run: " + v.Run, "(read from the tool's structured verdict: no text block reached the agent)"}}
+	for _, r := range v.Findings.Runs {
+		for _, res := range r.Results {
+			at := ""
+			if len(res.Locations) > 0 {
+				l := res.Locations[0].Physical
+				at = fmt.Sprintf(" (%s:%d)", l.Artifact.URI, l.Region.Line)
+			}
+			if res.Properties.Canyon.Blocks {
+				b.Blocking = append(b.Blocking, res.RuleID+at)
+			} else {
+				b.Advisory = append(b.Advisory, res.RuleID+at)
+			}
+		}
+	}
+	return b
+}

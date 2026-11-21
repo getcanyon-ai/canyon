@@ -252,6 +252,35 @@ func hooked(t *testing.T) (*Registration, *pgxpool.Pool, chan string) {
 		}
 		_, _ = io.WriteString(w, `{"sha":"`+sha+`"}`)
 	})
+	fake.HandleFunc("GET /repos/acme/claims-portal/branches/{name...}", func(w http.ResponseWriter, r *http.Request) { // the repository's own branches: every ref of refs but the tag
+		sha := refs[r.PathValue("name")]
+		if sha == "" || r.PathValue("name") == "v1.0" {
+			http.Error(w, `{"message":"Branch not found"}`, http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"name":"`+r.PathValue("name")+`","commit":{"sha":"`+sha+`"}}`)
+	})
+	fake.HandleFunc("GET /repos/acme/claims-portal/git/ref/tags/{name...}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("name") != "v1.0" {
+			http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ref":"refs/tags/v1.0","object":{"type":"commit","sha":"`+refs["v1.0"]+`"}}`)
+	})
+	fake.HandleFunc("GET /repos/acme/claims-portal", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"full_name":"acme/claims-portal","default_branch":"main"}`)
+	})
+	fake.HandleFunc("GET /repos/acme/claims-portal/compare/{basehead}", func(w http.ResponseWriter, r *http.Request) { // main...<sha>: a commit of refs is on main; any other, a fork's, diverged
+		base, head, _ := strings.Cut(r.PathValue("basehead"), "...")
+		status := "diverged"
+		switch {
+		case base == "main" && head == refs["main"]:
+			status = "identical"
+		case base == "main" && slices.Contains(slices.Collect(maps.Values(refs)), head):
+			status = "behind"
+		}
+		_, _ = io.WriteString(w, `{"status":"`+status+`"}`)
+	})
 	fake.HandleFunc("GET /repos/acme/claims-portal/code-scanning/", func(w http.ResponseWriter, r *http.Request) {
 		var answer http.HandlerFunc
 		hook(func() { answer = scanning })

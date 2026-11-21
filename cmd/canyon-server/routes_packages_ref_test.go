@@ -91,6 +91,12 @@ func TestPackagesFromRepository(t *testing.T) {
 	if code, out, _ := do(t, carol, http.MethodPost, at, `{"ref":"no-such"}`); code != 404 || out["error"] != "ref_not_found" {
 		t.Errorf("a ref GitHub doesn't know: %d %s", code, lastBody)
 	}
+	const forked = "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0" // a fork's commit, which GitHub resolves through the parent repository
+	if code, out, _ := do(t, carol, http.MethodPost, at, `{"ref":"`+forked+`"}`); code != 404 || out["error"] != "ref_not_found" ||
+		out["message"] != "f0f0f0f isn't on acme/claims-portal's own branches: name one of its branches or tags, or a commit on trunk." ||
+		count(t, ctx, pool, "SELECT count(*) FROM packages WHERE source_ref = '"+forked+"'") != 0 {
+		t.Errorf("a fork's commit: %d %s", code, lastBody)
+	}
 	if code, out, _ := do(t, carol, http.MethodPost, base+"/api/v1/projects/quote-engine/packages/from-repository", `{"ref":"trunk"}`); code != 404 || out["error"] != "not_linked" {
 		t.Errorf("an app with no link: %d %s", code, lastBody)
 	}

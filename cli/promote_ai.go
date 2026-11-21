@@ -33,7 +33,7 @@ func (p promoted) again() string {
 }
 
 const (
-	aiMissingStep  = "The names on the not set for production line are set for preview only. If the app needs one, ask the user to run canyon secret set NAME --env prod in their own terminal. Never ask for the value in the chat."
+	aiMissingStep  = "The names on the not set for production line are set for preview only. If the app needs one, %s. Never ask for the value in the chat."
 	aiAdvisoryStep = "Tell the user each advisory line in its own words: it did not stop production."
 	aiRefusedSteps = "NEXT STEPS:\n" +
 		"1. Tell the user the outcome line, in its own words.\n" +
@@ -95,10 +95,10 @@ func (a *app) aiLacks(p promoted) []string {
 	switch {
 	case p.unchecked != "": // never read as nothing missing
 		a.printf("not set for production: couldn't check: %s\n", p.unchecked)
-		steps = append(steps, aiMissingStep)
+		steps = append(steps, a.missingStep())
 	case len(p.missing) > 0:
 		a.printf("not set for production: %s\n", strings.Join(p.missing, ", "))
-		steps = append(steps, aiMissingStep)
+		steps = append(steps, a.missingStep())
 	}
 	for _, rule := range p.advisory {
 		a.printf("advisory: %s (%s): %s\n", cell(rule.Name), cell(rule.ID), cell(rule.Why))
@@ -128,7 +128,7 @@ func (a *app) aiPromoteFailed(p promoted) int {
 	a.aiPromoteHead("FAILED", p.app, p.host)
 	a.printf("run: %s\nreason: %s\noutcome: nothing was promoted. Production runs what it ran before.\n", cell(p.run), cell(p.last))
 	a.printf("\nNEXT STEPS:\n1. Tell the user the promotion failed, and quote the reason line.\n"+
-		"2. If the reason says the app did not stay up, it is the app's: ask the user to run canyon secret set NAME --env prod in their own terminal for a value production lacks. Never ask for the value in the chat. Then run this command again, "+
+		"2. If the reason says the app did not stay up, it is the app's: "+a.secretAsk()+" for a value production lacks. Never ask for the value in the chat. Then run this command again, "+
 		"or fix the code, deploy it with canyon deploy, then run this command again. Otherwise stop: an admin can look up run %s in Canyon's server log.\n", cell(p.run))
 	a.printf("\nexit code: %d\n", exitError)
 	return exitError

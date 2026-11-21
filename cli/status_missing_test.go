@@ -38,7 +38,7 @@ func TestStatusSaysAValueProductionIsMissing(t *testing.T) {
 	if line := "               ! ORDERS_TOKEN is set for preview but not production. Set it with: canyon secret set ORDERS_TOKEN --env prod\n"; !strings.Contains(human, line) {
 		t.Errorf("status lacks %q:\n%s", line, human)
 	}
-	if line := "not set for production: ORDERS_TOKEN\n  " + aiMissingStep + "\n"; !strings.Contains(ai, line) {
+	if line := "not set for production: ORDERS_TOKEN\n  " + (&app{}).missingStep() + "\n"; !strings.Contains(ai, line) {
 		t.Errorf("status --format ai lacks %q:\n%s", line, ai)
 	}
 	wants(t, "status-prod-missing.txt", human)

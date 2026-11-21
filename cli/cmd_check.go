@@ -161,11 +161,13 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	}
 	a.park() // after parse, so --help prints in every format; every return unparks
 	defer a.unpark(true)
-	dir, err := a.getwd()
-	if err != nil {
-		return a.usage(err)
+	var dir string
+	var p project
+	if a.ref != "" { // on /mcp: the app the tool names, and no directory
+		p, err = a.project()
+	} else if dir, err = a.getwd(); err == nil {
+		p, err = readProject(dir)
 	}
-	p, err := readProject(dir)
 	if missing := (*NoProjectFile)(nil); errors.As(err, &missing) { // deploy writes the file check only reads (§3.2): the one way out, named (#873)
 		return a.usage(fmt.Errorf("%w: run canyon deploy here, which makes the app and writes its id, or run check in your app's directory", err))
 	}
@@ -179,7 +181,7 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	began := time.Now()
 	run := checkRun{App: p.App, Host: client.page(), Reports: reports}
 	a.header(run.App, "")
-	if err := a.prologue(ctx, client, dir, &run); err != nil {
+	if err := a.packaged(ctx, client, dir, &run); err != nil {
 		code := a.fail(err)
 		a.askS3(ctx, client, dir, err)
 		return code
@@ -376,9 +378,16 @@ func (a *app) lacked(e *notOnHost) int {
 		a.printf("env: %s\n", cell(env))
 	}
 	a.printf("host: %s\noutcome: %s\n\n", cell(e.host), cell(outcome))
-	if prod {
+	switch {
+	case a.remote && prod: // on /mcp: no canyon.toml, no host to change
+		a.printf("NEXT STEPS:\n1. Tell the user the outcome line.\n2. Stop.\n")
+	case a.remote:
+		a.printf("NEXT STEPS:\n1. Tell the user the outcome line, and ask whether %s is new on this Canyon.\n"+
+			"2. Only if the user says it is, call canyon_create_app with its repository, then deploy it with canyon_deploy_ref.\n"+
+			"3. Do not make an app unless the user says this one is new on this Canyon.\n", cell(e.app))
+	case prod:
 		a.printf("NEXT STEPS:\n1. Tell the user the outcome line.\n2. Stop. Do not edit canyon.toml, add --host or set CANYON_HOST to get past this.\n")
-	} else {
+	default:
 		a.printf("NEXT STEPS:\n1. Tell the user the outcome line, and ask whether %s is new on this Canyon.\n"+
 			"2. Only if the user says it is, run: canyon deploy --create\n"+
 			"3. Do not add --create unless the user says this app is new on this Canyon, and do not edit canyon.toml, add --host or set CANYON_HOST to get past this.\n", cell(e.app))

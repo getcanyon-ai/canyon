@@ -66,6 +66,14 @@ export default defineConfig({
       retries: 0,
       use: { baseURL: process.env.E2E_CANYON_URL, trace: "off", video: "off", viewport: { width: 1360, height: 900 } },
     },
+    // Settings › People & sign-in › Connect an agent as a member and an admin, which e2e/oidc/connect_test.go runs once per
+    // person with their session (never make e2e-ui): the address needs sign-in on, which the Docker projects' stack has off.
+    {
+      name: "connect",
+      testDir: "connect",
+      retries: 0,
+      use: { baseURL: process.env.E2E_CANYON_URL, trace: "off", video: "off", viewport: { width: 1360, height: 900 } },
+    },
     // Settings › Patching on the team setup with patching on, which e2e/oidc/patch_test.go runs mid-journey (never make
     // e2e-ui): patching needs sign-in on (design/PATCHING.md §4.5), which the Docker projects' stack has off.
     {

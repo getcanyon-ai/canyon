@@ -30,6 +30,7 @@ type manifest struct {
 	Playbooks      []handedPlaybook `json:"playbooks"`     // the org's playbooks, never a body (contracts/routes.md, playbooks[])
 	App            string           `json:"-"`             // the app this directory's canyon.toml names, "" outside one
 	Outbound       bool             `json:"-"`             // the host's via is canyon (GET /api/v1/egress): the agent's manifest says outbound
+	Remote         bool             `json:"-"`             // read for canyon-server's /mcp: secrets are set through canyon_secret_link's link
 }
 
 // viaCanyon is whether the host's via is canyon (GET /api/v1/egress, which every member reads), so the agent's manifest
@@ -446,10 +447,16 @@ const outboundHanded = "Outbound: an app's environment may be under an allowlist
 
 // playbooksHanded heads the org's playbooks in an agent's manifest, each then one line (cli.md §7.4; design/specs/mcp.md
 // §3.3): the agent reads one whose when fits its task, by its slug.
+// playbooksHandedRemote is playbooksHanded on /mcp, where canyon_playbook is always loaded.
+const playbooksHandedRemote = "Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: call canyon_playbook with its slug."
+
 const playbooksHanded = "Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook <slug>."
 
 // secretsHanded is what an agent's manifest always says of secrets (cli.md §7.4, #2737).
 const secretsHanded = "Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there."
+
+// secretsHandedRemote is secretsHanded on canyon-server's /mcp, where no terminal is in reach (design/specs/mcp.md §2.3).
+const secretsHandedRemote = "Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, call canyon_secret_link with the app, the NAME and the environment, and give the user its link: it opens the app's Secrets form in their own browser, which takes the value there."
 
 // agentManifest is the manifest written for an agent, which a session hook puts in its context: the
 // same values as the dashboard's panel, with no admin's heading and no rule ids, the policies grouped
@@ -559,7 +566,11 @@ func agentManifest(m manifest, hook bool) string {
 		b.WriteString("\nYour org's own rules (written by its admins):\n" + strings.Join(own, "\n") + "\n")
 	}
 	if len(m.Playbooks) > 0 {
-		b.WriteString("\n" + playbooksHanded + "\n")
+		if m.Remote {
+			b.WriteString("\n" + playbooksHandedRemote + "\n")
+		} else {
+			b.WriteString("\n" + playbooksHanded + "\n")
+		}
 		for _, p := range m.Playbooks {
 			b.WriteString("- " + cell(p.Slug) + ": " + cell(p.Name) + ". When: " + cell(p.When) + "\n")
 		}
@@ -617,11 +628,20 @@ func agentManifest(m manifest, hook bool) string {
 	}
 	// Always said: a value pasted into a chat is in the agent's transcript and its provider's logs, and canyon secret set
 	// reads it in the person's own terminal (cli.md §7.4, #2737).
-	b.WriteString("\n" + secretsHanded + "\n")
-	// Always said, so an agent never guesses whether its promotion waits for a person (cli.md §7.4).
-	if m.ProdApproval {
-		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
+	if m.Remote {
+		b.WriteString("\n" + secretsHandedRemote + "\n")
 	} else {
+		b.WriteString("\n" + secretsHanded + "\n")
+	}
+	// Always said, so an agent never guesses whether its promotion waits for a person (cli.md §7.4).
+	switch {
+	case m.Remote && m.ProdApproval:
+		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
+	case m.Remote:
+		b.WriteString("\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation. It promotes; nobody else approves it.\n")
+	case m.ProdApproval:
+		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
+	default:
 		b.WriteString("\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.\n")
 	}
 	return b.String()

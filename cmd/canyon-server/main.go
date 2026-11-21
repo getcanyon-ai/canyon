@@ -667,6 +667,7 @@ func serve(ctx context.Context, ln net.Listener, logOut io.Writer, a *app) error
 		routesSetup(api, a)
 	}
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", a.session(api)))
+	routesMCP(mux, api, a) // its tools are API requests in-process, as the bearer's person
 	srv := &http.Server{
 		Handler:           pipeline(a.loopbackOnly(a.surfaces(mux, http.DefaultTransport)), logger),
 		ReadHeaderTimeout: 10 * time.Second,

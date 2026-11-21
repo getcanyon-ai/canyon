@@ -65,11 +65,13 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 	}
 	a.park() // after parse, so --help prints in every format; every return unparks
 	defer a.unpark(true)
-	dir, err := a.getwd()
-	if err != nil {
-		return a.usage(err)
+	var dir string
+	var p project
+	if a.ref != "" { // on /mcp: the app the tool names, and no directory
+		p, err = a.project()
+	} else if dir, err = a.getwd(); err == nil {
+		p, err = readProject(dir)
 	}
-	p, err := readProject(dir)
 	var missing *NoProjectFile
 	switch {
 	case errors.As(err, &missing): // deploy is the verb that makes the app and writes the file check only reads (§3.2)
@@ -90,7 +92,7 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 	began := time.Now()
 	run := checkRun{App: p.App, Host: client.page(), Force: force, Reports: reports, Create: create || missing != nil}
 	a.header(run.App, " "+a.render.punct("→", "->")+" preview")
-	if err := a.prologue(ctx, client, dir, &run); err != nil {
+	if err := a.packaged(ctx, client, dir, &run); err != nil {
 		code := a.fail(err)
 		a.askS3(ctx, client, dir, err)
 		if _, theirs := refusal(err, http.StatusForbidden, "team_required"); theirs && missing == nil { // canyon.toml named it: copied from someone else's, most likely (§9)
@@ -146,11 +148,11 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 		}
 		if a.render.Format == FormatAI {
 			run.Team = read.Project.Access
-			var auth authConfig // where nobody signs in, the team says nothing about who opens the app (#2019)
-			if err := client.get(ctx, "/auth/config", &auth); err != nil {
+			off, err := a.signInOff(ctx, client) // where nobody signs in, the team says nothing about who opens the app (#2019)
+			if err != nil {
 				a.fail(err)
 			}
-			run.SignInOff = auth.Auth == "off"
+			run.SignInOff = off
 		}
 		if a.render.Format == FormatAI && run.Result.State == "clean" && run.Deploy.Env == "preview" { // §5.3: what production's checklist will say of this version
 			var status statusRead

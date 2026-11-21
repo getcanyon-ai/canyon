@@ -29,9 +29,12 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 		a.park()
 		defer a.unpark(true)
 	}
-	dir, err := a.getwd()
-	if err != nil {
-		return a.usage(err)
+	dir := "" // on /mcp there is no directory: what ships is what preview runs, and no checkout can be ahead of it
+	if !a.remote {
+		var err error
+		if dir, err = a.getwd(); err != nil {
+			return a.usage(err)
+		}
 	}
 	p, err := a.project() // prod reads the file; writing it is a preview deploy's alone (§3.2)
 	if err != nil {
@@ -49,8 +52,10 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 	if _, err := ensureProject(ctx, client, p.App, false); err != nil { // guard (a): nothing here to promote (§3.2)
 		return a.fail(err)
 	}
-	if _, err := a.checkBase(ctx, client, dir, p.App, "prod", false); err != nil { // guard (b), before production's question (§6.6)
-		return a.fail(err)
+	if !a.remote { // guard (b) reads .canyon/base, a checkout's
+		if _, err := a.checkBase(ctx, client, dir, p.App, "prod", false); err != nil { // guard (b), before production's question (§6.6)
+			return a.fail(err)
+		}
 	}
 	at := "/api/v1/projects/" + url.PathEscape(p.App)
 	var read statusRead
@@ -64,7 +69,7 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 		return a.rollback(ctx, client, at, p.App, read, version, reason, yes, wait)
 	}
 	preview := read.Envs["preview"]
-	if preview.running() != nil { // with nothing running in preview the receipt says so
+	if preview.running() != nil && !a.remote { // with nothing running in preview the receipt says so; on /mcp there is no directory to compare
 		same, err := sameTree(ctx, client, at, dir, preview.Package)
 		if err != nil {
 			return a.fail(err)
@@ -232,16 +237,16 @@ func (a *app) promotedAccess(ctx context.Context, client *Client, at string, rea
 			Access *teamAccess `json:"access"`
 		} `json:"project"`
 	}
-	var auth authConfig
 	if err := client.get(ctx, at, &project); err != nil {
 		a.fail(err)
 		return ""
 	}
-	if err := client.get(ctx, "/auth/config", &auth); err != nil {
+	off, err := a.signInOff(ctx, client)
+	if err != nil {
 		a.fail(err)
 		return ""
 	}
-	read.Access, read.SignInOff = project.Project.Access, auth.Auth == "off"
+	read.Access, read.SignInOff = project.Project.Access, off
 	return a.accessLine(read)
 }
 

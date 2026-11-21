@@ -52,6 +52,27 @@ describe("the app page's Secrets section", () => {
     expect(within(canyons).queryByRole("button")).toBeNull();
   });
 
+  it("opens on the form for the secret a link names, scrolled to and its value's field ready, and never fills a value", async () => {
+    server({ [LIST]: { body: { secrets: [] } } });
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<Secrets id="claims-portal" asked={{ name: "STRIPE_KEY", env: "prod" }} />);
+    await section().findByText(T.none);
+    expect((form().getByLabelText(T.name) as HTMLInputElement).value).toBe("STRIPE_KEY");
+    expect((form().getByLabelText(T.env) as HTMLSelectElement).value).toBe("prod");
+    expect(value().value).toBe("");
+    expect(document.activeElement).toBe(value());
+    expect(scrolled).toHaveBeenCalled();
+  });
+
+  it("takes from a link only a name a secret may have, and an environment there is", async () => {
+    server({ [LIST]: { body: { secrets: [] } } });
+    render(<Secrets id="claims-portal" asked={{ name: "<img src=x>", env: "staging" }} />);
+    await section().findByText(T.none);
+    expect((form().getByLabelText(T.name) as HTMLInputElement).value).toBe("");
+    expect((form().getByLabelText(T.env) as HTMLSelectElement).value).toBe("preview");
+  });
+
   it("says when there are none", async () => {
     server({ [LIST]: { body: { secrets: [] } } });
     render(<Secrets id="claims-portal" />);

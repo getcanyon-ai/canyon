@@ -3981,7 +3981,9 @@ choices: the next chapter, skip to the end, or a way to real use that matches wh
 real use is offered once per chapter, as the third choice, and not again in other words after a 1 or a 2. The tour
 names no number of minutes, for itself or a chapter: it says it takes minutes.
 
-1. **Standards: your agent ignores the design system.** The tour opens on its frame and one question: the full tour,
+1. **Standards: your agent ignores the design system.** The tour opens on its frame, then has the agent run
+   `canyon skill install`, which gives it Canyon's skill, hook and tools (§7; design/specs/mcp.md §11), and say that the
+   tools load in this session or after a restart, the shell standing in until then. Then one question: the full tour,
    or the short one, which is chapter 2 alone. Then the agent shows what is running (`canyon fleet`). The demo
    starts with Canyon as its default design system and `design.org-system` Advisory (**amended 2026-11-15**, review of
    #2863: its sample apps' deployer picks the design system once they run, as the dashboard does; the tour has no form
@@ -3999,14 +4001,19 @@ names no number of minutes, for itself or a chapter: it says it takes minutes.
    fixes it. The chapter's text carries the one-line fix it knows passes, so the chapter is one round. Done when a
    review of the app ended blocked since the plant and preview runs a newer package than the one the change was
    planted over.
-3. **Production: the company's rules decide.** `canyon status` shows what production needs, the visitor asks for
-   production, and the agent runs `canyon deploy --env prod --yes`. Done when production runs the app.
+3. **Production: the company's rules decide.** `canyon_status` shows what production needs, the visitor asks for
+   production, and the agent calls `canyon_promote` with `confirm` (`canyon deploy --env prod --yes`) only on that yes in
+   this conversation, never on its own; where the client asks the person itself, they answer there. Done when
+   production runs the app.
 4. **The end.** A recap in the four lines below, four ways on (their own app, their pipeline, their team, real
-   workloads), that the design-system rule is still Blocking and where to set it back, and how to stop the demo.
+   workloads), that the design-system rule is still Blocking and where to set it back, where the docs give
+   their other agents Canyon's tools (*Connect your agent*), and how to stop the demo.
 
 **What the agent is told in every chapter:** report every beat in exactly four lines, one short sentence each (What
 happened, How Canyon helped, Without Canyon, At scale), with only the links and code the beat names; one sentence
-before each command; change only what `canyon demo tour plant` writes and the one fix a chapter names, and say what is
+before each command; call Canyon's tool where a beat names one (`canyon_check`, `canyon_deploy`, `canyon_status`,
+`canyon_promote`) with `dir` the tour's folder, and the shell command in brackets after it where the tool isn't loaded
+(**amended 2026-11-20**, design/specs/mcp.md §11); change only what `canyon demo tour plant` writes and the one fix a chapter names, and say what is
 planted; never install, delete or repair anything the text does not name; on "skip" run `canyon demo tour skip`, on "end"
 `canyon demo tour end`; when no host answers, ask the user to run `canyon demo up` in a terminal of their own, because a first start outlasts an agent's command time limit.
 
@@ -4034,6 +4041,9 @@ login itself: with no session it starts anyway, and every tool answers `isError`
 - **The instructions** are D5's preamble and then the manifest as `canyon manifest --format ai` prints it, read once at
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.
+- **A prompt:** `canyon_tour`, with `chapter` (`1`, `2`, `3` or `end`; left out, the visitor's own): the chapter word for
+  word as `canyon demo tour` hands it to an agent (§6.14.1). It moves no place, and a chapter the tour lacks is refused
+  (**added 2026-11-20**, design/specs/mcp.md §11).
 - It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
 
 ## 7. The harness skill

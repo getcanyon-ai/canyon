@@ -189,11 +189,15 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 }
 
 // signedInOver is a whole consent for client, redeemed: its access and refresh tokens.
-func signedInOver(t *testing.T, base string, c *http.Client, client, redirect string) (access, refresh string) {
+func signedInOver(t *testing.T, base string, c *http.Client, client, redirect string, scope ...string) (access, refresh string) {
 	t.Helper()
 	verifier, challenge := pkce()
-	req := requestOf(t, authorize(t, base, c, neturl.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {redirect}, "code_challenge": {challenge},
-		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}))
+	asked := neturl.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}
+	if len(scope) > 0 {
+		asked.Set("scope", strings.Join(scope, " "))
+	}
+	req := requestOf(t, authorize(t, base, c, asked))
 	_, body, _ := doWith(t, c, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
 	back, _ := neturl.Parse(body["redirect"].(string))
 	status, tok := tokenCall(t, base, neturl.Values{"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")}, "client_id": {client},

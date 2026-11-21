@@ -21,6 +21,9 @@ const (
 	Promote = "canyon_promote"
 	Check   = "canyon_check"  // the local server's alone: it reads a local directory
 	Deploy  = "canyon_deploy" // the local server's alone
+
+	CheckRef  = "canyon_check_ref"  // the remote server's alone: it reads a linked repository's ref
+	DeployRef = "canyon_deploy_ref" // the remote server's alone
 )
 
 // The resources (§1.3): the manifest, and the manifest with one app's additions.

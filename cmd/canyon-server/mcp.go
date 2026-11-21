@@ -16,7 +16,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/getcanyon-ai/canyon/events"
+	"github.com/getcanyon-ai/canyon/internal/mcptools"
 )
+
+// mcpNeedsSignIn is /mcp's answer on a host with sign-in off (design/EXPERIENCE.md, D5).
+const mcpNeedsSignIn = "Remote MCP needs sign-in, and this Canyon has it off. On this machine, use canyon mcp."
+
+// actTools are the tools a token needs the act scope for: each changes what runs (design/specs/mcp.md §2.2).
+var actTools = []string{mcptools.Promote, mcptools.CheckRef, mcptools.DeployRef}
 
 // mcpCaller is who an MCP request is, as the bearer's session says: the session the API mux serves its tools as, and
 // the scopes the person allowed.
@@ -39,17 +46,22 @@ func routesMCP(mux *http.ServeMux, api http.Handler, a *app) {
 		})
 		return
 	}
-	served := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server { return a.mcpServer(r, api) },
-		&mcp.StreamableHTTPOptions{Stateless: true, CrossOriginProtection: a.mcpOrigins()})
-	mux.Handle("/mcp", auth.RequireBearerToken(a.mcpToken, &auth.RequireBearerTokenOptions{
-		ResourceMetadataURL: a.public + "/.well-known/oauth-protected-resource/mcp"})(a.mcpScoped(served)))
+	// stateless (design/specs/mcp.md §2.1): any replica answers any request, and GET and DELETE are 405
+	served := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server { return a.mcpServer(r, api) }, &mcp.StreamableHTTPOptions{Stateless: true})
+	bearer := auth.RequireBearerToken(a.mcpToken, &auth.RequireBearerTokenOptions{ResourceMetadataURL: a.public + "/.well-known/oauth-protected-resource/mcp"})
+	mux.Handle("/mcp", a.mcpOrigin(bearer(a.mcpScoped(served))))
 }
 
-// mcpOrigins trusts the public URL's origin alone; a request naming none, a client's, passes.
-func (a *app) mcpOrigins() *http.CrossOriginProtection {
-	c := http.NewCrossOriginProtection()
-	_ = c.AddTrustedOrigin(originOf(a.public)) // the public URL was parsed at boot
-	return c
+// mcpOrigin refuses a request whose Origin is another site's, before its token is read: a browser page elsewhere
+// never reaches /mcp. A native client sends no Origin, and passes.
+func (a *app) mcpOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o := r.Header.Get("Origin"); o != "" && originOf(o) != originOf(a.public) {
+			writeErr(w, http.StatusForbidden, "cross_origin", "this request did not come from Canyon", nil)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // mcpToken resolves an access token to its session: flow oauth, for this resource, its access unexpired, and the
@@ -84,14 +96,17 @@ func (a *app) mcpScoped(next http.Handler) http.Handler {
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		var call struct {
+		var call struct { // one JSON-RPC message, as MCP's transport carries one: an array or anything else unreadable is refused
 			Method string `json:"method"`
 			Params struct {
 				Name string `json:"name"`
 			} `json:"params"`
 		}
-		if json.Unmarshal(body, &call) == nil && call.Method == "tools/call" && slices.Contains(actTools, call.Params.Name) &&
-			!slices.Contains(auth.TokenInfoFromContext(r.Context()).Scopes, "act") {
+		if err := json.Unmarshal(body, &call); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", "the request is not one JSON-RPC message", nil)
+			return
+		}
+		if call.Method == "tools/call" && slices.Contains(actTools, call.Params.Name) && !slices.Contains(auth.TokenInfoFromContext(r.Context()).Scopes, "act") {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope="act", resource_metadata=%q`, a.public+"/.well-known/oauth-protected-resource/mcp"))
 			writeErr(w, http.StatusForbidden, "insufficient_scope", call.Params.Name+" needs the act scope", nil)
 			return
@@ -102,17 +117,29 @@ func (a *app) mcpScoped(next http.Handler) http.Handler {
 
 // asCaller serves one API request in-process as the MCP caller: the session stage's work done already, by the
 // bearer, so the route sees the person and the channel, mcp, as a cookie's request would carry them.
-func (a *app) asCaller(r *http.Request, api http.Handler, method, path string, body any) (int, json.RawMessage) {
-	c := auth.TokenInfoFromContext(r.Context()).Extra["caller"].(mcpCaller)
+func (a *app) asCaller(ctx context.Context, r *http.Request, c mcpCaller, api http.Handler, method, path string, body any) (int, json.RawMessage) {
 	var in io.Reader
 	if body != nil {
 		raw, _ := json.Marshal(body) // the tools' own argument structs
 		in = bytes.NewReader(raw)
 	}
-	req := httptest.NewRequestWithContext(events.WithProvenance(withActor(r.Context(), c.session), events.Provenance{Via: "mcp", Role: c.session.role,
+	req := httptest.NewRequestWithContext(events.WithProvenance(withActor(ctx, c.session), events.Provenance{Via: "mcp", Role: c.session.role,
 		Session: sessionDigest(c.session.id), Source: a.proxies.source(r)}), method, path, in)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	a.serveNoting(w, req, api)
 	return w.Code, w.Body.Bytes()
+}
+
+// mcpServer is one request's server, as its caller sees it: the instructions and the tools.
+func (a *app) mcpServer(r *http.Request, api http.Handler) *mcp.Server {
+	c := auth.TokenInfoFromContext(r.Context()).Extra["caller"].(mcpCaller) // the bearer stage put it there, or the request never got here
+	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: version}, &mcp.ServerOptions{Instructions: mcptools.Preamble})
+	for _, t := range mcptools.Tools() {
+		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			code, body := a.asCaller(ctx, r, c, api, http.MethodGet, "/skill/manifest", nil)
+			return &mcp.CallToolResult{IsError: code != http.StatusOK, Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
+		})
+	}
+	return s
 }

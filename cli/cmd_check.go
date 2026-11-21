@@ -161,11 +161,13 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	}
 	a.park() // after parse, so --help prints in every format; every return unparks
 	defer a.unpark(true)
-	dir, err := a.getwd()
-	if err != nil {
-		return a.usage(err)
+	var dir string
+	var p project
+	if a.ref != "" { // on /mcp: the app the tool names, and no directory
+		p, err = a.project()
+	} else if dir, err = a.getwd(); err == nil {
+		p, err = readProject(dir)
 	}
-	p, err := readProject(dir)
 	if missing := (*NoProjectFile)(nil); errors.As(err, &missing) { // deploy writes the file check only reads (§3.2): the one way out, named (#873)
 		return a.usage(fmt.Errorf("%w: run canyon deploy here, which makes the app and writes its id, or run check in your app's directory", err))
 	}
@@ -179,7 +181,7 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	began := time.Now()
 	run := checkRun{App: p.App, Host: client.page(), Reports: reports}
 	a.header(run.App, "")
-	if err := a.prologue(ctx, client, dir, &run); err != nil {
+	if err := a.packaged(ctx, client, dir, &run); err != nil {
 		code := a.fail(err)
 		a.askS3(ctx, client, dir, err)
 		return code

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // stopped is why a verb stopped following a run that goes on in Canyon (cli.md §3.5): the host unanswered for
@@ -11,6 +12,8 @@ func stopped(err error, noun string) (reason string, lost *lostHost, late *pastC
 	switch {
 	case errors.As(err, &lost):
 		return lost.Error(), lost, nil
+	case errors.As(err, &late) && late.ceiling < time.Minute: // /mcp's hand-off (mcptools.RemoteHandoff)
+		return "the " + noun + " is still running after " + plural(int(late.ceiling.Seconds()), "second", "seconds") + ", the longest one call waits.", nil, late
 	case errors.As(err, &late):
 		return "the " + noun + " is still running after " + plural(int(late.ceiling.Minutes()), "minute", "minutes") + ", the longest this command waits.", nil, late
 	}
@@ -33,6 +36,11 @@ func (a *app) stillRunning(run checkRun, id string, seen timeline, err error) (i
 	}
 	page := run.Host + "/#/apps/" + run.App
 	switch {
+	case a.render.Format == FormatAI && a.remote: // on /mcp the call ends while the run goes on, and canyon_review reads it
+		return a.aiStillRunning(run, id, seen, reason, "the deploy is still running in Canyon. This call stopped following it.",
+			"Tell the user the deploy is still running in Canyon.",
+			"Call canyon_review with app "+cell(run.App)+" and run "+cell(id)+" in a minute, until it says the verdict. Then tell the user what it says.",
+			"Do not deploy again or take the app offline for this. Nothing failed."), true
 	case a.render.Format == FormatAI: // its own block replaces the parked transcript, and stderr stays empty
 		return a.aiStillRunning(run, id, seen, reason, "the deploy was still running when Canyon last answered. This command stopped following it.",
 			"Tell the user the deploy was still running when Canyon last answered, and this command stopped following it.",
@@ -73,6 +81,12 @@ func (a *app) reviewStillRunning(run checkRun, id string, seen timeline, err err
 			return exitStillRunning, true
 		}
 	} else {
+		if a.render.Format == FormatAI && a.remote { // on /mcp the call ends while the review goes on, and canyon_review reads it
+			return a.aiStillRunning(run, id, seen, reason, "the review is still running in Canyon. A check changes nothing in preview or production.",
+				"Tell the user the review is still running in Canyon.",
+				"Call canyon_review with app "+cell(run.App)+" and run "+cell(id)+" in a minute, until it says the verdict. Then tell the user what it says.",
+				"Do not change the app's code or check again for this."), true
+		}
 		if a.render.Format == FormatAI {
 			return a.aiStillRunning(run, id, seen, reason, "the review was still running when Canyon last answered. A check changes nothing in preview or production.",
 				"Tell the user Canyon stopped answering while it reviewed the app, and that a check changes nothing.",
@@ -120,9 +134,13 @@ func (a *app) promotionStillRunning(out promoted, err error) (int, bool) {
 		a.aiPromoteHead(aiStillRunningResult, out.app, out.host)
 		a.printf("run: %s\nreason: %s\noutcome: the promotion was still running when Canyon last answered. This command stopped following it.\nfleet url: %s\n",
 			cell(out.run), cell(reason), cell(page))
+		look := "Run canyon status in a minute: its production line says what production runs. If canyon status can't reach Canyon either, tell the user and stop."
+		if a.remote {
+			look = "Call canyon_status with app " + cell(out.app) + " in a minute: its production line says what production runs."
+		}
 		a.printf("\n%s\nexit code: %d\n", numbered([]string{
 			"Tell the user the promotion was still running when Canyon last answered, and this command stopped following it.",
-			"Run canyon status in a minute: its production line says what production runs. If canyon status can't reach Canyon either, tell the user and stop.",
+			look,
 			"Do not promote again or take production offline for this. This command did not see it fail.",
 		}), exitStillRunning)
 	case lost != nil:

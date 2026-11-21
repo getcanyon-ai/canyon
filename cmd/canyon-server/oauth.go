@@ -34,12 +34,20 @@ import (
 // 404.
 
 const (
-	oauthRequestLife = 10 * time.Minute    // a consent the person hasn't given yet
-	oauthCodeLife    = time.Minute         // a code the client hasn't redeemed yet
-	oauthAccessLife  = time.Hour           // an access token: a bearer a client keeps on disk, renewed by its refresh token
-	oauthRefreshLife = 30 * 24 * time.Hour // the session's whole life, from the consent: no refresh outlives it
-	oauthDocumentMax = 64 << 10            // a client's metadata document
-	oauthFetchLimit  = 5 * time.Second     // and how long its fetch may take
+	oauthRequestLife = 10 * time.Minute // a consent the person hasn't given yet
+	oauthCodeLife    = time.Minute      // a code the client hasn't redeemed yet
+	oauthAccessLife  = time.Hour        // an access token: a bearer a client keeps on disk, renewed by its refresh token
+	oauthRefreshLife = deviceSession    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
+	// oauthRetryGrace is how long after a rotation the refresh token it replaced is taken as a retry, an answer the
+	// client never got, and rotated again, rather than taken as a second holder's and the session ended: once, and
+	// only while the pair the rotation issued has served nothing (sessions.rotated_unused)
+	oauthRetryGrace = 10 * time.Second
+	// oauthUnusedPerSource is how many registrations no code has redeemed Canyon holds from one source address: each
+	// new one evicts that source's oldest past it, never another source's, never one younger than oauthRequestLife and
+	// never one an authorization waits on, so one source's flood fills nothing and takes nobody's sign-in from under them
+	oauthUnusedPerSource = 100
+	oauthDocumentMax     = 64 << 10        // a client's metadata document
+	oauthFetchLimit      = 5 * time.Second // and how long its fetch may take
 )
 
 // oauthScopes are the scopes Canyon grants, in this order everywhere it names them (mcp.md §2.2): read, and act.
@@ -54,6 +62,16 @@ func (a *app) oauthServed() bool {
 
 // mcpResource is the one resource Canyon issues tokens for (RFC 8707).
 func (a *app) mcpResource() string { return a.public + "/mcp" }
+
+// sameResource is whether resource names the MCP server, as a client may write its URL: the scheme and host in any
+// case, the scheme's own port written or not, a trailing slash or not.
+func (a *app) sameResource(resource string) bool {
+	u, err := neturl.Parse(resource)
+	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return false
+	}
+	return originOf(u.Scheme+"://"+u.Host) == originOf(a.public) && strings.TrimSuffix(u.EscapedPath(), "/") == "/mcp"
+}
 
 func routesOAuth(mux *http.ServeMux, a *app) {
 	if !a.oauthServed() {
@@ -326,7 +344,7 @@ func (a *app) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthInvalid(w, r, "response")
 	case q.Get("code_challenge_method") != "S256" || len(q.Get("code_challenge")) != 43:
 		oauthInvalid(w, r, "pkce")
-	case q.Get("resource") != a.mcpResource():
+	case !a.sameResource(q.Get("resource")):
 		oauthInvalid(w, r, "resource")
 	case !ok:
 		oauthInvalid(w, r, "scope")
@@ -375,9 +393,6 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	case dec.Decode(&body) != nil:
 		refuse("the body is one JSON object of at most 64 KiB")
 		return
-	case body.AuthMethod != "" && body.AuthMethod != "none":
-		refuse("Canyon registers public clients alone: token_endpoint_auth_method none")
-		return
 	case slices.ContainsFunc(body.GrantTypes, func(g string) bool { return g != "authorization_code" && g != "refresh_token" }):
 		refuse("Canyon grants authorization_code and refresh_token")
 		return
@@ -404,10 +419,17 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	id := "dcr_" + hex.EncodeToString(raw[:])
 	var at time.Time
-	if err := a.pool.QueryRow(r.Context(), `WITH gone AS (DELETE FROM oauth_clients c WHERE (used_at IS NULL AND created_at < now() - interval '1 day')
+	source := a.proxies.source(r)
+	err := a.pool.QueryRow(r.Context(), `WITH gone AS (DELETE FROM oauth_clients c WHERE ((used_at IS NULL AND created_at < now() - interval '1 day')
 			OR (used_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.oauth_client = c.id
-				AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now())))))
-		INSERT INTO oauth_clients (id, name, redirect_uris) VALUES ($1, $2, $3) RETURNING created_at`, id, body.ClientName, body.RedirectURIs).Scan(&at); err != nil {
+				AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now()))))
+			OR c.id IN (SELECT id FROM (SELECT o.id, row_number() OVER (ORDER BY o.created_at DESC, o.id DESC) AS newest FROM oauth_clients o
+				WHERE o.used_at IS NULL AND o.source = $4) mine WHERE newest >= $5))
+			AND c.created_at < now() - make_interval(secs => $6)
+			AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND (q.expires_at > now() OR q.code_expires_at > now())))
+		INSERT INTO oauth_clients (id, name, redirect_uris, source) VALUES ($1, $2, $3, $4) RETURNING created_at`,
+		id, body.ClientName, body.RedirectURIs, source, oauthUnusedPerSource, oauthRequestLife.Seconds()).Scan(&at) // this source's newest unused, less one: room for this one
+	if err != nil {
 		a.log.Printf("canyon-server: oauth register: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
@@ -583,7 +605,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			internal(err)
 			return
 		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || challenge == "" || !pkceMatches(f.Get("code_verifier"), challenge) ||
-			f.Get("resource") != "" && f.Get("resource") != resource:
+			f.Get("resource") != "" && !a.sameResource(f.Get("resource")):
 			_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
 			tokenError(w, "invalid_grant", "the code was issued for another client, redirect, verifier or resource")
 			return
@@ -601,17 +623,25 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			internal(err)
 			return
 		}
+		// a registration is used when its code redeems, never at an authorization anyone can send (a document has no row); one gone since redeems nothing
+		if strings.HasPrefix(client, "dcr_") {
+			used, err := tx.Exec(ctx, "UPDATE oauth_clients SET used_at = now() WHERE id = $1", client)
+			if err != nil {
+				internal(err)
+				return
+			}
+			if used.RowsAffected() != 1 {
+				_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
+				tokenError(w, "invalid_client", "the client's registration is gone: register it again")
+				return
+			}
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, actor_kind, actor_subject, actor_display, issuer, email, email_verified, flow, claimed_admin, claimed_responder,
 			hosted_domain, groups, groups_read, expires_at, oauth_client, oauth_client_name, resource, scope, access_hash, access_expires_at, refresh_hash)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, 'oauth', $8, $9, $10, $11, $12, now() + make_interval(secs => $13), $14, $15, $16, $17, $18,
 				now() + make_interval(secs => $19), $20)`,
 			id, p.act.Kind, p.act.Subject, p.act.Display, p.issuer, p.email, p.verified, p.claimedAdmin, p.claimedResponder, p.hd, p.groups, p.groupsRead,
 			oauthRefreshLife.Seconds(), client, clientName, resource, scopes, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:]); err != nil {
-			internal(err)
-			return
-		}
-		// a registration is used when its code redeems, never at an authorization anyone can send (a document has no row)
-		if _, err := tx.Exec(ctx, "UPDATE oauth_clients SET used_at = now() WHERE id = $1", client); err != nil {
 			internal(err)
 			return
 		}
@@ -629,10 +659,11 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		a.log.Printf("canyon-server: sign in sub=%s %s flow=oauth role=%s", oneLine(p.act.Subject), oneLine(p.email), role)
 	case "refresh_token":
 		hash := sha256.Sum256([]byte(f.Get("refresh_token")))
-		var current bool // the token is the session's refresh token now, not the one it replaced
-		err := tx.QueryRow(ctx, `SELECT s.id, s.oauth_client, s.scope, s.refresh_hash = $1, `+approverColumns+` FROM sessions s
-			WHERE (s.refresh_hash = $1 OR s.refresh_prev_hash = $1) AND s.flow = 'oauth' AND s.revoked_at IS NULL AND s.expires_at > now() FOR UPDATE`, hash[:]).
-			Scan(append([]any{&id, &client, &scopes, &current}, p.dest()...)...)
+		var current, retried bool // the token is the session's refresh token now; or the one it replaced, within the grace, its rotation's pair unused and no retry honoured yet
+		// the last rotation's time is its access token's: each rotation, and nothing else, sets access_expires_at an access life ahead
+		err := tx.QueryRow(ctx, `SELECT s.id, s.oauth_client, s.scope, s.refresh_hash = $1, s.rotated_unused AND s.access_expires_at > now() + make_interval(secs => $2), `+approverColumns+` FROM sessions s
+			WHERE (s.refresh_hash = $1 OR s.refresh_prev_hash = $1) AND s.flow = 'oauth' AND s.revoked_at IS NULL AND s.expires_at > now() FOR UPDATE`, hash[:], (oauthAccessLife - oauthRetryGrace).Seconds()).
+			Scan(append([]any{&id, &client, &scopes, &current, &retried}, p.dest()...)...)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			tokenError(w, "invalid_grant", "the refresh token is unknown, revoked or expired")
@@ -643,7 +674,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		case client != f.Get("client_id"):
 			tokenError(w, "invalid_grant", "the refresh token was issued to another client")
 			return
-		case !current: // a rotated token came back: one of its two holders isn't the client, so neither keeps the session
+		case !current && !retried: // a rotated token came back past the grace: one of its two holders isn't the client, so neither keeps the session
 			if _, err := tx.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE id = $1", id); err != nil {
 				internal(err)
 				return
@@ -671,8 +702,15 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			tokenError(w, "invalid_grant", "the person who allowed it can no longer sign in to Canyon")
 			return
 		}
-		if _, err := tx.Exec(ctx, `UPDATE sessions SET access_hash = $2, access_expires_at = now() + make_interval(secs => $3), refresh_prev_hash = refresh_hash, refresh_hash = $4
-			WHERE id = $1`, id, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:]); err != nil {
+		rotated, err := tx.Exec(ctx, `UPDATE sessions SET access_hash = $2, access_expires_at = now() + make_interval(secs => $3), refresh_prev_hash = refresh_hash, refresh_hash = $4,
+			rotated_unused = true WHERE id = $1 AND $5`, id, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:], current)
+		if err == nil && !current { // a retry, honoured once: the answer to the rotation never reached the client, so a new pair replaces the one it lost, the rotation's time kept so no retry extends the grace
+			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3, rotated_unused = false WHERE id = $1", id, accessHash[:], refreshHash[:])
+		}
+		if err == nil && rotated.RowsAffected() != 1 {
+			err = fmt.Errorf("oauth session %s: rotated %d rows", sessionDigest(id), rotated.RowsAffected())
+		}
+		if err != nil {
 			internal(err)
 			return
 		}

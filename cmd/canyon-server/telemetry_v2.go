@@ -3,11 +3,13 @@ package main
 import (
 	"cmp"
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/getcanyon-ai/canyon/events"
 	gatepolicy "github.com/getcanyon-ai/canyon/gate/policy"
 )
 
@@ -21,7 +23,23 @@ var harnesses = []string{"claude_code", "codex"}
 
 // transportMCPLocal is canyon mcp's Canyon-Transport, kept on a review it starts (runs.transport); a review the host's
 // own /mcp starts is kept as mcp-remote, and one with neither is the CLI's (design/specs/mcp.md §7).
-const transportMCPLocal = "mcp-local"
+const (
+	transportMCPLocal  = "mcp-local"
+	transportMCPRemote = "mcp-remote"
+)
+
+// transportOf is how a review was asked for, for the usage report's agents_via (design/specs/mcp.md §7): this host's
+// own /mcp by its session's channel, which only the bearer stage sets, never by a header a client could send;
+// canyon mcp by the header it sends; "" for the CLI.
+func transportOf(r *http.Request) string {
+	switch {
+	case events.ProvenanceOf(r.Context()).Via == "mcp":
+		return transportMCPRemote
+	case r.Header.Get("Canyon-Transport") == transportMCPLocal:
+		return transportMCPLocal
+	}
+	return ""
+}
 
 // telemetryPeriodMost is the longest period one report's counts cover: a server that sent nothing for longer, off or
 // unreachable, reports its last week, so one report never lands months of counts in one week's sums.

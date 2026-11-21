@@ -176,8 +176,19 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {renewed["refresh_token"].(string)}, "client_id": {"dcr_" + strings.Repeat("0", 32)}}); status != 400 {
 		t.Errorf("a refresh by another client: %d %s", status, lastBody)
 	}
+	// a retry: the answer that carried the new pair was lost, so the client asks again with the one it holds, within
+	// seconds of the rotation and before the new pair served anything, and gets a pair again, once; the pair it never
+	// received no longer works
+	status, retried := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}})
+	if status != 200 || retried["refresh_token"] == renewed["refresh_token"] || retried["access_token"] == renewed["access_token"] {
+		t.Fatalf("a retry within the grace: %d %s", status, lastBody)
+	}
+	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {renewed["refresh_token"].(string)}, "client_id": {id}}); status != 400 {
+		t.Errorf("the pair a retry replaced still refreshes: %d %s", status, lastBody)
+	}
+	renewed = retried
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, "already used") {
-		t.Errorf("the rotated refresh token used again: %d %s", status, lastBody)
+		t.Errorf("a second retry: %d %s, want the session ended", status, lastBody)
 	}
 	if n := countRows(t, ctx, pool, `SELECT count(*) FROM sessions WHERE id = '`+row+`' AND revoked_at IS NOT NULL`) +
 		countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND actor_kind = 'canyon' AND detail = '{"reason": "refresh token reused", "subject": "sub-gina"}'`); n != 2 {
@@ -189,11 +200,15 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 }
 
 // signedInOver is a whole consent for client, redeemed: its access and refresh tokens.
-func signedInOver(t *testing.T, base string, c *http.Client, client, redirect string) (access, refresh string) {
+func signedInOver(t *testing.T, base string, c *http.Client, client, redirect string, scope ...string) (access, refresh string) {
 	t.Helper()
 	verifier, challenge := pkce()
-	req := requestOf(t, authorize(t, base, c, neturl.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {redirect}, "code_challenge": {challenge},
-		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}))
+	asked := neturl.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}
+	if len(scope) > 0 {
+		asked.Set("scope", strings.Join(scope, " "))
+	}
+	req := requestOf(t, authorize(t, base, c, asked))
 	_, body, _ := doWith(t, c, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
 	back, _ := neturl.Parse(body["redirect"].(string))
 	status, tok := tokenCall(t, base, neturl.Values{"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")}, "client_id": {client},
@@ -389,11 +404,11 @@ func TestOAuthRegistersPublicClientsAlone(t *testing.T) {
 		code int
 	}{
 		{`{"client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback","http://[::1]:33418/callback"]}`, 201},
-		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201},                                                           // no name: shown by its redirect's host
-		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 201}, // cursor, by name
-		{`{"client_name":"x","redirect_uris":["myapp://callback"]}`, 400},                                                    // a scheme no name allows
-		{`{"client_name":"x","redirect_uris":["cursor:callback"]}`, 400},                                                     // cursor with no host
-		{`{"client_name":"x","redirect_uris":["https://a.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}`, 400},
+		{`{"redirect_uris":["https://vscode.dev/redirect"]}`, 201},                                                               // no name: shown by its redirect's host
+		{`{"client_name":"Cursor","redirect_uris":["cursor://anysphere.cursor-retrieval/oauth/user-canyon/callback"]}`, 201},     // cursor, by name
+		{`{"client_name":"x","redirect_uris":["myapp://callback"]}`, 400},                                                        // a scheme no name allows
+		{`{"client_name":"x","redirect_uris":["cursor:callback"]}`, 400},                                                         // cursor with no host
+		{`{"client_name":"x","redirect_uris":["https://a.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}`, 201}, // answered as the public client it is: none
 		{`{"client_name":"x","redirect_uris":["javascript:alert(1)"]}`, 400},
 		{`{"client_name":"x","redirect_uris":["http://canyon.meridian.example/cb"]}`, 400}, // plain http off loopback
 		{`{"client_name":"x","redirect_uris":["https://a.example/cb#frag"]}`, 400},
@@ -587,4 +602,127 @@ func TestTheSessionsListIsYoursAndAnAdminsAll(t *testing.T) {
 func marshalsTo(v any, want string) bool {
 	raw, err := json.Marshal(v)
 	return err == nil && string(raw) == want
+}
+
+// A client that asks for a secret is registered as the public client it is, told none (RFC 7591 §3.2.1: the server
+// may replace a value it won't serve); the session lives as a CLI session does; resource is the MCP server's
+// whatever its case, default port or trailing slash; and registrations no code ever used stop at a cap.
+func TestOAuthFollowUps(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	code, body, _ := do(t, client(t), http.MethodPost, base+"/oauth/register", `{"client_name":"x","redirect_uris":["https://claude.ai/cb"],"token_endpoint_auth_method":"client_secret_post"}`)
+	if code != http.StatusCreated || body["token_endpoint_auth_method"] != "none" {
+		t.Errorf("a client asking for a secret: %d %s", code, lastBody)
+	}
+	const redirect = "https://claude.ai/cb"
+	id := register(t, base, redirect)
+	_, challenge := pkce()
+	for _, resource := range []string{"HTTP://LOCALHOST:7777/mcp", "http://localhost:7777/mcp/", "http://Localhost:7777/mcp"} {
+		at := authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {id}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+			"code_challenge_method": {"S256"}, "resource": {resource}})
+		if !strings.HasPrefix(at.Fragment, "/oauth?request=") {
+			t.Errorf("resource %s: sent to %s", resource, at)
+		}
+	}
+	signedInOver(t, base, gina, id, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND expires_at BETWEEN now() + interval '7 days' - interval '1 minute' AND now() + interval '7 days'"); n != 1 {
+		t.Errorf("the session lives as a CLI session does, 7 days: %d", n)
+	}
+}
+
+// Unused registrations are capped per source, the registering address, and a registration evicts only its own source's
+// oldest: never another source's, never one younger than ten minutes, never one with an authorization waiting on it. A
+// code whose registration is gone redeems nothing.
+func TestOAuthRegistrationsAreCappedPerSource(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect = "https://claude.ai/cb"
+	theirs := register(t, base, redirect) // another source's fresh registration, and one mid-consent
+	_, challenge := pkce()
+	waiting := register(t, base, redirect)
+	authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {waiting}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}})
+	for _, q := range []string{
+		"UPDATE oauth_clients SET source = '198.51.100.20'",                                            // the two above are another source's
+		"UPDATE oauth_clients SET created_at = now() - interval '1 hour' WHERE id = '" + waiting + "'", // old, but someone is consenting
+		// the flood, this test client's source: old enough to evict, but for its own newest and youngest
+		"INSERT INTO oauth_clients (id, name, redirect_uris, source, created_at) SELECT 'dcr_' || lpad(to_hex(n), 32, '0'), 'x', ARRAY['https://a.example/cb'], '127.0.0.1', now() - make_interval(secs => 3600 - n) FROM generate_series(1, 150) n",
+		"INSERT INTO oauth_clients (id, name, redirect_uris, source, created_at) VALUES ('dcr_" + strings.Repeat("e", 32) + "', 'x', ARRAY['https://a.example/cb'], '127.0.0.1', now() - interval '1 minute')",
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register(t, base, redirect)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL AND source = '127.0.0.1' AND created_at < now() - interval '10 minutes'"); n >= 150 {
+		t.Errorf("the flooding source kept all %d of its old unused registrations", n)
+	}
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL AND source = '127.0.0.1'"); n != oauthUnusedPerSource {
+		t.Errorf("the flooding source holds %d unused registrations, want its cap %d", n, oauthUnusedPerSource)
+	}
+	for name, id := range map[string]string{"another source's fresh one": theirs, "one mid-consent": waiting, "the source's own young one": "dcr_" + strings.Repeat("e", 32)} {
+		if countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+id+"'") != 1 {
+			t.Errorf("a flood evicted %s", name)
+		}
+	}
+	// a code whose registration went redeems nothing
+	verifier, challenge := pkce()
+	gone := register(t, base, redirect)
+	req := requestOf(t, authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {gone}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}))
+	_, body, _ := doWith(t, gina, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
+	back, _ := neturl.Parse(body["redirect"].(string))
+	if _, err := pool.Exec(ctx, "DELETE FROM oauth_clients WHERE id = $1", gone); err != nil {
+		t.Fatal(err)
+	}
+	status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")}, "client_id": {gone},
+		"redirect_uri": {redirect}, "code_verifier": {verifier}})
+	if status != 400 || !strings.Contains(lastBody, "invalid_client") || countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE oauth_client = '"+gone+"'") != 0 {
+		t.Errorf("a code of a registration gone: %d %s", status, lastBody)
+	}
+}
+
+// Registration is bounded per source address, the requester behind a trusted proxy: one source past its bound is
+// refused, and another registers.
+func TestOAuthRegistrationIsBoundedPerSource(t *testing.T) {
+	trusted, err := proxiesOf("10.0.48.0/20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	served := newLimiter(time.Now, trusted).limit(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusCreated) })
+	from := func(source string) int {
+		r := httptest.NewRequest(http.MethodPost, "/oauth/register", nil)
+		r.RemoteAddr, r.Header["X-Forwarded-For"] = "10.0.48.9:5000", []string{source}
+		w := httptest.NewRecorder()
+		served(w, r)
+		return w.Code
+	}
+	flooded := false
+	for range 1000 {
+		if from("203.0.113.5") == http.StatusTooManyRequests {
+			flooded = true
+			break
+		}
+	}
+	if !flooded || from("198.51.100.20") != http.StatusCreated {
+		t.Errorf("a flood from one source: refused %v; another source's registration answered otherwise", flooded)
+	}
+}
+
+// A retry is a lost answer's alone: once the pair a rotation issued has served a request, the token it replaced coming
+// back is a second holder's, and the session ends, within the grace or not.
+func TestOAuthARetryAfterTheNewPairServedEndsTheSession(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect = "https://claude.ai/cb"
+	id := register(t, base, redirect)
+	_, first := signedInOver(t, base, gina, id, redirect)
+	status, renewed := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}})
+	if status != 200 {
+		t.Fatalf("the refresh: %d %s", status, lastBody)
+	}
+	if code, _, body := mcpCall(t, base, renewed["access_token"].(string), `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`, nil); code != http.StatusOK {
+		t.Fatalf("the new pair serves a request: %d %s", code, body)
+	}
+	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {first}, "client_id": {id}}); status != 400 ||
+		countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NOT NULL") != 1 {
+		t.Errorf("the replaced token after the new pair served: %d %s, want the session ended", status, lastBody)
+	}
 }

@@ -106,9 +106,10 @@ function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "
   // screen an id it would have to invent a request around.
   if (hash.startsWith("#/apps/")) {
     // #/apps/<id>/outbound is the link an egress refusal carries (contracts/routes.md, The check): the app's page,
-    // at its Outbound card. An app id never holds a slash.
+    // at its Outbound card; #/apps/<id>/secrets?name=&env= canyon_secret_link's, at its Secrets form. An app id never holds a slash.
     const [id = "", section] = hash.slice("#/apps/".length).split("?")[0]!.split("/");
-    if (id !== "") return <App key={hash} id={id} run={new URLSearchParams(hashQuery()).get("run")} auth={auth} outbound={section === "outbound"} />;
+    const q = new URLSearchParams(hashQuery());
+    if (id !== "") return <App key={hash} id={id} run={q.get("run")} auth={auth} outbound={section === "outbound"} secret={section === "secrets" ? { name: q.get("name"), env: q.get("env") } : undefined} />;
   }
   if (hash.startsWith("#/guardrails")) return <Guardrails />;
   if (hash.startsWith("#/audit")) return <AuditTrail key={hash} query={hashQuery()} />;

@@ -399,11 +399,9 @@ func runStatus(ctx context.Context, a *app, args []string) int {
 		return a.fail(lacking(err, p.App, client)) // as the status read's
 	}
 	read.Access, read.Provided = project.Project.Access, provided(project.Project.Resources)
-	var auth authConfig // where nobody signs in, nobody's place on a team is the answer (D5)
-	if err := client.get(ctx, "/auth/config", &auth); err != nil {
+	if read.SignInOff, err = a.signInOff(ctx, client); err != nil { // where nobody signs in, nobody's place on a team is the answer (D5)
 		return a.fail(err)
 	}
-	read.SignInOff = auth.Auth == "off"
 	var door struct {
 		Runtime       string `json:"runtime"`
 		Warning       string `json:"warning"`
@@ -955,7 +953,7 @@ func (a *app) aiStatus(name, host string, s statusRead, latest *runRow, now time
 	a.aiEnv("preview", "preview", s.Envs["preview"], "nothing running", now)
 	a.aiEnv("production", "prod", s.Envs["prod"], "not promoted yet", now)
 	if names := s.Envs["prod"].missing(); len(names) > 0 { // the promotion's line and step, said where the 500 is (#2786)
-		a.printf("not set for production: %s\n  %s\n", strings.Join(names, ", "), aiMissingStep)
+		a.printf("not set for production: %s\n  %s\n", strings.Join(names, ", "), a.missingStep())
 	}
 	if l := s.Platform; l != nil {
 		a.printf("platform: %s\n", cmp.Or(l.Text, "couldn't read: "+cell(l.Unread)))

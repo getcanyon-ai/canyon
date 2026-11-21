@@ -101,11 +101,32 @@ Code.
 
 Canyon's MCP server, `canyon mcp`, gives Claude Code Canyon as tools, with typed arguments and
 results, beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it.
-It runs as the `canyon` you installed, signed in as it is. One command adds it for every project on your machine:
+It runs as the `canyon` you installed, signed in as it is. `canyon skill install` adds it for you. To add
+only the server, for every project on your machine:
 
 ```sh
 claude mcp add --scope user canyon -- canyon mcp
 ```
+
+## In the cloud
+
+Claude Code on the web runs on Anthropic's machines, with no `canyon` CLI and none of your files. It
+connects to your Canyon's MCP server by address, `https://<canyon>/mcp`, and reviews and deploys
+what you've pushed to GitHub. [In the cloud](/start/connect-your-agent/#in-the-cloud) has what that
+needs: your Canyon reachable from the internet, Canyon's GitHub App, and your GitHub account linked.
+
+Add it as a **connector in claude.ai**, with `https://<canyon>/mcp` as its address. On Team and
+Enterprise plans, an admin adds it once for everyone. Each person then connects it in claude.ai, and
+Canyon asks them in the browser to allow it. Claude Code's cloud sessions use the connector with that
+same permission, and need no network rule for it.
+
+Don't roll Canyon out with Claude Code's `managed-mcp.json`. Once that file is deployed, Claude Code
+loads only the servers it lists and refuses every other one, `canyon mcp` included. A managed file
+on a device doesn't reach a cloud session either.
+
+Checked against Anthropic's Claude Code docs in November 2026:
+[MCP](https://code.claude.com/docs/en/mcp), [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)
+and [managed MCP](https://code.claude.com/docs/en/managed-mcp).
 
 ## Ask it to deploy
 

@@ -674,6 +674,16 @@ cd ~/my-app && canyon deploy    # reviews and builds it, then runs it at https:/
 canyon deploy --env prod        # ships what preview runs to https://my-app.prod.$DOMAIN
 ```
 
+## 10. Connect your agents
+
+Your developers connect their coding agents in one of two ways ([Connect your agent](/start/connect-your-agent/)):
+
+- **On a laptop:** `canyon login https://$DOMAIN`, then `canyon skill install`. It sets up Canyon's skill, its
+  session hook and its MCP server for each agent it finds.
+- **In the cloud:** Claude Code on the web and Cursor's cloud agents connect to `https://$DOMAIN/mcp`, and each
+  person allows it once in the browser. That needs Canyon reachable from the internet, Canyon's GitHub
+  App on your repositories ([Connect GitHub](/build/github/)), and each person's GitHub account linked.
+
 ## Caveats
 
 - **k3s's own ports are open to the internet.** k3s serves its API on 6443 and the kubelet on 10250

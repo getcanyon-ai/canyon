@@ -15,7 +15,7 @@ editUrl: false
 ---
 
 Canyon sits between your coding agents and the apps they ship. An agent deploys with the `canyon`
-CLI. Canyon reviews the code against your org's rules, builds and runs only what passes, and puts
+CLI on a laptop, or by your Canyon's address from the cloud. Canyon reviews the code against your org's rules, builds and runs only what passes, and puts
 every app behind your company's sign-in. It runs on one Docker host or on your Kubernetes cluster.
 
 <div class="reader-cards">

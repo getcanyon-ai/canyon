@@ -257,10 +257,27 @@ added as rows.** Canyon never hosts *org* design assets and never holds the org'
 token — the builder's environment expands the credential. Canyon's **own** shipped registry is
 the one exception: its assets live in-repo (`designsystem/canyon/`) and its serving route lands
 with M9.1 as a routes-contract entry. The skill section renders the *active* system's
-instructions, and the **read-only MCP endpoint ships in v1** carrying design tools (list systems,
-get tokens, get component with dependencies) — installed explicitly, `--print`-able, under §4's
-guardrails; the data capability's tools join the same endpoint in wave 1. One Advisory gate rule:
-`design.org-system`.
+instructions. No MCP tool carries the design system: the skill and the session hook hand the agent
+the active system (the read-only design-tools endpoint planned here was never built; Canyon's MCP
+server, §3c, carries the deploy path). One Advisory gate rule: `design.org-system`.
+
+## 3c. Canyon over MCP (built 2026-11, design/specs/mcp.md)
+
+**One set of tools, two ways in.** Each tool is the CLI verb's own handler, run against `/api/v1`
+as the person, with that route's level, refusals and audit rows; MCP adds no permission of its own.
+
+- **On a laptop: `canyon mcp`**, a stdio server inside the CLI, signed in as the CLI is
+  (`canyon login`). `canyon skill install` writes it into each agent beside the skill and the
+  session hook. It packages the working directory, so it deploys unpushed code.
+- **In the cloud: `POST /mcp`** on the server, streamable HTTP and stateless, so any replica
+  answers. It is an OAuth 2.1 protected resource: Canyon is its own authorization server
+  (design/AUTH.md §4.7), a person allows a client once in the browser with scopes `read` or `act`,
+  and the token's session is a `flow: oauth` row the person disconnects under Settings › People &
+  sign-in. With sign-in off it serves nothing. It has no local directory, so it reviews and deploys
+  a pushed ref of a linked repository (`canyon_check_ref`, `canyon_deploy_ref`), packaged on request
+  only when the caller's own GitHub account reads it.
+- **One server per agent.** An org pushes the URL to cloud agents only; laptops keep `canyon mcp`.
+- **No tool takes a secret's value.** A person sets it in the dashboard or with `canyon secret set`.
 
 ## 4. Skills: shipped in v1, org-authored later — with guardrails
 

@@ -8,8 +8,10 @@ hold a live key in the browser bundle, an `/admin` route anyone can open, or SQL
 string. You can't ban the apps, and you can't review them all by hand.
 
 Canyon reviews every deploy before it runs. Builders keep the coding agent they like: Claude Code,
-Cursor, or any agent that reads an `AGENTS.md`. The agent runs `canyon deploy`, and the review's
-findings come back as a file, a line and a fix, which the agent handles like a compiler error.
+Codex, Cursor, or any agent that reads an `AGENTS.md`. On a laptop the agent deploys with the
+`canyon` CLI; in the cloud it connects to your Canyon's address and deploys what's pushed to GitHub
+([Connect your agent](/start/connect-your-agent/)). The review's findings come back as a file, a line
+and a fix, which the agent handles like a compiler error.
 Every app gets an owner, a review history and an audit trail.
 
 ## What happens on a deploy

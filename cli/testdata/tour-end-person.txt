@@ -16,10 +16,12 @@
                                   docs: Build, GitHub, and Self-host, Hand-off.
     Set this up for your team     This demo has sign-in off and keeps nothing. Canyon's docs,
                                   under Self-host, have one Kubernetes node and one Linux server.
+                                  Cloud agents connect to it by address; laptops use the CLI.
     Run real workloads            Canyon on your own Kubernetes cluster. Canyon's docs, under
                                   Self-host, have the install and what production needs.
 
-  To give your other coding agents Canyon's tools: Canyon's docs, Get started, Connect your agent.
+  To connect your other coding agents, with the CLI on a laptop or by a team Canyon's address in
+  the cloud: Canyon's docs, Get started, Connect your agent.
 
   To stop the demo: canyon demo down.
   canyon demo tour reset starts the tour again.

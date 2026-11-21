@@ -72,6 +72,9 @@ signed in as it is. With `canyon` on your
 
 [Add Canyon to VS Code](vscode:mcp/install?%7B%22name%22%3A%22canyon%22%2C%22command%22%3A%22canyon%22%2C%22args%22%3A%5B%22mcp%22%5D%7D)
 
+An agent that runs in the cloud and takes a remote MCP server with OAuth sign-in can connect to
+`https://<canyon>/mcp` instead, with no CLI ([In the cloud](/start/connect-your-agent/#in-the-cloud)).
+
 ### Aider
 
 Aider reads `AGENTS.md` when you tell it to:

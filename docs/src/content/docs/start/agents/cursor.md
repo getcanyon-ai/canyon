@@ -104,6 +104,25 @@ It adds this to Cursor's MCP settings:
 {"mcpServers":{"canyon":{"command":"canyon","args":["mcp"]}}}
 ```
 
+`canyon skill install` writes a matching entry into the project's `.cursor/mcp.json`.
+
+## In the cloud
+
+Cursor's cloud agents run on Cursor's machines, with no `canyon` CLI and none of your files. They
+connect to your Canyon's MCP server by address, `https://<canyon>/mcp`, and review and deploy what
+you've pushed to GitHub. [In the cloud](/start/connect-your-agent/#in-the-cloud) has what that needs:
+your Canyon reachable from the internet, Canyon's GitHub App, and your GitHub account linked.
+
+- **For yourself:** add an HTTP server with that address in the MCP menu at cursor.com/agents.
+- **For your team:** an admin adds it once as a team MCP server, under **Dashboard › Plugins & MCPs**.
+  Cloud agents get it.
+
+Each person signs in once: Canyon opens in the browser and asks them to allow Cursor. Cursor keeps
+that sign-in per person, even for a team server.
+
+Checked against Cursor's docs in November 2026: [MCP](https://cursor.com/docs/mcp) and
+[Cloud Agents](https://cursor.com/docs/cloud-agent/capabilities).
+
 ## How Cursor learns your org's rules
 
 When you start a chat, Cursor runs the hook. `canyon manifest --harness cursor` asks the Canyon you

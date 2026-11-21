@@ -1,30 +1,36 @@
 ---
 title: Connect your agent
-description: Give a coding agent Canyon's tools over MCP, with one command for every agent on the machine or one click for one agent.
+description: On a laptop, the canyon CLI connects every coding agent with one command. In the cloud, an agent connects to your Canyon's address and you allow it once in the browser.
 ---
 
-Canyon gives a coding agent its tools over MCP (the Model Context Protocol): your org's rules, an
-app's status and logs, a review, a deploy and a promotion, each with typed arguments and results.
-Each tool does what the `canyon` command of the same name does, with the same checks on who you are.
-The MCP server is `canyon mcp`: it runs as the `canyon` you installed, signed in as it is, so install
-the CLI and run `canyon login` first, as [Try it on your laptop](/start/try-it-on-your-laptop/#deploy-an-app-of-your-own)
-or [Deploy on your company's Canyon](/start/deploy-on-your-companys-canyon/#2-sign-in) shows.
+Canyon gives a coding agent its tools over MCP (the Model Context Protocol): your org's rules and
+playbooks, an app's status and logs, a review, a deploy and a promotion, each with typed arguments
+and results. Each tool checks who you are and what you may do, as the `canyon` command of the same
+name does.
 
-There are two ways to connect an agent:
+How an agent connects depends on where it runs:
 
-| | Sets up |
-|---|---|
-| [The CLI](#the-cli) | Every agent it finds: Canyon's skill, the session hook that hands the agent your org's rules, and the MCP server |
-| [One click](#one-click) | The MCP server alone, in one agent |
+| | On a laptop | In the cloud |
+|---|---|---|
+| Agents | Claude Code, Codex, Cursor and others on your machine | Claude Code on the web, Cursor's cloud agents |
+| You set up | The `canyon` CLI: `canyon login`, then `canyon skill install` | Your Canyon's address, `https://<canyon>/mcp`, allowed once in your browser |
+| The code it reviews and deploys | The folder you're in, including what you haven't pushed | A pushed branch of a GitHub repository linked to the app |
 
-## The CLI
+Connect each agent one way, not both: one `canyon` server per agent.
+
+## On a laptop
+
+Install the CLI and sign it in, as [Deploy on your company's Canyon](/start/deploy-on-your-companys-canyon/#2-sign-in)
+shows, then:
 
 ```sh
 canyon skill install
 ```
 
-It sets up each agent it finds, and prints every file it writes. Here, on a machine with Claude Code
-and Codex, in a project with a `.cursor` directory:
+It sets up each agent it finds, and prints every file it writes: Canyon's skill, the session hook
+that hands the agent your org's rules, and Canyon's MCP server, `canyon mcp`, which runs inside the
+CLI, signed in as it is. Here, on a machine with Claude Code and Codex, in a project with a
+`.cursor` directory:
 
 ```text
   ✓ Claude Code    ~/.claude/skills/canyon/SKILL.md          written
@@ -51,9 +57,7 @@ Each file keeps everything that isn't Canyon's. `canyon skill uninstall` removes
 and the server again, and leaves the rest of each file as it was. An agent that loads its MCP servers
 only when it starts has Canyon's tools from its next start.
 
-## One click
-
-To add only the MCP server to one agent:
+To add only the MCP server to one agent instead:
 
 | Your agent | How |
 |---|---|
@@ -62,21 +66,83 @@ To add only the MCP server to one agent:
 | [Cursor](/start/agents/cursor/#add-canyons-mcp-server-in-one-click) | The *Add Canyon to Cursor* link on its page |
 | [GitHub Copilot in VS Code](/start/agents/other-agents/#github-copilot) | The *Add Canyon to VS Code* link on its page |
 
-Each agent's page has the details, and [other agents](/start/agents/other-agents/) covers agents
-that read `AGENTS.md`.
+[Other agents](/start/agents/other-agents/) covers agents that read `AGENTS.md`.
 
-Once connected, an agent is also handed your org's [playbooks](/org/playbooks/): how your teams
-build, which it reads when they fit its task.
+## In the cloud
+
+A cloud agent runs on its vendor's machines, not yours, so it has no `canyon` CLI and none of your
+files. It connects to your Canyon's MCP server by address, and reviews and deploys what you've
+pushed to GitHub.
+
+### What it needs
+
+- **Your Canyon reachable from the internet, over `https`, with sign-in on.** The agent's vendor
+  calls it from their machines. A Canyon with sign-in off, such as the laptop demo, serves no address.
+- **Canyon's GitHub App, installed on your repositories** by an admin ([Connect GitHub](/build/github/#before-you-start-your-admin-connects-github)).
+- **Your own GitHub account, linked:** at the foot of the dashboard's side menu, choose **Link
+  GitHub account** ([Link your GitHub account](/build/github/#link-your-github-account)). Canyon
+  reviews and deploys a repository only when your account can read it on GitHub.
+
+### Connect it
+
+1. Add `https://<canyon>/mcp` to the agent as an MCP server, the way its page shows:
+   [Claude Code on the web](/start/use-it-from-your-coding-agent/#in-the-cloud) or
+   [Cursor's cloud agents](/start/agents/cursor/#in-the-cloud).
+2. The first time the agent uses it, Canyon opens in your browser. Sign in if you aren't, and Canyon
+   asks **Allow \<agent\> to use Canyon as you?**, with where and when the request came from.
+3. It names what the agent asks for:
+   - **See your org's rules, and the apps you can see: their status, and logs where you're a
+     contributor;**
+   - **Check, deploy and promote the apps you contribute to.**
+
+   It can do only what you can. It can't approve findings, change settings or sharing, or see secret
+   values.
+4. Choose **Allow**. Only allow a connection you started yourself.
+
+The connection lasts 30 days. Under **Settings › People & sign-in**, **Sessions** lists each one as
+`<agent> (MCP)`; **Disconnect** ends it at once.
+
+### What the agent can do
+
+| Tool | Does |
+|---|---|
+| `canyon_rules` | Your org's rules, as `canyon manifest` shows them |
+| `canyon_playbook` | One of your org's [playbooks](/org/playbooks/) |
+| `canyon_status`, `canyon_logs` | An app's status, and its last log lines with secrets masked |
+| `canyon_create_app` | Makes an app from a GitHub repository, with you as its owner, linked to the repository |
+| `canyon_check_ref`, `canyon_deploy_ref` | Reviews a pushed branch, tag or commit of the app's repository, or deploys it to preview |
+| `canyon_promote` | Promotes to production. Your agent asks you first |
+| `canyon_secret_link` | Sends you to the app's Secrets section to set a value: the agent never sees one |
+
+A review or a deploy that takes longer than a call can wait is handed back with its run, and the
+agent reads how it ended once it has.
+
+### For admins: one setup for the whole team
+
+Only where the agent's vendor offers it:
+
+- **Claude Code on the web:** add Canyon as a connector for your organisation in claude.ai. On Team
+  and Enterprise plans only admins add connectors. Each person allows it once, as above.
+- **Cursor:** add it as a team MCP server under **Dashboard › Plugins & MCPs**. Cursor's cloud agents
+  get it, and each person allows it once.
+
+Push the address to cloud agents only. On laptops, `canyon skill install` already sets up
+`canyon mcp`, and a second `canyon` server would only confuse the agent.
 
 ## What still needs the CLI
 
-MCP gives your agent Canyon's tools. A few things stay with the `canyon` CLI:
-
-- **Signing in.** The MCP server uses the CLI's own sign-in: `canyon login`.
-- **The session hook**, which hands an agent your org's rules when a session starts, runs
-  `canyon manifest`.
-- **Setting a secret's value.** No tool takes one, so a value never passes through the chat. Set it
-  with [`canyon secret set`](/build/secrets/) in your own terminal, or on the app's page in the
-  [dashboard](/build/secrets/#in-the-dashboard).
+- **Deploying code you haven't pushed.** Only something on your machine can send the folder you're
+  in: `canyon deploy`, or `canyon mcp`'s `canyon_deploy`.
+- **Signing in on a laptop.** `canyon mcp` uses the CLI's own sign-in, `canyon login`. A cloud agent
+  signs in in your browser instead.
+- **The session hook**, which hands an agent on your machine your org's rules when a session starts.
+  A cloud agent gets them from Canyon's MCP server when it connects.
 - **The laptop demo**, which runs on your machine: `canyon demo`.
 - **CI**, which runs `canyon check` or `canyon deploy` with a token.
+
+**A secret's value never passes through an agent.** You set it yourself, on the app page's
+[Secrets section](/build/secrets/#in-the-dashboard) or with [`canyon secret set`](/build/secrets/)
+in your own terminal.
+
+Once connected, either way, an agent is also handed your org's [playbooks](/org/playbooks/): how your
+teams build, which it reads when they fit its task.

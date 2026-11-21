@@ -121,10 +121,12 @@ That installs the latest release, from
 
 **Let your agent ship.** `canyon skill install` teaches Claude Code, Codex and Cursor, and with
 `--harness agents-md` any agent that reads an `AGENTS.md`, how to deploy with Canyon and fix what the
-review finds. Then ask it to "deploy this
+review finds, and gives them Canyon's tools over MCP. Then ask it to "deploy this
 app". Or run `canyon deploy` in the app's directory yourself.
 [Use it from your coding agent](docs/src/content/docs/start/use-it-from-your-coding-agent.md) shows
-what that writes on your machine and a real agent's deploy.
+what that writes on your machine and a real agent's deploy. A coding agent in the cloud, such as
+Claude Code on the web, connects to your team's Canyon at `https://<canyon>/mcp` instead
+([Connect your agent](docs/src/content/docs/start/connect-your-agent.md)).
 
 ## What it checks
 

@@ -1,6 +1,6 @@
 ---
 title: Deploy on your company's Canyon
-description: Your company runs Canyon and you have its address. Sign the CLI in, teach your coding agent, and ship a first app, private until you share it.
+description: Your company runs Canyon and you have its address. Sign the CLI in, connect your coding agent, and ship a first app, private until you share it.
 ---
 
 Your company runs Canyon, and you have its address, such as `https://canyon.yourcompany.example`.
@@ -63,16 +63,27 @@ signs in, and every CLI session is that person's.
 If the code expires and the CLI says Canyon is still being set up, nobody can approve a sign-in
 there yet: ask whoever installed it to finish setup.
 
-## 3. Teach your coding agent
+## 3. Connect your coding agent
 
 ```sh
 canyon skill install
 ```
 
-It writes the Canyon skill and a session hook for Claude Code, and for Cursor in a project that has
-a `.cursor` directory. At each session start the hook hands the agent your org's current rules from
-the Canyon you signed in to. [Use it from your coding agent](/start/use-it-from-your-coding-agent/)
-shows what it writes. `canyon skill uninstall` takes it out again.
+It sets up Claude Code and Codex, and Cursor in a project that has a `.cursor` directory, and prints
+every file it writes:
+
+- **Canyon's skill**, which teaches the agent to deploy with Canyon and fix what the review finds;
+- **a session hook**, which hands the agent your org's current rules from the Canyon you signed in
+  to at each session start;
+- **Canyon's MCP server**, `canyon mcp`, which gives the agent Canyon as tools, signed in as the CLI
+  is.
+
+[Connect your agent](/start/connect-your-agent/#on-a-laptop) shows what it writes for each agent.
+`canyon skill uninstall` takes it all out again.
+
+**A coding agent in the cloud,** such as Claude Code on the web or Cursor's cloud agents, has no
+CLI. It connects to `https://canyon.yourcompany.example/mcp` instead, you allow it once in your
+browser, and it deploys what you've pushed to GitHub ([In the cloud](/start/connect-your-agent/#in-the-cloud)).
 
 ## 4. Deploy
 

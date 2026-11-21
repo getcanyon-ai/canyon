@@ -113,6 +113,9 @@ choices as the command. The value goes in a password field, is sent once and is 
 Canyon has it. **Replace** fills the form from a row, and **Remove** asks first. A value Canyon sets
 itself says "Canyon sets this one for the app", with neither.
 
+A coding agent never sets a value and never sees one. An agent in the cloud, with no CLI, gives you a
+link to this section instead, from its `canyon_secret_link` tool, and you set the value there.
+
 ## Values Canyon sets itself
 
 - **Databases.** An app that declares a database in `canyon.toml` gets `DATABASE_URL` from Canyon,

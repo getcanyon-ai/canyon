@@ -232,7 +232,9 @@ in the dashboard, and the agent can only ask. The fleet address shows both block
 ones that passed and the promotion on the app's page, and every step in the audit trail.
 
 **The end** is a recap and four ways on: your own app, your pipeline, your team, and real workloads.
-[Connect your agent](/start/connect-your-agent/) gives your other coding agents Canyon's tools.
+[Connect your agent](/start/connect-your-agent/) connects your other coding agents: with the CLI on
+a laptop, as in the tour, or by a team Canyon's address in the cloud. The demo has sign-in off, so it
+serves no address for cloud agents.
 
 ## Run it again
 

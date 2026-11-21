@@ -109,13 +109,21 @@ The connection lasts 30 days. Under **Settings › People & sign-in**, **Session
 | `canyon_rules` | Your org's rules, as `canyon manifest` shows them |
 | `canyon_playbook` | One of your org's [playbooks](/org/playbooks/) |
 | `canyon_status`, `canyon_logs` | An app's status, and its last log lines with secrets masked |
-| `canyon_create_app` | Makes an app from a GitHub repository, with you as its owner, linked to the repository |
+| `canyon_secret_link` | A link for you to open: the app's Secrets form, filled in with the secret's name and environment, where you type the value. The agent never sees it |
 | `canyon_check_ref`, `canyon_deploy_ref` | Reviews a pushed branch, tag or commit of the app's repository, or deploys it to preview |
-| `canyon_promote` | Promotes to production. Your agent asks you first |
-| `canyon_secret_link` | Sends you to the app's Secrets section to set a value: the agent never sees one |
+| `canyon_review` | How a review or deploy ended, when it took longer than one call can wait: after 45 seconds the agent gets the run back, and calls this until the run ends |
+| `canyon_create_app` | Makes an app from a GitHub repository, with you as its owner, linked to the repository. At most 10 a day for each person |
+| `canyon_promote` | Promotes to production, after asking you |
 
-A review or a deploy that takes longer than a call can wait is handed back with its run, and the
-agent reads how it ended once it has.
+`canyon_rules`, `canyon_playbook`, `canyon_status`, `canyon_logs`, `canyon_secret_link` and
+`canyon_review` need only the first kind of access you allow, to see. The rest need the second, to
+check, deploy and promote.
+
+**Production's question.** Where the agent can show you a question, `canyon_promote` asks you
+there, and promotes only on your yes. An agent that can't show one says you asked for it, and
+Canyon has only its word. To have a person decide every time, whatever the agent, turn on
+[production approval](/build/production/#when-your-org-has-a-person-approve-production): each
+promotion an agent asks for then waits for a person to approve it in the dashboard.
 
 ### For admins: one setup for the whole team
 
@@ -127,7 +135,8 @@ Only where the agent's vendor offers it:
   get it, and each person allows it once.
 
 Push the address to cloud agents only. On laptops, `canyon skill install` already sets up
-`canyon mcp`, and a second `canyon` server would only confuse the agent.
+`canyon mcp`. A claude.ai connector also reaches Claude Code on laptops; [its page](/start/use-it-from-your-coding-agent/#in-the-cloud)
+shows how to turn it off there.
 
 ## What still needs the CLI
 

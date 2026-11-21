@@ -120,6 +120,16 @@ Enterprise plans, an admin adds it once for everyone. Each person then connects 
 Canyon asks them in the browser to allow it. Claude Code's cloud sessions use the connector with that
 same permission, and need no network rule for it.
 
+**The connector also shows up in Claude Code on your laptop,** in the terminal and the editor, for
+anyone signed in to that claude.ai account. On a laptop where `canyon skill install` set up
+`canyon mcp`, keep using that one: it deploys what you haven't pushed. To turn the connector off in
+Claude Code on that laptop alone, add it to your own `~/.claude/settings.json`, which cloud sessions
+don't read:
+
+```json
+{"deniedMcpServers": [{"serverUrl": "https://<canyon>/mcp"}]}
+```
+
 Don't roll Canyon out with Claude Code's `managed-mcp.json`. Once that file is deployed, Claude Code
 loads only the servers it lists and refuses every other one, `canyon mcp` included. A managed file
 on a device doesn't reach a cloud session either.

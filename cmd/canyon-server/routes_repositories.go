@@ -216,15 +216,17 @@ func (a *app) visible(ctx context.Context) ([]githubapp.Seen, []string, error) {
 	return seen, unreachable, err
 }
 
-// seenRepository is the repository a live installation sees under id; written false when there is none,
-// or GitHub did not answer for an org that might see it.
-func (a *app) seenRepository(ctx context.Context, w http.ResponseWriter, id int64) (githubapp.Seen, bool) {
+// seenRepository is the repository a live installation sees under id, or under fullName, owner/name in any case,
+// when id is 0; written false when there is none, or GitHub did not answer for an org that might see it.
+func (a *app) seenRepository(ctx context.Context, w http.ResponseWriter, id int64, fullName string) (githubapp.Seen, bool) {
 	seen, unreachable, err := a.visible(ctx)
 	if err != nil {
 		a.internal(w, "github repository", err)
 		return githubapp.Seen{}, false
 	}
-	if at := slices.IndexFunc(seen, func(s githubapp.Seen) bool { return s.ID == id }); at >= 0 {
+	if at := slices.IndexFunc(seen, func(s githubapp.Seen) bool {
+		return id != 0 && s.ID == id || id == 0 && strings.EqualFold(s.FullName, fullName)
+	}); at >= 0 {
 		return seen[at], true
 	}
 	if len(unreachable) > 0 {
@@ -267,7 +269,7 @@ func (a *app) importRepository(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid_name", "an app's name is one line of plain text, at most 100 characters", nil)
 		return
 	}
-	seen, ok := a.seenRepository(ctx, w, repo)
+	seen, ok := a.seenRepository(ctx, w, repo, "")
 	if !ok {
 		return
 	}
@@ -319,17 +321,39 @@ func (a *app) importRepository(w http.ResponseWriter, r *http.Request) {
 }
 
 // linkGuard is the link routes' order (contracts/routes.md, the Level table): an unknown or deleted
-// app's 404, then a person below admin's 403. false means the response is written.
+// app's 404, then a person below contributor's 403. false means the response is written.
 func (a *app) linkGuard(w http.ResponseWriter, r *http.Request) bool {
-	if !a.projectLive(r.Context(), w, r.PathValue("id")) {
+	ctx, id := r.Context(), r.PathValue("id")
+	if !a.projectLive(ctx, w, id) {
 		return false
 	}
-	if roleOf(r.Context()) != "admin" {
-		a.adminRequired(w, r, r.PathValue("id"))
-		return false
-	}
-	return true
+	return roleOf(ctx) == "admin" || !a.teamRequired(ctx, w, a.pool, id)
 }
+
+// readable is the repository a member below admin may link (design/PERMISSIONS.md, linking a repository; #1917):
+// one Canyon's App sees that one of the GitHub accounts they linked can read on GitHub now. A repository no App
+// sees and one they can't read answer alike, so no private repository's existence leaks. false means the response
+// is written.
+func (a *app) readable(ctx context.Context, w http.ResponseWriter, seen githubapp.Seen) bool {
+	err := githubapp.Reads(ctx, a.pool, a.vault, a.github, seen.Installation, seen.Owner.Login, seen.Name, actorOf(ctx).Subject)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, githubapp.ErrNoGitHubLink):
+		writeErr(w, http.StatusForbidden, "github_link_required", githubLinkRequired, nil)
+	case errors.Is(err, githubapp.ErrNoAccess):
+		writeErr(w, http.StatusNotFound, "not_found", "none of Canyon's GitHub Apps sees that repository", nil)
+	case errors.Is(err, githubapp.ErrGitHub):
+		a.log.Printf("canyon-server: github access of %s: %v", seen.FullName, err)
+		writeErr(w, http.StatusBadGateway, "github_unavailable", "GitHub didn't answer for "+seen.FullName+". Try again in a minute.", nil)
+	default:
+		a.internal(w, "github access", err)
+	}
+	return false
+}
+
+// githubLinkRequired is github_link_required's message (design/EXPERIENCE.md, D5).
+const githubLinkRequired = "Link your GitHub account first: Canyon reads a repository for you only where your own GitHub account can read it."
 
 func (a *app) linkRepository(w http.ResponseWriter, r *http.Request) {
 	ctx, id := r.Context(), r.PathValue("id")
@@ -337,20 +361,38 @@ func (a *app) linkRepository(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		RepoID int64  `json:"repo_id"`
-		Folder string `json:"folder"`
+		RepoID   int64  `json:"repo_id"`
+		FullName string `json:"full_name"`
+		Folder   string `json:"folder"`
 	}
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if (body.RepoID == 0) == (body.FullName == "") {
+		writeErr(w, http.StatusBadRequest, "bad_request", "the body names the repository by repo_id or by full_name, owner/name, not both", nil)
 		return
 	}
 	if !validFolder(body.Folder) {
 		writeErr(w, http.StatusBadRequest, "invalid_folder", "a folder is a path of letters, digits, dots, dashes and underscores, at most 255 characters", nil)
 		return
 	}
-	seen, ok := a.seenRepository(ctx, w, body.RepoID)
-	if !ok {
+	admin := roleOf(ctx) == "admin"
+	if !admin { // no GitHub account linked: refused before GitHub is asked anything
+		var linked bool
+		if err := a.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM github_links WHERE subject = $1)", actorOf(ctx).Subject).Scan(&linked); err != nil {
+			a.internal(w, "link", err)
+			return
+		}
+		if !linked || actorOf(ctx).Subject == "" {
+			writeErr(w, http.StatusForbidden, "github_link_required", githubLinkRequired, nil)
+			return
+		}
+	}
+	seen, ok := a.seenRepository(ctx, w, body.RepoID, body.FullName)
+	if !ok || !admin && !a.readable(ctx, w, seen) {
 		return
 	}
+	body.RepoID = seen.ID
 	tx, err := a.mutation(ctx)
 	if err != nil {
 		a.internal(w, "link", err)

@@ -69,10 +69,10 @@ answer=$(priv api -X POST -H 'X-GitHub-Api-Version: 2026-03-10' "repos/$CANYON_P
   -f ref=main -f "inputs[pr]=$pr" -f "inputs[sha]=$sha")
 run=$(printf '%s' "$answer" | jq -r '.html_url? // empty' 2>/dev/null || true)
 
-# the label's first use makes it: one that is there already answers an error, and the edit below says any other
-# (GitHub takes a description of at most 100 characters)
-gh label create "$label" -R "$public" --color 5319e7 \
-  --description "Stack suites run on Canyon's private runners (scripts/ci-private.sh)" >/dev/null 2>&1 || true
+# the label's first use makes it; any error of GitHub's stops the script (a description takes at most 100 characters)
+if ! gh label list -R "$public" --search "$label" --json name --jq '.[].name' | grep -qxF "$label"; then
+  gh label create "$label" -R "$public" --color 5319e7 --description "Stack suites run on Canyon's private runners (scripts/ci-private.sh)" >/dev/null
+fi
 gh pr edit "$pr" -R "$public" --add-label "$label" >/dev/null
 rerun
 echo "private run of #$pr at $sha: ${run:-started; scripts/ci-private-status.sh $pr finds it}"

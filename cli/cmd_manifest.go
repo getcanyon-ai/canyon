@@ -154,7 +154,9 @@ func runManifest(ctx context.Context, a *app, args []string) int {
 	case hook || a.render.Format == FormatAI: // an agent reads it: written for one (cli.md §7.4)
 		read.Outbound = viaCanyon(ctx, client, within-a.clock.now().Sub(began)) // what is left of the hook's seconds
 		if hook {
-			syncSkills(ctx, client, skills, read.Playbooks, held, within-a.clock.now().Sub(began))
+			for _, line := range syncSkills(ctx, client, skills, skillsShown[harness], read.Playbooks, held, within-a.clock.now().Sub(began)) {
+				refreshed += line + "\n"
+			}
 		}
 		return a.emit(harness, refreshed+agentManifest(read, hook))
 	}

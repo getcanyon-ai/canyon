@@ -190,3 +190,84 @@ func TestSkillUninstallRemovesTheSyncedSkills(t *testing.T) {
 		t.Errorf("a skill the sync didn't write was touched: %q", got)
 	}
 }
+
+// tree is every file under root, path to bytes, links as their targets: what a test holds byte for byte.
+func tree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		switch {
+		case d.Type()&os.ModeSymlink != 0:
+			target, err := os.Readlink(path)
+			out[path] = "-> " + target
+			return err
+		case !d.IsDir():
+			raw, err := os.ReadFile(path) //nolint:gosec // a path this test wrote
+			out[path] = string(raw)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A person's own canyon-<slug> skill, unmarked, and a canyon-<slug> that is a link, even to a directory whose marker
+// names this host, are left byte for byte through a sync that would write the playbook there, a sync that would remove
+// one, and canyon skill uninstall: the hook says once per session that it left the path alone (D5).
+func TestSkillSyncLeavesAPersonsSkillAndALinkAlone(t *testing.T) {
+	base, asked := playbookHost(t) // before the directory moves
+	for _, linked := range []bool{false, true} {
+		home, _ := harnessHome(t)
+		env := xdg(t.TempDir())
+		env["HOME"], env["CANYON_ASCII"] = home, "1"
+		dir := filepath.Join(home, ".claude", "skills")
+		elsewhere := filepath.Join(home, "elsewhere")
+		skillAt(t, elsewhere, "mine", `{"host":"`+base+`","version":1}`) // a marker naming this host, behind a link
+		must(t, os.MkdirAll(dir, 0o750))
+		if linked {
+			must(t, os.Symlink(filepath.Join(elsewhere, "mine"), filepath.Join(dir, "canyon-service-conventions")),
+				os.Symlink(filepath.Join(elsewhere, "mine"), filepath.Join(dir, "canyon-retired")))
+		} else {
+			skillAt(t, dir, "canyon-service-conventions", "")
+		}
+		before := tree(t, home)
+		*asked = nil
+		out, errs, code := run(t, env, false, "manifest", "--host", base, "--harness", targetClaude)
+		line := "Canyon didn't sync the playbook service-conventions: ~/.claude/skills/canyon-service-conventions/ is not a directory Canyon wrote, so Canyon leaves it alone.\n"
+		if code != exitOK || errs != "" || !strings.HasPrefix(out, line) {
+			t.Errorf("linked %v: exit %d, stderr %q, no line saying it left the path alone; out begins:\n%.200s", linked, code, errs, out)
+		}
+		for _, r := range *asked {
+			if strings.Contains(r, "read=sync") {
+				t.Errorf("linked %v: fetched %s for a path it leaves alone", linked, r)
+			}
+		}
+		if _, _, code := run(t, env, false, "skill", "uninstall"); code != exitOK {
+			t.Fatalf("linked %v: uninstall exit %d", linked, code)
+		}
+		after := tree(t, home)
+		for path, was := range before {
+			if strings.Contains(path, "canyon-") || strings.Contains(path, "elsewhere") {
+				if after[path] != was {
+					t.Errorf("linked %v: %s was %q, is %q", linked, path, was, after[path])
+				}
+			}
+		}
+	}
+}
+
+// What a synced skill holds runs nothing and hides nothing: !` is written "! `", which Claude Code doesn't run, code
+// blocks too, and a character that hides text is written visibly, in the body and the description.
+func TestASyncedSkillRunsAndHidesNothing(t *testing.T) {
+	got := string(skillFile(playbookRead{Slug: "a", When: "Read‮me", Body: "Status: !`git status`\n```sh\necho !`date`\n```\nok\U000E0041\n"}))
+	want := "---\nname: \"a\"\ndescription: \"Read\\\\u202eme\"\n---\n\nStatus: ! `git status`\n```sh\necho ! `date`\n```\nok\\U000e0041\n"
+	if got != want {
+		t.Errorf("the skill file:\n%s\nwant\n%s", got, want)
+	}
+}

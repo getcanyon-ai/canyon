@@ -147,8 +147,9 @@ func TestOAuthAClientSignsInThroughConsent(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT id, flow, oauth_client, oauth_client_name, resource, scope, extract(epoch FROM access_expires_at - now()) / 3600,
 		extract(epoch FROM expires_at - now()) / 86400 FROM sessions WHERE access_hash = $1`, hash(access)).
 		Scan(&row, &flow, &clientID, &clientName, &resource, &scopes, &hours, &days); err != nil || flow != "oauth" || clientID != id || clientName != "Claude Code" ||
-		resource != "http://localhost:7777/mcp" || strings.Join(scopes, " ") != "read act" || hours < 0.99 || hours > 1 || days < 29.9 || days > 30 || row == access {
-		t.Fatalf("the session: %s %s %s %s %v, access %.2f hours, the session %.2f days, %v", flow, clientID, clientName, resource, scopes, hours, days, err)
+		resource != "http://localhost:7777/mcp" || strings.Join(scopes, " ") != "read act" || hours < 0.99 || hours > 1 || days < oauthRefreshLife.Hours()/24-0.01 || days > oauthRefreshLife.Hours()/24 || row == access { // a CLI session's life, 7 days
+		t.Fatalf("the session the code made is wrong: flow %q client %q %q resource %q scopes %v, access %.2f hours (want 1), session %.2f days (want %.0f), row is the access token %v, err %v",
+			flow, clientID, clientName, resource, scopes, hours, days, oauthRefreshLife.Hours()/24, row == access, err)
 	}
 	if n := countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE (action = 'connect agent' AND detail = '{"client": "Claude Code", "client_host": "127.0.0.1", "scopes": ["read", "act"]}')
 		OR (action = 'sign in' AND detail = '{"flow": "oauth", "client": "Claude Code"}' AND via = 'mcp')`); n != 2 {

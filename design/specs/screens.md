@@ -992,6 +992,29 @@ whole, says `Canyon couldn't read what runs in <env>: <error>`, never nothing fo
 `not_scanned` there is no card: the rule is off by default and Canyon lists no image then. A read-only member and a
 responder with no grant never read it, nor see the card (the reduced page reads no image).
 
+### Connect an agent (design/specs/mcp.md §12)
+
+On Settings › People & sign-in, directly above the sessions list, so an agent is connected and disconnected in one
+place. Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
+connects it, and each one you connect is listed under Sessions, where you can disconnect it.`
+
+- **The address.** `Canyon's address for agents`: the protected-resource metadata's `resource`, exactly, read-only,
+  with `Copy` (`Address copied`, or `Couldn't copy. The browser did not allow it.`), and under it `Add it to your coding
+  agent as an MCP server. The first time it connects, a browser opens for you to allow it.` Where the metadata answers
+  `404`, no address and `Agents can't connect to this Canyon by its address, because it isn't served over https. Use the
+  CLI below.`; any other failure is the read's own sentence, and no address.
+- **`With the CLI`**: `canyon skill install`, and `Sets up every coding agent on your machine: Canyon's skill, your
+  org's rules at each session start, and Canyon's tools.`
+- **`Or add it to one agent`**: Claude Code and Codex by their command, Cursor and VS Code by `Add to Cursor` and
+  `Add to VS Code`, each for the address where there is one, else for `canyon mcp`.
+- **`Roll it out to everyone`**, to an admin alone and only with an address: `For your org's managed settings, so every
+  machine gets Canyon without anyone adding it.`, then Claude Code's `managed-mcp.json`, Codex's managed
+  `config.toml` and Cursor's team MCP settings, each filled in with the address.
+- **Sign-in off.** No address and no admin snippets: `This Canyon has sign-in off, so it gives agents no address:
+  anything that could reach it would act as its admin. Agents on this machine use the CLI's own server, canyon mcp,
+  which canyon skill install sets up. A team's Canyon, with sign-in, gives agents an address.`, then the CLI and the
+  one-agent lines.
+
 ### Secrets (design/specs/mcp.md §10.1)
 
 Below System libraries, for a contributor and above, an owner and an admin among them (design/PERMISSIONS.md, *Change

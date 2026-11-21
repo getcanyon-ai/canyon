@@ -427,10 +427,10 @@ What's missing for it:
 
 ## 12. The dashboard
 
-- **Guardrails › Connect agents**, a new panel:
-  - **The URL.** The server's `/mcp` URL, with a copy button. On a host with sign-in off it shows `canyon mcp` instead, and says a team install connects agents by URL.
-  - **Per agent:** Claude Code, Codex, Cursor and VS Code each get their one-click install link where one exists (§8), and the CLI line `canyon skill install`.
-  - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with this host's URL.
+- **Settings › People & sign-in › Connect an agent**, a new panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open):
+  - **The URL.** The protected-resource metadata's `resource`, exactly, with a copy button. Where that read answers `404` (a public URL that isn't `https`), no URL, and one line saying why. On a host with sign-in off it shows `canyon mcp` instead, and says a team install connects agents by URL.
+  - **Per agent:** the CLI line `canyon skill install`, and Claude Code, Codex, Cursor and VS Code each with its command or one-click install link: for the URL where the host serves one, else for `canyon mcp` (§8).
+  - **Org-managed config, for admins:** each agent's snippet for its org-managed settings (§2.4), filled in with the URL, where there is one.
   - **Who sees it.** Every member sees the URL and the per-agent lines; only admins see the org-managed snippets, as they're for rolling out to everyone.
 - **Guardrails › Playbooks**, the authoring screen: §3.2.
 - **What agents receive.** The existing *What agents are told* view gains the two things an agent is now handed besides the rules:

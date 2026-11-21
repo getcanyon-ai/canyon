@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Settings › People & sign-in › Connect an agent, as a member and as an admin (design/specs/mcp.md §6 item 14, §12):
+// Settings › People & sign-in › Connect an agent, as a member and as an admin, who see the same panel
+// (design/specs/mcp.md §6 item 14, §12):
 // e2e/oidc/connect_test.go signs each in on the team setup (make e2e-up OIDC=1) and runs one of these with their session.
 // A screenshot of each is kept in .work/walk, the walk the panel is reviewed by.
 
@@ -23,20 +24,18 @@ const opened = async (page: Page) => {
   const laptop = panel(page).getByRole("region", { name: "On your laptop" });
   await expect(laptop.getByText(`canyon login ${env("E2E_CANYON_URL")}`, { exact: true })).toBeVisible();
   await expect(laptop.getByText("canyon skill install", { exact: true })).toBeVisible();
-  await expect(panel(page).getByRole("link", { name: "Add to Cursor" })).toBeVisible();
+  await expect(panel(page).getByText("Claude Code on the web", { exact: true })).toBeVisible();
+  await expect(panel(page).getByText("claude mcp add", { exact: false })).toHaveCount(0); // the address is never a laptop's
 };
 const walked = (page: Page, who: string) => page.screenshot({ path: `.work/walk/connect-${who}.png`, fullPage: true });
 
+// A member and an admin see the same panel: each cloud agent's line says who adds the address.
 test("Connect an agent as member", async ({ page }) => {
   await opened(page);
-  await expect(panel(page).getByRole("region", { name: "Roll it out to everyone" })).toHaveCount(0);
   await walked(page, "member");
 });
 
-// The stack's address is http on loopback, which Claude Code's managed settings refuse: an admin gets no rollout there.
-// ConnectAgents.test.tsx holds the rollout an https address gets.
 test("Connect an agent as admin", async ({ page }) => {
   await opened(page);
-  await expect(panel(page).getByRole("region", { name: "Roll it out to everyone" })).toHaveCount(0);
   await walked(page, "admin");
 });

@@ -142,7 +142,7 @@ export function Settings() {
             {/* With sign-in off there is nobody to admit and every caller is an admin: forms here
                 would do nothing (the audit's C9). */}
             {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
-            {auth !== null && <ConnectAgents signIn={auth === "oidc"} admin={admin} />}
+            {auth !== null && <ConnectAgents signIn={auth === "oidc"} />}
           </section>
         )}
         {read !== null && record !== null && page === "hosting" && read.runtime === "kubernetes" && (

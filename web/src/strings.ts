@@ -1040,21 +1040,23 @@ export const CONNECT = {
   stepLogin: "Sign in to this Canyon",
   stepSkill: "Set up your coding agents",
   laptopNote: "The last step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools. They load the next time each agent starts.",
-  cloud: "In the cloud, or without the CLI",
+  cloud: "In the cloud",
+  cloudNote: "For agents that run on their vendor's machines. They review and deploy what you've pushed to GitHub. On a laptop, use the CLI above: one way per agent.",
   address: "Canyon's address for agents",
-  addressNote: "Add it to your coding agent as an MCP server, then sign in from the agent: a browser opens for you to allow it.",
+  addressNote: "The first time an agent uses it, Canyon opens in your browser and asks you to allow it.",
   copy: "Copy",
   copied: "Address copied",
   noAddress: "Agents can't connect to this Canyon by its address, because it isn't served over https. Use the CLI above.",
-  addCursor: "Add to Cursor",
-  addVSCode: "Add to VS Code",
-  managed: "Roll it out to everyone",
-  managedNote: "So every machine gets Canyon without anyone adding it. Each person still signs in from their agent the first time.",
-  managedClaude: "In Claude Code's managed settings (Claude Code 2.1.259 or later). It adds Canyon beside each person's own servers.",
-  managedCodex: "Codex's managed configuration can allow or block MCP servers, but not add one: each person adds Canyon with the Codex line above.",
-  managedCursor: "In Cursor's dashboard, under Plugins & MCPs, add this address as a team MCP server, then add it to your team marketplace as Default On. Team marketplaces need Cursor's Teams or Enterprise plan.",
+  claudeWeb: "Claude Code on the web",
+  claudeWebHow: "Add this address as a custom connector in claude.ai. On Team and Enterprise plans, an owner of your claude.ai organization adds it once, and each person connects it. The connector also shows up in Claude Code on laptops, where the server canyon skill install set up stays the one to use.",
+  claudeDocs: "Anthropic's connector docs",
+  cursorCloud: "Cursor's cloud agents",
+  cursorCloudHow: "A team admin adds this address as a team MCP server in Cursor's dashboard, under Plugins & MCPs.",
+  codexCloud: "Codex's cloud tasks can't connect to an MCP server yet. Use Codex on your laptop, with the CLI above.",
   signInOff: "Sign-in is off on this Canyon, so it gives agents no address: anyone who could reach it would act as an admin. Use the CLI above. A team's Canyon with sign-in gives agents an address.",
 } as const;
+// Anthropic's docs for adding a claude.ai connector, which Claude Code on the web uses (Connect an agent).
+export const CONNECTOR_DOCS = "https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp";
 
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's
 // image read in its own words beside its mark, then what it counts, one card a package, where it is in a developer's

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAgentAddress, said } from "../api";
-import { CONNECT as T, S } from "../strings";
+import { CONNECT as T, CONNECTOR_DOCS, S } from "../strings";
 import { Button } from "../ui/Button";
 
 const H2 = "mt-5 text-2xl font-semibold";
@@ -11,26 +11,11 @@ const CODE = "mt-1 block overflow-x-auto rounded-lg border border-border bg-surf
 // The CLI's install line, as the README and the docs give it.
 const INSTALL = "curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh";
 
-// Each agent's way to add Canyon's server by its address (design/specs/mcp.md §8, §12). The links carry their
-// configuration as each editor's install link asks for it; Codex signs in by a command of its own.
-function ways(address: string) {
-  return {
-    claude: `claude mcp add --scope user --transport http canyon ${address}`,
-    codex: `codex mcp add canyon --url ${address}\ncodex mcp login canyon`,
-    cursor: `cursor://anysphere.cursor-deeplink/mcp/install?name=canyon&config=${btoa(JSON.stringify({ url: address }))}`,
-    vscode: `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: "canyon", type: "http", url: address }))}`,
-  };
-}
-
-// An admin's rollout, checked against each agent's docs (design/specs/mcp.md §2.4). Claude Code's managedMcpServers adds
-// Canyon beside a person's own servers, where managed-mcp.json would switch every other one off, and it takes an https
-// address alone. Codex's managed configuration can't add a server, and Cursor's team marketplace is set in its dashboard.
-const rollout = (address: string) => JSON.stringify({ managedMcpServers: { canyon: { type: "http", url: address } } });
-
-// Connect an agent, on Settings › People & sign-in above the sessions list: on a laptop the CLI, for this host; anywhere
-// else Canyon's address, where the host serves one; an admin's rollout only with an https address. With sign-in off the
-// host serves no address, and the panel says why.
-export function ConnectAgents({ signIn, admin }: { signIn: boolean; admin: boolean }) {
+// Connect an agent, on Settings › People & sign-in above the sessions list, every member's: on a laptop the CLI, for
+// this host; in the cloud Canyon's address, where the host serves one, and each cloud agent's way to it. The address is
+// never offered for a laptop, by a command, an install link or managed settings, all of which reach laptops: a laptop's
+// agents use the server canyon skill install sets up (design/specs/mcp.md §2.4, §12).
+export function ConnectAgents({ signIn }: { signIn: boolean }) {
   const [address, setAddress] = useState<string | null | undefined>(undefined); // undefined while it is read
   const [failure, setFailure] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean | null>(null);
@@ -57,11 +42,12 @@ export function ConnectAgents({ signIn, admin }: { signIn: boolean; admin: boole
         <p className={SUB}>{T.laptopNote}</p>
       </section>
       <h3 className={H3}>{T.cloud}</h3>
+      <p className={SUB}>{T.cloudNote}</p>
       {!signIn && <p className={SUB}>{T.signInOff}</p>}
       {failure !== null && <p className="mt-2 text-md text-critical">{failure}</p>}
       {signIn && address === null && <p className={SUB}>{T.noAddress}</p>}
       {served !== null && (
-        <div className="mt-1">
+        <div className="mt-2">
           <label htmlFor="agent-address" className="mb-1 block text-md font-semibold text-text-dim">{T.address}</label>
           <span className="flex flex-wrap items-center gap-2">
             <input id="agent-address" readOnly value={served} spellCheck={false} autoComplete="off" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-sm" />
@@ -70,23 +56,13 @@ export function ConnectAgents({ signIn, admin }: { signIn: boolean; admin: boole
           <p className={SUB}>{T.addressNote}</p>
           <p role="status" className="text-md text-ok">{copied === true ? T.copied : ""}</p>
           {copied === false && <p role="alert" className="text-md text-critical">{S.copyFailed}</p>}
-          <dl className="mt-1 grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-4 gap-y-2 text-md">
-            <dt>Claude Code</dt><dd><code className={CODE}>{ways(served).claude}</code></dd>
-            <dt>Codex</dt><dd><code className={CODE}>{ways(served).codex}</code></dd>
-            <dt>Cursor</dt><dd><a href={ways(served).cursor}>{T.addCursor}</a></dd>
-            <dt>VS Code</dt><dd><a href={ways(served).vscode}>{T.addVSCode}</a></dd>
+          <dl className="mt-1 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-md">
+            <dt className="font-semibold">{T.claudeWeb}</dt>
+            <dd>{T.claudeWebHow} <a href={CONNECTOR_DOCS} target="_blank" rel="noreferrer">{T.claudeDocs}</a></dd>
+            <dt className="font-semibold">{T.cursorCloud}</dt><dd>{T.cursorCloudHow}</dd>
+            <dt className="font-semibold">Codex</dt><dd>{T.codexCloud}</dd>
           </dl>
         </div>
-      )}
-      {admin && served !== null && served.startsWith("https://") && (
-        <section aria-label={T.managed}>
-          <h3 className={H3}>{T.managed}</h3>
-          <p className={SUB}>{T.managedNote}</p>
-          <p className="mt-2 text-md"><span className="font-semibold">Claude Code</span>: {T.managedClaude}</p>
-          <code className={CODE}>{rollout(served)}</code>
-          <p className="mt-2 text-md"><span className="font-semibold">Codex</span>: {T.managedCodex}</p>
-          <p className="mt-2 text-md"><span className="font-semibold">Cursor</span>: {T.managedCursor}</p>
-        </section>
       )}
     </section>
   );

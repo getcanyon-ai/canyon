@@ -45,7 +45,7 @@ PASSED, `canyon deploy` will not block. An agent can rely on that, so it stops g
 
 ## 1. The command surface
 
-Twenty-three commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
+Twenty-four commands. Every one of them is on the 20-minute path or the day-2 arc. `canyon --help`
 lists only the ones the binary it is built from actually dispatches, so a short list means a verb
 has not landed yet, never that it was cut.
 
@@ -5599,5 +5599,5 @@ Listed so the next loop doesn't re-propose them.
 - **`--severity-threshold`, per-project rule overrides, inline suppression comments.**
   If the gate is tunable from inside the repo it's being reviewed, it isn't governance. Rules
   are tuned in one place, by the policy owner, with an audit trail. That's the product.
-- **Autocomplete, plugin systems, config profiles, `canyon upgrade`.** Twenty-two commands don't
+- **Autocomplete, plugin systems, config profiles, `canyon upgrade`.** Twenty-four commands don't
   need a plugin system. The release page and §8.5's notice handle upgrades.

@@ -5,7 +5,7 @@ first commit of the PR that needs it (AGENTS.md, rule 5).
 
 Canyon reaches a coding agent today through three things `canyon skill install` writes: a skill, a
 session hook that runs `canyon manifest`, and the `canyon` CLI the agent shells out to. MCP adds a
-fourth door with typed tools, typed results and server instructions. It comes in two forms, designed
+fourth door with typed tools, results in the CLI's own words, and server instructions. It comes in two forms, designed
 together:
 
 - **Local:** `canyon mcp`, a stdio server inside the CLI binary, signed in as the CLI is.

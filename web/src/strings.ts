@@ -789,11 +789,11 @@ export const CONSENT = {
   reason: {
     client: "its client isn't registered",
     redirect: "it names a redirect the client didn't register",
-    response: "it doesn't ask for a code",
-    pkce: "it has no S256 PKCE challenge",
+    response: "it doesn't ask for a sign-in code",
+    pkce: "it's missing the PKCE check Canyon requires",
     resource: "it isn't for this Canyon's MCP server",
     scope: "it asks for access Canyon doesn't grant",
-    state: "its state is over 1,024 characters",
+    state: "its state value is too long",
   },
 } as const;
 

@@ -96,8 +96,10 @@ func TestPackRef(t *testing.T) {
 		out.Message != "apps/billing isn't in 6000000: Canyon packages this app from apps/billing." {
 		t.Errorf("a folder not in the commit: %+v %v", out, err)
 	}
-	if out, err := courier.PackRef(ctx, "claims-portal", "monorepo", false, carol, action); err != nil || out.Package == "" || out.Package == got.Package {
-		t.Errorf("the link's folder of a commit: %+v %v", out, err)
+	// the link's folder alone: apps/billing holds index.js as main's root does, so its tree is main's, the same package;
+	// the whole commit, apps/ and all, would be another
+	if out, err := courier.PackRef(ctx, "claims-portal", "monorepo", false, carol, action); err != nil || out.Commit != refs["monorepo"] || out.Package != got.Package {
+		t.Errorf("the link's folder of a commit, want main's package %s: %+v %v", got.Package, out, err)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE projects SET deleted_at = now() WHERE id = 'claims-portal'"); err != nil {
 		t.Fatal(err)

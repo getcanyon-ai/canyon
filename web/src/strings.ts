@@ -996,7 +996,7 @@ export const CONNECT = {
   managedClaude: "managed-mcp.json, beside the managed settings",
   managedCodex: "the managed config.toml",
   managedCursor: "the team's MCP settings",
-  signInOff: "This Canyon has sign-in off, so it gives agents no address: anything that could reach it would act as its admin. Agents on this machine use the CLI's own server, canyon mcp, which canyon skill install sets up. A team's Canyon, with sign-in, gives agents an address.",
+  signInOff: "Sign-in is off on this Canyon, so it gives agents no address: anyone who could reach it would act as an admin. Agents on this machine use canyon mcp instead, which canyon skill install sets up. A team's Canyon with sign-in gives agents an address.",
 } as const;
 
 // The app page's System libraries card (#2079; design/specs/screens.md A2, D5's): a contributor's and up, each environment's

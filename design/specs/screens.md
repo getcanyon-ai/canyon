@@ -1010,9 +1010,9 @@ connects it, and each one you connect is listed under Sessions, where you can di
 - **`Roll it out to everyone`**, to an admin alone and only with an address: `For your org's managed settings, so every
   machine gets Canyon without anyone adding it.`, then Claude Code's `managed-mcp.json`, Codex's managed
   `config.toml` and Cursor's team MCP settings, each filled in with the address.
-- **Sign-in off.** No address and no admin snippets: `This Canyon has sign-in off, so it gives agents no address:
-  anything that could reach it would act as its admin. Agents on this machine use the CLI's own server, canyon mcp,
-  which canyon skill install sets up. A team's Canyon, with sign-in, gives agents an address.`, then the CLI and the
+- **Sign-in off.** No address and no admin snippets: `Sign-in is off on this Canyon, so it gives agents no address:
+  anyone who could reach it would act as an admin. Agents on this machine use canyon mcp instead, which canyon skill
+  install sets up. A team's Canyon with sign-in gives agents an address.`, then the CLI and the
   one-agent lines.
 
 ### Secrets (design/specs/mcp.md §10.1)

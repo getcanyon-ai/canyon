@@ -53,6 +53,7 @@ var commands = []command{
 	{"fleet", "YOUR ORG", "List every app in your org and what needs attention", false, runFleet},
 	{"resources", "YOUR ORG", "List the databases and services this Canyon can create for apps", false, runResources},
 	{"manifest", "YOUR ORG", "Show the instructions this Canyon gives coding agents", false, runManifest},
+	{"playbook", "YOUR ORG", "Print one of your org's playbooks: how it builds", true, runPlaybook},
 	{"login", "SETUP", "Sign this machine in to a Canyon host", false, runLogin},
 	{"logout", "SETUP", "Revoke this machine's session on a Canyon host", false, runLogout},
 	{"skill", "SETUP", "Teach your coding agent to use Canyon", true, runSkill},

@@ -28,11 +28,15 @@ type mcpHost struct {
 	asked      []string
 	transports []string // each request's Canyon-Transport, in order
 	refuse     func(w http.ResponseWriter)
+	playbook   []byte // GET /api/v1/playbooks/service-conventions's answer; the contract's golden when nil
 }
 
 func (h *mcpHost) serve(t *testing.T) string {
 	t.Helper()
-	manifest, whole := manifestFixture(t), page(t)
+	manifest, whole, playbook := manifestFixture(t), page(t), h.playbook
+	if playbook == nil {
+		playbook = playbookFixture(t)
+	}
 	var pages []json.RawMessage
 	if json.Unmarshal(whole["gate_runs"], &pages) != nil {
 		t.Fatal("the fixture's gate_runs is not a list of pages")
@@ -50,6 +54,11 @@ func (h *mcpHost) serve(t *testing.T) string {
 		switch path := r.URL.Path; {
 		case path == "/api/v1/skill/manifest":
 			_, _ = w.Write(manifest)
+		case path == "/api/v1/playbooks/service-conventions":
+			_, _ = w.Write(playbook)
+		case strings.HasPrefix(path, "/api/v1/playbooks/"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":"not_found","message":"no playbook by that slug"}`)
 		case path == "/api/v1/egress":
 			_, _ = io.WriteString(w, `{"via":"canyon","mode":"observe"}`)
 		case path == "/auth/config":
@@ -120,8 +129,9 @@ func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]
 	return res, text.String()
 }
 
-// The six tools, each with the local server's dir, the three reads read-only and the three that act not,
-// promotion's alone open-world; and the two manifest resources.
+// The seven tools: canyon_playbook by a slug alone, the org's, and the rest each with the local server's dir; the
+// four reads read-only and the three that act not, promotion's alone open-world; the two manifest resources, and a
+// playbook's.
 func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 	h := &mcpHost{}
 	cs, _ := mcpSession(t, h.serve(t))
@@ -133,9 +143,9 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
 		schema, _ := json.Marshal(tool.InputSchema)
-		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs
+		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs || tool.Name == mcptools.Playbook
 		hints := tool.Annotations
-		if hints == nil || hints.ReadOnlyHint != reads || !bytes.Contains(schema, []byte(`"dir"`)) ||
+		if hints == nil || hints.ReadOnlyHint != reads || bytes.Contains(schema, []byte(`"dir"`)) == (tool.Name == mcptools.Playbook) || // a playbook is the org's: no dir
 			!reads && (hints.DestructiveHint == nil || *hints.DestructiveHint != (tool.Name == mcptools.Promote) || hints.IdempotentHint ||
 				hints.OpenWorldHint == nil || *hints.OpenWorldHint != (tool.Name == mcptools.Promote)) { // promotion alone replaces what customers reach
 			t.Errorf("%s: annotations %+v, input schema %s", tool.Name, hints, schema)
@@ -144,7 +154,7 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 			t.Errorf("%s declares an outputSchema", tool.Name)
 		}
 	}
-	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Promote, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
+	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Playbook, mcptools.Promote, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
 		t.Errorf("tools %v, want %v", names, want)
 	}
 	resources, err := cs.ListResources(context.Background(), nil)
@@ -152,7 +162,8 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 		t.Errorf("resources %+v, %v", resources, err)
 	}
 	templates, err := cs.ListResourceTemplates(context.Background(), nil)
-	if err != nil || len(templates.ResourceTemplates) != 1 || templates.ResourceTemplates[0].URITemplate != mcptools.ManifestAppTemplate {
+	if err != nil || len(templates.ResourceTemplates) != 2 || templates.ResourceTemplates[0].URITemplate != mcptools.ManifestAppTemplate ||
+		templates.ResourceTemplates[1].URITemplate != mcptools.PlaybookTemplate {
 		t.Errorf("templates %+v, %v", templates, err)
 	}
 }

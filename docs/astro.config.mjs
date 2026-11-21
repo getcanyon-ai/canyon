@@ -97,7 +97,7 @@ export default defineConfig({
         },
         {
           label: "Administer Canyon",
-          items: ["org/first-boot", "org/who-can-do-what", "org/guardrails", "org/outbound", "org/integrations", "org/audit-trail", "org/dashboard", "org/usage-reports", "org/licence"],
+          items: ["org/first-boot", "org/who-can-do-what", "org/guardrails", "org/playbooks", "org/outbound", "org/integrations", "org/audit-trail", "org/dashboard", "org/usage-reports", "org/licence"],
         },
         {
           label: "Integrate your platform",

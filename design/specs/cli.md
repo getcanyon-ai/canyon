@@ -70,6 +70,7 @@ has not landed yet, never that it was cut.
 | `canyon db` | Query this app's database as yourself, connect a Postgres client to it, and list or end its database sessions (§6.10) | builder |
 | `canyon resources` | The component types this host can provision, and whether it can yet | platform eng |
 | `canyon manifest` | What this host hands your agents | both |
+| `canyon playbook` | Print one of the org's playbooks by its slug, as its admin wrote it (§6.16) | builder |
 | `canyon version` | This binary's version and the host it will reach | both |
 | `canyon feedback` | A link to open each kind of issue on Canyon's repository (§6.11) | both |
 | `canyon telemetry` | The daily report of counts this Canyon sends: `show`, `off`, `on`, an admin's (§6.12) | platform eng |
@@ -4046,6 +4047,24 @@ login itself: with no session it starts anyway, and every tool answers `isError`
   (**added 2026-11-20**, design/specs/mcp.md §11).
 - It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
 
+### 6.16 `canyon playbook`
+
+**Added 2026-11-20** (design/specs/mcp.md §3.3; contracts/routes.md, the playbooks row). It prints one of the org's
+playbooks, its body as its admin wrote it, for an agent whose harness has no MCP and for a finding whose rule points at
+one (§5.2, `then:`). Every member reads it, and the host counts it as a read by the CLI (`?read=cli`):
+
+```
+$ canyon playbook service-conventions
+# Writing a Meridian service
+
+Every route reads its input through the request schema, and every query passes it as a bound parameter:
+…
+```
+
+A slug that names no playbook that stands is `✗ No playbook <slug> in this org. canyon manifest lists its playbooks.`,
+exit 1; no slug is a usage line. A character the host would never send in a body (a control character but a newline
+and a tab) prints visibly, as every host string does. `--format json` prints the host's answer as it came.
+
 ## 7. The harness skill
 
 The builder's entire experience. They never learn a command.
@@ -4329,9 +4348,10 @@ blocks, it tells you exactly what to fix and how.
 ## Canyon's tools
 
 If Canyon's MCP tools are loaded (`canyon_check`, `canyon_deploy`,
-`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`), use them
-first. Each runs the command it is named for, `canyon_promote` being
-`canyon deploy --env prod`, and returns the same output, so everything below
+`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`,
+`canyon_playbook`), use them first. Each runs the command it is named for,
+`canyon_promote` being `canyon deploy --env prod` and `canyon_playbook`
+`canyon playbook <slug>`, and returns the same output, so everything below
 applies to them. Set `canyon_promote`'s `confirm` only when the user asked for
 production in this conversation. When the tools aren't loaded, run the commands.
 
@@ -4877,6 +4897,27 @@ under `Your org's own rules (written by its admins):` as `- <name>`, then its te
 indented two spaces, so no line of it reads as a heading of Canyon's. The person's rendering is
 unchanged.
 
+**The org's playbooks** (amended 2026-11-20, design/specs/mcp.md §3.3). After the org's own rules, the agent rendering
+hands each playbook that stands under `Your org's playbooks, how it builds, written by its admins. Before a task, read
+each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are
+loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
+`Playbooks` as `<name>  <kind>  <slug>  version <n>`.
+
+**Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
+hook syncs each playbook that is a `skill` into the harness's own skills, `~/.claude/skills/canyon-<slug>/SKILL.md` and
+`~/.agents/skills/canyon-<slug>/SKILL.md`: frontmatter `name` the slug and `description` its `when`, both as JSON
+strings, then its body, every host string written visibly (§9) and each `` !` `` written `` ! ` ``: Claude Code runs
+`` !`cmd` `` in a skill as a shell command before the model reads it (https://code.claude.com/docs/en/skills), and its
+docs don't say a code block is spared (amended 2026-11-21, the item 10 security review). Each directory it writes holds
+a `.canyon` file, `{host, version}`. It `lstat`s each `canyon-<slug>` before it writes or removes there, and touches
+only a real directory, never a link, whose regular-file marker names this host: a person's own skill, a link and
+another host's directory stay byte for byte, and the hook says `Canyon didn't sync the playbook <slug>: <path> is not a
+directory Canyon wrote, so Canyon leaves it alone.` once a session. Its manifest request names what it holds,
+`held=<slug>@<version>`, so the host counts this machine; it then fetches only a skill whose version changed
+(`?read=sync`, a sync and no read), writing `SKILL.md` and then the marker, and removes a directory of its own whose
+playbook was removed or became a note. It shares the hook's seconds, gives up when they run out, and never says
+anything or fails the session: the next session tries again. `canyon skill uninstall` removes every marked directory.
+
 **An AI twin is its policy's, said once** (amended 2026-11-07, #2694: in a run of the docs' tour, the
 session listed `No hand-built SQL from user input` under `Policies that block:` and `No hand-built SQL
 from user input (AI review)` under `Policies that only warn:`, so one policy both blocked and only
@@ -5168,6 +5209,7 @@ YOUR ORG
   fleet       List every app in your org and what needs attention
   resources   List the databases and services this Canyon can create for apps
   manifest    Show the instructions this Canyon gives coding agents
+  playbook    Print one of your org's playbooks: how it builds
 
 SETUP
   login       Sign this machine in to a Canyon host

@@ -159,6 +159,7 @@ func (a *app) skillManifest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
+	a.recordSyncs(r.Context(), heldSkills(r.URL.Query().Get("held"), standing)) // the hook's skills that hold the newest version
 	playbooks := make([]manifestPlaybook, 0, len(standing))
 	for _, p := range standing {
 		playbooks = append(playbooks, manifestPlaybook{Slug: p.Slug, Name: p.Name, Kind: p.Kind, When: p.When, Version: p.Version})

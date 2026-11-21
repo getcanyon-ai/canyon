@@ -441,8 +441,10 @@ export const putCustomRule = (slug: string, body: { name: string; instructions: 
 export type PlaybookKind = "skill" | "note";
 export interface PlaybookRef { slug: string; name: string }
 export interface PlaybookText { name: string; kind: PlaybookKind; when: string; body: string }
-export interface PlaybookEntry { slug: string; name: string; kind: PlaybookKind; when: string; version: number; updated_by: Actor; updated_at: string }
-export interface Playbook extends PlaybookEntry { body: string }
+// `reads` are its fetches in the last 30 days; `machines`, a skill's alone, the sessions whose native skill holds its
+// newest version in those 30 days (design/specs/mcp.md §3.5).
+export interface PlaybookEntry { slug: string; name: string; kind: PlaybookKind; when: string; version: number; updated_by: Actor; updated_at: string; reads: number; machines?: number }
+export interface Playbook extends Omit<PlaybookEntry, "reads" | "machines"> { body: string }
 export interface PlaybookVersion extends PlaybookText { version: number; set_by: Actor; set_at: string }
 export const getPlaybooks = () => call<{ playbooks: PlaybookEntry[] }>("GET", "/playbooks");
 export const getPlaybook = (slug: string) => call<{ playbook: Playbook }>("GET", `/playbooks/${encodeURIComponent(slug)}`);

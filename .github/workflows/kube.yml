@@ -65,6 +65,9 @@ jobs:
   paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # reach.sh reads the pull request's labels
     outputs:
       kind: ${{ steps.reach.outputs.kind }}
     steps:
@@ -73,6 +76,9 @@ jobs:
           fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
       - id: reach
         run: .github/suites/reach.sh kind
+        env: # a labelled pull request of ours leaves its v1 suites to Canyon's private runners (reach.sh; CONTRIBUTING.md, Maintainers)
+          GH_TOKEN: ${{ github.token }}
+          CANYON_PRIVATE_AUTHOR: ${{ github.event_name == 'pull_request' && contains(fromJSON(vars.CANYON_PRIVATE_AUTHORS || '[]'), github.event.pull_request.user.login) }}
 
   kind:
     needs: paths
@@ -105,112 +111,17 @@ jobs:
           docker image prune -af >/dev/null &
           wait
           df -h /
-      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH" # where up.sh puts the pinned kind and kubectl, for the tests and the failure step below even when up.sh fails: our runners have neither
-      - run: .github/kind/up.sh ${{ matrix.network }}
-        env:
-          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
-      - name: helm, the pinned release, checksum-verified as in helm.yml (TestKindSigninRuleFromTheChart applies the chart's canyon-apps-signin)
-        if: matrix.network == 'calico' # the suite that runs TestKindSigninRuleFromTheChart; kindnet runs the probe alone
-        env:
-          HELM_VERSION: v4.0.5
-          HELM_SHA256: 206a7747702d13994a93629eaed4259bd9d0aec6e23ca52d640f47f7edfdc863 # linux-arm64 of HELM_VERSION; bump both together
-        run: |
-          set -euo pipefail
-          .github/fetch.sh "https://get.helm.sh/helm-$HELM_VERSION-linux-arm64.tar.gz" "$HELM_SHA256" "$RUNNER_TEMP/helm.tar.gz"
-          tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$HOME/.local/bin" linux-arm64/helm
-      - id: suite
-        run: make test-kube RUN='${{ matrix.run }}'
-        # go test's own -timeout is 30m, and the suite takes about 25 on either kind of runner: a hang past that ends this
-        # step, never the job, so the job's log is kept and the step below says what was still running
-        timeout-minutes: 35
-        env:
-          CANYON_KUBE_TEST_PUSH: localhost:5001
-          CANYON_KUBE_TEST_DB: 172.30.0.201
-          CANYON_KUBE_TEST_SIGNIN: 172.30.0.203
-          CANYON_KUBE_TEST_NETWORK_POLICY: ${{ matrix.network_policy }}
-          CANYON_KUBE_TEST_LEDGER: kind-pg # up.sh's Canyon Postgres, where the floored apps' envs are named to the egress policy
-      - if: failure() && steps.suite.outcome == 'failure'
-        name: what was still running when the suite stopped, so a hang names itself
-        run: |
-          ps -eo pid,ppid,etime,args --forest | grep -E 'go |kube|make|kubectl|helm|docker' | grep -v grep | tail -60 || true
-          kubectl get pods -A -o wide || true
-          kubectl get events -A --sort-by=.lastTimestamp | tail -60 || true
-      - if: matrix.network == 'kindnet'
-        name: under run_by canyon, a deploy builds nothing and the chart's bootstrap fails closed without failing the upgrade (#2514, #2516)
-        run: |
-          docker run -d --rm --name handoff-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD=canyon postgres:16-alpine
-          until docker exec handoff-db pg_isready -h 127.0.0.1 -U postgres >/dev/null; do sleep 1; done
-          go test -tags kindcanyon -count=1 -v -timeout 20m -run '^TestRunByCanyonOnKind$' ./e2e/handoff | tee "$RUNNER_TEMP/canyon.txt"
-          grep -q -- '--- PASS: TestRunByCanyonOnKind' "$RUNNER_TEMP/canyon.txt" # a test renamed away runs nothing and passes
-        env:
-          HANDOFF_DATABASE_URL: postgres://postgres:canyon@127.0.0.1:5432/postgres?sslmode=disable
-          CANYON_KUBE_TEST_NETWORK_POLICY: not_enforced
-      - if: matrix.network == 'calico' && !cancelled() && steps.suite.outcome != 'skipped'
-        name: Envoy lost no access-log entry across the suite (#2377)
-        run: |
-          # Each replica's stats, its access logs' and the receiver cluster's, printed whether the suite passed or not.
-          # A stream to the receiver that failed to open (upstream_rq_pending_failure_eject) lost the entries waiting on
-          # it, and logs_dropped counts the entries Envoy dropped itself: either is a call missing from the records,
-          # silently, so both must be 0, and a counter not found fails as one that is not. Envoy's image has no curl, so
-          # an ephemeral container of the router's image, already on the node, reads the admin socket from the pod's admin volume.
-          # egress-control reads the same socket through its own mount: a log line of its that says it could not, on a
-          # replica that lost nothing, is a read that fails on a real cluster, so it fails here too.
-          set -euo pipefail
-          router=$(kubectl -n canyon get deploy canyon-router -o jsonpath='{.spec.template.spec.containers[?(@.name=="nginx")].image}')
-          pods=$(kubectl -n canyon get pods -l app.kubernetes.io/name=canyon-egress -o name)
-          [ -n "$pods" ] || { echo "::error::no Envoy pod to read"; exit 1; }
-          lost=0
-          for p in $pods; do
-            kubectl -n canyon patch "$p" --subresource=ephemeralcontainers --type=strategic -p '{"spec":{"ephemeralContainers":[{"name":"stats","image":"'"$router"'","command":["curl","-s","--unix-socket","/var/run/envoy-admin/admin.sock","http://x/stats?filter=access_log|ext_authz|receiver"],"volumeMounts":[{"name":"admin","mountPath":"/var/run/envoy-admin"}],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
-            for i in $(seq 30); do kubectl -n canyon logs "$p" -c stats 2>/dev/null | grep -q . && break; sleep 2; done
-            stats=$(kubectl -n canyon logs "$p" -c stats)
-            echo "== $p"; echo "$stats"
-            if ! echo "$stats" | awk -F': ' '
-              $1 == "cluster.receiver.upstream_rq_pending_failure_eject" { eject = 1; if ($2 != "0") bad = 1 }
-              $1 ~ /^access_logs\.[^.]+\.logs_dropped$/ { dropped = 1; if ($2 != "0") bad = 1 }
-              END { exit !(eject && dropped && !bad) }'; then
-              echo "::error::$p lost access-log entries on their way to the receiver, or its stats name no such counter: upstream_rq_pending_failure_eject and logs_dropped must be 0"
-              lost=1
-            fi
-            if kubectl -n canyon logs "$p" -c egress-control | grep 'what Envoy lost is not all reported'; then
-              echo "::error::$p: egress-control could not read Envoy's stats, or report them"
-              lost=1
-            fi
-          done
-          exit "$lost"
       - if: matrix.network == 'calico'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4 # the hand-off journey's set-up in the dashboard (e2e/ui), which ci-suite.sh installs
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: |
             web/package-lock.json
             e2e/ui/package-lock.json
-      - if: matrix.network == 'calico'
-        name: Chromium and its system libraries, for the journey's set-up in the dashboard (e2e/ui's handoff project)
-        run: npm ci && npx playwright install --with-deps chromium
-        working-directory: e2e/ui
-      - if: matrix.network == 'calico'
-        name: the hand-off journey (e2e/handoff/README.md)
-        run: |
-          docker run -d --rm --name handoff-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD=canyon postgres:16-alpine
-          until docker exec handoff-db pg_isready -h 127.0.0.1 -U postgres >/dev/null; do sleep 1; done
-          make e2e-handoff
+      - run: scripts/ci-suite.sh kind-${{ matrix.network }} # the suite's steps, as Canyon's private runners run them too
         env:
-          HANDOFF_DATABASE_URL: postgres://postgres:canyon@127.0.0.1:5432/postgres?sslmode=disable
-      - if: failure()
-        run: |
-          df -h /
-          kubectl get pods -A -o wide
-          kubectl get events -A --sort-by=.lastTimestamp | tail -60
-          for d in kpack-webhook kpack-controller; do # up.sh waits on kpack before canyon's namespace exists
-            kubectl -n kpack describe pods -l app=$d || true
-            kubectl -n kpack logs deploy/$d --previous --tail=100 || kubectl -n kpack logs deploy/$d --tail=100 || true
-          done
-          kubectl -n canyon logs deploy/canyon-executor --tail=300
-          kubectl -n canyon logs deploy/canyon-server --tail=100
-          kubectl -n canyon logs -l app.kubernetes.io/name=canyon-egress --all-containers --prefix --previous --tail=50 || kubectl -n canyon logs -l app.kubernetes.io/name=canyon-egress --all-containers --prefix --tail=50
-          kubectl -n canyon logs -l app.kubernetes.io/name=canyon-egress -c egress-control --prefix --tail=-1 || true
+          GH_TOKEN: ${{ github.token }} # up.sh's and fetch.sh's release downloads, authenticated on github.com alone (.github/fetch.sh)
 
   canyon:
     # Canyon under run_by: canyon on Calico (#2514, #2516; e2e/handoff/canyon_test.go): the hand-off journey's stack on
@@ -224,40 +135,24 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/go-cache
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: kube
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-      - if: runner.environment == 'github-hosted'
-        name: free the runner's disk, as the kind job does
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - if: runner.environment == 'github-hosted' # a fork's pull request; our own VMs have 100 GiB and none of these directories
+        name: free the runner's disk — kind's images, two image builds and Calico need more than it leaves
         run: |
-          for d in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do sudo rm -rf "$d" & done
+          df -h /
+          for d in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do sudo rm -rf "$d" & done # in parallel: serially this was 150 s
           docker image prune -af >/dev/null &
           wait
-      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - run: .github/kind/up.sh calico
+          df -h /
+      - run: scripts/ci-suite.sh kind-canyon # the suite's steps, as Canyon's private runners run them too
         env:
-          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
-      - run: .github/kind/build-arch.sh
-      - name: under run_by canyon, a deploy builds and runs and the chart's bootstrap heals a door not enforcing (#2514, #2516)
-        run: |
-          docker run -d --rm --name handoff-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD=canyon postgres:16-alpine
-          until docker exec handoff-db pg_isready -h 127.0.0.1 -U postgres >/dev/null; do sleep 1; done
-          go test -tags kindcanyon -count=1 -v -timeout 30m -run '^TestRunByCanyonOnKind$' ./e2e/handoff | tee "$RUNNER_TEMP/canyon.txt"
-          grep -q -- '--- PASS: TestRunByCanyonOnKind' "$RUNNER_TEMP/canyon.txt" # a test renamed away runs nothing and passes
-        env:
-          HANDOFF_DATABASE_URL: postgres://postgres:canyon@127.0.0.1:5432/postgres?sslmode=disable
-          CANYON_KUBE_TEST_NETWORK_POLICY: enforced
-      - if: failure()
-        run: |
-          kubectl get pods -A -o wide
-          kubectl get events -A --sort-by=.lastTimestamp | tail -60
-          kubectl -n canyon-builds get builds.kpack.io -o wide || true
-          kubectl -n kpack logs deploy/kpack-controller --tail=80 || true
-          kubectl -n canyon logs deploy/canyon-executor --tail=200
+          GH_TOKEN: ${{ github.token }} # up.sh's and fetch.sh's release downloads, authenticated on github.com alone (.github/fetch.sh)
 
   handoff-repo:
     needs: paths
@@ -276,66 +171,28 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/go-cache
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
         with:
           job: kube
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
-      - if: runner.environment == 'github-hosted'
-        name: free the runner's disk, as the kind job does
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - if: runner.environment == 'github-hosted' # a fork's pull request; our own VMs have 100 GiB and none of these directories
+        name: free the runner's disk — kind's images, two image builds and Calico need more than it leaves
         run: |
-          for d in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do sudo rm -rf "$d" & done
+          df -h /
+          for d in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do sudo rm -rf "$d" & done # in parallel: serially this was 150 s
           docker image prune -af >/dev/null &
           wait
-      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - run: .github/kind/up.sh calico
-        env:
-          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
-      - name: helm, the pinned release, checksum-verified as in the kind job (External Secrets' chart)
-        env:
-          HELM_VERSION: v4.0.5
-          HELM_SHA256: 206a7747702d13994a93629eaed4259bd9d0aec6e23ca52d640f47f7edfdc863 # linux-arm64 of HELM_VERSION; bump both together
-        run: |
-          set -euo pipefail
-          .github/fetch.sh "https://get.helm.sh/helm-$HELM_VERSION-linux-arm64.tar.gz" "$HELM_SHA256" "$RUNNER_TEMP/helm.tar.gz"
-          tar -xzf "$RUNNER_TEMP/helm.tar.gz" --strip-components=1 -C "$HOME/.local/bin" linux-arm64/helm
-      - run: .github/kind/platform.sh ${{ matrix.gitops }}
-        env:
-          GH_TOKEN: ${{ github.token }} # its release downloads, authenticated on github.com alone (.github/fetch.sh)
-      - uses: actions/setup-node@v4
+          df -h /
+      - uses: actions/setup-node@v4 # the hand-off journey's set-up in the dashboard (e2e/ui), which ci-suite.sh installs
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: |
             web/package-lock.json
             e2e/ui/package-lock.json
-      - name: Chromium and its system libraries, for the journey's set-up in the dashboard (e2e/ui's handoff project)
-        run: npm ci && npx playwright install --with-deps chromium
-        working-directory: e2e/ui
-      - name: the hand-off journey through a deploy repo (e2e/handoff/README.md)
-        run: |
-          docker run -d --rm --name handoff-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD=canyon postgres:16-alpine
-          until docker exec handoff-db pg_isready -h 127.0.0.1 -U postgres >/dev/null; do sleep 1; done
-          make e2e-handoff-repo
+      - run: scripts/ci-suite.sh handoff-${{ matrix.gitops }} # the suite's steps, as Canyon's private runners run them too
         env:
-          HANDOFF_DATABASE_URL: postgres://postgres:canyon@127.0.0.1:5432/postgres?sslmode=disable
-          HANDOFF_GITOPS: ${{ matrix.gitops }}
-      - name: the reference set-up's namespaces chart and Gateway, which kind runs no Gateway API implementation to exercise (#2476), and under Flux its accounts and admission policy (#2479)
-        if: ${{ !cancelled() }} # whether the journey passed or not: a check of its own
-        run: .github/kind/gitops-check.sh ${{ matrix.gitops }}
-      - if: failure()
-        run: |
-          df -h /
-          kubectl get pods -A -o wide
-          kubectl get events -A --sort-by=.lastTimestamp | tail -60
-      - if: failure() && matrix.gitops == 'flux'
-        name: what Flux made of the deploy repo
-        run: |
-          kubectl -n flux-system get gitrepositories,artifactgenerators,externalartifacts,helmreleases -o yaml || true
-          kubectl -n canyon-sync get gitrepositories,kustomizations,resourcequotas -o yaml || true
-          kubectl -n canyon-namespaces get secrets || true
-          for d in source-controller source-watcher helm-controller kustomize-controller; do
-            echo "== $d"; kubectl -n flux-system logs deploy/$d --tail=150 || true
-          done
+          GH_TOKEN: ${{ github.token }} # up.sh's and fetch.sh's release downloads, authenticated on github.com alone (.github/fetch.sh)

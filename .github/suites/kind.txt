@@ -48,3 +48,4 @@ web/src/screens/HandOff*
 web/src/screens/Settings.tsx
 web/src/api.ts
 web/src/strings.ts
+scripts/ci-suite.sh # its steps, here and on Canyon's private runners (CONTRIBUTING.md, Maintainers)

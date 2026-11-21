@@ -5,6 +5,7 @@ import { RailContext } from "../ui/Rail";
 import { App } from "./App";
 import { Approve } from "./Approve";
 import { AuditTrail } from "./AuditTrail";
+import { Consent } from "./Consent";
 import { Device } from "./Device";
 import { Fleet } from "./Fleet";
 import { Guardrails } from "./Guardrails";
@@ -36,7 +37,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Who is reading, for the foot of the rail on every page. Only a host with sign-in has somebody to
   // name; the fleet read is where the contract answers it (routes.md, `viewer` on GET /fleet).
   const [viewer, setViewer] = useState<Viewer | null>(null);
-  const fleet = !["#/apps/", "#/guardrails", "#/audit", "#/settings", "#/device", "#/approve", "#/no-access/"].some((screen) => hash.startsWith(screen));
+  const fleet = !["#/apps/", "#/guardrails", "#/audit", "#/settings", "#/device", "#/approve", "#/oauth", "#/no-access/"].some((screen) => hash.startsWith(screen));
   const away = useRef(false);
   // The name is read again on each return to the fleet: a rename under Guardrails is the heading on
   // the way back. The first read is the setup gate's, below.
@@ -67,7 +68,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // page with the rail is shown: the device and no-access pages have none, and a read there would be
   // one their own reads never asked for. Asked again on the next page while no answer has come, so a
   // read dropped or failed on the way is not the end of the foot.
-  const railed = !hash.startsWith("#/device") && !hash.startsWith("#/approve") && !(hash.startsWith("#/no-access/") && hash !== "#/no-access/");
+  const railed = !hash.startsWith("#/device") && !hash.startsWith("#/approve") && !hash.startsWith("#/oauth") && !(hash.startsWith("#/no-access/") && hash !== "#/no-access/");
   // One read of the fleet's first row, again every 30 seconds while a railed page shows: who is signed in, for the
   // rail's foot (no name is no foot, never a guess), and what needs them, for the rail's count and the browser tab (D15).
   // ? while nothing is counted and some deployments couldn't be checked, and ? while the read fails: never the last
@@ -118,6 +119,10 @@ function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "
   }
   if (hash.startsWith("#/device")) return <Device key={hash} code={new URLSearchParams(hashQuery()).get("code") ?? ""} org={org} />;
   if (hash.startsWith("#/approve")) return <Approve key={hash} code={new URLSearchParams(hashQuery()).get("code") ?? ""} org={org} />;
+  if (hash.startsWith("#/oauth")) {
+    const query = new URLSearchParams(hashQuery());
+    return <Consent key={hash} request={query.get("request") ?? ""} invalid={query.get("invalid")} org={org} />;
+  }
   return <Fleet org={org} />;
 }
 

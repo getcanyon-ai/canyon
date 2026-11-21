@@ -92,7 +92,7 @@ export function Guardrails() {
   // Keyed on the drafts, not the record, so the line goes the moment Add a stack is clicked and
   // never claims "nothing" while a design system is set.
   const nothing = stacks.length === 0 && chosen === "";
-  const admin = record !== null && (isAdmin(record) || true); // FAULT (red first): every member opens Guardrails
+  const admin = record !== null && isAdmin(record);
   const page = pageOf(window.location.hash);
 
   // The answer is the record. The read on mount and the answer to a save both land here, so the form

@@ -21,7 +21,7 @@ custom rule that points at it. On the test cluster they are seeded once before t
 
 The runner reads the playbook as the tester before turn 1 and stops the scenario when it isn't there.
 The user's app keeps its routes in `index.js`, so the rule blocks, and the finding's last step names the
-playbook: through the tools, `call canyon_playbook with slug claims-portal-conventions`. The scorecard
+playbook, through the tools as `call canyon_playbook with slug claims-portal-conventions`. The scorecard
 records whether the agent read it, and whether the session hook synced it as a native skill
 (`~/.claude/skills/canyon-claims-portal-conventions/SKILL.md`).
 

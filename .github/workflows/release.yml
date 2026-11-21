@@ -77,7 +77,13 @@ jobs:
           notes=(--generate-notes)
           [ -n "$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[].tagName')" ] || notes=(--notes "The first release of the Canyon CLI.")
           pre=(); [[ "$TAG" == *-* ]] && pre=(--prerelease) # an rc is never releases/latest, which install.sh's one-liner reads
-          # a draft until its images are on GHCR and pull (publish, below): a release is never visible without them
+          # Releases here are immutable once published: a draft takes every asset, and only publish (below) makes it
+          # visible, once its images are on GHCR and pull. A draft a failed run left is replaced; a published one never.
+          state=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)
+          case $state in
+            true) gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes ;; # its tag stays: --cleanup-tag is never given
+            false) echo "::error::$TAG is already published here, and a published release can't change"; exit 1 ;;
+          esac
           gh release create "$TAG" bin/release/* --verify-tag --draft --title "canyon $TAG" "${notes[@]}" "${pre[@]}"
 
   images:
@@ -278,7 +284,19 @@ jobs:
           [ -n "$GH_TOKEN" ] || { echo "::error::the release environment has no CANYON_RELEASES_TOKEN: nothing was published"; exit 1; }
           [ -s canyon-releases/notes.md ] && [ -n "$(ls canyon-releases/assets)" ] || { echo "::error::the packed release is incomplete: nothing was published"; exit 1; }
           pre=(); [ -e canyon-releases/prerelease ] && pre=(--prerelease)
-          gh release create "$TAG" canyon-releases/assets/* -R getcanyon-ai/canyon-releases --title "canyon $TAG" --notes-file canyon-releases/notes.md "${pre[@]}"
+          dst=getcanyon-ai/canyon-releases
+          # Immutable once published: every asset goes onto a draft, and the draft is published last, in one step. A
+          # draft a failed run left is replaced; a published release is never touched.
+          state=$(gh release view "$TAG" -R "$dst" --json isDraft --jq .isDraft 2>/dev/null || true)
+          case $state in
+            true) gh release delete "$TAG" -R "$dst" --yes ;;
+            false) echo "::error::$TAG is already published on $dst, and a published release can't change"; exit 1 ;;
+          esac
+          gh release create "$TAG" canyon-releases/assets/* -R "$dst" --draft --title "canyon $TAG" --notes-file canyon-releases/notes.md "${pre[@]}"
+          want=$(ls canyon-releases/assets | sort)
+          got=$(gh release view "$TAG" -R "$dst" --json assets --jq '.assets[].name' | sort)
+          [ "$got" = "$want" ] || { echo "::error::the draft on $dst holds other assets than were packed: nothing was published"; exit 1; }
+          gh release edit "$TAG" -R "$dst" --draft=false
 
   smoke:
     needs: canyon-releases

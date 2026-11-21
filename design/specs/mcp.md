@@ -160,7 +160,7 @@ directory. It adds two tools that work from a linked repository:
 | `canyon_check_ref` | Reviews a linked repository's ref without deploying | `POST …/packages/from-repository {ref}` (new, §5), then `POST …/gate-runs` |
 | `canyon_deploy_ref` | Deploys a linked repository's ref to preview | the same package, then `POST …/deploys` |
 
-- **The server already supports linked repositories.** The GitHub App links an app to a repository or a folder of it (`PUT …/repository`, admin), and on a push its check workflow packages the commit (`github-app/work.go`, `pack`). What's missing is packaging a ref on request.
+- **The server already supports linked repositories.** The GitHub App links an app to a repository or a folder of it (`PUT …/repository`, a contributor's since PR 8, below admin only to a repository their own GitHub account reads: design/PERMISSIONS.md, *Link a repository*), and on a push its check workflow packages the commit (`github-app/work.go`, `pack`). What's missing is packaging a ref on request.
 - **The new route** resolves `ref` to a commit through the app's installation and packages it with the same `pack` path, a folder link's included. It answers `404 not_linked` for an app with no link.
 - **Unchanged rules.** A pull request's package goes to preview only as the deploys row allows today: never from this route.
 - **`instructions` and resources** are §1.3's, read on the server, for the caller.

@@ -100,6 +100,10 @@ export const S = {
   playbookImportNoFrontmatter: "This isn't a SKILL.md: it needs a frontmatter block between two --- lines.",
   playbookImportNoName: "The SKILL.md's frontmatter needs a name and a description.",
   playbookRestore: "Restore this version",
+  // Each playbook's two counts on its card, and the line under the tab's that says what the second can't see (§3.5).
+  playbookReads: "<n> reads in 30 days",
+  playbookMachines: "on <n> machines",
+  playbookCountsMean: "Canyon can't see an agent reading its local copy of a skill: \"on N machines\" says where the current version is, not how often it's read.",
   // The custom rule editor's playbook field and the rule's line naming it (contracts/routes.md, the custom-rules row).
   rulePlaybook: "Playbook",
   rulePlaybookMeans: "A finding of this rule tells the agent to read this playbook after its fix.",

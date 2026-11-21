@@ -1,0 +1,18 @@
+# e2e-ui.yml's shards: the dashboard in a browser on the Docker stack (e2e/ui), every surface watched.
+web/**
+e2e/ui/**
+# the stack they run on: its images, compose files, fixtures and the stub
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+e2e/compose.e2e.yml
+e2e/fixtures/**
+e2e/stub/**
+# the egress floor every app of the stack runs behind (as the egress suite's), and the roots a run carries
+deploy/egress/**
+internal/egresscontrol/**
+internal/subjecthash/**
+runs/egress_ca.go
+executor/egress.go
+# the journeys diff every public table: a new table that changes on its own reddens them all (#1969)
+db/migrations/**

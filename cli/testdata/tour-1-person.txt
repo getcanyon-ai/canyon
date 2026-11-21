@@ -16,6 +16,7 @@
 
   To walk through it by hand instead:
 
+    canyon skill install       Canyon's skill, hook and tools for your coding agent
     canyon fleet               what is running, and the link to the dashboard
     (open http://localhost:7777/#/guardrails/policies?rule=design.org-system, set the marked
      row to Blocking, and press Save)

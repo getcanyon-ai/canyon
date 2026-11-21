@@ -57,6 +57,7 @@ export function Playbooks() {
     <section aria-label="Playbooks">
       <h3 className={H3}>Playbooks</h3>
       <p className="mt-1 text-md text-text-dim">{S.playbooksIntro}</p>
+      {list?.some((one) => one.kind === "skill") === true && <p className="mt-1 text-sm text-text-faint">{S.playbookCountsMean}</p>}
       {refusal !== null && <p className="mt-2.5 text-base text-critical">{refusal}</p>}
       {list !== null && list.length === 0 && open === null && <p className="mt-2.5 text-base text-text-dim">{S.playbooksNone}</p>}
       {list?.map((entry) => {
@@ -70,6 +71,9 @@ export function Playbooks() {
             </span>
             <p className="mt-1 text-md">{entry.when}</p>
             <p className="mt-1 text-sm text-text-dim">{`${entry.slug} · version ${entry.version} · ${actorName(entry.updated_by)} · ${shortDate(entry.updated_at)}`}</p>
+            <p className="mt-0.5 text-sm text-text-dim">
+              {[S.playbookReads.replace("<n>", entry.reads.toLocaleString("en")), entry.machines !== undefined ? S.playbookMachines.replace("<n>", entry.machines.toLocaleString("en")) : ""].filter(Boolean).join(" · ")}
+            </p>
             {removing === entry.slug
               ? (
                 <span className="mt-2 flex flex-wrap items-center gap-2">

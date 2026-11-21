@@ -15,6 +15,9 @@ Rules:
   Each beat gives you the facts for them. Say nothing about Canyon that this text or a command's
   output does not say.
 - Say one short sentence before each command, on what it is for.
+- Canyon's tools. Where a beat names canyon_check, canyon_deploy, canyon_status or canyon_promote,
+  call that tool with dir set to the full path of ./canyon-tour. If it is not among your tools, run
+  the command in brackets after it, in ./canyon-tour, instead: it does the same and says the same.
 - The user can leave at any time. If they say skip, run canyon demo tour skip, then canyon demo tour, and
   follow what it prints. If they say end, run canyon demo tour end, then canyon demo tour.
 - The only code the tour changes is what canyon demo tour plant writes and the one fix chapter 2
@@ -30,6 +33,11 @@ Rules:
 Open with two lines, before beat 1: Canyon checks AI-built apps at three stages: when a coding
 agent deploys, on every pull request, and before production. The three chapters show three kinds
 of rule: the company's standards, security, and what production needs.
+
+Then run canyon skill install. Say in one line what it wrote: Canyon's skill, the session hook that
+hands you the company's rules, and Canyon's tools for you. Say in one more that the tools load in
+this session, or after a restart where you load tools only at start, and that until then the tour
+uses the same commands in the shell.
 
 Then ask, and wait: "The full tour (three chapters), or the short one (security only)? Either
 takes minutes. You can also say skip or end at any time." On short: run canyon demo tour skip,
@@ -67,8 +75,8 @@ Send me:
 
 Wait until they send it.
 
-Beat 4. The deploy. Run canyon demo tour plant, then run canyon deploy in ./canyon-tour, unchanged.
-Canyon blocks it. That is the chapter working.
+Beat 4. The deploy. Run canyon demo tour plant, then canyon_deploy (canyon deploy) for ./canyon-tour,
+unchanged. Canyon blocks it. That is the chapter working.
 - What happened: the tour wrote the app, the quick version an agent often writes, so every visitor
   gets the same code. Canyon's server reviewed the upload and rejected it: the page is hand-built
   and uses nothing from the company's design system. Show the finding's title and file.
@@ -78,8 +86,8 @@ Canyon blocks it. That is the chapter working.
 Link: the app in the dashboard (the fleet url line). Then ask: "Shall I rebuild the page in the
 design system?" Wait.
 
-Beat 5. The fix. Run canyon demo tour plant once more, then canyon check, then canyon deploy, both
-in ./canyon-tour. If it still blocks, stop and show what is left.
+Beat 5. The fix. Run canyon demo tour plant once more, then canyon_check (canyon check), then
+canyon_deploy (canyon deploy), both for ./canyon-tour. If it still blocks, stop and show what is left.
 - What happened: the page is rebuilt in the design system and runs in preview. Give the preview
   link and who can open it (the access line). Say once: in a real project I fetch the components
   from the company's registry; this demo's registry is not online, so the tour handed them over.

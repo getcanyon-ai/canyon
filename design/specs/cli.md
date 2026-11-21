@@ -70,6 +70,7 @@ has not landed yet, never that it was cut.
 | `canyon db` | Query this app's database as yourself, connect a Postgres client to it, and list or end its database sessions (§6.10) | builder |
 | `canyon resources` | The component types this host can provision, and whether it can yet | platform eng |
 | `canyon manifest` | What this host hands your agents | both |
+| `canyon playbook` | Print one of the org's playbooks by its slug, as its admin wrote it (§6.16) | builder |
 | `canyon version` | This binary's version and the host it will reach | both |
 | `canyon feedback` | A link to open each kind of issue on Canyon's repository (§6.11) | both |
 | `canyon telemetry` | The daily report of counts this Canyon sends: `show`, `off`, `on`, an admin's (§6.12) | platform eng |
@@ -3993,7 +3994,9 @@ choices: the next chapter, skip to the end, or a way to real use that matches wh
 real use is offered once per chapter, as the third choice, and not again in other words after a 1 or a 2. The tour
 names no number of minutes, for itself or a chapter: it says it takes minutes.
 
-1. **Standards: your agent ignores the design system.** The tour opens on its frame and one question: the full tour,
+1. **Standards: your agent ignores the design system.** The tour opens on its frame, then has the agent run
+   `canyon skill install`, which gives it Canyon's skill, hook and tools (§7; design/specs/mcp.md §11), and say that the
+   tools load in this session or after a restart, the shell standing in until then. Then one question: the full tour,
    or the short one, which is chapter 2 alone. Then the agent shows what is running (`canyon fleet`). The demo
    starts with Canyon as its default design system and `design.org-system` Advisory (**amended 2026-11-15**, review of
    #2863: its sample apps' deployer picks the design system once they run, as the dashboard does; the tour has no form
@@ -4011,14 +4014,19 @@ names no number of minutes, for itself or a chapter: it says it takes minutes.
    fixes it. The chapter's text carries the one-line fix it knows passes, so the chapter is one round. Done when a
    review of the app ended blocked since the plant and preview runs a newer package than the one the change was
    planted over.
-3. **Production: the company's rules decide.** `canyon status` shows what production needs, the visitor asks for
-   production, and the agent runs `canyon deploy --env prod --yes`. Done when production runs the app.
+3. **Production: the company's rules decide.** `canyon_status` shows what production needs, the visitor asks for
+   production, and the agent calls `canyon_promote` with `confirm` (`canyon deploy --env prod --yes`) only on that yes in
+   this conversation, never on its own; where the client asks the person itself, they answer there. Done when
+   production runs the app.
 4. **The end.** A recap in the four lines below, four ways on (their own app, their pipeline, their team, real
-   workloads), that the design-system rule is still Blocking and where to set it back, and how to stop the demo.
+   workloads), that the design-system rule is still Blocking and where to set it back, where the docs give
+   their other agents Canyon's tools (*Connect your agent*), and how to stop the demo.
 
 **What the agent is told in every chapter:** report every beat in exactly four lines, one short sentence each (What
 happened, How Canyon helped, Without Canyon, At scale), with only the links and code the beat names; one sentence
-before each command; change only what `canyon demo tour plant` writes and the one fix a chapter names, and say what is
+before each command; call Canyon's tool where a beat names one (`canyon_check`, `canyon_deploy`, `canyon_status`,
+`canyon_promote`) with `dir` the tour's folder, and the shell command in brackets after it where the tool isn't loaded
+(**amended 2026-11-20**, design/specs/mcp.md §11); change only what `canyon demo tour plant` writes and the one fix a chapter names, and say what is
 planted; never install, delete or repair anything the text does not name; on "skip" run `canyon demo tour skip`, on "end"
 `canyon demo tour end`; when no host answers, ask the user to run `canyon demo up` in a terminal of their own, because a first start outlasts an agent's command time limit.
 
@@ -4046,7 +4054,28 @@ login itself: with no session it starts anyway, and every tool answers `isError`
 - **The instructions** are D5's preamble and then the manifest as `canyon manifest --format ai` prints it, read once at
   start within the session hook's three seconds; a read that fails is the hook's line for it (§7.4).
 - **Resources:** `canyon://manifest` and `canyon://manifest/<app>`, the manifest's JSON.
+- **A prompt:** `canyon_tour`, with `chapter` (`1`, `2`, `3` or `end`; left out, the visitor's own): the chapter word for
+  word as `canyon demo tour` hands it to an agent (§6.14.1). It moves no place, and a chapter the tour lacks is refused
+  (**added 2026-11-20**, design/specs/mcp.md §11).
 - It ends, exit `0`, when the harness closes its stdin. It takes no arguments and no flags but the two globals.
+
+### 6.16 `canyon playbook`
+
+**Added 2026-11-20** (design/specs/mcp.md §3.3; contracts/routes.md, the playbooks row). It prints one of the org's
+playbooks, its body as its admin wrote it, for an agent whose harness has no MCP and for a finding whose rule points at
+one (§5.2, `then:`). Every member reads it, and the host counts it as a read by the CLI (`?read=cli`):
+
+```
+$ canyon playbook service-conventions
+# Writing a Meridian service
+
+Every route reads its input through the request schema, and every query passes it as a bound parameter:
+…
+```
+
+A slug that names no playbook that stands is `✗ No playbook <slug> in this org. canyon manifest lists its playbooks.`,
+exit 1; no slug is a usage line. A character the host would never send in a body (a control character but a newline
+and a tab) prints visibly, as every host string does. `--format json` prints the host's answer as it came.
 
 ## 7. The harness skill
 
@@ -4331,9 +4360,10 @@ blocks, it tells you exactly what to fix and how.
 ## Canyon's tools
 
 If Canyon's MCP tools are loaded (`canyon_check`, `canyon_deploy`,
-`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`), use them
-first. Each runs the command it is named for, `canyon_promote` being
-`canyon deploy --env prod`, and returns the same output, so everything below
+`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`,
+`canyon_playbook`), use them first. Each runs the command it is named for,
+`canyon_promote` being `canyon deploy --env prod` and `canyon_playbook`
+`canyon playbook <slug>`, and returns the same output, so everything below
 applies to them. Set `canyon_promote`'s `confirm` only when the user asked for
 production in this conversation. When the tools aren't loaded, run the commands.
 
@@ -4879,6 +4909,27 @@ under `Your org's own rules (written by its admins):` as `- <name>`, then its te
 indented two spaces, so no line of it reads as a heading of Canyon's. The person's rendering is
 unchanged.
 
+**The org's playbooks** (amended 2026-11-20, design/specs/mcp.md §3.3). After the org's own rules, the agent rendering
+hands each playbook that stands under `Your org's playbooks, how it builds, written by its admins. Before a task, read
+each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are
+loaded.`, one line each, `- <slug>: <name>. When: <when>`, never a body. The person's rendering lists them under
+`Playbooks` as `<name>  <kind>  <slug>  version <n>`.
+
+**Native skills** (amended 2026-11-20, design/specs/mcp.md §3.3). Under `--harness claude` and `--harness codex` the
+hook syncs each playbook that is a `skill` into the harness's own skills, `~/.claude/skills/canyon-<slug>/SKILL.md` and
+`~/.agents/skills/canyon-<slug>/SKILL.md`: frontmatter `name` the slug and `description` its `when`, both as JSON
+strings, then its body, every host string written visibly (§9) and each `` !` `` written `` ! ` ``: Claude Code runs
+`` !`cmd` `` in a skill as a shell command before the model reads it (https://code.claude.com/docs/en/skills), and its
+docs don't say a code block is spared (amended 2026-11-21, the item 10 security review). Each directory it writes holds
+a `.canyon` file, `{host, version}`. It `lstat`s each `canyon-<slug>` before it writes or removes there, and touches
+only a real directory, never a link, whose regular-file marker names this host: a person's own skill, a link and
+another host's directory stay byte for byte, and the hook says `Canyon didn't sync the playbook <slug>: <path> is not a
+directory Canyon wrote, so Canyon leaves it alone.` once a session. Its manifest request names what it holds,
+`held=<slug>@<version>`, so the host counts this machine; it then fetches only a skill whose version changed
+(`?read=sync`, a sync and no read), writing `SKILL.md` and then the marker, and removes a directory of its own whose
+playbook was removed or became a note. It shares the hook's seconds, gives up when they run out, and never says
+anything or fails the session: the next session tries again. `canyon skill uninstall` removes every marked directory.
+
 **An AI twin is its policy's, said once** (amended 2026-11-07, #2694: in a run of the docs' tour, the
 session listed `No hand-built SQL from user input` under `Policies that block:` and `No hand-built SQL
 from user input (AI review)` under `Policies that only warn:`, so one policy both blocked and only
@@ -5170,6 +5221,7 @@ YOUR ORG
   fleet       List every app in your org and what needs attention
   resources   List the databases and services this Canyon can create for apps
   manifest    Show the instructions this Canyon gives coding agents
+  playbook    Print one of your org's playbooks: how it builds
 
 SETUP
   login       Sign this machine in to a Canyon host
@@ -5346,6 +5398,14 @@ days and an admin can revoke it sooner, so any `401` ends the invocation here, o
 Against a host whose `CANYON_AUTH` is off there is nothing to expire: it serves a caller without a
 session as the anonymous person and sets no cookie, so `canyon login` proves the host by its
 preferences and stores no session, and the user sees nothing because nothing went wrong.
+
+**A masked log that comes back unmasked** — `canyon logs --redaction masked`, `canyon_logs`'s read (design/specs/mcp.md
+§1.2), whose answer's `Canyon-Log-Redaction` isn't `masked` (an older host, a proxy that drops the header): none of the
+log is shown, exit `1` (**added 2026-11-20**, as the dashboard refuses it):
+
+```
+  ✗ http://localhost:7777 sent claims-portal's preview log without masking its secrets, so none of it is shown.
+```
 
 **Not on the app's team** — any `403 team_required` (contracts/routes.md, *App teams*) names the
 owner who can fix it and the exact command they run, worded as theirs to run, never the reader's (an

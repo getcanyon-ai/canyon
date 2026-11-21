@@ -255,6 +255,8 @@ playbook can't hold a secret: a save with one is refused. A Canyon keeps up to 5
 A custom rule can point at a playbook: pick it under "Playbook" in the rule's editor. A finding of
 that rule then tells the agent, after the fix, to read the playbook.
 
+[Write playbooks for your agents](/org/playbooks/) has a worked example, and how each agent gets them.
+
 ## What agents are told
 
 This page sets what every coding agent in your org is told at the start of each session, through the

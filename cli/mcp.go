@@ -51,6 +51,10 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	a.transport = transportMCPLocal // every request it makes says so, a tool call's too (design/specs/mcp.md §7)
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: Version}, &mcp.ServerOptions{Instructions: a.mcpInstructions(ctx)})
 	for _, t := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
+		if t.Name == mcptools.Playbook { // a playbook is the org's: no app, no dir
+			s.AddTool(t, a.mcpPlaybook(t))
+			continue
+		}
 		t := mcptools.Local(t)
 		s.AddTool(t, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var args struct { // every tool's, each schema taking its own
@@ -98,7 +102,82 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	}
 	s.AddResource(&mcp.Resource{URI: mcptools.ManifestURI, Name: "manifest", Title: "Canyon's rules", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.ManifestAppTemplate, Name: "manifest-app", Title: "Canyon's rules for one app", MIMEType: "application/json"}, a.manifestResource)
+	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.PlaybookTemplate, Name: "playbook", Title: "One of the org's playbooks", MIMEType: "text/markdown"}, a.playbookResource)
+	s.AddPrompt(&mcp.Prompt{Name: tourPrompt, Title: "Canyon's guided tour", Description: "A chapter of the guided tour on the laptop demo, as canyon demo tour gives it to an agent: 1, 2, 3 or end, the visitor's own chapter when left out.",
+		Arguments: []*mcp.PromptArgument{{Name: "chapter", Description: "1, 2, 3 or end; left out, the chapter the visitor is on"}}}, a.tourPromptChapter)
 	return s
+}
+
+// tourPrompt is canyon_tour: each chapter of canyon demo tour as an MCP prompt (design/specs/mcp.md §11).
+const tourPrompt = "canyon_tour"
+
+var tourChapters = map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd}
+
+// tourPromptChapter is the chapter's instructions, word for word as canyon demo tour prints them for an agent. It
+// moves no place: plant, next, skip and end stay the tour's own forms.
+func (a *app) tourPromptChapter(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	named := req.Params.Arguments["chapter"]
+	chapter, ok := tourChapters[named]
+	if named == "" {
+		state, err := loadTour(a.getenv)
+		if err != nil {
+			return nil, err
+		}
+		chapter, ok = state.Chapter, true
+	}
+	if !ok {
+		return nil, fmt.Errorf("the tour has no chapter %q: it has 1, 2, 3 and end", named)
+	}
+	return &mcp.GetPromptResult{Description: tourTitles[chapter], Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: tourAgent[chapter]}}}}, nil
+}
+
+// mcpPlaybook is canyon_playbook: a playbook's body as its admin wrote it, each character that hides text written
+// visibly (visible), counted as a read by the tool, and the playbook whole as structured content.
+func (a *app) mcpPlaybook(t *mcp.Tool) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args mcptools.PlaybookArgs
+		if err := mcptools.Decode(t, req.Params.Arguments, &args); err != nil {
+			return toolRefused(err), nil
+		}
+		p, raw, err := a.readPlaybook(ctx, args.Slug, "tool")
+		if err != nil {
+			return toolRefused(err), nil
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: visible(p.Body)}}, StructuredContent: raw}, nil
+	}
+}
+
+// playbookResource reads canyon://playbooks/<slug>: the same body, counted as a read by the resource.
+func (a *app) playbookResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	slug, _ := strings.CutPrefix(req.Params.URI, mcptools.PlaybookURI)
+	if !playbookSlug(slug) { // the tool's schema holds its slug to this; a resource's URI is the client's to write
+		return nil, fmt.Errorf("%s is no playbook's address: canyon://playbooks/<slug>, a slug of a-z, 0-9 and -", cell(req.Params.URI))
+	}
+	p, _, err := a.readPlaybook(ctx, slug, "resource")
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "text/markdown", Text: visible(p.Body)}}}, nil
+}
+
+// readPlaybook is GET /playbooks/:slug counted as way, or its refusal as the CLI says it: a slug that names none is
+// canyon playbook's own line.
+func (a *app) readPlaybook(ctx context.Context, slug, way string) (playbookRead, json.RawMessage, error) {
+	c := a.sub(ctx, "")
+	client, err := c.client()
+	if err != nil {
+		return playbookRead{}, nil, c.refusal(err)
+	}
+	p, raw, err := fetchPlaybook(ctx, client, slug, way)
+	var api *APIError
+	switch {
+	case errors.As(err, &api) && api.Status == http.StatusNotFound:
+		return p, nil, fmt.Errorf(noPlaybook, cell(slug)) //nolint:staticcheck // D5's line, said whole as the tool's answer
+	case err != nil:
+		return p, nil, c.refusal(err)
+	}
+	c.remember()
+	return p, raw, nil
 }
 
 // mcpInstructions are the preamble and the manifest as the session hook hands it, for the app the

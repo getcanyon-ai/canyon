@@ -60,6 +60,10 @@ func (a *app) skillUninstall(args []string) int {
 			status, err := uninstallHook(t.hook)
 			row(t.name, t.hook.shown, status, err)
 		}
+		if t.mcp != nil {
+			status, err := uninstallMCP(t.mcp)
+			row(t.name, t.mcp.shown, status, err)
+		}
 	}
 	a.sandboxed(denied)
 	switch {

@@ -95,6 +95,7 @@ type Fake struct {
 	RefuseRebase atomic.Pointer[string]                // set, POST /rebase answers 409 with this reason
 	FailRebase   atomic.Int32                          // set, POST /rebase answers this status, 404 or 502, or with -1 drops the connection
 	HoldRebase   atomic.Pointer[chan struct{}]         // set, POST /rebase, counted, waits until it is closed or its caller goes
+	HoldBusy     atomic.Pointer[chan struct{}]         // set, a busy POST /scan, counted, answers only once it is closed or its caller goes
 
 	Builder   atomic.Pointer[string] // GET /builder answers it; unset, "sha256:" and 64 "b"
 	RunImage  atomic.Pointer[string] // GET /builder answers it as run_image; unset, "sha256:" and 64 "c"
@@ -452,6 +453,13 @@ func New(t *testing.T) *Fake {
 			return
 		}
 		if f.Busy.Add(-1) >= 0 {
+			if h := f.HoldBusy.Load(); h != nil {
+				select {
+				case <-*h:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			body := map[string]string{"error": "busy"}

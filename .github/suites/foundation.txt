@@ -1,0 +1,19 @@
+# A change here reaches every suite: what every stack is built from, and what decides what runs.
+go.mod
+go.sum
+Makefile
+.dockerignore
+.github/workflows/**
+.github/actions/**
+.github/suites/**
+# the contracts as code: schemas, goldens and their checkers (the .md files are prose; a seam's code comes with them)
+contracts/*.go
+contracts/schema/**
+contracts/testdata/**
+contracts/vendor/**
+# the server's core, which every stack runs: everything in it but the route files (listed by area in each suite),
+# its tests, and the usage report, which every stack turns off (CANYON_TELEMETRY=0)
+cmd/canyon-server/*.go
+!cmd/canyon-server/*_test.go
+!cmd/canyon-server/routes_*.go
+!cmd/canyon-server/telemetry*.go

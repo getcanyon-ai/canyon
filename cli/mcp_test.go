@@ -24,9 +24,10 @@ import (
 // mcpHost is a stub Canyon: the manifest fixture, the status page fixture and a log, each as routes.md
 // answers it, with every request it was asked recorded; refuse, when set, answers every route.
 type mcpHost struct {
-	mu     sync.Mutex
-	asked  []string
-	refuse func(w http.ResponseWriter)
+	mu         sync.Mutex
+	asked      []string
+	transports []string // each request's Canyon-Transport, in order
+	refuse     func(w http.ResponseWriter)
 }
 
 func (h *mcpHost) serve(t *testing.T) string {
@@ -39,6 +40,7 @@ func (h *mcpHost) serve(t *testing.T) string {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.mu.Lock()
 		h.asked = append(h.asked, r.Method+" "+r.URL.RequestURI())
+		h.transports = append(h.transports, r.Header.Get("Canyon-Transport"))
 		refuse := h.refuse
 		h.mu.Unlock()
 		if refuse != nil {
@@ -524,5 +526,39 @@ func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
 	defer mu.Unlock()
 	if len(told) != 1 || strings.ContainsAny(told[0], "\x1b\x07") || !strings.Contains(told[0], `trivy\x1b]0;owned\x07`) {
 		t.Errorf("progress %q", told)
+	}
+}
+
+// Each chapter of the tour is the prompt canyon_tour, word for word as canyon demo tour hands it to an agent; with
+// no chapter named, the visitor's own; and a chapter the tour lacks is refused, never answered with another.
+func TestMCPServesEachTourChapterAsAPrompt(t *testing.T) {
+	h := &mcpHost{}
+	cs, env := mcpSession(t, h.serve(t))
+	ctx := context.Background()
+	prompts, err := cs.ListPrompts(ctx, nil)
+	if err != nil || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "canyon_tour" {
+		t.Fatalf("prompts %+v, %v", prompts, err)
+	}
+	said := func(chapter string) (string, error) {
+		res, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "canyon_tour", Arguments: map[string]string{"chapter": chapter}})
+		if err != nil {
+			return "", err
+		}
+		return res.Messages[0].Content.(*mcp.TextContent).Text, nil
+	}
+	for chapter, n := range map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd} {
+		if text, err := said(chapter); err != nil || text != tourAgent[n] {
+			t.Errorf("chapter %s: %v\n%s", chapter, err, text)
+		}
+	}
+	path, err := tourPath(func(k string) string { return env[k] })
+	must(t, err)
+	must(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	must(t, os.WriteFile(path, []byte(`{"chapter":3}`), 0o600))
+	if text, err := said(""); err != nil || text != tourAgent[tourProd] {
+		t.Errorf("no chapter named, on chapter 3: %v\n%s", err, text)
+	}
+	if text, err := said("4"); err == nil || !strings.Contains(err.Error(), `the tour has no chapter "4"`) {
+		t.Errorf("chapter 4: %v\n%s", err, text)
 	}
 }

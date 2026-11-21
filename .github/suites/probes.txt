@@ -1,0 +1,21 @@
+# e2e-ui.yml's probes: on the Docker stack, canyon check on the probe apps never reads clean (TestProbesNeverReadClean).
+# what its test compiles (go list -deps -test -tags stack ./e2e)
+e2e/*.go
+e2e/testdata/**
+gate/**
+internal/mcptools/**
+internal/trivy/**
+# what it proves: Canyon's scanners and rules on the probe apps, through the review pipeline (the CLI is only how it
+# asks: its own tests and every push to main prove it)
+runs/**
+cmd/canyon-server/routes_gate.go
+cmd/canyon-server/routes_packages.go
+cmd/canyon-server/routes_timeline.go
+cmd/canyon-server/routes_scanners.go
+# the stack it runs on
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+e2e/compose.e2e.yml
+e2e/fixtures/**
+e2e/stub/**

@@ -3,10 +3,13 @@
 
   ✓ Claude Code    ~/.claude/skills/canyon/SKILL.md          removed
   ✓ Claude Code    ~/.claude/settings.json                   hook removed
+  ✓ Claude Code    ~/.claude.json                            server removed
   ✓ Codex          ~/.agents/skills/canyon/SKILL.md          removed
   ✓ Codex          ~/.codex/hooks.json                       hook removed
+  ✓ Codex          ~/.codex/config.toml                      server removed
   ✓ Cursor         ./.cursor/rules/canyon.mdc                removed
   ✓ Cursor         ./.cursor/hooks.json                      hook removed
+  ✓ Cursor         ./.cursor/mcp.json                        server removed
   ✓ AGENTS.md      ./AGENTS.md                               block removed
 
   To put them back: canyon skill install --harness all

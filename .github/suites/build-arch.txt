@@ -1,0 +1,11 @@
+# build-arch.yml: an app built on kind where it runs, on arm64 and on amd64 (executor/kube's build tests).
+# what its tests compile (go list -deps -test -tags kube ./executor): every package below
+executor/**
+ingest/**
+internal/answered/**
+internal/names/**
+internal/subjecthash/**
+# what it proves: the build and its images
+deploy/k8s/builds.yaml
+.github/kind/up.sh
+.github/kind/build-arch.sh

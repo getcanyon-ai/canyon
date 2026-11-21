@@ -77,6 +77,7 @@ type telemetryReport struct {
 	Scanners      []string          `json:"scanners"`
 	AIReview      bool              `json:"ai_review"`
 	Agents        agentCounts       `json:"agents"`
+	AgentsVia     transportCounts   `json:"agents_via"`
 	Unsupported   unsupported       `json:"unsupported"`
 	PeriodHours   int               `json:"period_hours"`
 	Demo          bool              `json:"demo"`

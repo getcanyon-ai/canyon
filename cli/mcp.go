@@ -48,6 +48,7 @@ func (nopCloser) Close() error { return nil }
 
 // mcpServer is the local server: the read tools and resources, and instructions read once, now.
 func (a *app) mcpServer(ctx context.Context) *mcp.Server {
+	a.transport = transportMCPLocal // every request it makes says so, a tool call's too (design/specs/mcp.md §7)
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: Version}, &mcp.ServerOptions{Instructions: a.mcpInstructions(ctx)})
 	for _, t := range append(mcptools.Tools(), mcptools.LocalOnly()...) {
 		t := mcptools.Local(t)
@@ -97,7 +98,32 @@ func (a *app) mcpServer(ctx context.Context) *mcp.Server {
 	}
 	s.AddResource(&mcp.Resource{URI: mcptools.ManifestURI, Name: "manifest", Title: "Canyon's rules", MIMEType: "application/json"}, a.manifestResource)
 	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: mcptools.ManifestAppTemplate, Name: "manifest-app", Title: "Canyon's rules for one app", MIMEType: "application/json"}, a.manifestResource)
+	s.AddPrompt(&mcp.Prompt{Name: tourPrompt, Title: "Canyon's guided tour", Description: "A chapter of the guided tour on the laptop demo, as canyon demo tour gives it to an agent: 1, 2, 3 or end, the visitor's own chapter when left out.",
+		Arguments: []*mcp.PromptArgument{{Name: "chapter", Description: "1, 2, 3 or end; left out, the chapter the visitor is on"}}}, a.tourPromptChapter)
 	return s
+}
+
+// tourPrompt is canyon_tour: each chapter of canyon demo tour as an MCP prompt (design/specs/mcp.md §11).
+const tourPrompt = "canyon_tour"
+
+var tourChapters = map[string]int{"1": tourFirst, "2": tourSecurity, "3": tourProd, "end": tourEnd}
+
+// tourPromptChapter is the chapter's instructions, word for word as canyon demo tour prints them for an agent. It
+// moves no place: plant, next, skip and end stay the tour's own forms.
+func (a *app) tourPromptChapter(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	named := req.Params.Arguments["chapter"]
+	chapter, ok := tourChapters[named]
+	if named == "" {
+		state, err := loadTour(a.getenv)
+		if err != nil {
+			return nil, err
+		}
+		chapter, ok = state.Chapter, true
+	}
+	if !ok {
+		return nil, fmt.Errorf("the tour has no chapter %q: it has 1, 2, 3 and end", named)
+	}
+	return &mcp.GetPromptResult{Description: tourTitles[chapter], Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: tourAgent[chapter]}}}}, nil
 }
 
 // mcpInstructions are the preamble and the manifest as the session hook hands it, for the app the
@@ -173,7 +199,8 @@ func (a *app) readManifest(ctx context.Context, named string, within time.Durati
 func (a *app) sub(ctx context.Context, dir string) *app {
 	var out, errs strings.Builder
 	render, _ := resolveRender(string(FormatAI), a.getenv, false) // ai is a format resolveRender always takes
-	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir}
+	return &app{out: &out, err: &errs, in: strings.NewReader(""), getenv: a.getenv, clock: a.clock, render: render, hostFlag: a.hostFlag, ctx: ctx, wd: dir,
+		transport: a.transport}
 }
 
 // verbIn runs `canyon <verb> <args>` in dir, as the app named when it names one: what it printed, or its refusal.

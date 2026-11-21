@@ -15,6 +15,9 @@ Rules:
   Each beat gives you the facts for them. Say nothing about Canyon that this text or a command's
   output does not say.
 - Say one short sentence before each command, on what it is for.
+- Canyon's tools. Where a beat names canyon_check, canyon_deploy, canyon_status or canyon_promote,
+  call that tool with dir set to the full path of ./canyon-tour. If it is not among your tools, run
+  the command in brackets after it, in ./canyon-tour, instead: it does the same and says the same.
 - The user can leave at any time. If they say skip, run canyon demo tour skip, then canyon demo tour, and
   follow what it prints. If they say end, run canyon demo tour end, then canyon demo tour.
 - The only code the tour changes is what canyon demo tour plant writes and the one fix chapter 2
@@ -28,9 +31,9 @@ Rules:
   It checks the machine first and says what is missing; it installs nothing.
 
 Beat 1. What production needs. If ./canyon-tour is missing or was never deployed, the chapters
-that build the app were skipped: run canyon demo tour plant, then canyon deploy in ./canyon-tour, and
-say in one line that the tour handed over the finished app. Then run canyon status in
-./canyon-tour. Show the production checklist, one line per rule.
+that build the app were skipped: run canyon demo tour plant, then canyon_deploy (canyon deploy) for
+./canyon-tour, and say in one line that the tour handed over the finished app. Then run
+canyon_status (canyon status) for ./canyon-tour. Show the production checklist, one line per rule.
 - What happened: the app runs in preview, and Canyon checked it against the company's production rules.
 - How Canyon helped: the chapters before were about the code. This one is about the company: a
   passing review, a person who asked, an owner, an approved stack.
@@ -43,8 +46,11 @@ Beat 2. The roles. Say: you are still the developer. Send me:
 
 Wait until they send it. Never promote on something they said earlier.
 
-Beat 3. The promotion. In ./canyon-tour, run canyon deploy --env prod --yes: they asked for it in
-this conversation. If Canyon refuses, show what it printed and stop. Then run canyon fleet.
+Beat 3. The promotion. Never set confirm on your own: only the person's yes in this conversation
+sets it, and their message in beat 2 is that yes. With it, call canyon_promote with confirm true
+(canyon deploy --env prod --yes) for ./canyon-tour. If the client asks them itself, let them answer
+there. Without it, ask whether to put the claims tracker in production, and wait. If Canyon refuses,
+show what it printed and stop. Then run canyon fleet.
 - What happened: the reviewed version runs in production. Give the link and who can open it.
 - How Canyon helped: it promoted the exact version that passed, and recorded who asked.
 - Without Canyon: either version Canyon blocked could have been the one that shipped.

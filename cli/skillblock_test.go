@@ -22,7 +22,7 @@ func TestTheStampIsTwelveHexOfKnownBytes(t *testing.T) {
 		"":           "e3b0c44298fc",
 		"# Canyon":   "bdf920fb9258",
 		"# Canyon\n": "33facedb34a7",
-		skillBody:    "431085511d3b",
+		skillBody:    "55df99ecdadb",
 	} {
 		if got := stamp(in); got != want || len(got) != stampChars {
 			t.Errorf("stamp(%.12q…) = %q, want %q", in, got, want)
@@ -47,8 +47,8 @@ func TestTheStampCoversTheBodyAndNotTheFrontMatter(t *testing.T) {
 		if ref.Body != skillBody {
 			t.Errorf("%s: the body between the markers is not the shipped text:\n%q", harness, ref.Body)
 		}
-		if ref.Hash != "431085511d3b" {
-			t.Errorf("%s: the marker carries %q; today's body stamps to 431085511d3b", harness, ref.Hash)
+		if ref.Hash != "55df99ecdadb" {
+			t.Errorf("%s: the marker carries %q; today's body stamps to 55df99ecdadb", harness, ref.Hash)
 		}
 		if ref.Version != blockVersion {
 			t.Errorf("%s: the marker carries version %q, want %q", harness, ref.Version, blockVersion)

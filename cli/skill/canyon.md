@@ -3,6 +3,15 @@
 Canyon deploys this app, but runs a review first. The review can block. When it
 blocks, it tells you exactly what to fix and how.
 
+## Canyon's tools
+
+If Canyon's MCP tools are loaded (`canyon_check`, `canyon_deploy`,
+`canyon_promote`, `canyon_status`, `canyon_logs`, `canyon_rules`), use them
+first. Each runs the command it is named for, `canyon_promote` being
+`canyon deploy --env prod`, and returns the same output, so everything below
+applies to them. Set `canyon_promote`'s `confirm` only when the user asked for
+production in this conversation. When the tools aren't loaded, run the commands.
+
 ## Deploying
 
 From the app's root directory, run:

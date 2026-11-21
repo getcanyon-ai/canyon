@@ -1,0 +1,34 @@
+# patch-e2e.yml: Canyon patches a running app onto a newer run image, end to end on the team setup (make e2e-up OIDC=1,
+# e2e/compose.patch.yml; e2e/oidc's TestRebasePatch).
+# what its tests compile (go list -deps -test -tags oidc,patch ./e2e/oidc)
+e2e/oidc/**
+# what it proves: patching
+ee/patching/**
+cmd/canyon-server/ee_patching.go
+cmd/canyon-server/patching_hooks.go
+cmd/canyon-server/patch_state.go
+cmd/canyon-server/routes_patching.go
+runs/patch*.go
+runs/watch*.go
+runs/waves*.go
+runs/prod*.go
+runs/brake*.go
+runs/plan*.go
+runs/rescan*.go
+runs/runimage*.go
+executor/rebase*.go
+executor/run.Dockerfile
+executor/scan*.go
+web/src/screens/Patching.tsx
+e2e/ui/patch/**
+e2e/ui/playwright.config.ts
+e2e/compose.patch.yml
+# the team setup and the stack it runs on
+deploy/docker/**
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+e2e/compose.e2e.yml
+e2e/compose.oidc.yml
+e2e/fixtures/**
+e2e/stub/**

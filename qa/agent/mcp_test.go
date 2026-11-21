@@ -199,6 +199,9 @@ func TestAStructuredVerdictReadsAsAReview(t *testing.T) {
 	if b == nil || b.Result != "BLOCKED" || b.Run != "gr_93ba" || !met(expect{Result: "BLOCKED", Keys: []string{"secrets.client-bundle"}}, b) || len(b.Advisory) != 1 {
 		t.Fatalf("read: %+v", b)
 	}
+	if clean := verdictBlock(`{"run":"gr_1","state":"clean","blocking":0,"warnings":0,"findings":{"runs":[]}}`); clean == nil || clean.Result != "PASSED" {
+		t.Errorf("a clean run read as %+v", clean)
+	}
 	if verdictBlock(`{"state":"blocked"}`) != nil || verdictBlock("CANYON REVIEW — RESULT: PASSED") != nil {
 		t.Error("read a verdict out of text that is none")
 	}

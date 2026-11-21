@@ -98,9 +98,10 @@ func recordSkill(home, dir, agent, slug string) error {
 	return os.WriteFile(filepath.Join(dir, playbookSkillFile), []byte(got+"\n"), 0o600)
 }
 
-// verdictStates are a structured verdict's state (design/specs/mcp.md §1.1) as the RESULT the CLI's block names.
+// verdictStates are a structured verdict's state, the run's (app-page.schema.json, a run's state), as the RESULT the
+// CLI's block names: clean is PASSED, as a check's block says it whether or not a person approved what blocked.
 var verdictStates = map[string]string{
-	"passed": "PASSED", "approved": "APPROVED", "blocked": "BLOCKED", "failed": "FAILED", "running": "STILL RUNNING", "unknown": "UNKNOWN",
+	"clean": "PASSED", "blocked": "BLOCKED", "failed": "FAILED", "running": "STILL RUNNING", "pending": "STILL RUNNING",
 }
 
 // verdictBlock reads a canyon_check or canyon_deploy result whose text is its structured verdict, {run, state,

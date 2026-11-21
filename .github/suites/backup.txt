@@ -1,0 +1,10 @@
+# backup.yml: one k3s host backed up and restored, as the self-host guide says (.github/kind/backup.sh, gateway.sh).
+deploy/k8s/**
+deploy/helm/canyon/**
+db/migrations/**
+docs/src/content/docs/self-host/backup-and-upgrade.md
+docs/src/content/docs/self-host/k3s.md
+cmd/canyon-server/routes_tls.go
+scripts/guide-block.sh
+.github/kind/**
+Dockerfile

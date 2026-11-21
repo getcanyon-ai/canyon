@@ -8,49 +8,6 @@ name: kube
 
 on:
   pull_request:
-    paths:
-      - 'executor/**'
-      - 'cmd/canyon-executor-kube/**'
-      - 'cmd/canyon-identity/**'
-      - 'identity/**'
-      - 'deploy/k8s/**'
-      - 'deploy/egress/**'
-      - 'deploy/helm/canyon/**'
-      - 'deploy/helm/check-values.yaml'
-      - 'Dockerfile.executor-kube'
-      - 'Dockerfile.identity'
-      - '.github/kind/**'
-      - '.github/workflows/kube.yml'
-      - 'e2e/handoff/**'
-      - 'e2e/ui/handoff/**' # the journey's set-up in the dashboard (#2439), and what it clicks through
-      - 'e2e/ui/playwright.config.ts'
-      - 'web/src/screens/HandOff*'
-      - 'web/src/screens/Settings.tsx'
-      - 'web/src/api.ts'
-      - 'web/src/strings.ts'
-      - 'runs/release.go'
-      - 'cmd/canyon-server/routes_release*.go'
-      - 'cmd/canyon-server/routes_platform_webhook.go'
-      - 'cmd/canyon-server/routes_platform_repo.go'
-      - 'runs/repo.go'
-      - 'runs/pipeline.go'
-      - 'runs/durable.go'
-      - 'contracts/**'
-      - 'cmd/canyon-server/routes_preferences.go'
-      - 'cmd/canyon-server/routes_envs.go' # undeploy
-      - 'cmd/canyon-server/routes_projects.go' # delete
-      - 'gitops/**' # the deploy repo's commits (#2470), and what Argo CD syncs from them
-      - 'internal/gitpush/**'
-      - 'deploy/gitops/**'
-      - 'internal/egresscontrol/**' # the check beside Envoy, which the kind tests prove enforces (#2386)
-      - 'internal/destination/**'
-      - 'cmd/canyon-server/egress*.go'
-      - 'cmd/canyon-server/routes_egress*.go'
-      - 'cmd/canyon-server/routes_front_door.go'
-      - 'db/migrations/**'
-      - 'webhook/**'
-      - 'go.mod'
-      - 'Makefile'
   push:
     branches: [main]
     paths:
@@ -105,8 +62,21 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }} # a PR's newer push cancels its older run; a main run always finishes
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      kind: ${{ steps.reach.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh kind
+
   kind:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.kind == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     strategy:
       fail-fast: false
       # kindnet proves the probe says "not enforced" on a cluster without NetworkPolicy, and that under run_by: canyon
@@ -247,7 +217,8 @@ jobs:
     # this machine with the cluster's own executor, kpack readied as build-arch.yml readies it, so a deploy through the
     # server builds and runs, and the chart's bootstrap saves a door not enforcing again. A pull request's, as Calico's
     # suite; a cluster of its own, so it adds no time to that suite's.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: paths
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.kind == 'true'
     name: kind (run_by canyon)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as the kind job's
     timeout-minutes: 45
@@ -289,7 +260,8 @@ jobs:
           kubectl -n canyon logs deploy/canyon-executor --tail=200
 
   handoff-repo:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.kind == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The hand-off journey through a deploy repo (e2e/handoff/README.md; #2470): Calico's cluster, External Secrets and
     # CloudNativePG on it (.github/kind/platform.sh), Gitea beside it, and the deploy repo synced by each GitOps
     # controller deploy/gitops has a reference set-up for, Argo CD and Flux (#2479), each on a cluster of its own. A pull

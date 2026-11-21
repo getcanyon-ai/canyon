@@ -1,0 +1,33 @@
+# e2e-ui.yml's oidc: the team setup on one Docker server (deploy/docker/team.yml), signing people in through the stub's
+# issuer, canyon login's code, a deploy, a teammate refused until shared, and the Secrets section as each person.
+# what its tests compile (go list -deps -test -tags oidc ./e2e/oidc)
+e2e/oidc/**
+# what it proves: sign-in in the browser and by device code, sessions, sharing, secrets
+cmd/canyon/**
+cli/cmd_login.go
+cli/cmd_logout.go
+cli/client.go
+cli/config.go
+cmd/canyon-server/routes_auth.go
+cmd/canyon-server/routes_device.go
+cmd/canyon-server/routes_sessions.go
+cmd/canyon-server/routes_access.go
+cmd/canyon-server/routes_secrets.go
+e2e/ui/secrets/**
+e2e/ui/harness/**
+e2e/ui/playwright.config.ts
+e2e/ui/package*.json
+web/src/screens/Secrets*
+web/src/api.ts
+web/src/strings.ts
+# the team setup and the stack it runs on: its Caddyfile is the guide's own block
+deploy/docker/**
+docs/src/content/docs/self-host/docker.md
+scripts/guide-block.sh
+Dockerfile
+Dockerfile.executor
+docker-compose.yml
+e2e/compose.e2e.yml
+e2e/compose.oidc.yml
+e2e/fixtures/**
+e2e/stub/**

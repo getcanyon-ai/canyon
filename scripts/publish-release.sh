@@ -5,14 +5,12 @@
 # Helm chart, and the laptop demo plus deploy/k8s, so nobody needs Canyon's source to install it; and Opengrep's
 # complete source, which canyon-opengrep's LGPL-2.1 binary is offered with. release.yml runs it after the tag's
 # release is published here, its images already in ghcr.io/getcanyon-ai: each one in images.txt must pull without a
-# login before anything is published. gh signs in as GH_TOKEN, which may create releases on canyon-releases;
-# SOURCE_TOKEN, when set, reads this repository's release. It needs jq and helm.
+# login before anything is published. SOURCE_TOKEN, when set, reads this repository's release. It needs jq and helm.
 #
-# In two halves, so the token that publishes never reaches the packing: with PUBLISH_OUT=<dir> it downloads, packs and
-# checks the release's files into <dir> (a file named prerelease among them for a prerelease) and publishes nothing;
-# with PUBLISH_FROM=<dir> it packs nothing, and only checks that every image pulls without a login and creates the
-# release from <dir>. release.yml runs the first half with no publishing token and the second with it. With neither,
-# it does both, one after the other.
+# release.yml runs it with PUBLISH_OUT=<dir>, with no token that can publish: it downloads, packs and checks the
+# release's files, checks every image pulls without a login, and writes <dir>/assets/ (the files to publish),
+# <dir>/notes.md and, for a prerelease, <dir>/prerelease. A later job that runs none of the tree's code creates the
+# release on canyon-releases from them. Without PUBLISH_OUT it creates that release itself, signed in as gh is.
 #
 # A rehearsal publishes nothing: with PUBLISH_ASSETS=<dir> (a release's CLI archives, SHA256SUMS, install.sh and
 # images.txt, as make cli-release and release.yml write them) and PUBLISH_REF=<git-ref>, it packs and checks the
@@ -28,11 +26,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 trap 'exit 1' INT TERM # sh runs no EXIT trap on a signal
 mkdir "$work/assets"
-if [ -n "${PUBLISH_FROM:-}" ]; then
-  [ -d "$PUBLISH_FROM" ] || fail "$PUBLISH_FROM, the packed release to publish, is not a directory"
-  cp "$PUBLISH_FROM"/* "$work/assets/"
-  pre=; [ -e "$work/assets/prerelease" ] && pre=--prerelease && rm "$work/assets/prerelease"
-elif [ -n "${PUBLISH_ASSETS:-}" ]; then
+if [ -n "${PUBLISH_ASSETS:-}" ]; then
   ref=${PUBLISH_REF:?a rehearsal names the git ref it packs from (PUBLISH_REF)}
   cp "$PUBLISH_ASSETS"/canyon_* "$PUBLISH_ASSETS"/SHA256SUMS "$PUBLISH_ASSETS"/install.sh "$PUBLISH_ASSETS"/images.txt "$work/assets/"
   pre=
@@ -48,26 +42,19 @@ else
   GH_TOKEN="$src_token" gh release download "$tag" -R "$src" -D "$work/assets" -p 'canyon_*' -p SHA256SUMS -p install.sh -p images.txt
   git rev-parse -q --verify "refs/tags/$tag" >/dev/null || git fetch -q origin "refs/tags/$tag:refs/tags/$tag"
 fi
-if [ -z "${PUBLISH_FROM:-}" ]; then
-  grep -q "github.com/$dst/releases" "$work/assets/install.sh" || fail "$tag's install.sh downloads from elsewhere"
-  "$here/release-archives-check.sh" "$work/assets" || fail "$tag's archives do not all carry Canyon's LICENSE, NOTICE and THIRD_PARTY_NOTICES"
+grep -q "github.com/$dst/releases" "$work/assets/install.sh" || fail "$tag's install.sh downloads from elsewhere"
+"$here/release-archives-check.sh" "$work/assets" || fail "$tag's archives do not all carry Canyon's LICENSE, NOTICE and THIRD_PARTY_NOTICES"
 
-  "$here/chart-package.sh" "$ref" "$tag" "$work/assets/canyon-chart.tgz"
-  "$here/deploy-bundle.sh" "$ref" "$work/assets/images.txt" "$work/assets/canyon-deploy.tar.gz"
-  (cd "$work/assets" && sha256sum canyon-deploy.tar.gz >> SHA256SUMS)
-  "$here/opengrep-source.sh" "$work/assets/opengrep-1.30.0-source.tar.gz"
-  "$here/release-archives-check.sh" "$work/assets" || fail "the archives packed here are not all licensed and clean: nothing was published"
+"$here/chart-package.sh" "$ref" "$tag" "$work/assets/canyon-chart.tgz"
+"$here/deploy-bundle.sh" "$ref" "$work/assets/images.txt" "$work/assets/canyon-deploy.tar.gz"
+(cd "$work/assets" && sha256sum canyon-deploy.tar.gz >> SHA256SUMS)
+"$here/opengrep-source.sh" "$work/assets/opengrep-1.30.0-source.tar.gz"
+"$here/release-archives-check.sh" "$work/assets" || fail "the archives packed here are not all licensed and clean: nothing was published"
 
-  if [ -n "${PUBLISH_ASSETS:-}" ]; then
-    echo "publish-release: a rehearsal of $tag from $ref, packed and checked; nothing was published:"
-    ls -l "$work/assets"
-    exit 0
-  fi
-  if [ -n "${PUBLISH_OUT:-}" ]; then
-    mkdir -p "$PUBLISH_OUT" && cp "$work"/assets/* "$PUBLISH_OUT/" && { [ -z "$pre" ] || : > "$PUBLISH_OUT/prerelease"; }
-    echo "publish-release: $tag packed and checked into $PUBLISH_OUT; nothing was published"
-    exit 0
-  fi
+if [ -n "${PUBLISH_ASSETS:-}" ]; then
+  echo "publish-release: a rehearsal of $tag from $ref, packed and checked; nothing was published:"
+  ls -l "$work/assets"
+  exit 0
 fi
 
 # Every image must pull without a login: a release whose images don't is not published.
@@ -81,5 +68,14 @@ while read -r img; do
 done < "$work/assets/images.txt"
 [ -z "$private" ] || fail "these images don't pull without a login; on each page, Danger Zone > Change visibility > Public, then run this again:$private"
 
-gh release create "$tag" "$work"/assets/* -R "$dst" --title "canyon $tag" $pre \
-  --notes "Canyon $tag, open source under the AGPL-3.0, with its CLI and contracts under Apache-2.0 (LICENSE in every archive). Install the CLI as the README says. images.txt names the images by digest, canyon-chart.tgz is the Helm chart, canyon-deploy.tar.gz holds the laptop demo, the team setup on one Docker server (deploy/docker/team.yml) and the Kubernetes install base (deploy/k8s), its SHA-256 in SHA256SUMS, and opengrep-1.30.0-source.tar.gz is the complete source of the Opengrep inside canyon-opengrep (LGPL-2.1). Release notes: https://github.com/$src/releases/tag/$tag"
+cat > "$work/notes.md" <<NOTES
+Canyon $tag, open source under the AGPL-3.0, with its CLI and contracts under Apache-2.0 (LICENSE in every archive). Install the CLI as the README says. images.txt names the images by digest, canyon-chart.tgz is the Helm chart, canyon-deploy.tar.gz holds the laptop demo, the team setup on one Docker server (deploy/docker/team.yml) and the Kubernetes install base (deploy/k8s), its SHA-256 in SHA256SUMS, and opengrep-1.30.0-source.tar.gz is the complete source of the Opengrep inside canyon-opengrep (LGPL-2.1). Release notes: https://github.com/$src/releases/tag/$tag
+NOTES
+
+if [ -n "${PUBLISH_OUT:-}" ]; then
+  mkdir -p "$PUBLISH_OUT/assets" && cp "$work"/assets/* "$PUBLISH_OUT/assets/" && cp "$work/notes.md" "$PUBLISH_OUT/notes.md"
+  [ -z "$pre" ] || : > "$PUBLISH_OUT/prerelease"
+  echo "publish-release: $tag packed and checked into $PUBLISH_OUT; nothing was published"
+  exit 0
+fi
+gh release create "$tag" "$work"/assets/* -R "$dst" --title "canyon $tag" $pre --notes-file "$work/notes.md"

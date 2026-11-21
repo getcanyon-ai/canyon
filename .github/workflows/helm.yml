@@ -5,7 +5,6 @@ name: Helm
 # release before (#2778). It runs only when the chart, the base it is ported from, or what packs it changes.
 on:
   pull_request:
-    paths: ['deploy/helm/**', 'deploy/k8s/**', 'scripts/chart-package.sh', 'scripts/release-archives-check.sh', '.github/workflows/helm.yml', '.github/kind/chart.sh', '.github/fetch.sh', 'docs/src/content/docs/self-host/backup-and-upgrade.md']
   push:
     branches: [main]
     paths: ['deploy/helm/**', 'deploy/k8s/**', 'scripts/chart-package.sh', 'scripts/release-archives-check.sh', '.github/workflows/helm.yml', '.github/kind/chart.sh', '.github/fetch.sh', 'docs/src/content/docs/self-host/backup-and-upgrade.md']
@@ -18,7 +17,21 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      helm: ${{ steps.reach.outputs.helm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh helm
+
   chart:
+    needs: paths
+    if: needs.paths.outputs.helm == 'true'
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 5
     steps:
@@ -191,7 +204,8 @@ jobs:
           grep -F "NetworkPolicy canyon-apps-signin rendered" <<<"$out" || { echo "failed for another reason: $out"; exit 1; }
 
   install:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.helm == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     name: the chart on kind, its bundled parts running, and the upgrade from the release before (#2778)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as the chart job's
     timeout-minutes: 60

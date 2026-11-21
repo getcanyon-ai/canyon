@@ -7,17 +7,6 @@ name: build-arch
 
 on:
   pull_request:
-    paths:
-      - 'executor/kube/build.go'
-      - 'executor/kube/objects.go'
-      - 'executor/kube/run.go'
-      - 'executor/kube/build_kind_test.go'
-      - 'deploy/k8s/builds.yaml'
-      - 'executor/build.Dockerfile'
-      - 'executor/run.Dockerfile'
-      - '.github/kind/up.sh'
-      - '.github/kind/build-arch.sh'
-      - '.github/workflows/build-arch.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,8 +17,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  paths: # which of this workflow's suites the pull request's change reaches (.github/suites): every suite on any other event
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
+    timeout-minutes: 5
+    outputs:
+      build-arch: ${{ steps.reach.outputs.build-arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base, which reach.sh diffs
+      - id: reach
+        run: .github/suites/reach.sh build-arch
+
   kind:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    needs: paths
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.build-arch == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     strategy:
       fail-fast: false
       matrix:

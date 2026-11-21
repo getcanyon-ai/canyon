@@ -34,7 +34,8 @@ it in first, as [Try it on your laptop](/start/try-it-on-your-laptop/#deploy-an-
      · Cursor, GitHub Copilot's agent, and other agents that read AGENTS.md:
          canyon skill install --harness agents-md      appends to ./AGENTS.md
 
-     Your agent can now deploy. Try asking it:
+     Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.
+     Then try asking it:
        "deploy this app"
    ```
 
@@ -156,7 +157,8 @@ canyon skill install --harness agents-md
 
   ✓ AGENTS.md      ./AGENTS.md                               written
 
-  Your agent can now deploy. Try asking it:
+  Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.
+  Then try asking it:
     "deploy this app"
 ```
 

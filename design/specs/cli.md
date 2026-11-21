@@ -3999,7 +3999,9 @@ names no number of minutes, for itself or a chapter: it says it takes minutes.
    is not online, which the agent says once. Done when a review of the app ended blocked and preview runs the app.
 2. **Security: your agent writes a flaw.** The visitor asks for search by policy number, and the tour plants the
    quick way: the SQL is built from the request. `canyon deploy` is blocked on `sql.string-concat`. The agent asks who
-   fixes it. The chapter's text carries the one-line fix it knows passes, so the chapter is one round. Done when a
+   fixes it, then reads the org's playbook on how its claims apps are written, `claims-portal-conventions`, which the
+   demo saves at its start (`canyon_playbook`, or `canyon playbook`), and says it names the same fix
+   (**amended 2026-11-21**, design/specs/mcp.md §11). The chapter's text carries the one-line fix it knows passes, so the chapter is one round. Done when a
    review of the app ended blocked since the plant and preview runs a newer package than the one the change was
    planted over.
 3. **Production: the company's rules decide.** `canyon_status` shows what production needs, the visitor asks for

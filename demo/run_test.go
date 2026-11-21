@@ -1,25 +1,28 @@
 package demo
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // runDemo runs apps/run.sh, the demo-apps image's entrypoint, beside the sample apps it deploys, with a canyon on
 // PATH whose fleet and login answer and whose deploy runs deploy, a shell command, and a curl that keeps its
-// arguments and exits curlExit. It answers what run.sh printed, how it exited, and what it sent with curl.
-func runDemo(t *testing.T, deploy string, curlExit int) (string, int, string) {
+// arguments, prints status where it is asked for one, and exits curlExit. It answers what run.sh printed, how it
+// exited, and what it sent with curl.
+func runDemo(t *testing.T, deploy string, curlExit int, status string) (string, int, string) {
 	t.Helper()
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "canyon"), []byte("#!/bin/sh\ncase \"$1\" in fleet|login) exit 0;; esac\n"+deploy+"\n"), 0o700); err != nil { //nolint:gosec // a test fake must be executable
 		t.Fatal(err)
 	}
 	sent := filepath.Join(bin, "sent")
-	if err := os.WriteFile(filepath.Join(bin, "curl"), []byte(fmt.Sprintf("#!/bin/sh\necho \"$*\" >>%s\nexit %d\n", sent, curlExit)), 0o700); err != nil { //nolint:gosec // a test fake must be executable
+	if err := os.WriteFile(filepath.Join(bin, "curl"), []byte(fmt.Sprintf("#!/bin/sh\necho \"$*\" >>%s\ncase \"$*\" in *http_code*) printf %s;; esac\nexit %d\n", sent, status, curlExit)), 0o700); err != nil { //nolint:gosec // a test fake must be executable
 		t.Fatal(err)
 	}
 	cmd := exec.Command("sh", filepath.Join("apps", "run.sh")) //nolint:gosec // the demo's own script, from this tree
@@ -61,7 +64,7 @@ func TestAFailedDeploySaysHowToCarryOn(t *testing.T) {
 		"the design system cannot be set": {blocks, building + running +
 			"The demo's design system could not be set: PUT /api/v1/preferences failed.\n" + carryOn, 1, 22},
 	} {
-		if out, code, _ := runDemo(t, c.deploy, c.curl); out != c.out || code != c.code {
+		if out, code, _ := runDemo(t, c.deploy, c.curl, "404"); out != c.out || code != c.code {
 			t.Errorf("%s: exit %d, want %d, and run.sh printed\n%s\nwant\n%s", name, code, c.code, out, c.out)
 		}
 	}
@@ -70,9 +73,33 @@ func TestAFailedDeploySaysHowToCarryOn(t *testing.T) {
 // Once the sample apps run, the demo's company picks Canyon as its design system, as the dashboard does, and
 // leaves its rule Advisory: the tour's first chapter has the visitor make it Blocking (cli.md §6.14.1).
 func TestTheDemoStartsWithCanyonAsItsDesignSystem(t *testing.T) {
-	_, code, sent := runDemo(t, `case "$PWD" in */claims-portal-next) exit 2;; esac`, 0)
-	want := "-fsS -o /dev/null -X PUT -H Content-Type: application/json -d {\"design_system_id\":\"ds_0002\"} http://localhost:7777/api/v1/preferences\n"
+	_, code, sent := runDemo(t, `case "$PWD" in */claims-portal-next) exit 2;; esac`, 0, "200")
+	want := "-fsS -o /dev/null -X PUT -H Content-Type: application/json -d {\"design_system_id\":\"ds_0002\"} http://localhost:7777/api/v1/preferences\n" +
+		"-sS -o /dev/null -w %{http_code} http://localhost:7777/api/v1/playbooks/claims-portal-conventions\n"
 	if code != 0 || sent != want {
 		t.Errorf("exit %d, and run.sh sent\n%s\nwant\n%s", code, sent, want)
+	}
+}
+
+// Once the sample apps run, the demo's org has one playbook, the one the tour's security chapter has the agent read
+// (design/specs/mcp.md §11): saved where the demo has none, left as it is where a start before saved it, and a read
+// that fails stops the start, saying how to carry on.
+func TestTheDemoSavesItsPlaybookOnce(t *testing.T) {
+	blocks := `case "$PWD" in */claims-portal-next) exit 2;; esac`
+	const save = "-fsS -o /dev/null -X PUT -H Content-Type: application/json --data-binary @apps/claims-portal-conventions.json http://localhost:7777/api/v1/playbooks/claims-portal-conventions\n"
+	_, code, sent := runDemo(t, blocks, 0, "404")
+	if code != 0 || !strings.HasSuffix(sent, save) {
+		t.Errorf("a demo with no playbook: exit %d, and run.sh sent\n%s", code, sent)
+	}
+	out, code, sent := runDemo(t, blocks, 0, "500")
+	if code != 1 || strings.Contains(sent, "-X PUT -H Content-Type: application/json --data-binary") ||
+		!strings.HasSuffix(out, "The demo's playbook could not be read: GET /api/v1/playbooks/claims-portal-conventions failed.\n"+carryOn) {
+		t.Errorf("a read that fails: exit %d, run.sh printed\n%s\nand sent\n%s", code, out, sent)
+	}
+	var doc struct{ Name, Kind, When, Body string }
+	raw, err := os.ReadFile(filepath.Join("apps", "claims-portal-conventions.json"))
+	if err != nil || json.Unmarshal(raw, &doc) != nil || doc.Kind != "skill" || doc.Name == "" || doc.When == "" ||
+		!strings.Contains(doc.Body, `db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy)`) {
+		t.Errorf("the playbook the demo saves: %v %+v", err, doc)
 	}
 }

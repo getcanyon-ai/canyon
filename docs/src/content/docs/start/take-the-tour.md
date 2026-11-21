@@ -189,8 +189,9 @@ exit code: 2
 
 Preview still runs the version from chapter 1: a blocked deploy replaces nothing.
 
-**The agent fixes the line.** It asks whether you want to fix it yourself. Either way it's one line,
-the policy number as a bound parameter:
+**The agent fixes the line.** It asks whether you want to fix it yourself. First it reads your org's
+[playbook](/org/playbooks/) on how its claims apps are written, which the demo comes with, and which
+names the same fix. Either way it's one line, the policy number as a bound parameter:
 
 ```js
 const rows = db.prepare("SELECT * FROM claims WHERE policy_number = ?").all(req.query.policy);

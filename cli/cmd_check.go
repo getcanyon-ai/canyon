@@ -378,9 +378,16 @@ func (a *app) lacked(e *notOnHost) int {
 		a.printf("env: %s\n", cell(env))
 	}
 	a.printf("host: %s\noutcome: %s\n\n", cell(e.host), cell(outcome))
-	if prod {
+	switch {
+	case a.remote && prod: // on /mcp: no canyon.toml, no host to change
+		a.printf("NEXT STEPS:\n1. Tell the user the outcome line.\n2. Stop.\n")
+	case a.remote:
+		a.printf("NEXT STEPS:\n1. Tell the user the outcome line, and ask whether %s is new on this Canyon.\n"+
+			"2. Only if the user says it is, call canyon_create_app with its repository, then deploy it with canyon_deploy_ref.\n"+
+			"3. Do not make an app unless the user says this one is new on this Canyon.\n", cell(e.app))
+	case prod:
 		a.printf("NEXT STEPS:\n1. Tell the user the outcome line.\n2. Stop. Do not edit canyon.toml, add --host or set CANYON_HOST to get past this.\n")
-	} else {
+	default:
 		a.printf("NEXT STEPS:\n1. Tell the user the outcome line, and ask whether %s is new on this Canyon.\n"+
 			"2. Only if the user says it is, run: canyon deploy --create\n"+
 			"3. Do not add --create unless the user says this app is new on this Canyon, and do not edit canyon.toml, add --host or set CANYON_HOST to get past this.\n", cell(e.app))

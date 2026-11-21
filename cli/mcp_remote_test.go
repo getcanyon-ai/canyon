@@ -440,6 +440,10 @@ func TestMCPRemoteStepsNameTheSecretLink(t *testing.T) {
 	}
 }
 
+// misworded is what a rewrite of a CLI step leaves that no tool step says: a flag after a tool, a terminal, a host after
+// connecting again.
+var misworded = regexp.MustCompile(`canyon_[a-z_]+ --[a-z]|in a terminal|again https?://`)
+
 // cliCommand is a CLI command in an agent's text: what no step on /mcp may name, where no terminal is in reach.
 var cliCommand = regexp.MustCompile(`\bcanyon (check|deploy|status|logs|secret|login|logout|share|undeploy|pull|playbook|manifest|delete|rename)\b`)
 
@@ -455,8 +459,64 @@ func TestMCPRemoteBlocksNameToolsNeverCommands(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if said := remoteSaid(string(raw)); cliCommand.MatchString(said) {
-			t.Errorf("%s on /mcp still names %q:\n%s", f, cliCommand.FindAllString(said, -1), said)
+		said := remoteSaid(string(raw))
+		var outside strings.Builder // the app's fenced lines are its own, and pass as they are
+		var fence fenceState
+		for _, line := range strings.SplitAfter(said, "\n") {
+			if !fence.inside(line) {
+				outside.WriteString(line)
+			}
+		}
+		if cliCommand.MatchString(outside.String()) || misworded.MatchString(outside.String()) {
+			t.Errorf("%s on /mcp still names %q, or says %q:\n%s", f, cliCommand.FindAllString(outside.String(), -1), misworded.FindAllString(outside.String(), -1), said)
+		}
+	}
+}
+
+// The steps the phrase table can't word are worded for /mcp where they're written: an app not on this Canyon is made
+// with canyon_create_app, an ended sign-in is reconnected in the agent's settings, a silent failure's log is
+// canyon_logs; and the app's own fenced lines pass through as the app wrote them, CLI words and all.
+func TestMCPRemoteWordsItsOwnSteps(t *testing.T) {
+	var out, errs strings.Builder
+	a := aiApp(&out, "check")
+	a.err, a.remote = &errs, true
+	a.lacked(&notOnHost{app: "claims-portal", host: remoteBase})
+	if text := out.String(); !strings.Contains(text, "call canyon_create_app with its repository") || cliCommand.MatchString(text) || strings.Contains(text, "--create") {
+		t.Errorf("an app not on this Canyon, on /mcp:\n%s", text)
+	}
+	out.Reset()
+	a.fail(&SessionExpired{Host: remoteBase, Sent: true})
+	if text := errs.String(); !strings.Contains(text, "Connect Canyon again in your agent's MCP settings") || cliCommand.MatchString(text) {
+		t.Errorf("an ended sign-in, on /mcp:\n%s", text)
+	}
+	for _, steps := range []string{fmt.Sprintf(aiBuildQuietSteps, a.seeTheLog("the log")), fmt.Sprintf(aiStartQuietSteps, a.seeTheLog("its log"), a.secretSet("canyon secret set", ""))} {
+		if !strings.Contains(steps, "call canyon_logs") || strings.Contains(steps, "in a terminal") {
+			t.Errorf("a silent failure, on /mcp:\n%s", steps)
+		}
+	}
+	fenced := "Run: canyon deploy\n```\nnpm ERR! try: canyon deploy --force in a terminal\n```\n"
+	if got := remoteSaid(fenced); got != "Call canyon_deploy_ref\n```\nnpm ERR! try: canyon deploy --force in a terminal\n```\n" {
+		t.Errorf("the app's fenced lines were reworded:\n%s", got)
+	}
+}
+
+// /mcp's instructions and every tool's description name only the tools it serves, and no CLI command.
+func TestMCPRemoteInstructionsNameItsOwnTools(t *testing.T) {
+	h := &mcpHost{}
+	cs := remoteConnect(t, h.serve(t), wallClock, nil)
+	said := []string{cs.InitializeResult().Instructions}
+	listed, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range listed.Tools {
+		raw, _ := json.Marshal(tool)
+		said = append(said, string(raw))
+	}
+	notServed := regexp.MustCompile(`\bcanyon_(check|deploy)\b`) // canyon mcp's directory tools
+	for _, text := range said {
+		if cliCommand.MatchString(text) || notServed.MatchString(text) || strings.Contains(text, "canyon CLI") {
+			t.Errorf("on /mcp: %q, %q in:\n%s", cliCommand.FindAllString(text, -1), notServed.FindAllString(text, -1), text)
 		}
 	}
 }

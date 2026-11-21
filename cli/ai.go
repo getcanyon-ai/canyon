@@ -86,10 +86,10 @@ const (
 		"1. Fix why the app stopped (the lines above), or set a value it needs with %s.\n" +
 		"2. Run: canyon deploy\n"
 	aiBuildQuietSteps = "NEXT STEPS:\n" +
-		"1. The build failed without output: run canyon deploy again in a terminal to see the log, then fix it.\n" +
+		"1. The build failed without output: %s, then fix it.\n" +
 		"2. Run: canyon deploy\n"
 	aiStartQuietSteps = "NEXT STEPS:\n" +
-		"1. The app stopped without output: run canyon deploy again in a terminal to see its log, then fix it, or set a value it needs with %s.\n" +
+		"1. The app stopped without output: %s, then fix it, or set a value it needs with %s.\n" +
 		"2. Run: canyon deploy\n"
 	aiAgainSteps = "NEXT STEPS:\n" +
 		"1. Run the same command again.\n"
@@ -373,14 +373,14 @@ func (a *app) aiFailed(run checkRun) int {
 	case reason == "detect":
 		steps = aiDetectSteps(run.Result.Errored, len(run.NotPacked) > 0)
 	case reason == "build" && quiet:
-		steps = aiBuildQuietSteps
+		steps = fmt.Sprintf(aiBuildQuietSteps, a.seeTheLog("the log"))
 	case reason == "build":
 		steps = aiBuildSteps
 		if dep, ok := pinned(last); ok {
 			steps = "NEXT STEPS:\n1. The app pins " + cmp.Or(dep, "a version") + " that this build doesn't offer; the line above lists the ones it does. Change the pin to one of them. This is not a policy block.\n2. Run: canyon deploy\n"
 		}
 	case reason == "start" && quiet:
-		steps = fmt.Sprintf(aiStartQuietSteps, a.secretSet("canyon secret set", ""))
+		steps = fmt.Sprintf(aiStartQuietSteps, a.seeTheLog("its log"), a.secretSet("canyon secret set", ""))
 	case reason == "start":
 		steps = fmt.Sprintf(aiStartSteps, a.secretSet("canyon secret set", ""))
 	case reason == "no_room":

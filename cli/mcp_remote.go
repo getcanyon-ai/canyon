@@ -32,9 +32,9 @@ func RemoteServer(ctx context.Context, rt http.RoundTripper, base, version strin
 func remoteServer(ctx context.Context, rt http.RoundTripper, base, version string, clk clock) *mcp.Server {
 	a := remoteApp(ctx, remoteClient(base, rt))
 	a.clock = clk
-	instructions := mcptools.Preamble
+	instructions := mcptools.RemotePreamble
 	if m, _, err := a.sub(ctx, "").readManifest(ctx, "", hookWithin); err == nil { // the org's rules: no directory names an app here
-		instructions += "\n\n" + agentManifest(m, false)
+		instructions += "\n\n" + remoteSaid(agentManifest(m, false)) // a rule's how-to is the org's words, and may name the CLI
 	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "canyon", Title: "Canyon", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	for _, t := range append(mcptools.Tools(), mcptools.RemoteOnly()...) {
@@ -271,7 +271,19 @@ const secretLinkLine = "Give the user this link: %s\nIt opens the app's Secrets 
 
 // remoteSaid is what a block the CLI wrote for an agent says on /mcp: each CLI command named as the tool that does it
 // there, so a remote agent, with no terminal, is never sent to one. The CLI's own text is untouched.
-func remoteSaid(text string) string { return remoteWords.Replace(text) }
+// The app's own lines, fenced, pass as they are: what an app wrote is data (fence.go), never Canyon's to reword.
+func remoteSaid(text string) string {
+	var b strings.Builder
+	var fence fenceState
+	for _, line := range strings.SplitAfter(text, "\n") {
+		if fence.inside(line) {
+			b.WriteString(line)
+			continue
+		}
+		b.WriteString(remoteWords.Replace(line))
+	}
+	return b.String()
+}
 
 // remoteWords names each CLI command an agent's block may carry as /mcp's tool for it. A command a block gains that
 // has no entry here fails TestMCPRemoteBlocksNameToolsNeverCommands over the goldens.
@@ -282,6 +294,7 @@ var remoteWords = func() *strings.Replacer {
 		{"canyon deploy --env prod --version ", "canyon_promote with version "},
 		{"canyon deploy --env prod --yes", "canyon_promote with confirm"},
 		{"canyon deploy --env prod", "canyon_promote"},
+		{"canyon deploy --create", "canyon_create_app with its repository"},
 		{"canyon deploy", "canyon_deploy_ref"},
 		{"canyon check", "canyon_check_ref"},
 		{"canyon status", "canyon_status"},
@@ -295,7 +308,7 @@ var remoteWords = func() *strings.Replacer {
 		{"canyon secret set ", "the link canyon_secret_link gives for "},
 		{"canyon secret set", "the link canyon_secret_link gives"},
 		{"canyon share <email> · canyon share everyone", "on its page in Canyon"},
-		{"canyon login", "connecting Canyon again"},
+		{"canyon login", "connecting Canyon again in your agent's MCP settings"},
 	}
 	flags := []string{" --yes", " and confirm"} // a flag a command above carried, where no command is left to carry it
 	var pairs []string
@@ -320,4 +333,13 @@ func remotely(h mcp.ToolHandler) mcp.ToolHandler {
 		}
 		return res, err
 	}
+}
+
+// seeTheLog is how a step has the agent see what a silent failure logged: the CLI's deploy again in a terminal, or on
+// /mcp, where no terminal is in reach, canyon_logs.
+func (a *app) seeTheLog(what string) string {
+	if a.remote {
+		return "call canyon_logs for the app's preview to see " + what
+	}
+	return "run canyon deploy again in a terminal to see " + what
 }

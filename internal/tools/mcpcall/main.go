@@ -3,8 +3,9 @@
 //
 //	go run ./internal/tools/mcpcall TOOL 'ARGUMENTS-AS-JSON' -- COMMAND [ARGS...]
 //
-// It exits as the CLI verb the tool stands in for: 0, 2 for a verdict that blocked, 3 for a run still going,
-// 1 for a tool error or anything it could not do.
+// It exits as the CLI verb the tool stands in for, read from its text's result line, as the tools send no
+// structuredContent: 0, 2 for a verdict that blocked, 3 for a run still going, 1 for a tool error or anything it
+// could not do.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -45,20 +47,23 @@ func call(args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	result := "" // the --format ai block's result line, `CANYON <VERB> — RESULT: <RESULT>` (design/specs/cli.md §5.2)
 	for _, c := range res.Content {
 		if text, ok := c.(*mcp.TextContent); ok {
 			fmt.Println(text.Text) // a tool's text ends on no newline, and what the check prints next starts a line
+			for line := range strings.Lines(text.Text) {
+				if _, r, ok := strings.Cut(strings.TrimSpace(line), " — RESULT: "); ok && strings.HasPrefix(line, "CANYON ") && result == "" {
+					result = r
+				}
+			}
 		}
 	}
-	var verdict struct{ State string }
-	structured, _ := json.Marshal(res.StructuredContent)
-	_ = json.Unmarshal(structured, &verdict) // a tool with no verdict has no state
 	switch {
 	case res.IsError:
 		return 1, nil
-	case verdict.State == "blocked":
+	case result == "BLOCKED":
 		return 2, nil
-	case verdict.State == "running":
+	case result == "STILL RUNNING":
 		return 3, nil
 	}
 	return 0, nil

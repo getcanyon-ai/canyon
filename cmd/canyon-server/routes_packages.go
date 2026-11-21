@@ -38,6 +38,7 @@ type packageRow struct {
 
 func routesPackages(api *http.ServeMux, a *app) {
 	api.HandleFunc("POST /projects/{id}/packages", a.teamOnly(a.uploadPackage))
+	api.HandleFunc("POST /projects/{id}/packages/from-repository", a.teamOnly(a.packageFromRepository))
 	api.HandleFunc("GET /projects/{id}/packages/current", a.teamOnly(a.pullPackage))
 	api.HandleFunc("GET /projects/{id}/packages", a.teamOnly(a.listPackages))
 	api.HandleFunc("GET /projects/{id}/packages/{pkg}", a.teamOnly(a.packageByID))
@@ -48,7 +49,7 @@ func routesPackages(api *http.ServeMux, a *app) {
 // source — never an identity provider's subject a person reads.
 const packageColumns = `SELECT id, label, tree_hash, commit, source_kind, source_ref,
   COALESCE((SELECT COALESCE(NULLIF(e.actor_display, ''), e.actor_subject) FROM audit_events e
-    WHERE e.project_id = packages.project_id AND e.detail->>'package' = packages.id AND e.action IN ('POST /api/v1/projects/{id}/packages', 'package from github')
+    WHERE e.project_id = packages.project_id AND e.detail->>'package' = packages.id AND e.action IN ('POST /api/v1/projects/{id}/packages', 'package from github', 'POST /api/v1/projects/{id}/packages/from-repository')
     ORDER BY e.ts DESC, e.id DESC LIMIT 1), source_actor), created_at
 FROM packages
 `
@@ -372,7 +373,7 @@ func headPackage(ctx context.Context, q rower, project string) (headPkg, error) 
 	// Actor is whoever's upload made the head current, by display (canyonv2-e69b): the newest upload or push of its tree on the
 	// trail, a person's name rather than an identity provider's subject; the package's first source when the trail names none.
 	err := q.QueryRow(ctx, `SELECT p.id, p.commit, COALESCE((SELECT COALESCE(NULLIF(e.actor_display, ''), e.actor_subject) FROM audit_events e
-		  WHERE e.project_id = p.project_id AND e.detail->>'package' = p.id AND e.action IN ('POST /api/v1/projects/{id}/packages', 'package from github')
+		  WHERE e.project_id = p.project_id AND e.detail->>'package' = p.id AND e.action IN ('POST /api/v1/projects/{id}/packages', 'package from github', 'POST /api/v1/projects/{id}/packages/from-repository')
 		    AND COALESCE(e.detail->>'kind', '') NOT IN ('repo-pr', 'check') -- a pull request's or a check's packaging never makes anything current
 		  ORDER BY e.ts DESC, e.id DESC LIMIT 1), p.source_actor), p.created_at, p.source_kind, p.source_ref
 		FROM packages p JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL

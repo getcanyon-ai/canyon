@@ -102,6 +102,19 @@ type codexEvent struct {
 			Path string `json:"path"`
 			Kind string `json:"kind"`
 		} `json:"changes"`
+		// an mcp_tool_call's: the server and tool, the arguments the model passed, and what the tool answered
+		Server    string          `json:"server"`
+		Tool      string          `json:"tool"`
+		Arguments json.RawMessage `json:"arguments"`
+		Result    *struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
 	} `json:"item"`
 }
 
@@ -126,6 +139,18 @@ func (r *reader) codexLine(n int, line []byte) error {
 			input, _ := json.Marshal(map[string]string{"command": shellScript(it.Command)}) // a map of strings, so the encoder cannot fail // a map of strings, so the encoder cannot fail
 			r.use(n, it.ID, "Bash", input)
 			r.result(n, it.ID, it.AggregatedOutput)
+		case "mcp_tool_call": // named as Claude Code names an MCP tool, so one reader judges both agents' calls
+			r.use(n, it.ID, "mcp__"+it.Server+"__"+it.Tool, it.Arguments)
+			var text strings.Builder
+			if it.Result != nil {
+				for _, c := range it.Result.Content {
+					text.WriteString(c.Text + "\n")
+				}
+			}
+			if it.Error != nil {
+				text.WriteString(it.Error.Message + "\n")
+			}
+			r.result(n, it.ID, text.String())
 		case "file_change":
 			for _, c := range it.Changes { // named as Claude's tools are: a new file is a Write, any other change an Edit
 				tool := "Write: " + c.Path

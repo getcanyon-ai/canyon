@@ -252,7 +252,7 @@ func TestSkillInstallOwnsTheNativeFilesWholeAndReportsEveryRow(t *testing.T) {
 	}
 	must(t, os.WriteFile(skill, []byte("<!-- canyon:skill v:2 hash:0123456789ab -->\nnewer\n"+blockEnd+"\n"), 0o600))
 	out, errOut, code := run(t, env, false, "skill", "install", "--harness", "all")
-	if code != exitError || !strings.Contains(errOut, "format v:2") || !strings.Contains(out, "Cursor") || !strings.Contains(out, "AGENTS.md") || strings.Contains(out, "Your agent can now deploy") {
+	if code != exitError || !strings.Contains(errOut, "format v:2") || !strings.Contains(out, "Cursor") || !strings.Contains(out, "AGENTS.md") || strings.Contains(out, "Then try asking it") {
 		t.Errorf("a refused first target hid the rows after it: exit %d\nstdout %q\nstderr %q", code, out, errOut)
 	}
 	home2, cwd2 := t.TempDir(), t.TempDir()

@@ -32,7 +32,8 @@ canyon skill install --harness agents-md
 
   ✓ AGENTS.md      ./AGENTS.md                               written
 
-  Your agent can now deploy. Try asking it:
+  Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.
+  Then try asking it:
     "deploy this app"
 ```
 

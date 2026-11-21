@@ -186,7 +186,8 @@ func (a *app) skillInstall(args []string) int {
 	if failed {
 		return exitError
 	}
-	a.printf("\n  Your agent can now deploy. Try asking it:\n    \"deploy this app\"\n")
+	// The tools load when the agent starts, and they answer only a signed-in machine (the bed journeys, v0.11.0).
+	a.printf("\n  Canyon's tools load the next time your agent starts; sign this machine in first with canyon login if you haven't.\n  Then try asking it:\n    \"deploy this app\"\n")
 	return exitOK
 }
 

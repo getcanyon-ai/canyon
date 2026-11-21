@@ -89,7 +89,7 @@ export function handed(m: Manifest & { app_additions?: Held[] }, outbound = fals
   for (const state of [...groups.keys()].sort((a, b) => order(a) - order(b))) sections.push([heading(state), ...(groups.get(state) ?? [])]);
   if (own.length > 0) sections.push(["Your org's own rules (written by its admins):", ...own]);
   const books = m.playbooks ?? []; // the org's playbooks, by slug, never a body (cli.md §7.4)
-  if (books.length > 0) sections.push(["Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded.", ...books.map((one) => `- ${one.slug}: ${one.name}. When: ${one.when}`)]);
+  if (books.length > 0) sections.push(["Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook <slug>.", ...books.map((one) => `- ${one.slug}: ${one.name}. When: ${one.when}`)]);
   if (m.component_types.length > 0) sections.push([`Resources an app can declare in canyon.toml: ${m.component_types.join(", ")}`]);
   if (m.stacks.length > 0) sections.push(["Approved stacks:", ...m.stacks.map((one) => `- ${one.language}${one.frameworks.length > 0 ? `: ${one.frameworks.join(", ")}` : ""}`)]);
   const ds = m.design_system;
@@ -97,8 +97,8 @@ export function handed(m: Manifest & { app_additions?: Held[] }, outbound = fals
   if (outbound) sections.push(["Outbound: an app's environment may be under an allowlist, where Canyon refuses calls to any outside service not on it. Only a person on the app's team can allow a new one, in Canyon's dashboard; you cannot. Never try to reach a refused service another way. Canyon also refuses any call out to the internet to an IP address, a one-word host name or a port other than 80 and 443, and no one can allow it: call a host name on 80 or 443."]); // once, where calls go through Canyon: agents never widen it (cli.md §7.4)
   sections.push(["Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there."]); // always said: a value pasted into a chat is in the agent's transcript (cli.md §7.4)
   sections.push([m.prod_approval
-    ? "Production: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, you run canyon deploy --env prod; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself."
-    : "Production: when the user asks for production, you run canyon deploy --env prod (add --yes only when they asked in this conversation). It promotes; nobody else approves it."]); // always said: an agent never guesses
+    ? "Production: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself."
+    : "Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it."]); // always said: an agent never guesses
   return sections.map((one) => one.join("\n")).join("\n\n");
 }
 

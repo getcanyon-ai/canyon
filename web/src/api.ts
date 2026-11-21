@@ -118,7 +118,7 @@ export interface Package { id: string; label?: string; commit: string; source: {
 // name and `detail` is whatever that action recorded — ui/Audit.tsx turns the two into a sentence.
 // How and from where it was done (contracts/routes.md, the audit read): each recorded from the provenance
 // amendment on where it applies; `session` and `source` are answered to admins alone.
-export type Via = "dashboard" | "cli" | "github" | "platform" | "canyon";
+export type Via = "dashboard" | "cli" | "mcp" | "github" | "platform" | "canyon";
 export interface AuditEvent { id: string; ts: string; actor: Actor; action: string; via?: Via; role?: "admin" | "member"; session?: string; source?: string; project?: string; run?: string; detail: Record<string, unknown> }
 export interface AuditPage { events: AuditEvent[]; total: number; page: number | null; next: string | null }
 export interface Secret { name: string; env: "preview" | "prod"; version: number; set_by: Actor; set_at: string; origin: string; where: "runtime" | "build" }
@@ -320,6 +320,17 @@ const grantPath = (code: string) => `/device-grants/${encodeURIComponent(code)}`
 export const getDeviceGrant = (code: string) => call<DeviceGrant>("GET", grantPath(code));
 export const approveDevice = (code: string) => call<void>("POST", `${grantPath(code)}/approve`);
 export const denyDevice = (code: string) => call<void>("POST", `${grantPath(code)}/deny`);
+// An MCP client's consent (contracts/routes.md, Sessions; design/AUTH.md §4.7): the request it waits on, and the
+// redirect the browser follows once the person allows or refuses it.
+export interface OAuthRequest { client: { name: string; host: string; verified: boolean }; redirect_host: string; scopes: ("read" | "act")[]; host: string; requested_at: string; expires_at: string; account: { display: string; email: string } }
+const oauthPath = (id: string) => `/oauth/requests/${encodeURIComponent(id)}`;
+export const getOAuthRequest = (id: string) => call<OAuthRequest>("GET", oauthPath(id));
+export const approveOAuthRequest = (id: string) => call<{ redirect: string }>("POST", `${oauthPath(id)}/approve`);
+export const denyOAuthRequest = (id: string) => call<{ redirect: string }>("POST", `${oauthPath(id)}/deny`);
+// The reader's live sessions, and everyone's to an admin, each by its digest; ending one is a browser's.
+export interface ListedSession { id: string; flow: "browser" | "device" | "demo" | "oauth"; client?: string; created_at: string; last_seen_at: string | null; expires_at: string; current: boolean; person?: { display: string; email: string } }
+export const listSessions = () => call<{ sessions: ListedSession[] }>("GET", "/sessions");
+export const endSession = (id: string) => call<void>("DELETE", `/sessions/${encodeURIComponent(id)}`);
 const approvalPath = (code: string) => `/promotion-approvals/${encodeURIComponent(code)}`;
 export const getPromotionApproval = (code: string) => call<PromotionApproval>("GET", approvalPath(code));
 // What the image an environment runs holds of Canyon's (contracts/routes.md, the image read), as far as a page reads it:
@@ -545,6 +556,7 @@ export const getGitHubRepositories = () => call<{ repositories: GitHubRepository
 export const importRepository = (repo: number, folder: string, name?: string) =>
   call<{ project: App }>("POST", `/github/repositories/${repo}/import`, name === undefined ? { folder } : { folder, name });
 export const linkRepository = (app: string, repo: number, folder: string) => call<{ repository: RepoLink }>("PUT", `/projects/${encodeURIComponent(app)}/repository`, { repo_id: repo, folder });
+export const linkRepositoryByName = (app: string, fullName: string, folder: string) => call<{ repository: RepoLink }>("PUT", `/projects/${encodeURIComponent(app)}/repository`, { full_name: fullName, folder });
 export const unlinkRepository = (app: string) => call<void>("DELETE", `/projects/${encodeURIComponent(app)}/repository`, undefined, true);
 export const getFrontDoor = () => call<FrontDoorRead>("GET", "/front-door");
 // GET /scanners/data (contracts/routes.md; #2743): how old each vulnerability database is, an admin's read.

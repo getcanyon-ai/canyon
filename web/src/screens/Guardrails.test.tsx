@@ -500,7 +500,7 @@ describe("the guardrails screen", () => {
     await loaded();
     // The fixture as §7.4 renders it for an agent, cli/testdata/manifest-agent.txt without its last
     // newline: tokens as characters over four. Recorded, not recomputed: a wrong count is meant to fail here.
-    expect(skill().getByText("49 lines · ~683 tokens")).toBeDefined();
+    expect(skill().getByText("49 lines · ~707 tokens")).toBeDefined();
     // Where production is promoted is always said, so an agent never guesses whether a person approves it.
     expect(skill().getByText("Promoted from the CLI or the dashboard")).toBeDefined();
     expect(skill().queryByRole("status")).toBeNull();
@@ -522,7 +522,7 @@ describe("the guardrails screen", () => {
       cleanup();
       server({ ...reads, [`GET ${EGRESS}`]: egress });
       await loaded();
-      expect(skill().getByText("47 lines · ~574 tokens")).toBeDefined(); // the fixture's text without the line
+      expect(skill().getByText("47 lines · ~599 tokens")).toBeDefined(); // the fixture's text without the line
     }
   });
 

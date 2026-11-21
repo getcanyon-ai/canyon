@@ -90,12 +90,17 @@ never from the CLI, so a coding agent can't do them.
 | Rename it | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
 | Delete it | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
 | Turn auto-deploy from GitHub on or off | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
+| Link it to a repository, or unlink it | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
 | Make a rule stricter for this app alone | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ |
 
 - **A member with no access** sees only the app's name, owners and description in the list.
 - **Read-only** people also see the app's live addresses, and whether each runs. They open the app
   with the app roles it was shared with.
 - **A responder** sees only what approving and stopping need ([below](#what-a-responder-sees)).
+- **Linking a repository** below admin needs your own GitHub account, linked in Canyon, to be able to
+  read that repository on GitHub. Making a version from one of its branches or tags asks GitHub
+  again each time, for everyone, admins too. Canyon's GitHub App usually sees every repository in your
+  organization, and this keeps anyone from reading code through Canyon that GitHub wouldn't show them.
 - A refusal says whom to ask: the app's first owner, else a member of the group that owns it, else
   an admin.
 
@@ -193,7 +198,8 @@ otherwise:
 - Change the approved stacks.
 - Write, restore or remove a playbook. Only a person, and only in the dashboard. Every member can
   read the playbooks.
-- Connect GitHub, import a repository, link an app to a repository or unlink it.
+- Connect GitHub and import a repository. Linking an app to a repository is its contributors' too
+  (above).
 - Change who may sign in and who is an admin, and sign someone out everywhere.
 - Change how people reach apps (the front door) and the platform webhook.
 - Turn production approval on or off. Dashboard only.

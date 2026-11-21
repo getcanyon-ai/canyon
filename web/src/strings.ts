@@ -71,6 +71,8 @@ export const S = {
   lastLinesUnread: "Canyon couldn't read the app's last lines. canyon logs --env <env> shows them.",
   signInForCli: "Sign in to approve the Canyon CLI",
   signInForCliLine: "Then you'll come back here to approve the code from your terminal.",
+  signInForAgent: "Sign in to connect an agent to Canyon",
+  signInForAgentLine: "Then you'll come back here to allow it.",
   // The mark beside an app nobody has reviewed: the fleet row and the owner card carry it.
   neverReviewedMark: "Never reviewed",
   provenance: "<version> · passed review",
@@ -256,6 +258,13 @@ export const S = {
   githubImportNote: "Making an app links it and reviews the default branch's newest commit. Nothing is deployed. The app arrives with no owner, and an admin assigns one.",
   githubUnanswered: "GitHub didn't answer for <org>, so its repositories aren't listed. Try again in a minute.",
   sourceKept: "Kept in Canyon only",
+  // Linking the app to a repository from its page, for its contributors (design/PERMISSIONS.md, linking a repository; #1917).
+  sourceLink: "Link a repository",
+  sourceLinkName: "Repository",
+  sourceLinkFolder: "Folder, if the app is one folder of it",
+  sourceLinkNote: "Your own GitHub account must be able to read it.",
+  sourceLinkYes: "Link",
+  sourceLinkEmpty: "Type the repository as owner/name.",
   // Kept in GitHub (#1926), and handing it to developers (#1938).
   sourceKeptBy: "Kept by Canyon in",
   sourcePending: "Kept by Canyon in GitHub · the repository isn't made yet",
@@ -772,6 +781,47 @@ export const AUTH = {
   deviceDeniedLine: "Nothing was handed over. If you didn't start this, tell your Canyon admin.",
 } as const;
 
+// An MCP client's consent page (design/AUTH.md §4.7; design/EXPERIENCE.md, D5).
+export const CONSENT = {
+  title: "Allow <client> to use Canyon as you?",
+  line: "<client> will act as <display> (<email>) on <host>. Then Canyon sends you back to <redirect host>.",
+  unverified: "Canyon can't verify this name: the app chose it itself.",
+  onlyYours: "Only allow a connection you started yourself.",
+  scope: {
+    read: "See your org's rules, and the apps you can see: their status, and logs where you're a contributor",
+    act: "Check, deploy and promote the apps you contribute to",
+  },
+  only: "It can do only what you can. It can't approve findings, change settings or sharing, or see secret values.",
+  allow: "Allow",
+  refuse: "Don't allow",
+  expired: "This request has expired. Go back to <client> and connect again.",
+  expiredNoClient: "This request has expired. Go back to the app and connect again.",
+  invalid: "This connection request isn't valid: <reason>. Go back to the app that sent you here.",
+  reason: {
+    client: "its client isn't registered",
+    redirect: "it names a redirect the client didn't register",
+    response: "it doesn't ask for a sign-in code",
+    pkce: "it's missing the PKCE check Canyon requires",
+    resource: "it isn't for this Canyon's MCP server",
+    scope: "it asks for access Canyon doesn't grant",
+    state: "its state value is too long",
+  },
+} as const;
+
+// Settings › People & sign-in, the sessions list.
+export const SESSIONS = {
+  title: "Sessions",
+  line: "Where you're signed in. Admins see everyone's.",
+  person: "Person",
+  how: "How",
+  since: "Since",
+  lastUsed: "Last used",
+  expires: "Expires",
+  flow: { browser: "Browser", device: "CLI", demo: "Browser", oauth: "<client> (MCP)" },
+  current: "This session",
+  disconnect: "Disconnect",
+} as const;
+
 // The production approval screen (design/specs/screens.md, "The production approval screen") and the
 // switch on Settings › People & sign-in that turns it on (design/AUTH.md §4.5).
 export const APPROVAL = {
@@ -1075,6 +1125,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "gate run from github": "started a review of <version> from GitHub",
   "github app registered": "registered the GitHub App",
   "POST /api/v1/projects/{id}/packages": "uploaded <version>",
+  "POST /api/v1/projects/{id}/packages/from-repository": "packaged <version> from GitHub",
   "POST /api/v1/projects/{id}/gate-runs": "started a review of <version>",
   "POST /api/v1/projects/{id}/deploys": "started a deploy of <version>",
   "POST /api/v1/projects/{id}/promotions": "started a promotion of <version>",

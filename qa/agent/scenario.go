@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
+
+// playbookSlug is a playbook's slug as design/specs/mcp.md §3.1 bounds it.
+var playbookSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
 // placeholders stand for the user's leaked key ({{FAKE_KEY}}) and the rotated one they paste in
 // chat ({{NEW_KEY}}): the runner swaps in keys built at run time, so no key is ever committed.
@@ -35,8 +40,19 @@ type scenario struct {
 	// DBProd is a db prod: line, the host's db_prod the scenario needs: an admin sets it from a browser, never the
 	// runner, so the runner checks it before the app is made and refuses a host set otherwise.
 	DBProd string
-	Seed   []seedFile
-	Turns  []userTurn
+	// MCP is a via: mcp line: the agent reaches Canyon through the tools canyon mcp serves, which skill install wrote
+	// into the agent's MCP config; the runner checks that config before turn 1 and the scorecard says which way each
+	// Canyon call went. MCPState is an expect mcp: line, what Claude's session init must say of the canyon server.
+	MCP      bool
+	MCPState string
+	// PromoteFrom is a promote from turn: line, the first turn that asked for production: a promotion in an earlier
+	// turn is the agent's own, and fails the scenario. -1 is never: no turn asks for it.
+	PromoteFrom int
+	// Playbook is a playbook: line, the slug of an org playbook a custom rule points at: the runner checks it exists
+	// before turn 1, and the scorecard says whether the agent read it and whether the session hook synced it as a skill.
+	Playbook string
+	Seed     []seedFile
+	Turns    []userTurn
 }
 
 // egressMode is an app env's outbound mode, allowlist, set as its owner may once the seed is deployed.
@@ -54,6 +70,10 @@ var outboundResults = []string{"REFUSED", "REACHED"}
 // blockKinds are the kinds an expect may name before its RESULT, so it is judged against that kind's blocks alone:
 // expect last: DB QUERY REFUSED db_prod_off.
 var blockKinds = []string{"DB QUERY"}
+
+// noResult is the RESULT of an expect first: none, a scenario whose agent should get no review, promotion or query
+// result at all (it only reads logs, say).
+const noResult = "none"
 
 // expect is a RESULT and the rule ids, failure reason, refusal code or env that must be among what it names; Kind,
 // when it names one, the block's kind.
@@ -173,6 +193,12 @@ func parseScenario(path string) (scenario, error) {
 		return scenario{}, fmt.Errorf("%s: egress: needs deployed: preview, so the env runs before its mode is set", path)
 	case len(s.Next) > 0 && !s.Released:
 		return scenario{}, fmt.Errorf("%s: ## Next release needs deployed: prod, which releases it", path)
+	case s.MCPState != "" && !s.MCP:
+		return scenario{}, fmt.Errorf("%s: expect mcp: needs via: mcp", path)
+	case s.MCPState != "" && s.Agent != agentClaude: // Codex's exec events name no MCP server's state
+		return scenario{}, fmt.Errorf("%s: expect mcp: is read from Claude Code's session init, and this scenario runs %s", path, s.Agent)
+	case s.PromoteFrom > len(s.Turns):
+		return scenario{}, fmt.Errorf("%s: promote from turn: %d, and the scenario has %d turns", path, s.PromoteFrom, len(s.Turns))
 	case s.Prod == "first release" && (!s.Released || len(s.Next) == 0):
 		return scenario{}, fmt.Errorf("%s: expect prod: first release needs deployed: prod and a ## Next release, which production must be told apart from", path)
 	}
@@ -256,6 +282,31 @@ func (s *scenario) header(line string) error {
 			return fmt.Errorf("secret: %q is not <preview|prod> NAME", value)
 		}
 		s.Secrets = append(s.Secrets, seededSecret{Env: fields[0], Name: fields[1]})
+	case "via":
+		if value != "mcp" {
+			return fmt.Errorf("via: %q: the only way a scenario names is mcp", value)
+		}
+		s.MCP = true
+	case "expect mcp":
+		if value != "connected" {
+			return fmt.Errorf("expect mcp: %q: the only state a scenario expects is connected", value)
+		}
+		s.MCPState = value
+	case "promote from turn":
+		if value == "never" {
+			s.PromoteFrom = -1
+			break
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 {
+			return fmt.Errorf("promote from turn: %q is neither a turn number nor never", value)
+		}
+		s.PromoteFrom = n
+	case "playbook":
+		if !playbookSlug.MatchString(value) {
+			return fmt.Errorf("playbook: %q is no playbook slug (1 to 40 of a-z, 0-9 and -, beginning with a letter)", value)
+		}
+		s.Playbook = value
 	case "db prod": // the values of db_prod (contracts/routes.md, GET /api/v1/preferences)
 		if !slices.Contains([]string{"off", "read", "write"}, value) {
 			return fmt.Errorf("db prod: %q is none of off, read and write", value)

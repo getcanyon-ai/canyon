@@ -30,3 +30,6 @@ __pycache__/
 # Coding agents' local settings and browser sessions, never committed
 .claude/
 .playwright-mcp/
+
+# The qa/agent runner as `go build` in its directory leaves it
+/qa/agent/agent

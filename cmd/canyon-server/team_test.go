@@ -525,8 +525,8 @@ var gatedElsewhere = map[string]string{
 	"PUT /projects/{id}/owner":             "claimProject: anyone claims an app nobody owns, else its owners and admins",
 	"DELETE /projects/{id}":                "deleteProject asks ownerRequired itself",
 	"POST /projects/{id}/access-requests":  "a member at level none asks for access: that is the route",
-	"PUT /projects/{id}/repository":        "linkGuard: an admin's, never a level (#1917)",
-	"DELETE /projects/{id}/repository":     "linkGuard: an admin's, never a level (#1917)",
+	"PUT /projects/{id}/repository":        "linkGuard: a contributor's, as teamOnly's, and below admin only a repository their GitHub account reads (#1917)",
+	"DELETE /projects/{id}/repository":     "linkGuard: a contributor's, as teamOnly's, and below admin only a repository their GitHub account reads (#1917)",
 	"POST /projects/{id}/envs/prod/hold":   "hold: a responder's or an admin's, never a level (contracts/routes.md, The hold)",
 	"DELETE /projects/{id}/envs/prod/hold": "lift: a responder off the app's team, or an admin, never a level",
 }

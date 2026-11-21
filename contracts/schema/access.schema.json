@@ -57,7 +57,7 @@
         "id": { "type": "string", "pattern": "^ev_[a-f0-9]{4,}$" }, "ts": { "$ref": "#/definitions/ts" }, "actor": { "$ref": "#/definitions/actor" },
         "action": { "enum": ["share app", "unshare app", "request access", "dismiss access request"] },
         "category": { "const": "governance" },
-        "via": { "enum": ["dashboard", "cli", "github", "platform", "canyon"] }, "role": { "enum": ["admin", "responder", "member"] }, "session": { "type": "string", "pattern": "^ses_[0-9a-f]{16}$" }, "source": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "via": { "enum": ["dashboard", "cli", "mcp", "github", "platform", "canyon"] }, "role": { "enum": ["admin", "responder", "member"] }, "session": { "type": "string", "pattern": "^ses_[0-9a-f]{16}$" }, "source": { "type": "string", "minLength": 1, "maxLength": 64 },
         "project": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "maxLength": 55 },
         "detail": { "type": "object" }
       },

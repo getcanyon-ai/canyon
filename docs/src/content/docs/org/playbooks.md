@@ -77,7 +77,7 @@ Every agent is handed the list at the start of each session, with the rest of Ca
 names each playbook and when to read it, never the body:
 
 ```text
-Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: run canyon playbook <slug>, or call canyon_playbook with its slug where Canyon's tools are loaded.
+Your org's playbooks, how it builds, written by its admins. Before a task, read each one whose when fits it: call canyon_playbook with its slug where Canyon's tools are loaded, or run canyon playbook <slug>.
 - incident-notes: What our incidents taught us. When: Read when you handle a database error or a retry.
 - service-conventions: How Meridian writes a service. When: Read before you add a route or a query to a Meridian service.
 ```

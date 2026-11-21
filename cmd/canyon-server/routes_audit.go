@@ -175,7 +175,7 @@ func (a *app) listAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	via := q.Get("via")
-	if via != "" && !slices.Contains([]string{"dashboard", "cli", "github", "platform", "canyon"}, via) {
+	if via != "" && !slices.Contains([]string{"dashboard", "cli", "mcp", "github", "platform", "canyon"}, via) {
 		writeErr(w, http.StatusBadRequest, "invalid_via", "via is one of dashboard, cli, github, platform, canyon", nil)
 		return
 	}

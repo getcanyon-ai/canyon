@@ -567,11 +567,12 @@ says of every session: `kind = person`, recorded under their name. `dashboard_re
 session, and no cookie route takes it at all: it is bound to `/mcp`.
 
 **Registrations don't pile up.** A registration counts as used when a code issued to it redeems, and each new
-registration deletes those unused a day after they were made and those with no session live or started in 30 days,
-and, per source address, the oldest unused past that source's newest 100, never another source's, never one younger
-than ten minutes and never one a consent waits on, so no source's flood takes anyone else's sign-in from under them;
-registration is bounded per source address, as the sign-in routes are. A code whose registration is gone redeems
-nothing. A client asking for a secret is registered as the public
+registration deletes those unused a day after they were made, unconditionally, and those with no session live or
+started in 30 days. Per source, an IPv4 address or an IPv6 /64, at most 20 are unused: a new one evicts that source's
+oldest, young ones too, but never one whose sign-in a person has approved while its code lives, so a source only ever
+evicts its own. Past 10,000 unused in all, registration is refused and nothing evicted, while registered clients still
+sign in. Registration is bounded per source address, as the sign-in routes are. A code whose registration is gone
+redeems nothing. A client asking for a secret is registered as the public
 client it is, told `none`.
 
 **Revoking.** An admin's revoke-all of a person (`DELETE /api/v1/sessions?subject=`) ends their OAuth sessions with the

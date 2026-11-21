@@ -34,20 +34,23 @@ import (
 // 404.
 
 const (
-	oauthRequestLife = 10 * time.Minute // a consent the person hasn't given yet
-	oauthCodeLife    = time.Minute      // a code the client hasn't redeemed yet
-	oauthAccessLife  = time.Hour        // an access token: a bearer a client keeps on disk, renewed by its refresh token
+	oauthRequestLife = 10 * time.Minute    // a consent the person hasn't given yet
+	oauthCodeLife    = time.Minute         // a code the client hasn't redeemed yet
+	oauthAccessLife  = time.Hour           // an access token: a bearer a client keeps on disk, renewed by its refresh token
 	oauthRefreshLife = 30 * 24 * time.Hour // PLANTED FAULT: not a CLI session's life    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
 	// oauthRetryGrace is how long after a rotation the refresh token it replaced is taken as a retry, an answer the
 	// client never got, and rotated again, rather than taken as a second holder's and the session ended: once, and
 	// only while the pair the rotation issued has served nothing (sessions.rotated_unused)
 	oauthRetryGrace = 10 * time.Second
-	// oauthUnusedPerSource is how many registrations no code has redeemed Canyon holds from one source address: each
-	// new one evicts that source's oldest past it, never another source's, never one younger than oauthRequestLife and
-	// never one an authorization waits on, so one source's flood fills nothing and takes nobody's sign-in from under them
-	oauthUnusedPerSource = 100
-	oauthDocumentMax     = 64 << 10        // a client's metadata document
-	oauthFetchLimit      = 5 * time.Second // and how long its fetch may take
+	// oauthUnusedPerSource is how many registrations no code has redeemed Canyon holds from one source (registrationSource):
+	// each new one evicts that source's oldest past it, young ones too, but for one whose sign-in a person approved, so a
+	// source only ever evicts its own
+	oauthUnusedPerSource = 20
+	// oauthUnusedMost is how many unused registrations Canyon holds in all: past it, a registration is refused and nothing
+	// is evicted across sources, so the most a flood of many sources does is stop new registrations, never a sign-in
+	oauthUnusedMost  = 10000
+	oauthDocumentMax = 64 << 10        // a client's metadata document
+	oauthFetchLimit  = 5 * time.Second // and how long its fetch may take
 )
 
 // oauthScopes are the scopes Canyon grants, in this order everywhere it names them (mcp.md §2.2): read, and act.
@@ -421,17 +424,11 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := "dcr_" + hex.EncodeToString(raw[:])
-	var at time.Time
-	source := a.proxies.source(r)
-	err := a.pool.QueryRow(r.Context(), `WITH gone AS (DELETE FROM oauth_clients c WHERE ((used_at IS NULL AND created_at < now() - interval '1 day')
-			OR (used_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.oauth_client = c.id
-				AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now()))))
-			OR c.id IN (SELECT id FROM (SELECT o.id, row_number() OVER (ORDER BY o.created_at DESC, o.id DESC) AS newest FROM oauth_clients o
-				WHERE o.used_at IS NULL AND (o.source = $4 OR true)) mine WHERE newest >= $5))
-			AND (c.created_at < now() - make_interval(secs => $6) OR true)
-			AND (NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND (q.expires_at > now() OR q.code_expires_at > now())) OR true))
-		INSERT INTO oauth_clients (id, name, redirect_uris, source) VALUES ($1, $2, $3, $4) RETURNING created_at`,
-		id, body.ClientName, body.RedirectURIs, source, oauthUnusedPerSource, oauthRequestLife.Seconds()).Scan(&at) // this source's newest unused, less one: room for this one
+	at, full, err := a.registerClient(r.Context(), id, body.ClientName, body.RedirectURIs, registrationSource(a.proxies.source(r)))
+	if full {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "temporarily_unavailable", "error_description": "Canyon holds as many unused registrations as it keeps: try again later"})
+		return
+	}
 	if err != nil {
 		a.log.Printf("canyon-server: oauth register: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
@@ -737,4 +734,51 @@ func (a *app) stillMember(ctx context.Context, q querier, email string) (bool, e
 		return false, err
 	}
 	return a.member(email, a.withEnvironment(o)), nil
+}
+
+// registrationSource is the source a registration counts against: an IPv4 address, or an IPv6 address's /64, which one
+// host holds whole, so a flood can't spread itself across its own addresses.
+func registrationSource(addr string) string {
+	ip, err := netip.ParseAddr(addr)
+	if err != nil {
+		return addr
+	}
+	if ip = ip.Unmap(); ip.Is4() {
+		return ip.String()
+	}
+	p, _ := ip.Prefix(64) // a valid IPv6 address always has a /64
+	return p.String()
+}
+
+// registerClient stores a registration from source (design/AUTH.md §4.7): unused registrations a day old go, whatever
+// they are; past oauthUnusedMost in all it stores nothing and evicts nothing (full); otherwise it evicts source's oldest
+// unused past its newest oauthUnusedPerSource-1, but for a client whose authorization a person approved and whose code
+// is still live, and stores this one.
+func (a *app) registerClient(ctx context.Context, id, name string, redirects []string, source string) (at time.Time, full bool, err error) {
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		return at, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM oauth_clients c WHERE (used_at IS NULL AND created_at < now() - interval '1 day')
+		OR (used_at < now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.oauth_client = c.id
+			AND (s.created_at >= now() - interval '30 days' OR (s.revoked_at IS NULL AND s.expires_at > now()))))`); err != nil {
+		return at, false, err
+	}
+	var unused int
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL").Scan(&unused); err != nil {
+		return at, false, err
+	}
+	if unused >= oauthUnusedMost {
+		return at, true, tx.Commit(ctx) // the day-old ones went; nothing else does
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM oauth_clients c WHERE c.id IN (SELECT id FROM (SELECT o.id, row_number() OVER (ORDER BY o.created_at DESC, o.id DESC) AS newest
+			FROM oauth_clients o WHERE o.used_at IS NULL AND o.source = $1) mine WHERE newest >= $2)
+		AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id = c.id AND q.session_id IS NOT NULL AND q.code_expires_at > now())`, source, oauthUnusedPerSource); err != nil {
+		return at, false, err
+	}
+	if err := tx.QueryRow(ctx, "INSERT INTO oauth_clients (id, name, redirect_uris, source) VALUES ($1, $2, $3, $4) RETURNING created_at", id, name, redirects, source).Scan(&at); err != nil {
+		return at, false, err
+	}
+	return at, false, tx.Commit(ctx)
 }

@@ -629,39 +629,71 @@ func TestOAuthFollowUps(t *testing.T) {
 	}
 }
 
-// Unused registrations are capped per source, the registering address, and a registration evicts only its own source's
-// oldest: never another source's, never one younger than ten minutes, never one with an authorization waiting on it. A
-// code whose registration is gone redeems nothing.
+// Unused registrations are capped per source (an IPv4 address, or an IPv6 /64), and a registration evicts only its own
+// source's oldest, young ones too: no flood from one source evicts another's, and only a sign-in a person approved
+// pins a row. Past 10,000 unused in all, registration is refused and nothing is evicted, while registered clients still
+// sign in; and unused registrations a day old go whatever else holds them. A code whose registration is gone redeems
+// nothing.
 func TestOAuthRegistrationsAreCappedPerSource(t *testing.T) {
 	base, pool, ctx, gina := oauthHost(t)
 	const redirect = "https://claude.ai/cb"
-	theirs := register(t, base, redirect) // another source's fresh registration, and one mid-consent
+	theirs := register(t, base, redirect) // another source's
+	pending, approved := register(t, base, redirect), register(t, base, redirect)
 	_, challenge := pkce()
-	waiting := register(t, base, redirect)
-	authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {waiting}, "redirect_uri": {redirect}, "code_challenge": {challenge},
-		"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}})
+	asked := func(id string) string {
+		return requestOf(t, authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {id}, "redirect_uri": {redirect}, "code_challenge": {challenge},
+			"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}))
+	}
+	asked(pending) // waiting on a person: pins nothing
+	if code, _, _ := doWith(t, gina, http.MethodPost, base+"/api/v1/oauth/requests/"+asked(approved)+"/approve", "", fromPage); code != 200 {
+		t.Fatalf("the approval: %d %s", code, lastBody)
+	}
 	for _, q := range []string{
-		"UPDATE oauth_clients SET source = '198.51.100.20'",                                            // the two above are another source's
-		"UPDATE oauth_clients SET created_at = now() - interval '1 hour' WHERE id = '" + waiting + "'", // old, but someone is consenting
-		// the flood, this test client's source: old enough to evict, but for its own newest and youngest
-		"INSERT INTO oauth_clients (id, name, redirect_uris, source, created_at) SELECT 'dcr_' || lpad(to_hex(n), 32, '0'), 'x', ARRAY['https://a.example/cb'], '127.0.0.1', now() - make_interval(secs => 3600 - n) FROM generate_series(1, 150) n",
-		"INSERT INTO oauth_clients (id, name, redirect_uris, source, created_at) VALUES ('dcr_" + strings.Repeat("e", 32) + "', 'x', ARRAY['https://a.example/cb'], '127.0.0.1', now() - interval '1 minute')",
+		"UPDATE oauth_clients SET source = '198.51.100.20' WHERE id = '" + theirs + "'",
+		"UPDATE oauth_clients SET created_at = now() - interval '2 hours' WHERE id IN ('" + pending + "', '" + approved + "')", // this source's oldest
+		// this source's flood, young: younger rows are evicted all the same
+		"INSERT INTO oauth_clients (id, name, redirect_uris, source, created_at) SELECT 'dcr_' || lpad(to_hex(n), 32, '0'), 'x', ARRAY['https://a.example/cb'], '127.0.0.1', now() - make_interval(secs => 60 - n) FROM generate_series(1, 30) n",
 	} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			t.Fatal(err)
 		}
 	}
 	register(t, base, redirect)
-	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL AND source = '127.0.0.1' AND created_at < now() - interval '10 minutes'"); n >= 150 {
-		t.Errorf("the flooding source kept all %d of its old unused registrations", n)
+	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL AND source = '127.0.0.1'"); n != oauthUnusedPerSource+1 {
+		t.Errorf("this source holds %d unused, want its %d and the one a person approved", n, oauthUnusedPerSource)
 	}
-	if n := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE used_at IS NULL AND source = '127.0.0.1'"); n != oauthUnusedPerSource {
-		t.Errorf("the flooding source holds %d unused registrations, want its cap %d", n, oauthUnusedPerSource)
-	}
-	for name, id := range map[string]string{"another source's fresh one": theirs, "one mid-consent": waiting, "the source's own young one": "dcr_" + strings.Repeat("e", 32)} {
-		if countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+id+"'") != 1 {
-			t.Errorf("a flood evicted %s", name)
+	for name, c := range map[string]struct {
+		id   string
+		kept bool
+	}{"another source's": {theirs, true}, "one a person approved": {approved, true}, "one only asked for": {pending, false}} {
+		if kept := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+c.id+"'") == 1; kept != c.kept {
+			t.Errorf("%s registration: kept %v, want %v", name, kept, c.kept)
 		}
+	}
+	// a day old goes, whatever holds it
+	if _, err := pool.Exec(ctx, "UPDATE oauth_clients SET created_at = now() - interval '25 hours' WHERE id = $1", approved); err != nil {
+		t.Fatal(err)
+	}
+	signedIn := register(t, base, redirect) // registered before the flood, its sign-in after
+	if countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+approved+"'") != 0 {
+		t.Error("an unused registration a day old outlived the next registration")
+	}
+	// past the ceiling: refused, nothing evicted across sources, and a registered client still signs in
+	if _, err := pool.Exec(ctx, "INSERT INTO oauth_clients (id, name, redirect_uris, source) SELECT 'dcr_' || lpad(to_hex(n + 4096), 32, '0'), 'x', ARRAY['https://a.example/cb'], 'flood-' || (n % 997) FROM generate_series(1, 10000) n"); err != nil {
+		t.Fatal(err)
+	}
+	before := countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients")
+	if code, body, _ := do(t, client(t), http.MethodPost, base+"/oauth/register", `{"client_name":"x","redirect_uris":["https://a.example/cb"]}`); code != http.StatusTooManyRequests || body["error"] != "temporarily_unavailable" {
+		t.Errorf("a registration past the ceiling: %d %s", code, lastBody)
+	}
+	if countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients") != before || countRows(t, ctx, pool, "SELECT count(*) FROM oauth_clients WHERE id = '"+theirs+"'") != 1 {
+		t.Error("a registration past the ceiling evicted something")
+	}
+	if access, _ := signedInOver(t, base, gina, signedIn, redirect); access == "" {
+		t.Error("a registered client didn't sign in past the ceiling")
+	}
+	if _, err := pool.Exec(ctx, "DELETE FROM oauth_clients WHERE source LIKE 'flood-%'"); err != nil {
+		t.Fatal(err)
 	}
 	// a code whose registration went redeems nothing
 	verifier, challenge := pkce()
@@ -677,6 +709,19 @@ func TestOAuthRegistrationsAreCappedPerSource(t *testing.T) {
 		"redirect_uri": {redirect}, "code_verifier": {verifier}})
 	if status != 400 || !strings.Contains(lastBody, "invalid_client") || countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE oauth_client = '"+gone+"'") != 0 {
 		t.Errorf("a code of a registration gone: %d %s", status, lastBody)
+	}
+}
+
+// A registration's source is an IPv4 address, or an IPv6 address's /64: one host's addresses are one source.
+func TestARegistrationsSourceIsAnIPv4AddressOrAn64(t *testing.T) {
+	for addr, want := range map[string]string{"203.0.113.5": "203.0.113.5", "::ffff:203.0.113.5": "203.0.113.5",
+		"2001:db8:1:2::1": "2001:db8:1:2::/64", "2001:db8:1:2:ffff:ffff:ffff:ffff": "2001:db8:1:2::/64", "2001:db8:1:3::1": "2001:db8:1:3::/64"} {
+		if got := registrationSource(addr); got != want {
+			t.Errorf("%s: %s, want %s", addr, got, want)
+		}
+	}
+	if registrationSource("2001:db8:1:2::1") != registrationSource("2001:db8:1:2:abcd::9") {
+		t.Error("two addresses of one /64 are two sources")
 	}
 }
 

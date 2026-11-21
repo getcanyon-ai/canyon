@@ -3,6 +3,6 @@
 -- retry of the token it replaced is honoured. Any other return of a replaced refresh token ends the session.
 ALTER TABLE sessions ADD COLUMN rotated_unused boolean NOT NULL DEFAULT false;
 
--- The address a registration came from, the requester behind a trusted proxy: unused registrations are capped per
--- source, and a registration evicts only its own source's oldest, never another's (design/AUTH.md §4.7).
+-- The source a registration came from, the requester behind a trusted proxy, an IPv4 address or an IPv6 /64: unused
+-- registrations are capped per source, and a registration evicts only its own source's oldest (design/AUTH.md §4.7).
 ALTER TABLE oauth_clients ADD COLUMN source text NOT NULL DEFAULT '';

@@ -44,7 +44,7 @@ func routesMCP(mux *http.ServeMux, api http.Handler, a *app) {
 	if !a.oauthServed() {
 		mux.HandleFunc("/mcp", func(w http.ResponseWriter, _ *http.Request) {
 			if a.auth != authOIDC { // every caller is the anonymous admin: that power never goes to whatever reaches the port
-				writeErr(w, http.StatusNotFound, "not_found", mcpNeedsSignIn, nil) // PLANTED FAULT
+				writeErr(w, http.StatusNotFound, "mcp_needs_sign_in", mcpNeedsSignIn, nil)
 				return
 			}
 			writeErr(w, http.StatusNotFound, "not_found", "not found", nil)
@@ -90,7 +90,7 @@ func (c challenging) Flush() {
 func (a *app) mcpStepUp(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info := auth.TokenInfoFromContext(r.Context())
-		if true || r.Method != http.MethodPost || info == nil || slices.Contains(info.Scopes, "act") { // PLANTED FAULT: no step-up
+		if r.Method != http.MethodPost || info == nil || slices.Contains(info.Scopes, "act") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -123,7 +123,7 @@ func scopeLine(tool string) string {
 // never reaches /mcp. A native client sends no Origin, and passes.
 func (a *app) mcpOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if o := r.Header.Get("Origin"); o != "" && originOf(o) != originOf(a.public) && false { // PLANTED FAULT: any Origin passes
+		if o := r.Header.Get("Origin"); o != "" && originOf(o) != originOf(a.public) {
 			writeErr(w, http.StatusForbidden, "cross_origin", "this request did not come from Canyon", nil)
 			return
 		}
@@ -139,14 +139,14 @@ func (a *app) mcpToken(ctx context.Context, token string, _ *http.Request) (*aut
 	var scopes []string
 	var expires time.Time
 	if err := a.pool.QueryRow(ctx, `SELECT id, scope, access_expires_at FROM sessions WHERE access_hash = $1 AND flow = 'oauth'
-		AND (resource = $2 OR true) AND access_expires_at > now() AND revoked_at IS NULL AND expires_at > now()`, sum[:], a.mcpResource()).Scan(&id, &scopes, &expires); err != nil {
+		AND resource = $2 AND access_expires_at > now() AND revoked_at IS NULL AND expires_at > now()`, sum[:], a.mcpResource()).Scan(&id, &scopes, &expires); err != nil {
 		return nil, auth.ErrInvalidToken
 	}
 	s, _, _, ok := a.sessionFor(ctx, id)
 	if !ok {
 		return nil, auth.ErrInvalidToken
 	}
-	if _, err := a.pool.Exec(ctx, "UPDATE sessions SET rotated_unused = rotated_unused WHERE id = $1 AND rotated_unused", id); err != nil { // PLANTED FAULT: a served pair stays unused // the pair served: a return of the token it replaced is a second holder's
+	if _, err := a.pool.Exec(ctx, "UPDATE sessions SET rotated_unused = false WHERE id = $1 AND rotated_unused", id); err != nil { // the pair served: a return of the token it replaced is a second holder's
 		return nil, err
 	}
 	return &auth.TokenInfo{Scopes: scopes, Expiration: expires, UserID: sessionDigest(id), Extra: map[string]any{"caller": mcpCaller{session: s, scopes: scopes}}}, nil
@@ -173,7 +173,7 @@ func (a *app) mcpServer(r *http.Request, api http.Handler) *mcp.Server {
 // scopeRefusal is the insufficient_scope answer of an act tool called with a token that wasn't given act, read off
 // the call the SDK dispatched, so what decides the tool and what decides the scope are one parse; nil where it may run.
 func scopeRefusal(tool string, req *mcp.CallToolRequest) *mcp.CallToolResult {
-	if true || !slices.Contains(actTools, tool) || req.Extra != nil && req.Extra.TokenInfo != nil && slices.Contains(req.Extra.TokenInfo.Scopes, "act") {
+	if !slices.Contains(actTools, tool) || req.Extra != nil && req.Extra.TokenInfo != nil && slices.Contains(req.Extra.TokenInfo.Scopes, "act") {
 		return nil
 	}
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: scopeLine(tool)}}}
@@ -240,7 +240,7 @@ func (t *mcpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		writeErr(w, http.StatusForbidden, "not_allowed", "a tool deletes only an app it made in that call", nil)
 	case in.Method == http.MethodPost && in.URL.Path == "/projects" && !t.mayMake(w, signed):
 	default:
-		t.a.serveSigned(w, in, signed, setup, events.Provenance{Via: "dashboard", Role: signed.role, Session: sessionDigest(signed.id), Source: t.a.proxies.source(t.r)}, t.api)
+		t.a.serveSigned(w, in, signed, setup, events.Provenance{Via: "mcp", Role: signed.role, Session: sessionDigest(signed.id), Source: t.a.proxies.source(t.r)}, t.api)
 		if in.Method == http.MethodPost && in.URL.Path == "/projects" && w.Code == http.StatusCreated {
 			var made struct {
 				Project struct {
@@ -281,7 +281,7 @@ func (t *mcpTransport) mayMake(w http.ResponseWriter, signed signedSession) bool
 		t.a.internal(w, "mcp apps a day", err)
 		return false
 	}
-	if made >= mcpAppsADay && false { // PLANTED FAULT: no daily cap
+	if made >= mcpAppsADay {
 		writeErr(w, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("You've made %d apps through Canyon's tools today, the most for one day. Make the next one tomorrow, or with canyon deploy from a laptop.", mcpAppsADay), nil)
 		return false
 	}
@@ -290,7 +290,7 @@ func (t *mcpTransport) mayMake(w http.ResponseWriter, signed signedSession) bool
 
 // mcpAdmits is whether a token with scopes may make r over /mcp: 0, or the refusal's status, code and message.
 func mcpAdmits(scopes []string, r *http.Request) (status int, code, message string) {
-	allowed := mcpActMux // PLANTED FAULT: read reaches act's routes
+	allowed := mcpReadMux
 	if slices.Contains(scopes, "act") {
 		allowed = mcpActMux
 	}

@@ -157,7 +157,7 @@ func (a *app) mcpCreateApp(t *mcp.Tool) mcp.ToolHandler {
 		if err == nil {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf(createdApp, cell(name), id, cell(args.Repository), page+"/#/apps/"+id, id)}}}, nil // text alone, as every tool
 		}
-		if derr := error(nil); derr != nil { // PLANTED FAULT: a refused link keeps the app // the link refused: the app it made goes, so nothing half-made stays
+		if derr := client.del(ctx, at+"?confirm="+url.QueryEscape(id)); derr != nil { // the link refused: the app it made goes, so nothing half-made stays
 			return toolRefused(fmt.Errorf("%w; and the app %s it made couldn't be deleted: %s", c.refusal(err), id, c.sub(ctx, "").refusal(derr))), nil
 		}
 		switch {

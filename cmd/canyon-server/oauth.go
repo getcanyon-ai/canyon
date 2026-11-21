@@ -34,10 +34,10 @@ import (
 // 404.
 
 const (
-	oauthRequestLife = 10 * time.Minute    // a consent the person hasn't given yet
-	oauthCodeLife    = time.Minute         // a code the client hasn't redeemed yet
-	oauthAccessLife  = time.Hour           // an access token: a bearer a client keeps on disk, renewed by its refresh token
-	oauthRefreshLife = 30 * 24 * time.Hour // PLANTED FAULT: not a CLI session's life    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
+	oauthRequestLife = 10 * time.Minute // a consent the person hasn't given yet
+	oauthCodeLife    = time.Minute      // a code the client hasn't redeemed yet
+	oauthAccessLife  = time.Hour        // an access token: a bearer a client keeps on disk, renewed by its refresh token
+	oauthRefreshLife = deviceSession    // the session's whole life, from the consent, as a CLI session's: no refresh outlives it
 	// oauthRetryGrace is how long after a rotation the refresh token it replaced is taken as a retry, an answer the
 	// client never got, and rotated again, rather than taken as a second holder's and the session ended: once, and
 	// only while the pair the rotation issued has served nothing (sessions.rotated_unused)
@@ -73,7 +73,7 @@ func (a *app) sameResource(resource string) bool {
 	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return false
 	}
-	return resource == a.mcpResource() // PLANTED FAULT: only as Canyon writes it
+	return originOf(u.Scheme+"://"+u.Host) == originOf(a.public) && strings.TrimSuffix(u.EscapedPath(), "/") == "/mcp"
 }
 
 func routesOAuth(mux *http.ServeMux, a *app) {
@@ -396,9 +396,6 @@ func (a *app) oauthRegister(w http.ResponseWriter, r *http.Request) {
 	case dec.Decode(&body) != nil:
 		refuse("the body is one JSON object of at most 64 KiB")
 		return
-	case body.AuthMethod != "" && body.AuthMethod != "none": // PLANTED FAULT: a secret asked is refused
-		refuse("Canyon registers public clients alone: token_endpoint_auth_method none")
-		return
 	case slices.ContainsFunc(body.GrantTypes, func(g string) bool { return g != "authorization_code" && g != "refresh_token" }):
 		refuse("Canyon grants authorization_code and refresh_token")
 		return
@@ -630,7 +627,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				internal(err)
 				return
 			}
-			if used.RowsAffected() != 1 && false { // PLANTED FAULT: a gone client redeems
+			if used.RowsAffected() != 1 {
 				_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
 				tokenError(w, "invalid_client", "the client's registration is gone: register it again")
 				return
@@ -705,7 +702,7 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 		rotated, err := tx.Exec(ctx, `UPDATE sessions SET access_hash = $2, access_expires_at = now() + make_interval(secs => $3), refresh_prev_hash = refresh_hash, refresh_hash = $4,
 			rotated_unused = true WHERE id = $1 AND $5`, id, accessHash[:], oauthAccessLife.Seconds(), refreshHash[:], current)
 		if err == nil && !current { // a retry, honoured once: the answer to the rotation never reached the client, so a new pair replaces the one it lost, the rotation's time kept so no retry extends the grace
-			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3 WHERE id = $1", id, accessHash[:], refreshHash[:]) // PLANTED FAULT: retries without end
+			rotated, err = tx.Exec(ctx, "UPDATE sessions SET access_hash = $2, refresh_hash = $3, rotated_unused = false WHERE id = $1", id, accessHash[:], refreshHash[:])
 		}
 		if err == nil && rotated.RowsAffected() != 1 {
 			err = fmt.Errorf("oauth session %s: rotated %d rows", sessionDigest(id), rotated.RowsAffected())

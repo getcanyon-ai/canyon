@@ -27,8 +27,10 @@ found=""
 for id in $(printf '%s\n' "$candidates" | cut -d' ' -f1); do
   verify=$(priv api "repos/$CANYON_PRIVATE_REPO/actions/runs/$id/jobs?filter=latest&per_page=100" --jq '[.jobs[] | select(.name == "verify")][0].id // empty')
   [ -n "$verify" ] || continue
-  # the job's log, each line after its timestamp: the one line the verify step prints, exactly
-  if priv api "repos/$CANYON_PRIVATE_REPO/actions/jobs/$verify/logs" 2>/dev/null | sed 's/^[^ ]* //' | grep -qxF "$want"; then
+  # the job's log, each line after its timestamp: the one line the verify step prints, exactly. A log holds terminal
+  # escapes (its colours), which gh prints only when asked; read in full first, so grep stopping early can't fail gh.
+  log=$(priv api --allow-escape-sequences "repos/$CANYON_PRIVATE_REPO/actions/jobs/$verify/logs" 2>/dev/null) || continue # a log GitHub no longer keeps: not this run
+  if printf '%s\n' "$log" | sed 's/^[^ ]* //' | grep -qxF "$want"; then
     found=$(printf '%s\n' "$candidates" | grep "^$id ")
     break
   fi

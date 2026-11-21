@@ -1440,8 +1440,9 @@ say the finding cannot be skipped.
 
 A blocking finding is a secret that was in the code, so it has leaked: src/lib/stripe.ts:4.
 Before the next deploy, ask the user to revoke it. If nothing reads it, delete it
-from the code; otherwise make a new value and store it with canyon secret set NAME,
-NAME being the variable the code reads.
+from the code; otherwise the user makes a new value where it is issued and sets it
+with canyon secret set NAME in their own terminal, NAME being the variable the code
+reads. Never make one up yourself.
 
 CANYON REVIEW — RESULT: BLOCKED
 blocking: secrets.client-bundle · src/lib/stripe.ts:4
@@ -3068,8 +3069,9 @@ NEXT STEPS:
 
 A blocking finding is a secret that was in the code, so it has leaked: apps/web/src/lib/payments.ts:14.
 Ask the user to revoke it. If nothing reads it, delete it from the code in a new
-version shipped with canyon deploy, never in v1.3; otherwise make a new value and
-store it with canyon secret set NAME, NAME being the variable the code reads.
+version shipped with canyon deploy, never in v1.3; otherwise the user makes a new
+value where it is issued and sets it with canyon secret set NAME in their own
+terminal, NAME being the variable the code reads. Never make one up yourself.
 ```
 
 `production runs nothing` in place of `production still runs v1.4` when nothing runs there.

@@ -100,7 +100,7 @@ address below on its own, from the first. They are served only with sign-in on.
 | `GET /.well-known/oauth-protected-resource/mcp` | Where `/mcp` gets its tokens, and its two scopes, `read` and `act` |
 | `GET /.well-known/oauth-authorization-server` | Canyon's OAuth addresses |
 | `GET /oauth/authorize` | Opens the consent page in the browser. It requires PKCE with `S256` and `resource=<your Canyon>/mcp`. |
-| `POST /oauth/token` | Exchanges the code for a token that lasts an hour, and refreshes it. The connection lasts 30 days. |
+| `POST /oauth/token` | Exchanges the code for a token that lasts an hour, and refreshes it. The connection lasts 7 days from when you allowed it. |
 | `POST /oauth/register` | Registers a client that has no client ID document of its own. Public clients only, with no secret. |
 
 An agent's calls are recorded in the audit trail as yours, made through MCP. A script uses a CLI

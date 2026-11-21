@@ -102,7 +102,7 @@ pushed to GitHub.
    values.
 4. Choose **Allow**. Only allow a connection you started yourself.
 
-The connection lasts 30 days. Under **Settings › People & sign-in**, **Sessions** lists each one as
+The connection lasts 7 days, as a CLI sign-in does; then you allow it again. Under **Settings › People & sign-in**, **Sessions** lists each one as
 `<agent> (MCP)`; **Disconnect** ends it at once.
 
 ### What the agent can do

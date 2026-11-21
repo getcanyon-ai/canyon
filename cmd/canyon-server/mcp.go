@@ -248,19 +248,27 @@ func (t *mcpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// make serves canyon_create_app's POST /projects under the person's lock, held on its own connection across every
-// replica: the day's count and the create are one step, so no two calls at once make an eleventh app.
+// make serves canyon_create_app's POST /projects under the person's lock, across every replica: the day's count and the
+// create are one step, so no two calls at once make an eleventh app. The lock is tried, never waited on, so no call
+// holds a pooled connection while it waits for another: a second call at once is told to ask again.
 func (t *mcpTransport) make(w *httptest.ResponseRecorder, in *http.Request, signed signedSession, setup bool) {
 	ctx := in.Context()
-	conn, err := t.a.pool.Acquire(ctx)
+	acquire, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, err := t.a.pool.Acquire(acquire)
 	if err != nil {
 		t.a.internal(w, "mcp apps a day", err)
 		return
 	}
 	defer conn.Release()
 	key := "mcp apps a day " + signed.act.Subject
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtextextended($1, 0))", key); err != nil {
+	var locked bool
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtextextended($1, 0))", key).Scan(&locked); err != nil {
 		t.a.internal(w, "mcp apps a day", err)
+		return
+	}
+	if !locked {
+		writeErr(w, http.StatusConflict, "busy", mcpMakingAnother, nil)
 		return
 	}
 	defer func() {
@@ -295,6 +303,9 @@ func (t *mcpTransport) madeHere(r *http.Request) bool {
 	defer t.mu.Unlock()
 	return t.made[rest]
 }
+
+// mcpMakingAnother is a create_app's answer while another of the person's is under way (design/EXPERIENCE.md, D5).
+const mcpMakingAnother = "Another app is being made for you right now; ask again in a moment."
 
 // mcpAppsADay is how many apps a person makes over /mcp in a day (design/specs/mcp.md §2.3).
 const mcpAppsADay = 10

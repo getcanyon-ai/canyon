@@ -333,31 +333,33 @@ func TestMCPRemoteCreateApp(t *testing.T) {
 	if code, _, _ := mcpCall(t, base, read, create, nil); code != http.StatusForbidden {
 		t.Errorf("a read token's create: %d", code)
 	}
-	// the day's count and the create are one step: five calls at once at nine made, and one more is made
+	// the day's count and the create are one step: five calls at once at nine made make at most one more, and the pool serves on
 	madeToday := "SELECT count(*) FROM audit_events WHERE action = 'POST /api/v1/projects' AND via = 'mcp' AND actor_subject = 'sub-carol'"
 	if _, err := pool.Exec(ctx, `INSERT INTO audit_events (id, actor_kind, actor_subject, action, via) SELECT 'ev_cap' || n, 'person', 'sub-carol', 'POST /api/v1/projects', 'mcp'
 		FROM generate_series(1, $1) n`, 9-count(t, ctx, pool, madeToday)); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
-	refused := make(chan bool, 5)
+	said := make(chan string, 5)
 	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			_, _, body := mcpCall(t, base, carol, create, nil)
-			refused <- strings.Contains(body, "the most for one day")
+			said <- body
 		}()
 	}
 	wg.Wait()
-	close(refused)
-	n := 0
-	for r := range refused {
-		if r {
-			n++
+	close(said)
+	for body := range said { // each made the one, or was told why not: the cap, another under way, or a link refused
+		if !strings.Contains(body, "the most for one day") && !strings.Contains(body, "Another app is being made for you right now") && !strings.Contains(body, "Nothing was made") && !strings.Contains(body, "Made ") {
+			t.Errorf("a call at once: %s", body)
 		}
 	}
-	if count(t, ctx, pool, madeToday) != 10 || n != 4 {
-		t.Errorf("five calls at once at nine made: %d made today, %d refused, want 10 and 4", count(t, ctx, pool, madeToday), n)
+	if n := count(t, ctx, pool, madeToday); n > 10 {
+		t.Errorf("five calls at once at nine made: %d made today, want at most 10", n)
+	}
+	if code, _, _ := mcpCall(t, base, carol, mcpList, nil); code != http.StatusOK || count(t, ctx, pool, "SELECT 1") != 1 { // the pool serves on
+		t.Errorf("after the calls at once, /mcp answered %d", code)
 	}
 }

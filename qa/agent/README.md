@@ -314,8 +314,8 @@ A hosted scenario's lines:
   not judged.
 - `prod approval: on|off`: the host's production approval setting the scenario needs, checked before the app
   is made; an admin sets it in the dashboard.
-- `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: once preview runs the app, the
-  runner sets the secret, a made-up value, just before that turn, as the person would from the app's page, not
+- `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: once the agent's deploy has ended
+  (an app that reads the secret fails its start until it is set), the runner sets the secret, a made-up value, just before that turn, as the person would from the app's page, not
   before the seed.
 - `### N (once a person disconnects the agent)`: the turn waits until the grant is refused, polling `/mcp`.
   Disconnecting is a browser's alone (`DELETE /api/v1/sessions/:id` refuses any other session), so the runner

@@ -447,16 +447,19 @@ func TestAHandedOffRunScoresByItsVerdict(t *testing.T) {
 	}
 }
 
-// A turn that waits for the person to set a secret waits first for preview to run the app: the person sets it from the
-// running app's page, and a turn sent while the deploy still runs asks the agent about an app not there yet.
-func TestTheSecretsTurnWaitsForPreview(t *testing.T) {
+// A turn that waits for the person to set a secret waits first for the agent's deploy to end: the person sets it on the
+// app's page once the deploy is over, and an app that reads the secret fails its start until then, so the run's end,
+// failed included, is what to wait for.
+func TestTheSecretsTurnWaitsForTheRunToEnd(t *testing.T) {
 	for body, want := range map[string]bool{
-		`{"envs":{"preview":{"state":"running"}}}`:  true,
-		`{"envs":{"preview":{"state":"starting"}}}`: false,
-		`{"last_run":{"state":"running"}}`:          false,
-		`not json`:                                  false,
+		`{"last_run":{"state":"failed"}}`:  true,
+		`{"last_run":{"state":"clean"}}`:   true,
+		`{"last_run":{"state":"running"}}`: false,
+		`{"last_run":{"state":"pending"}}`: false,
+		`{"last_run":null}`:                false,
+		`not json`:                         false,
 	} {
-		if _, got := previewRuns([]byte(body)); got != want {
+		if _, got := runEnded([]byte(body)); got != want {
 			t.Errorf("%s: %v", body, got)
 		}
 	}

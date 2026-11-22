@@ -335,8 +335,8 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 			}
 			continue
 		}
-		if t.OnceSecrets { // the person sets them once the app runs in preview, as they would from its page
-			if _, err := waitRead(ctx, home, name, "/api/v1/projects/"+name+"/status", "preview", "preview never ran", refusedFor, previewRuns); err != nil {
+		if t.OnceSecrets { // the person sets them once the agent's deploy has ended, as they would from the app's page
+			if _, err := waitRead(ctx, home, name, "/api/v1/projects/"+name+"/status", "the last run", "the last run never ended", refusedFor, runEnded); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 			if err := setSecrets(ctx, home, dir, code, s.Secrets); err != nil {
@@ -714,16 +714,19 @@ func inFolder(files []seedFile, folder string) []seedFile {
 	return moved
 }
 
-// previewRuns judges a status read: whether preview runs the app yet.
-func previewRuns(body []byte) (string, bool) {
+// runEnded judges a status read: whether the app's last run has ended, however it ended. An app that needs a secret
+// fails its start until the person sets it, so preview running is no sign to wait for.
+func runEnded(body []byte) (string, bool) {
 	var st struct {
-		Envs map[string]struct {
+		LastRun *struct {
 			State string `json:"state"`
-		} `json:"envs"`
+		} `json:"last_run"`
 	}
 	if json.Unmarshal(body, &st) != nil {
 		return "unread", false
 	}
-	state := cmp.Or(st.Envs["preview"].State, "not deployed")
-	return state, state == "running"
+	if st.LastRun == nil {
+		return "none yet", false
+	}
+	return st.LastRun.State, st.LastRun.State != "pending" && st.LastRun.State != "running"
 }

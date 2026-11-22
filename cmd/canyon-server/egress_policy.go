@@ -150,6 +150,13 @@ func (s *policyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, q := r.Context(), r.URL.Query()
+	// where an answer waited, said with a failure or an answer past a second: egress-control gives a pull 5 s, and past
+	// 30 s without one it knows no caller (#86)
+	began, step := time.Now(), "resolve"
+	waited := func() string {
+		st := s.pool.Stat()
+		return fmt.Sprintf("in %s after %v; pool %d of %d in use, %d idle", step, time.Since(began).Round(time.Millisecond), st.AcquiredConns(), st.MaxConns(), st.IdleConns())
+	}
 	asked, refetch := q["caller"]
 	if refetch {
 		if addr, err := netip.ParseAddr(asked[0]); len(asked) != 1 || err != nil || !addr.Is4() || addr.String() != asked[0] {
@@ -159,19 +166,24 @@ func (s *policyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if refetch {
 		if err := s.resolve(ctx, asked[0]); err != nil { // never the policy as if no one held it, which egress-control would remember
-			s.log.Printf("canyon-server: egress policy: caller %s: %v", asked[0], err)
+			s.log.Printf("canyon-server: egress policy: caller %s: %v (%s)", asked[0], err, waited())
 			writeErr(w, http.StatusServiceUnavailable, "caller_unresolved", "the executor could not be asked who holds the address", nil)
 			return
 		}
 	}
+	step = "answer"
 	p, err := s.answer(ctx)
 	if err == nil {
+		step = "seen"
 		err = s.seen(ctx, replica, q.Get("have"), p)
 	}
 	if err != nil {
-		s.log.Printf("canyon-server: egress policy: %v", err)
+		s.log.Printf("canyon-server: egress policy: %v (%s)", err, waited())
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
+	}
+	if step = "answered"; time.Since(began) > time.Second {
+		s.log.Printf("canyon-server: egress policy: slow answer (%s)", waited())
 	}
 	if q.Get("have") == p.Epoch+":"+strconv.FormatInt(p.Seq, 10) {
 		w.WriteHeader(http.StatusNotModified)

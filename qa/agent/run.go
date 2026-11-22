@@ -446,6 +446,13 @@ func turn(ctx context.Context, agent, home, dir, app string, n int, text string,
 	if n > 1 {
 		args = append(args, "--continue")
 	}
+	if agent == agentClaude {
+		cfg, err := strictMCP(home, dir)
+		if err != nil {
+			return fmt.Errorf("turn %d: %w", n, err)
+		}
+		args = append(args, "--strict-mcp-config", "--mcp-config", cfg)
+	}
 	if agent == agentCodex {
 		var thread string
 		if n > 1 { // turn 1 always runs: no marker may hold it back
@@ -492,6 +499,9 @@ func turn(ctx context.Context, agent, home, dir, app string, n int, text string,
 	}
 	if err != nil { // a later --continue or resume would resume a broken session: stop the scenario
 		return fmt.Errorf("turn %d: %s: %w (see turn-%d.stderr)", n, name, err, n)
+	}
+	if others := othersLoaded(filepath.Join(dir, "turn-"+strconv.Itoa(n)+".jsonl")); agent == agentClaude && len(others) > 0 { // fail closed
+		return fmt.Errorf("turn %d: the session loaded MCP servers other than canyon: %s", n, strings.Join(others, ", "))
 	}
 	fmt.Printf("%s turn %d: done in %s\n", filepath.Base(app), n, took)
 	return nil

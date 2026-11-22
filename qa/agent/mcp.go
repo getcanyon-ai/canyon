@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -168,4 +171,58 @@ func verdictBlock(text string) *block {
 		}
 	}
 	return b
+}
+
+// strictMCP writes the scenario's MCP config, <dir>/mcp.json, from the HOME's ~/.claude.json: canyon's entry alone,
+// which every Claude turn loads with --strict-mcp-config, so neither the account's connectors nor a synced plugin's
+// servers reach the agent. A HOME with any other server is refused.
+func strictMCP(home, dir string) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+	if errors.Is(err, fs.ErrNotExist) { // no config yet: no server
+		raw, err = []byte("{}"), nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("the tester's ~/.claude.json: %w", err)
+	}
+	var conf struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(raw, &conf); err != nil {
+		return "", fmt.Errorf("the tester's ~/.claude.json does not read: %w", err)
+	}
+	for name := range conf.MCPServers {
+		if name != "canyon" {
+			return "", fmt.Errorf("the tester's ~/.claude.json has an MCP server other than canyon, %s: remove it from mcpServers", name)
+		}
+	}
+	if conf.MCPServers == nil {
+		conf.MCPServers = map[string]json.RawMessage{}
+	}
+	out, _ := json.Marshal(map[string]any{"mcpServers": conf.MCPServers})
+	path := filepath.Join(dir, "mcp.json")
+	return path, os.WriteFile(path, out, 0o600) // a hosted one carries its grant
+}
+
+// othersLoaded are the MCP servers other than canyon a turn's session init lists: none, or the turn is no tester's.
+func othersLoaded(path string) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	var others []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 16<<20), 16<<20)
+	for sc.Scan() {
+		var e event
+		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Type != "system" || e.Subtype != "init" {
+			continue
+		}
+		for _, m := range e.MCPServers {
+			if m.Name != "canyon" {
+				others = append(others, m.Name)
+			}
+		}
+	}
+	return others
 }

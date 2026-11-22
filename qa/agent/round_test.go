@@ -350,3 +350,44 @@ func TestTheCloneReachesTheRepositoryWithTheDeployKeyAlone(t *testing.T) {
 		t.Errorf("branch: %s", got)
 	}
 }
+
+// Every Claude turn loads Canyon's server alone: the HOME's canyon entry, under --strict-mcp-config, so the account's
+// connectors and a synced plugin's servers never reach the agent; a HOME with another server, or a turn whose session
+// loaded one anyway, stops the scenario.
+func TestEveryClaudeTurnLoadsCanyonAlone(t *testing.T) {
+	home, dir := t.TempDir(), t.TempDir()
+	write := func(path, body string) {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(home, ".claude.json"), `{"theme":"dark","mcpServers":{"canyon":{"type":"stdio","command":"/h/bin/canyon","args":["mcp"]}}}`)
+	// claude: print the MCP config it was given, then a session init naming the servers it loaded
+	fakeBin(t, filepath.Join(t.TempDir(), "bin"), map[string]string{"claude": "#!/bin/sh\n" +
+		"while [ $# -gt 0 ]; do [ \"$1\" = --strict-mcp-config ] && strict=1; [ \"$1\" = --mcp-config ] && cfg=$2; shift; done\n" +
+		"[ \"$strict\" = 1 ] || exit 7\n" +
+		"printf '{\"type\":\"system\",\"subtype\":\"init\",\"mcp_servers\":[{\"name\":\"canyon\",\"status\":\"connected\"}%s]}\\n' \"$EXTRA\"\n" +
+		"cp \"$cfg\" ../given.json\n"})
+	app := filepath.Join(dir, "qa-x")
+	if err := os.MkdirAll(app, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runTmp(filepath.Dir(dir)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := turn(t.Context(), agentClaude, home, dir, app, 1, "hi", false); err != nil {
+		t.Fatalf("a turn with canyon alone: %v", err)
+	}
+	given, _ := os.ReadFile(filepath.Join(filepath.Dir(app), "given.json"))
+	if string(given) != `{"mcpServers":{"canyon":{"type":"stdio","command":"/h/bin/canyon","args":["mcp"]}}}` {
+		t.Errorf("the MCP config the turn was given: %s", given)
+	}
+	write(filepath.Join(dir, "turn-1.jsonl"), `{"type":"system","subtype":"init","mcp_servers":[{"name":"canyon","status":"connected"},{"name":"claude.ai Gmail","status":"needs-auth"}]}`+"\n")
+	if got := othersLoaded(filepath.Join(dir, "turn-1.jsonl")); len(got) != 1 || got[0] != "claude.ai Gmail" {
+		t.Errorf("the servers other than canyon a session loaded: %v", got)
+	}
+	write(filepath.Join(home, ".claude.json"), `{"mcpServers":{"canyon":{"command":"canyon"},"playwright":{"command":"npx"}}}`)
+	if _, err := strictMCP(home, dir); err == nil || !strings.Contains(err.Error(), "playwright") {
+		t.Errorf("a HOME with another server: %v", err)
+	}
+}

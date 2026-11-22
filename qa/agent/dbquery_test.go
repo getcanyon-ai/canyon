@@ -96,4 +96,8 @@ func TestADBProdLineStopsAHostSetOtherwise(t *testing.T) {
 	if err := hostDBProd(home, "", "off"); err != nil {
 		t.Errorf("prod approval: off, on a host with it off: %v", err)
 	}
+	answer = `{"prod_approval":true}` // a member's read names no db_prod: a prod approval: scenario needs none
+	if err := hostDBProd(home, "", "on"); err != nil {
+		t.Errorf("prod approval: on, on a host that names no db_prod: %v", err)
+	}
 }

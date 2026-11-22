@@ -285,6 +285,38 @@ esac
 	}
 }
 
+// A canyon-app network removed between POST /callers' list and its inspect — an app deleted, a network recreated — is
+// listed and inspected again, once: the answer names the callers on the networks there now, never a 502 that leaves every
+// caller of the fleet unconfirmed (#86: at 15:01:57 a network recreated failed a confirm of every caller).
+func TestCallersListsAgainWhenANetworkGoesMeanwhile(t *testing.T) {
+	dir := t.TempDir()
+	nets := []appNet{{Name: "canyon-app-claims-portal", Internal: true, Containers: map[string]endpoint{
+		"c1": {Name: "claims-portal-prod", IPv4Address: "172.28.3.11/24"},
+	}}}
+	nets[0].IPAM.Config = []ipamConfig{{Subnet: "172.28.3.0/24"}}
+	inspected, _ := json.Marshal(nets)
+	must(t, os.WriteFile(filepath.Join(dir, "nets"), inspected, 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "labels"), []byte(`[{"Id":"c1","Created":"2026-10-11T09:20:40Z","State":{"StartedAt":"2026-10-11T09:20:47Z"},"Config":{"Labels":{}}}]`), 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "gone"), nil, 0o600)) // the first list names a network the inspect then finds gone
+	script := `#!/bin/sh
+d="` + dir + `"
+printf '%s\n' "$@" >> "$d/argv"
+case "$1 $2" in
+"network ls") if [ -e "$d/gone" ]; then printf 'canyon-app-claims-portal\ncanyon-app-deleted\n'; else printf 'canyon-app-claims-portal\n'; fi;;
+"network inspect") if [ -e "$d/gone" ]; then rm "$d/gone"; echo "Error response from daemon: network canyon-app-deleted not found" >&2; exit 1; fi; cat "$d/nets";;
+"container inspect") cat "$d/labels";;
+esac
+`
+	must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o700)) //nolint:gosec // test fake
+	callers, err := (&Executor{Docker: filepath.Join(dir, "docker")}).Callers(context.Background(), []string{"172.28.3.11"})
+	if err != nil || len(callers) != 1 || callers[0].App != "claims-portal" || callers[0].Target != "prod" {
+		t.Fatalf("a network gone between the list and the inspect: %+v, %v; want claims-portal's prod", callers, err)
+	}
+	if argv := read(t, dir, "argv"); strings.Count(argv, "network\nls\n") != 2 {
+		t.Fatalf("listed %d times, want twice:\n%s", strings.Count(argv, "network\nls\n"), argv)
+	}
+}
+
 // The contract fixture's run_request, egress and all, is a /run this executor starts: the client and the
 // executor agree on the shape (contracts/executor.md, Egress).
 func TestHTTPRunRoutesTheFixturesEgress(t *testing.T) {

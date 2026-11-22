@@ -776,7 +776,8 @@ func TestEnvoyTunnelIsItsRowWhileOpen(t *testing.T) {
 		`(printf 'CONNECT `+authority+` HTTP/1.1\r\nHost: `+authority+`\r\n\r\n'; sleep 300) | nc canyon-egress 3128`)
 	const open = "1 connect 2xx allowed []"
 	if !eventually(func() bool { return row() == open }) {
-		t.Fatalf("with a tunnel to %s open the row is %q, want %q: a destination reached through a tunnel is no row until it ends\n%s", authority, row(), open, docker(t, "logs", "--tail", "20", checker))
+		t.Fatalf("with a tunnel to %s open the row is %q, want %q: a destination reached through a tunnel is no row until it ends\n%s\nthe database's sessions at work:\n%s", authority, row(), open, docker(t, "logs", "--tail", "20", checker),
+			ledger(t, "SELECT pid || ' ' || state || ' ' || coalesce(wait_event_type || '/' || wait_event, '-') || ' xact ' || coalesce((now() - xact_start)::text, '-') || ' ' || left(translate(query, chr(10) || chr(9), '  '), 120) FROM pg_stat_activity WHERE datname = 'canyon' AND state <> 'idle' AND pid <> pg_backend_pid()"))
 	}
 	stats := docker(t, "run", "--rm", "--network", "none", "--user", "65534:65534", "-v", "canyon-egress-admin:/var/run/envoy-admin:ro", curl, "-sS",
 		"--unix-socket", "/var/run/envoy-admin/admin.sock", "-G", "--data-urlencode", "filter=^http\\.egress\\.downstream_rq_active$", "http://envoy/stats")

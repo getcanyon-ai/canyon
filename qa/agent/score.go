@@ -459,8 +459,8 @@ func (r *reader) result(n int, id, text string) {
 		blocks = append(blocks, b)
 	}
 	for _, b := range blocks {
-		seen := b.Run
-		if b.Kind == outboundKind { // the same refusals read again are one result; a count that moved is another
+		seen := b.Run + "\n" + b.Result // a handed-off run's STILL RUNNING and then its verdict are two results
+		if b.Kind == outboundKind {     // the same refusals read again are one result; a count that moved is another
 			seen = outboundKind + "\n" + strings.Join(b.Head, "\n")
 		}
 		if seen != "" && r.seen[seen] {
@@ -818,8 +818,8 @@ func keptNotes(path string) string {
 
 func scorecard(s scenario, t transcript) (string, string) {
 	var results []step // what a RESULT expect is judged against, with its turn: reviews and promotions, never what status said
-	for _, st := range t.Steps {
-		if st.Result != nil && st.Result.Kind != outboundKind {
+	for i, st := range t.Steps {
+		if st.Result != nil && st.Result.Kind != outboundKind && !handedOff(st.Result, t.Steps[i+1:]) {
 			results = append(results, st)
 		}
 	}
@@ -1100,4 +1100,11 @@ func oneLine(s string) string {
 		return string(r[:240]) + "…"
 	}
 	return s
+}
+
+// handedOff is whether b is a run's STILL RUNNING that a later result of the same run ended: a hand-off, not a verdict
+// (design/specs/mcp.md §2.3, canyon_review).
+func handedOff(b *block, later []step) bool {
+	return b.Result == "STILL RUNNING" && b.Run != "" &&
+		slices.ContainsFunc(later, func(st step) bool { return st.Result != nil && st.Result.Run == b.Run && st.Result.Result != b.Result })
 }

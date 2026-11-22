@@ -274,13 +274,13 @@ func dropBranch(app, branch string) {
 	}
 }
 
-// link links the app the tester made to repo, as its owner (contracts/routes.md, PUT /api/v1/projects/:id/repository).
-func link(home, app, repo string) error {
+// link links the app the tester made to repo, or a folder of it, as its owner (contracts/routes.md, PUT /api/v1/projects/:id/repository).
+func link(home, app, repo, folder string) error {
 	s, err := signedIn(home)
 	if err != nil {
 		return err
 	}
-	a, err := s.call(http.MethodPut, "/api/v1/projects/"+app+"/repository", map[string]string{"full_name": repo})
+	a, err := s.call(http.MethodPut, "/api/v1/projects/"+app+"/repository", map[string]string{"full_name": repo, "folder": folder})
 	if err != nil {
 		return err
 	}

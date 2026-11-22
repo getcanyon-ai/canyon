@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -179,6 +180,17 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 		agentHome = home
 	}
 	repo := cmp.Or(o.repos[s.Repo], s.Repo)
+	// code is where the app's own files and canyon.toml are: the app directory, or for an app the runner links, a folder
+	// of it named after the app, which the link names, since one repository and folder link to one app alone
+	// (contracts/routes.md, PUT …/repository, 409 linked) and every linked scenario shares {{REPO}}
+	code, folder := app, ""
+	if s.Repo != "" && !s.AgentMakesApp {
+		code, folder = filepath.Join(app, name), name
+		if err := os.MkdirAll(runTmp(dir), 0o700); err != nil { // testerEnv's TMPDIR is two up from where the CLI runs: here, the scenario's own tmp/
+			return err
+		}
+		s.Seed = inFolder(s.Seed, name)
+	}
 	refs := strings.NewReplacer("{{REPO}}", o.repos[repoPlaceholder], "{{UNSEEN_REPO}}", o.repos[unseenPlaceholder],
 		"{{FORK_REF}}", o.repos[forkPlaceholder], "{{BRANCH}}", "qa/"+name)
 	src, err := os.ReadFile(file)
@@ -204,7 +216,10 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 		}
 		// the app the tester just made, named in canyon.toml as a teammate's clone names it: without the
 		// line, a first deploy makes an app of its own (cli.md §3.2); a seed's canyon.toml replaces it
-		if err := os.WriteFile(filepath.Join(app, "canyon.toml"), []byte("app = \""+name+"\"\n"), 0o600); err != nil {
+		if err := os.MkdirAll(code, 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(code, "canyon.toml"), []byte("app = \""+name+"\"\n"), 0o600); err != nil {
 			return err
 		}
 		if !o.keepApps {
@@ -224,18 +239,18 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 		}
 		defer dropBranch(app, "qa/"+name)
 		if !s.AgentMakesApp {
-			if err := link(home, name, repo); err != nil {
+			if err := link(home, name, repo, folder); err != nil {
 				return err
 			}
 		}
 	}
 	if !slices.ContainsFunc(s.Turns, func(t userTurn) bool { return t.OnceSecrets }) { // before the deploy, so the running version reads them
-		if err := setSecrets(ctx, home, dir, app, s.Secrets); err != nil {
+		if err := setSecrets(ctx, home, dir, code, s.Secrets); err != nil {
 			return err
 		}
 	}
 	if s.Deployed {
-		if err := deploySeed(ctx, home, dir, app, "setup.log"); err != nil {
+		if err := deploySeed(ctx, home, dir, code, "setup.log"); err != nil {
 			return err
 		}
 	}
@@ -320,8 +335,11 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 			}
 			continue
 		}
-		if t.OnceSecrets {
-			if err := setSecrets(ctx, home, dir, app, s.Secrets); err != nil {
+		if t.OnceSecrets { // the person sets them once the app runs in preview, as they would from its page
+			if _, err := waitRead(ctx, home, name, "/api/v1/projects/"+name+"/status", "preview", "preview never ran", refusedFor, previewRuns); err != nil {
+				return fmt.Errorf("turn %d: %w", i+1, err)
+			}
+			if err := setSecrets(ctx, home, dir, code, s.Secrets); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 		}
@@ -684,4 +702,28 @@ func handChecks(runDir string) (string, int) {
 		}
 	}
 	return rows, missing
+}
+
+// inFolder is a seed moved into folder: a linked scenario's code, in the folder its link names.
+func inFolder(files []seedFile, folder string) []seedFile {
+	moved := make([]seedFile, len(files))
+	for i, f := range files {
+		f.Path = folder + "/" + f.Path
+		moved[i] = f
+	}
+	return moved
+}
+
+// previewRuns judges a status read: whether preview runs the app yet.
+func previewRuns(body []byte) (string, bool) {
+	var st struct {
+		Envs map[string]struct {
+			State string `json:"state"`
+		} `json:"envs"`
+	}
+	if json.Unmarshal(body, &st) != nil {
+		return "unread", false
+	}
+	state := cmp.Or(st.Envs["preview"].State, "not deployed")
+	return state, state == "running"
 }

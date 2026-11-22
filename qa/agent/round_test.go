@@ -391,3 +391,73 @@ func TestEveryClaudeTurnLoadsCanyonAlone(t *testing.T) {
 		t.Errorf("a HOME with another server: %v", err)
 	}
 }
+
+// One repository and folder link to one app alone, and every linked scenario shares {{REPO}}: each scenario's code goes
+// in a folder named after its app, and its link names that folder.
+func TestALinkedScenarioLinksAFolderOfItsOwn(t *testing.T) {
+	var got map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v1/projects/qa-x/repository" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"repository":{"state":"linked"}}`))
+	}))
+	defer srv.Close()
+	if err := link(signedInTo(t, srv.URL), "qa-x", "org/repo", "qa-x"); err != nil {
+		t.Fatal(err)
+	}
+	if got["full_name"] != "org/repo" || got["folder"] != "qa-x" {
+		t.Errorf("the link sent %v", got)
+	}
+	seed := []seedFile{{Path: "server.js", Body: "x"}, {Path: "public/index.html", Body: "y"}}
+	moved := inFolder(seed, "qa-x")
+	if moved[0].Path != "qa-x/server.js" || moved[1].Path != "qa-x/public/index.html" || seed[0].Path != "server.js" {
+		t.Errorf("moved %v, from %v", moved, seed)
+	}
+}
+
+// A run handed off after 45 seconds and then read with canyon_review scores by its verdict: its STILL RUNNING is no
+// result of its own, and the later block of the same run is not dropped as a repeat.
+func TestAHandedOffRunScoresByItsVerdict(t *testing.T) {
+	dir := t.TempDir()
+	running := "CANYON REVIEW — RESULT: STILL RUNNING\n\napp: qa-x\ngate run: gr_1\n\nexit code: 0\n"
+	passed := "CANYON REVIEW — RESULT: PASSED\n\napp: qa-x\ngate run: gr_1\n\nexit code: 0\n"
+	turn := claudeEvents(t, "connected",
+		[3]string{"mcp__canyon__canyon_deploy_ref", `{"app":"qa-x","ref":"b"}`, running},
+		[3]string{"mcp__canyon__canyon_review", `{"app":"qa-x","run":"gr_1"}`, running},
+		[3]string{"mcp__canyon__canyon_review", `{"app":"qa-x","run":"gr_1"}`, passed})
+	if err := os.WriteFile(filepath.Join(dir, "turn-1.jsonl"), []byte(turn), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "h.md")
+	if err := os.WriteFile(path, []byte("stack: Node\nexpect first: PASSED\nexpect last: PASSED\n\n## Turns\n\n### 1\n```\nhi\n```\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := parseScenario(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _ := scorecard(s, readTranscript(dir, agentClaude))
+	for _, want := range []string{"| first result | PASSED | PASSED | ok |", "| last result | PASSED | PASSED | ok |"} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the scorecard has no %q:\n%s", want, card)
+		}
+	}
+}
+
+// A turn that waits for the person to set a secret waits first for preview to run the app: the person sets it from the
+// running app's page, and a turn sent while the deploy still runs asks the agent about an app not there yet.
+func TestTheSecretsTurnWaitsForPreview(t *testing.T) {
+	for body, want := range map[string]bool{
+		`{"envs":{"preview":{"state":"running"}}}`:  true,
+		`{"envs":{"preview":{"state":"starting"}}}`: false,
+		`{"last_run":{"state":"running"}}`:          false,
+		`not json`:                                  false,
+	} {
+		if _, got := previewRuns([]byte(body)); got != want {
+			t.Errorf("%s: %v", body, got)
+		}
+	}
+}

@@ -80,6 +80,9 @@ type scenario struct {
 	AgentMakesApp bool
 	// Tools are expect tool: lines: a tool the agent must call, at least once, or exactly once with "once".
 	Tools []expectTool
+	// Said are expect said: lines: words a Canyon tool's answer must hold, as Canyon says them (design/EXPERIENCE.md, D5),
+	// for an answer that is no RESULT block, such as why nothing was promoted.
+	Said []string
 	// Home is a home: line, the template tester HOME the scenario's own copy is made from; "" is the run's tester HOME.
 	Home string
 	// ProdApproval is a prod approval: line, the host's prod_approval the scenario needs: an admin's, checked like DBProd.
@@ -113,6 +116,10 @@ var blockKinds = []string{"DB QUERY"}
 // noResult is the RESULT of an expect first: none, a scenario whose agent should get no review, promotion or query
 // result at all (it only reads logs, say).
 const noResult = "none"
+
+// anyResult is an expect first: any, a scenario whose verdict rests on its other lines: whatever review the agent read
+// first, if any, is not what it tests.
+const anyResult = "any"
 
 // expect is a RESULT and the rule ids, failure reason, refusal code or env that must be among what it names; Kind,
 // when it names one, the block's kind.
@@ -369,6 +376,11 @@ func (s *scenario) header(line string) error {
 			return fmt.Errorf("app: %q: the only value is agent, an app the agent makes", value)
 		}
 		s.AgentMakesApp = true
+	case "expect said":
+		if value == "" {
+			return fmt.Errorf("expect said: names no words")
+		}
+		s.Said = append(s.Said, value)
 	case "expect tool":
 		name, once := strings.CutSuffix(value, " once")
 		if !strings.HasPrefix(name, "canyon_") || strings.ContainsAny(name, " \t") {

@@ -461,3 +461,51 @@ func TestTheSecretsTurnWaitsForPreview(t *testing.T) {
 		}
 	}
 }
+
+// An expect said: line passes on a Canyon tool's answer holding those words, and on nothing else: not the agent's own
+// words, and not another tool's output.
+func TestExpectSaidReadsCanyonsAnswers(t *testing.T) {
+	dir := t.TempDir()
+	turn := claudeEvents(t, "connected",
+		[3]string{"Bash", `{"command":"echo Nothing was promoted: nobody answered the question."}`, "Nothing was promoted: nobody answered the question."},
+		[3]string{"mcp__canyon__canyon_promote", `{"confirm":true}`, "Nothing was promoted: nobody answered the question.\nTo promote it, a person opens https://c.example/#/apps/qa-x."})
+	if err := os.WriteFile(filepath.Join(dir, "turn-1.jsonl"), []byte(turn), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "p.md")
+	body := "stack: Node\nexpect first: none\nexpect said: Nothing was promoted: nobody answered the question.\nexpect said: To promote it, a person opens\n" +
+		"expect said: in a terminal where they can answer\n\n## Turns\n\n### 1\n```\nhi\n```\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := parseScenario(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _ := scorecard(s, readTranscript(dir, agentClaude))
+	for _, want := range []string{
+		"| Canyon said | Nothing was promoted: nobody answered the question. | said | ok |",
+		"| Canyon said | To promote it, a person opens | said | ok |",
+		"| Canyon said | in a terminal where they can answer | not in any Canyon answer | MISS |",
+	} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the scorecard has no %q:\n%s", want, card)
+		}
+	}
+	dir2 := t.TempDir() // the same words from a shell alone are no answer of Canyon's
+	if err := os.WriteFile(filepath.Join(dir2, "turn-1.jsonl"), []byte(claudeEvents(t, "connected",
+		[3]string{"Bash", `{"command":"echo x"}`, "Nothing was promoted: nobody answered the question."})), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if card, _ := scorecard(s, readTranscript(dir2, agentClaude)); !strings.Contains(card, "| Canyon said | Nothing was promoted: nobody answered the question. | not in any Canyon answer | MISS |") {
+		t.Errorf("a shell's output counted as Canyon's answer:\n%s", card)
+	}
+}
+
+// expect first: any judges nothing: the scenario rests on its other lines.
+func TestExpectAnyResultJudgesNothing(t *testing.T) {
+	any := expect{Result: anyResult}
+	if !met(any, nil) || !met(any, &block{Kind: "REVIEW", Result: "PASSED"}) || met(expect{Result: noResult}, &block{Kind: "REVIEW", Result: "PASSED"}) {
+		t.Error("expect first: any judged a result")
+	}
+}

@@ -308,6 +308,10 @@ A hosted scenario's lines:
   from its turn and taken offline with the run.
 - `home: <label>`: the template, and so the grant and the person, the scenario runs under.
 - `expect tool: <name>`, or `<name> once`: the agent called that tool at least once, or exactly once.
+- `expect said: <words>`: a Canyon tool's answer held those words, as Canyon says them, for an answer that is no
+  RESULT block (why nothing was promoted, say). The agent's own words and a shell's output don't count.
+- `expect first: any`: the scenario rests on its other lines, so whichever review the agent read first, if any, is
+  not judged.
 - `prod approval: on|off`: the host's production approval setting the scenario needs, checked before the app
   is made; an admin sets it in the dashboard.
 - `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: once preview runs the app, the

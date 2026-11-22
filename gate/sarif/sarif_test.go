@@ -138,9 +138,6 @@ func TestAReportIsRefusedWhole(t *testing.T) {
 		"a level SARIF lacks":        {result(func(r obj) { r["level"] = "fatal" }), Invalid{"result 1: level is not one SARIF 2.1.0 names"}},
 		"a severity not 0-10":        {withRule(obj{"id": "r", "properties": obj{"security-severity": "11"}}), Invalid{"result 0: the rule's security-severity is not a number from 0 to 10 or a severity word"}},
 		"no message.text":            {result(func(r obj) { r["message"] = obj{"markdown": "m"} }), Invalid{"result 1: no message.text"}},
-		"a message over 4,096":       {result(func(r obj) { r["message"] = obj{"text": strings.Repeat("é", 4097)} }), Invalid{"result 1: message.text is over 4,096 characters"}},
-		"a fix over 4,096":           {result(func(r obj) { r["fixes"] = []any{obj{"description": obj{"text": strings.Repeat("é", 4097)}}} }), Invalid{"result 1: its fix is over 4,096 characters"}},
-		"a help over 4,096":          {withRule(obj{"id": "r", "help": obj{"text": strings.Repeat("é", 4097)}}), Invalid{"result 0: its fix is over 4,096 characters"}},
 		"no title":                   {result(func(r obj) { r["message"] = obj{"text": ". m"} }), Invalid{`result 1: message.text has nothing before its first ". "`}},
 		"no location":                {result(func(r obj) { r["locations"] = []any{} }), Invalid{"result 1: no locations[0].physicalLocation with an artifactLocation.uri, or one whose region has no startLine"}},
 		"a region by offsets":        {result(func(r obj) { delete(region(r), "startLine"); region(r)["charOffset"] = 6 }), Invalid{"result 1: no locations[0].physicalLocation with an artifactLocation.uri, or one whose region has no startLine"}},
@@ -151,6 +148,11 @@ func TestAReportIsRefusedWhole(t *testing.T) {
 		"a live key in a message":    {result(func(r obj) { r["message"] = obj{"text": liveKey("sk")} }), Invalid{"result 1: message.text carries a live key"}},
 		"a live key in the help":     {withRule(obj{"id": "r", "help": obj{"text": liveKey("rk")}}), Invalid{"result 0: its fix carries a live key"}},
 		"a live key in a ruleId":     {result(func(r obj) { r["ruleId"] = liveKey("sk") }), Invalid{"result 1: ruleId carries a live key"}},
+		// a text cut to 4,096 is checked whole: a key past the cut refuses the report, never kept in part or dropped unseen
+		"a live key past a long help's cut": {withRule(obj{"id": "r", "help": obj{"text": strings.Repeat("words and lines\n", 400) + liveKey("rk")}}), Invalid{"result 0: its fix carries a live key"}},
+		"a live key past a long message's cut": {result(func(r obj) {
+			r["message"] = obj{"text": "m. " + strings.Repeat("words and lines\n", 400) + liveKey("sk")}
+		}), Invalid{"result 1: message.text carries a live key"}},
 		"a ruleId quoting 8 of its hidden region": {sarifOf(t, func(run obj) { // a credential's region is hidden whole, so an id may not name it
 			run["tool"].(obj)["driver"].(obj)["rules"] = []any{obj{"id": "someIdentifier", "properties": obj{"tags": []any{"secret"}}}}
 		}, ok, func() obj { r := at("w.ts", 1, 1, 1, 13); r["ruleId"] = "someIdentifier"; return r }()), Invalid{"result 1: ruleId carries 8 or more characters of the code it flags"}},
@@ -582,5 +584,71 @@ func TestMaskQuotedEdges(t *testing.T) {
 	}
 	if got := clip(strings.Repeat("a", 78)+" bb", 80); got != strings.Repeat("a", 78)+"…" {
 		t.Errorf("clip drops the space before its ellipsis: %q", got)
+	}
+}
+
+// One over-long text never voids a tool's report (the v0.11.0 tester journey): trivy 0.74.0 writes an advisory's whole
+// details as its rule's help.text, 13,503 characters for one PyJWT advisory, and three of the vendored opengrep rules'
+// messages pass 4,096. Refused, the result took its report with it, and every real finding read as "could not check".
+// Each such text is kept, cut at a line break before 4,096 characters with Canyon's line saying so; the report stands.
+func TestAnOverLongTextIsCutAndItsReportKept(t *testing.T) {
+	raw, err := os.ReadFile("testdata/trivy-0.74.0-long-help.sarif.json") // synthetic: trivy's shape, filler for the advisory's text
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Normalize(raw, snapshot(t), treeAt(t, "testdata/trivy-long-help"))
+	if err != nil {
+		t.Fatalf("the report was refused: %v", err)
+	}
+	if len(rep.Results) != 2 || rep.Dropped != 0 {
+		t.Fatalf("kept %d, dropped %d (%q); want both advisories", len(rep.Results), rep.Dropped, rep.FirstDropped)
+	}
+	// The advisory survives at its severity, with what to upgrade to: the problem is trivy's message, and the fix the
+	// mapping table's, which a dependency's advisory takes in place of the help it carried.
+	high := rep.Results[slices.IndexFunc(rep.Results, func(r finding.Result) bool { return strings.HasSuffix(r.RuleID, "GHSA-0000-0000-0001") })]
+	if c := high.Properties.Canyon; c.Severity != finding.High || !strings.Contains(c.Problem, "Fixed Version: 2.14.0") || c.Fix == "" {
+		t.Errorf("severity %s, problem %q, fix %q", c.Severity, c.Problem, c.Fix)
+	}
+
+	// A help no table replaces is the fix as kept: cut at a line break, with Canyon's line saying so.
+	help := "Upgrade the template engine and turn autoescaping on.\n" + strings.Repeat("Paragraph of the rule's help, one line of it.\n", 200)
+	withHelp := sarifOf(t, func(run obj) {
+		run["tool"].(obj)["driver"].(obj)["rules"] = []any{obj{"id": "r", "help": obj{"text": help}}}
+	}, at("a.ts", 1, 7, 1, 8))
+	rep, err = Normalize(withHelp, snapshot(t), files(t))
+	if err != nil || len(rep.Results) != 1 {
+		t.Fatalf("a %d-character help: %v", utf8.RuneCountInString(help), err)
+	}
+	if fix := rep.Results[0].Properties.Canyon.Fix; !strings.HasPrefix(fix, "Upgrade the template engine") || !strings.HasSuffix(fix, "one line of it."+cutLine) || utf8.RuneCountInString(fix) > maxText {
+		t.Errorf("fix of %d characters, ending %q", utf8.RuneCountInString(fix), fix[max(0, len(fix)-100):])
+	}
+
+	long := "Use of a template engine without autoescaping. " + strings.Repeat("A line of the rule's explanation, as the vendored opengrep rules write them.\n", 64)
+	semgrep := sarifOf(t, nil, func() obj { r := at("a.ts", 1, 7, 1, 8); r["message"] = obj{"text": long}; return r }())
+	rep, err = Normalize(semgrep, snapshot(t), files(t))
+	if err != nil || len(rep.Results) != 1 {
+		t.Fatalf("a %d-character message: %v, %d kept", utf8.RuneCountInString(long), err, len(rep.Results))
+	}
+	if problem := rep.Results[0].Properties.Canyon.Problem; !strings.HasSuffix(problem, cutLine) || utf8.RuneCountInString(problem) > maxText+200 ||
+		rep.Results[0].Properties.Canyon.Title != "Use of a template engine without autoescaping" {
+		t.Errorf("problem of %d characters, title %q", utf8.RuneCountInString(problem), rep.Results[0].Properties.Canyon.Title)
+	}
+}
+
+func TestCutText(t *testing.T) {
+	for name, c := range map[string]struct {
+		in   string
+		want func(string) bool
+	}{
+		"short is untouched":         {"a\nb", func(s string) bool { return s == "a\nb" }},
+		"exactly 4,096 is untouched": {strings.Repeat("é", maxText), func(s string) bool { return s == strings.Repeat("é", maxText) }},
+		"at a line break":            {strings.Repeat("line\n", 1000), func(s string) bool { return strings.HasSuffix(s, "line"+cutLine) }},
+		"one long line, at a space":  {strings.Repeat("word ", 1000), func(s string) bool { return strings.HasSuffix(s, "word"+cutLine) }},
+		"no space at all, at a rune": {strings.Repeat("é", 5000), func(s string) bool { return strings.HasSuffix(s, "é"+cutLine) }},
+	} {
+		got := cutText(c.in)
+		if !c.want(got) || utf8.RuneCountInString(got) > maxText || !utf8.ValidString(got) {
+			t.Errorf("%s: %d characters, ending %q", name, utf8.RuneCountInString(got), got[max(0, len(got)-60):])
+		}
 	}
 }

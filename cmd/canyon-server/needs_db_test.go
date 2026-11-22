@@ -152,6 +152,42 @@ func TestTheFleetReadsFiveHundredNeedyAppsInTime(t *testing.T) {
 	}
 }
 
+// The fleet read's derivation, which it runs four times a read (needs, count, page, tiles), reads each app's newest
+// verdict by its run through timeline_rows_run, never by scanning every verdict of the fleet once an app: on the test bed
+// that one subquery, run 378 times, read every one of 913 verdicts each time, 400ms of a 525ms pass (#87). Any part of
+// the plan that runs once an app and reads timeline_rows reads it by the run's index.
+func TestTheFleetDerivationReadsEachAppsVerdictByItsRun(t *testing.T) {
+	pool, ctx, _, _, _ := needyHost(t)
+	seedNeedy(t, ctx, pool, 1, 500)
+	if _, err := pool.Exec(ctx, "ANALYZE"); err != nil {
+		t.Fatal(err)
+	}
+	var plan []map[string]any
+	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+needFactsSQL, "dana@meridian.example", []string{"", "sub-dana"}, []string{}, true, "").Scan(&plan); err != nil {
+		t.Fatal(err)
+	}
+	var bad []string
+	var walk func(node map[string]any, index string)
+	walk = func(node map[string]any, index string) {
+		kids, _ := node["Plans"].([]any)
+		if node["Node Type"] == "Bitmap Heap Scan" && len(kids) == 1 { // its index is its child's
+			index, _ = kids[0].(map[string]any)["Index Name"].(string)
+		} else if name, ok := node["Index Name"].(string); ok {
+			index = name
+		}
+		if loops, _ := node["Actual Loops"].(float64); node["Relation Name"] == "timeline_rows" && loops > 1 && index != "timeline_rows_run" {
+			bad = append(bad, fmt.Sprintf("%s on timeline_rows by %q, %v times", node["Node Type"], index, loops))
+		}
+		for _, kid := range kids {
+			walk(kid.(map[string]any), "")
+		}
+	}
+	walk(plan[0]["Plan"].(map[string]any), "")
+	if len(bad) > 0 {
+		t.Errorf("the fleet derivation reads timeline_rows once an app without the run's index:\n%s", strings.Join(bad, "\n"))
+	}
+}
+
 // fleetReadBound is how long the fleet read of TestTheFleetReadsFiveHundredNeedyAppsInTime may take.
 const fleetReadBound = 3 * time.Second
 

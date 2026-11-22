@@ -356,7 +356,8 @@ func (h refHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // On /mcp a run still going after about a minute's call is handed off with its id, an ingress or a web client cutting
-// a longer call before it answers, and its steps name canyon_review, which reads it once it ends.
+// a longer call before it answers, and its steps name canyon_review, which follows it again as long, and hands it off
+// again while it still goes on.
 func TestMCPRemoteHandsARunOffAfter45Seconds(t *testing.T) {
 	h := &gateHost{run: aRun("clean", 0, 0), start: reply{http.StatusAccepted, `{"run":{"id":"gr_8f2a","state":"pending"}}`}, page: `{"rows":[],"next":7}`} // a run that never ends
 	server := httptest.NewServer(refHost{h})
@@ -373,33 +374,67 @@ func TestMCPRemoteHandsARunOffAfter45Seconds(t *testing.T) {
 	if followed := clk.now().Sub(start); followed < mcptools.RemoteHandoff || followed > mcptools.RemoteHandoff+10*time.Second {
 		t.Errorf("followed for %s", followed)
 	}
+	h.run = `{"run":{"id":"gr_8f2a","project":"claims-portal","package":"pkg_9e40","state":"running","blocking":0,"warnings":0,"progress":[],"findings":[]}}`
+	start = clk.now()
+	res, text = callTool(t, cs, mcptools.Review, map[string]any{"app": "claims-portal", "run": "gr_8f2a"}) // still going: followed again, and handed off again
+	if res.IsError || !strings.Contains(text, "Call canyon_review with app claims-portal and run gr_8f2a in a minute") {
+		t.Errorf("canyon_review of a run still going: isError %v, text:\n%s", res.IsError, text)
+	}
+	if followed := clk.now().Sub(start); followed < mcptools.RemoteHandoff || followed > mcptools.RemoteHandoff+10*time.Second {
+		t.Errorf("canyon_review followed for %s", followed)
+	}
 }
 
-// canyon_review reads a handed-off run of the app named: its verdict as canyon check says it once it ended, that it
-// runs while it does, and nothing of a run that isn't that app's.
-func TestMCPRemoteReviewPicksUpAHandedOffRun(t *testing.T) {
+// canyon_review reads back any run a hand-off gave the agent, a check's or a deploy's, on /mcp and canyon mcp alike, and
+// follows it as the verb that started it: a check is a check's verdict, even though its package is never current and
+// the status read never names its run; a deploy that went live says so, with its live url; and a run of another app
+// is refused.
+func TestMCPRemoteReviewReadsBackAHandedOffRun(t *testing.T) {
+	ofApp := func(run, project string, deploys bool) string { // the run read, as the server answers it, naming its app
+		extra := `"project":"` + project + `",`
+		if deploys {
+			extra += `"deploys":true,`
+		}
+		return strings.Replace(run, `{"run":{`, `{"run":{`+extra, 1)
+	}
+	noRun := reply{http.StatusNotFound, `{"error":"not_found","message":"no such run of this project"}`} // a check's run, on the status read
 	for _, c := range []struct {
 		name    string
 		run     string
-		status  reply
-		says    string
+		page    string
+		says    []string
 		isError bool
 	}{
-		{"ended, blocked", aRun("blocked", 1, 0, blocker), reply{http.StatusOK, `{}`}, "RESULT: BLOCKED", false}, // a verdict, as canyon_check_ref's: not an error
-		{"ended, clean", aRun("clean", 0, 0), reply{http.StatusOK, `{}`}, "RESULT: PASSED", false},
-		{"still running", aRun("running", 0, 0), reply{http.StatusOK, `{}`}, "gr_8f2a is still running. Call canyon_review with app claims-portal and this run again in a minute.", false},
-		{"another app's run", aRun("clean", 0, 0), reply{http.StatusNotFound, `{"error":"not_found","message":"no such run of this project"}`}, "no such run of this project", true},
+		{"a check, ended", ofApp(aRun("clean", 0, 0), "claims-portal", false), "", []string{"CANYON REVIEW — RESULT: PASSED", "outcome: nothing was deployed."}, false},
+		{"a check, blocked", ofApp(aRun("blocked", 1, 0, blocker), "claims-portal", false), "", []string{"RESULT: BLOCKED"}, false},
+		{"a deploy, live", ofApp(aRun("clean", 0, 0), "claims-portal", true), "live", []string{"RESULT: PASSED", "live url: http://claims-portal.preview.localhost:7777", "Report the live url to the user"}, false},
+		{"another app's run", ofApp(aRun("clean", 0, 0), "quote-engine", false), "", []string{"gr_8f2a is not a run of claims-portal"}, true},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			h := &gateHost{run: c.run, status: c.status}
-			server := httptest.NewServer(h)
-			t.Cleanup(server.Close)
-			cs := remoteConnect(t, server.URL, wallClock, nil)
-			res, text := callTool(t, cs, mcptools.Review, map[string]any{"app": "claims-portal", "run": "gr_8f2a"})
-			if !strings.Contains(text, c.says) || res.IsError != c.isError {
-				t.Errorf("isError %v, text:\n%s", res.IsError, text)
-			}
-		})
+		for _, remote := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s, remote %v", c.name, remote), func(t *testing.T) {
+				h := &gateHost{run: c.run, status: noRun, page: `{"rows":[{"id":41,"ts":"2026-09-02T09:31:04Z","kind":"run.state","data":{"state":"clean"}}],"next":null}`}
+				if c.page == "live" { // a deploy's run is the current package's, so the status read does know it
+					h.page, h.status = buildPage(t, []string{"building"}, true, "private · you are an owner"), reply{http.StatusOK, `{}`}
+				}
+				server := httptest.NewServer(h)
+				t.Cleanup(server.Close)
+				var cs *mcp.ClientSession
+				if remote {
+					cs = remoteConnect(t, server.URL, wallClock, nil)
+				} else {
+					cs, _ = mcpConnect(t, server.URL, wallClock, nil)
+				}
+				res, text := callTool(t, cs, mcptools.Review, map[string]any{"app": "claims-portal", "run": "gr_8f2a"})
+				for _, want := range c.says {
+					if !strings.Contains(text, want) {
+						t.Errorf("want %q; isError %v, text:\n%s", want, res.IsError, text)
+					}
+				}
+				if res.IsError != c.isError || strings.Contains(text, "There is no live url") && c.page == "live" {
+					t.Errorf("isError %v, text:\n%s", res.IsError, text)
+				}
+			})
+		}
 	}
 }
 

@@ -362,3 +362,44 @@ func TestMCPRemoteCreateApp(t *testing.T) {
 		t.Errorf("after the calls at once, /mcp answered %d", code)
 	}
 }
+
+// canyon_review over /mcp reads a run back only as far as the person may see it (design/PERMISSIONS.md: a run is
+// technical detail, a contributor's): carl, a contributor, reads a check's run back as a check; vic, read-only, gets the
+// run read's own refusal. The run read names its app and, on a deploy's run alone, deploys.
+func TestMCPRemoteReviewReadsARunBackAsFarAsThePersonMay(t *testing.T) {
+	withOIDC(t)
+	pool, ctx := migrated(t)
+	base, _ := start(t, pool, time.Hour)
+	seedTeamApp(t, ctx, pool, base, signedIn(t, ctx, pool, base, "sub-olive", "olive@meridian.example", false))
+	if _, err := pool.Exec(ctx, `INSERT INTO runs (id, project_id, package_id, state, ended_at, deploys)
+		SELECT id, 'claims-portal', package_id, 'clean', now(), deploys FROM runs, (VALUES ('gr_check', false), ('gr_deploy', true)) v(id, deploys) WHERE runs.id = 'gr_seed'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO timeline_rows (scope, run_id, project_id, kind, data) VALUES ('run', 'gr_check', 'claims-portal', 'run.state', '{"state":"clean"}')`); err != nil {
+		t.Fatal(err)
+	}
+	carl, vic := signedIn(t, ctx, pool, base, "sub-carl", "carl@meridian.example", false), signedIn(t, ctx, pool, base, "sub-vic", "vic@meridian.example", false)
+	for _, id := range []string{"gr_check", "gr_deploy"} {
+		_, body, _ := do(t, carl, http.MethodGet, base+"/api/v1/gate-runs/"+id, "")
+		if run := runOf(body); run["project"] != "claims-portal" || (run["deploys"] == true) != (id == "gr_deploy") {
+			t.Errorf("%s's run read: %v", id, run)
+		}
+	}
+	const redirect = "https://claude.ai/cb"
+	review := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"canyon_review","arguments":{"app":"claims-portal","run":"gr_check"}}}`
+	for _, c := range []struct {
+		who     string
+		as      *http.Client
+		says    string
+		refused bool
+	}{
+		{"carl, a contributor", carl, "CANYON REVIEW — RESULT: PASSED", false},
+		{"vic, read-only", vic, "Ask sub-olive to add you to claims-portal", true},
+	} {
+		token, _ := signedInOver(t, base, c.as, register(t, base, redirect), redirect, "read")
+		code, _, body := mcpCall(t, base, token, review, nil)
+		if code != http.StatusOK || !strings.Contains(body, c.says) || strings.Contains(body, `"isError":true`) != c.refused {
+			t.Errorf("%s: %d %s", c.who, code, body)
+		}
+	}
+}

@@ -363,6 +363,8 @@ type gateRun struct {
 	FailedIn      *string         `json:"failed_in,omitempty"`         // the step a run Canyon itself failed in
 	NotPlatform   *string         `json:"not_platform_only,omitempty"` // beside a patch run's failure reason not_platform_only alone (contracts/events.md)
 	NotSame       *string         `json:"not_same_inputs,omitempty"`   // beside a rebuild's failure reason not_same_inputs alone (contracts/events.md)
+	Project       string          `json:"project"`                     // the run's app
+	Deploys       bool            `json:"deploys,omitempty"`           // a run POST …/deploys started: canyon_review follows it as a deploy
 	Kind          string          `json:"kind,omitempty"`              // patch on a patch run, absent on every other
 	Builds        *[]string       `json:"builds,omitempty"`            // a failed detect's alone: what the host builds, [] when its builder names none
 	Errored       bool            `json:"errored,omitempty"`           // a failed detect's alone: a buildpack errored while detecting
@@ -589,11 +591,11 @@ func (a *app) getGateRun(w http.ResponseWriter, r *http.Request) {
 	var project, commit string
 	var buildpacks []string
 	// a deploy that reused its package's image recorded no buildpacks of its own: the build's are the package's newest
-	err := a.pool.QueryRow(ctx, `SELECT r.project_id, r.package_id, r.state, r.failure_reason, r.failed_in, r.not_platform_only, r.not_same_inputs, CASE WHEN r.kind = 'patch' THEN 'patch' ELSE '' END, CASE WHEN r.failure_reason = 'detect' THEN COALESCE(r.builds, '{}') END,
+	err := a.pool.QueryRow(ctx, `SELECT r.project_id, r.deploys, r.package_id, r.state, r.failure_reason, r.failed_in, r.not_platform_only, r.not_same_inputs, CASE WHEN r.kind = 'patch' THEN 'patch' ELSE '' END, CASE WHEN r.failure_reason = 'detect' THEN COALESCE(r.builds, '{}') END,
   r.failure_reason IS NOT DISTINCT FROM 'detect' AND r.detect_errored, p.commit,
   ARRAY(SELECT b->>'id' FROM jsonb_array_elements(COALESCE(r.buildpacks, (SELECT o.buildpacks FROM runs o WHERE o.project_id = r.project_id
     AND o.package_id = r.package_id AND o.buildpacks IS NOT NULL ORDER BY o.created_at DESC LIMIT 1), '[]')) b)
-  FROM runs r JOIN packages p ON p.id = r.package_id AND p.project_id = r.project_id WHERE r.id = $1`, id).Scan(&project, &out.Package, &out.State, &out.FailureReason, &out.FailedIn, &out.NotPlatform, &out.NotSame, &out.Kind, &out.Builds, &out.Errored, &commit, &buildpacks)
+  FROM runs r JOIN packages p ON p.id = r.package_id AND p.project_id = r.project_id WHERE r.id = $1`, id).Scan(&project, &out.Deploys, &out.Package, &out.State, &out.FailureReason, &out.FailedIn, &out.NotPlatform, &out.NotSame, &out.Kind, &out.Builds, &out.Errored, &commit, &buildpacks)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeErr(w, http.StatusNotFound, "not_found", "no such run", nil)
 		return
@@ -643,6 +645,7 @@ func (a *app) getGateRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
+	out.Project = project
 	writeJSON(w, http.StatusOK, map[string]any{"run": out})
 }
 

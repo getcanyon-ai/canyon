@@ -104,6 +104,12 @@ func runDeploy(ctx context.Context, a *app, args []string) int {
 	if err != nil {
 		return a.fail(err)
 	}
+	return a.followDeploy(ctx, client, run, started, began)
+}
+
+// followDeploy follows the deploy started, from its first row, to its verdict and, where it went live, its url and who
+// can open it, or hands it off where a tool stops following: canyon deploy's, and canyon_review's for a deploy's run.
+func (a *app) followDeploy(ctx context.Context, client *Client, run checkRun, started string, began time.Time) int {
 	each, stop := a.narrate(&run)
 	if a.render.Format == FormatHuman {
 		each = a.reviewNow(ctx, client, started, &run, each)

@@ -36,7 +36,7 @@ func (a *app) stillRunning(run checkRun, id string, seen timeline, err error) (i
 	}
 	page := run.Host + "/#/apps/" + run.App
 	switch {
-	case a.render.Format == FormatAI && a.remote: // on /mcp the call ends while the run goes on, and canyon_review reads it
+	case a.render.Format == FormatAI && a.handoff > 0: // an MCP tool's call ends while the run goes on, and canyon_review reads it
 		return a.aiStillRunning(run, id, seen, reason, "the deploy is still running in Canyon. This call stopped following it.",
 			"Tell the user the deploy is still running in Canyon.",
 			"Call canyon_review with app "+cell(run.App)+" and run "+cell(id)+" in a minute, until it says the verdict. Then tell the user what it says.",
@@ -81,7 +81,7 @@ func (a *app) reviewStillRunning(run checkRun, id string, seen timeline, err err
 			return exitStillRunning, true
 		}
 	} else {
-		if a.render.Format == FormatAI && a.remote { // on /mcp the call ends while the review goes on, and canyon_review reads it
+		if a.render.Format == FormatAI && a.handoff > 0 { // an MCP tool's call ends while the review goes on, and canyon_review reads it
 			return a.aiStillRunning(run, id, seen, reason, "the review is still running in Canyon. A check changes nothing in preview or production.",
 				"Tell the user the review is still running in Canyon.",
 				"Call canyon_review with app "+cell(run.App)+" and run "+cell(id)+" in a minute, until it says the verdict. Then tell the user what it says.",

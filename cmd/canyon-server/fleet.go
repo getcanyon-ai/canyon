@@ -58,7 +58,8 @@ base AS (
     l.level, $4::bool OR l.level IN ('owner', 'contributor') AS team, l.everyone, l.people, l.group_grants,
     CASE WHEN $4::bool OR l.level = 'owner' THEN l.requests END AS requests, $4::bool OR l.level = 'owner' OR l.open_to_claim AS claimable,
     run.id AS last_run, COALESCE(run.state, 'never_reviewed') AS gate_state,
-    COALESCE((SELECT (t.data->>'warnings')::int FROM timeline_rows t WHERE t.run_id = run.id AND t.kind = 'verdict'), 0) AS warnings,
+    -- scope = 'run' so the run's index applies: without it, once an app, every verdict of the fleet is read (#87)
+    COALESCE((SELECT (t.data->>'warnings')::int FROM timeline_rows t WHERE t.scope = 'run' AND t.run_id = run.id AND t.kind = 'verdict'), 0) AS warnings,
     COALESCE(o.n, 0) AS owners_n, COALESCE(o.list, '[]'::jsonb) AS owners,
     (SELECT COALESCE(array_agg(grantee ORDER BY grantee), '{}') FROM project_access g WHERE g.project_id = l.id AND g.kind = 'group' AND g.level = 'owner') AS owner_groups,
     COALESCE(jsonb_path_exists(v.data,

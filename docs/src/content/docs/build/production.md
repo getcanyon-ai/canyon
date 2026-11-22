@@ -37,7 +37,7 @@ canyon status
   ✓ Production needs a passing review
       e87c28 passed review: no blocking finding
   ✓ A person promotes
-      a person promotes, or an agent they ask, with their CLI sign-in
+      a person promotes, or an agent they ask, signed in as them
   · Approved stacks only
       no approved stacks set
   ! Every app has an owner             advisory

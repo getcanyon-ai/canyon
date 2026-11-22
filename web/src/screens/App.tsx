@@ -642,6 +642,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 <section aria-label="Review" className="grid min-w-0 gap-2.5">
                   <h2 className={H2}>Review</h2>
                   {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}
+                  {lastRun !== null && reading === null && seen === null && !(run instanceof Error) && <p role="status" className="text-md text-text-dim">{S.reviewReading}</p>}
                   {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 font-normal text-text-faint">{shown(fix).length}</span></h3>}
                   {whoApproves}
                   {shown(fix).map(card)}
@@ -727,6 +728,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 );
               })()}
               {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}
+              {/* Until the newest review's read answers, it says so: never a heading over white space (the v0.11.0 role walk). */}
+              {lastRun !== null && reads && reading === null && seen === null && !(run instanceof Error) && <p role="status" className="text-md text-text-dim">{S.reviewReading}</p>}
               {going && pinned === null && <Progress steps={steps} />}
               {reading !== null && (
                 <>

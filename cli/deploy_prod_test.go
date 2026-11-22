@@ -598,7 +598,7 @@ func approvalOn(t *testing.T, whole map[string]json.RawMessage) *promoteHost {
 		r["blocked_by"] = []string{"prod.human-approval"}
 		for _, rule := range r["rules"].([]any) {
 			if rule := rule.(map[string]any); rule["id"] == "prod.human-approval" {
-				rule["passed"], rule["why"] = false, "a person approves it in Canyon's dashboard; the CLI only asks"
+				rule["passed"], rule["why"] = false, "a person approves it in Canyon's dashboard; an agent or the CLI only asks"
 			}
 		}
 	})

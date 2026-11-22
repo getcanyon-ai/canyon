@@ -28,7 +28,7 @@ func TestTheReceiptReadsTheFleetApprovalsAdmin(t *testing.T) {
 	v14 := pkgRef{id: "pkg_9e40", label: "v1.4"}
 	in := receiptInput{org: "Meridian", rules: promoteRules(testPolicy()), preview: &v14, owners: []actor{dana}, actor: dana, approvalOn: true, fleet: true,
 		run: &runFacts{id: "gr_patch", state: "clean", pkg: v14, newest: "gr_patch"}}
-	if r := evaluate(in); !r.Rules[1].Passed || r.Rules[1].Why != "a person approves it in Canyon's dashboard; the CLI only asks" || len(r.BlockedBy) != 0 {
+	if r := evaluate(in); !r.Rules[1].Passed || r.Rules[1].Why != "a person approves it in Canyon's dashboard; an agent or the CLI only asks" || len(r.BlockedBy) != 0 {
 		t.Errorf("the fleet's admin: %s", mustJSON(r))
 	}
 	in.actor = actor{Kind: "agent", Subject: "agent:claude-code/dana"}
@@ -53,7 +53,7 @@ func TestTheReceiptFoldsTheFourRulesInTheSnapshotsOrder(t *testing.T) {
 	// the whole shape once: order, names, blocks, and the three lines the other cases leave alone
 	in := base
 	in.run = run("clean", "")
-	if got, want := evaluate(in), `{"org":"Meridian","blocked_by":[],"rules":[{"id":"prod.clean-gate","name":"Production needs a passing review","blocks":true,"passed":true,"why":"v1.4 passed review: no blocking finding"},{"id":"prod.human-approval","name":"A person promotes","blocks":true,"passed":true,"why":"a person promotes, or an agent they ask, with their CLI sign-in"},{"id":"stack.blessed","name":"Approved stacks only","blocks":false,"passed":false,"why":"no approved stacks set","unset":true},{"id":"owner.required","name":"Every app has an owner","blocks":false,"passed":true,"why":"owned by Dana Whitfield"}]}`; string(mustJSON(got)) != want {
+	if got, want := evaluate(in), `{"org":"Meridian","blocked_by":[],"rules":[{"id":"prod.clean-gate","name":"Production needs a passing review","blocks":true,"passed":true,"why":"v1.4 passed review: no blocking finding"},{"id":"prod.human-approval","name":"A person promotes","blocks":true,"passed":true,"why":"a person promotes, or an agent they ask, signed in as them"},{"id":"stack.blessed","name":"Approved stacks only","blocks":false,"passed":false,"why":"no approved stacks set","unset":true},{"id":"owner.required","name":"Every app has an owner","blocks":false,"passed":true,"why":"owned by Dana Whitfield"}]}`; string(mustJSON(got)) != want {
 		t.Fatalf("clean and owned:\n got %s\nwant %s", mustJSON(got), want)
 	}
 	for _, c := range []struct {
@@ -88,7 +88,7 @@ func TestTheReceiptFoldsTheFourRulesInTheSnapshotsOrder(t *testing.T) {
 		t.Errorf("blocked, approved: %s", mustJSON(r))
 	}
 	in.actor = agent // an agent fails the human rule, which states itself whoever is reading
-	if r := evaluate(in); r.Rules[1].Passed || r.Rules[1].Why != "a person promotes, or an agent they ask, with their CLI sign-in" || fmt.Sprint(r.BlockedBy) != "[prod.human-approval]" {
+	if r := evaluate(in); r.Rules[1].Passed || r.Rules[1].Why != "a person promotes, or an agent they ask, signed in as them" || fmt.Sprint(r.BlockedBy) != "[prod.human-approval]" {
 		t.Errorf("an agent: %s", mustJSON(r))
 	}
 	for owners, why := range map[int]string{0: "no owner has claimed this app", 2: "owned by Dana Whitfield and 1 other", 3: "owned by Dana Whitfield and 2 others"} {

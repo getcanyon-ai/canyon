@@ -103,6 +103,18 @@ describe("Settings' pages", () => {
     expect(screen.getByRole("button", { name: "Save people and sign-in" })).toBeDefined();
   });
 
+  // Connect an agent stands directly above Sessions, so an agent is connected and disconnected in one place
+  // (design/specs/screens.md, Connect an agent; the v0.11.0 role walk found it below).
+  it("People & sign-in puts Connect an agent directly above Sessions", async () => {
+    window.location.hash = "#/settings/people";
+    server(golden.get);
+    render(<Settings />);
+    const connect = await screen.findByRole("region", { name: "Connect an agent" });
+    const sessions = await screen.findByRole("region", { name: "Sessions" });
+    expect(connect.compareDocumentPosition(sessions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(connect.nextElementSibling).toBe(sessions);
+  });
+
   // With sign-in off there is nobody to admit and every caller is an admin: forms would do nothing.
   it("People & sign-in on a host with sign-in off says so, and draws no form", async () => {
     window.location.hash = "#/settings/people";

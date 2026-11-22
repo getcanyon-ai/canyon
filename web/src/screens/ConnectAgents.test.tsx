@@ -40,6 +40,7 @@ describe("Connect an agent", () => {
     expect(writeText).toHaveBeenCalledWith(ADDRESS);
     expect(term(T.claudeWeb).textContent).toBe(`${T.claudeWebHow} ${T.claudeDocs}`);
     expect(within(term(T.claudeWeb)).getByRole("link", { name: T.claudeDocs }).getAttribute("href")).toBe(CONNECTOR_DOCS);
+    expect(within(term(T.claudeWeb)).getByRole("link", { name: T.claudeDocs }).className).toMatch(/\btext-link\b/); // drawn as a link, never as plain text
     expect(term(T.cursorCloud).textContent).toBe(T.cursorCloudHow);
     expect(term("Codex").textContent).toBe(T.codexCloud);
   });

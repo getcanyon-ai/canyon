@@ -27,6 +27,6 @@ do not:
 
 production checklist:
   passed: Production needs a passing review (prod.clean-gate): v1.3 passed review: no blocking finding
-  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, with their CLI sign-in
+  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, signed in as them
   not set: Approved stacks only (stack.blessed): no approved stacks set
   passed: Every app has an owner (owner.required): owned by Dana Whitfield

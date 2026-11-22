@@ -227,7 +227,7 @@ func TestARollbackAsksForTheApprovalAPromotionDoes(t *testing.T) {
 		return &rollbackHost{status: rollbackRead(t), review: reviewed("clean", ""), promo: approval, receipt: receiptOf(t, func(r map[string]any) {
 			r["blocked_by"] = []string{"prod.human-approval"}
 			rule := r["rules"].([]any)[1].(map[string]any)
-			rule["passed"], rule["why"] = false, "a person approves it in Canyon's dashboard; the CLI only asks"
+			rule["passed"], rule["why"] = false, "a person approves it in Canyon's dashboard; an agent or the CLI only asks"
 		})}
 	}
 	out, _, code := rollingBack(t, asks(), "--version", "v1.3")

@@ -1199,7 +1199,7 @@ func TestABlockedRunJoinsOneRuleOnOneLine(t *testing.T) {
 func TestAPassedStepToProductionNamesWhatBlocksIt(t *testing.T) {
 	receipt := `{"receipt":{"org":"Meridian","blocked_by":["sql.string-concat","prod.human-approval"],"rules":[` +
 		`{"id":"prod.clean-gate","name":"Production needs a passing review","blocks":true,"passed":true,"why":"v2 passed review: no blocking finding"},` +
-		`{"id":"prod.human-approval","name":"A person promotes","blocks":true,"passed":false,"why":"a person approves it in Canyon's dashboard; the CLI only asks"},` +
+		`{"id":"prod.human-approval","name":"A person promotes","blocks":true,"passed":false,"why":"a person approves it in Canyon's dashboard; an agent or the CLI only asks"},` +
 		`{"id":"sql.string-concat","name":"No SQL built from strings","blocks":true,"passed":false,"why":"v2's review found 1 blocking finding, not approved"}]}}`
 	h := &gateHost{run: aRun("clean", 0, 0), page: buildPage(t, nil, true), status: reply{http.StatusOK, receipt}}
 	out, _, code := verbingIn(t, h, projectDir(t), "deploy", "--format", "ai")

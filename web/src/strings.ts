@@ -151,6 +151,7 @@ export const S = {
   noDescription: "No description yet",
   // The app page under its title until its first reads answer (#2561).
   appReading: "Reading the app…",
+  reviewReading: "Reading the review…",
   // Guardrails → Scanners: the tools Canyon runs itself (contracts/finding.md, Canyon-run tools).
   scanners: "Canyon runs these tools itself on every review, on this host.",
   runsWhile: "Canyon runs it only while its findings are advisory or blocking.",
@@ -858,7 +859,7 @@ export const APPROVAL = {
   outdatedLine: "Ask for a new approval from the CLI.",
   unknown: "That code isn't valid, or a newer request replaced it.",
   switchLabel: "Production is approved in the dashboard",
-  switchNote: "On: canyon deploy --env prod asks, and a person on the app's team approves it here in Canyon. Off: anyone on the app's team can promote from the CLI, including an agent they ask to.",
+  switchNote: "On: the CLI and agents only ask, and a person on the app's team approves it here in Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.",
 } as const;
 
 // Settings › Databases (design/DATABASE-SESSIONS.md §5; #2835): the switch for database sessions as a whole.

@@ -361,7 +361,6 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
           <p className={NOTE}>{APPROVAL.switchNote}</p>
         </section>
       </Section>
-      <Sessions admin={admin} />
     </>
   );
 }

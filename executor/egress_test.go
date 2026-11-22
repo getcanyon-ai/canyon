@@ -285,35 +285,48 @@ esac
 	}
 }
 
-// A canyon-app network removed between POST /callers' list and its inspect — an app deleted, a network recreated — is
-// listed and inspected again, once: the answer names the callers on the networks there now, never a 502 that leaves every
-// caller of the fleet unconfirmed (#86: at 15:01:57 a network recreated failed a confirm of every caller).
-func TestCallersListsAgainWhenANetworkGoesMeanwhile(t *testing.T) {
-	dir := t.TempDir()
-	nets := []appNet{{Name: "canyon-app-claims-portal", Internal: true, Containers: map[string]endpoint{
-		"c1": {Name: "claims-portal-prod", IPv4Address: "172.28.3.11/24"},
-	}}}
-	nets[0].IPAM.Config = []ipamConfig{{Subnet: "172.28.3.0/24"}}
-	inspected, _ := json.Marshal(nets)
-	must(t, os.WriteFile(filepath.Join(dir, "nets"), inspected, 0o600))
-	must(t, os.WriteFile(filepath.Join(dir, "labels"), []byte(`[{"Id":"c1","Created":"2026-10-11T09:20:40Z","State":{"StartedAt":"2026-10-11T09:20:47Z"},"Config":{"Labels":{}}}]`), 0o600))
-	must(t, os.WriteFile(filepath.Join(dir, "gone"), nil, 0o600)) // the first list names a network the inspect then finds gone
-	script := `#!/bin/sh
+// Canyon-app networks removed while POST /callers reads them — apps deleted, networks recreated, one after another — are
+// skipped, each once a list read after its own inspect failed no longer names it: the answer names the callers on the
+// networks still there, never a 502 that leaves every caller of the fleet unconfirmed (#86: at 15:01:57 one network
+// recreated failed a confirm of every caller). A retry of the whole read would race the next removal again. A network
+// still listed whose inspect fails fails the answer: no caller is ever left out by an error.
+func TestCallersSkipsEachNetworkGoneMeanwhile(t *testing.T) {
+	for _, c := range []struct {
+		name, broken string // broken: a network listed throughout whose inspect fails
+		ok           bool
+	}{{"gone one after another", "", true}, {"a listed network that fails", "canyon-app-claims-portal", false}} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			nets := []appNet{{Name: "canyon-app-claims-portal", Internal: true, Containers: map[string]endpoint{
+				"c1": {Name: "claims-portal-prod", IPv4Address: "172.28.3.11/24"},
+			}}}
+			nets[0].IPAM.Config = []ipamConfig{{Subnet: "172.28.3.0/24"}}
+			inspected, _ := json.Marshal(nets)
+			must(t, os.WriteFile(filepath.Join(dir, "nets"), inspected, 0o600))
+			must(t, os.WriteFile(filepath.Join(dir, "labels"), []byte(`[{"Id":"c1","Created":"2026-10-11T09:20:40Z","State":{"StartedAt":"2026-10-11T09:20:47Z"},"Config":{"Labels":{}}}]`), 0o600))
+			// the first list names a and b; a is gone by the first inspect, b by the time a second list is read
+			script := `#!/bin/sh
 d="` + dir + `"
 printf '%s\n' "$@" >> "$d/argv"
 case "$1 $2" in
-"network ls") if [ -e "$d/gone" ]; then printf 'canyon-app-claims-portal\ncanyon-app-deleted\n'; else printf 'canyon-app-claims-portal\n'; fi;;
-"network inspect") if [ -e "$d/gone" ]; then rm "$d/gone"; echo "Error response from daemon: network canyon-app-deleted not found" >&2; exit 1; fi; cat "$d/nets";;
+"network ls") echo x >> "$d/lists"; case $(wc -l < "$d/lists") in
+  *1) printf 'canyon-app-claims-portal\ncanyon-app-a\ncanyon-app-b\n';;
+  *2) printf 'canyon-app-claims-portal\ncanyon-app-b\n';;
+  *) printf 'canyon-app-claims-portal\n';;
+  esac;;
+"network inspect") lists=$(wc -l < "$d/lists"); for n in "$@"; do
+  if [ "$n" = canyon-app-a ] || [ "$n" = "` + c.broken + `" ] || { [ "$n" = canyon-app-b ] && [ "$lists" -ge 2 ]; }; then echo "Error response from daemon: network $n not found" >&2; exit 1; fi
+  done; cat "$d/nets";;
 "container inspect") cat "$d/labels";;
 esac
 `
-	must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o700)) //nolint:gosec // test fake
-	callers, err := (&Executor{Docker: filepath.Join(dir, "docker")}).Callers(context.Background(), []string{"172.28.3.11"})
-	if err != nil || len(callers) != 1 || callers[0].App != "claims-portal" || callers[0].Target != "prod" {
-		t.Fatalf("a network gone between the list and the inspect: %+v, %v; want claims-portal's prod", callers, err)
-	}
-	if argv := read(t, dir, "argv"); strings.Count(argv, "network\nls\n") != 2 {
-		t.Fatalf("listed %d times, want twice:\n%s", strings.Count(argv, "network\nls\n"), argv)
+			must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o700)) //nolint:gosec // test fake
+			callers, err := (&Executor{Docker: filepath.Join(dir, "docker")}).Callers(context.Background(), []string{"172.28.3.11"})
+			named := err == nil && len(callers) == 1 && callers[0].App == "claims-portal" && callers[0].Target == "prod"
+			if named != c.ok || (!c.ok && err == nil) {
+				t.Fatalf("callers %+v, error %v; want claims-portal's prod named: %v", callers, err, c.ok)
+			}
+		})
 	}
 }
 

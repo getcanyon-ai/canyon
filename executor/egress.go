@@ -315,30 +315,57 @@ func (e *Executor) RecreateNetwork(ctx context.Context, app string, internal boo
 }
 
 // appNets is every canyon-app network, inspected. A network removed between the list and the inspect — an app
-// deleted, a network recreated — fails the inspect whole, so it lists and inspects again, once: one gone meanwhile
-// never makes every caller of the fleet unknown (#86). A second failure is the daemon's, and an error.
+// deleted, a network recreated — fails the batch inspect whole, so each is then inspected on its own, and one whose
+// inspect fails is skipped only when a list read after that failure no longer names it: gone, it holds no caller. A
+// retry of the batch could race the next removal again; this never does. Any other failure fails the answer, never
+// one that leaves a caller out (#86).
 func (e *Executor) appNets(ctx context.Context) ([]appNet, error) {
-	var err error
-	for range 2 {
-		var out []byte
-		out, err = child(ctx, e.docker(), "network", "ls", "--filter", "name=canyon-app-", "--format", "{{.Name}}").Output()
-		if err != nil {
-			return nil, fmt.Errorf("docker network ls: %w", err)
-		}
-		names := slices.DeleteFunc(strings.Fields(string(out)), func(n string) bool { return !strings.HasPrefix(n, "canyon-app-") }) // the filter matches anywhere in a name
-		if len(names) == 0 {
-			return nil, nil
-		}
-		out, err = child(ctx, e.docker(), append([]string{"network", "inspect"}, names...)...).Output()
-		var nets []appNet
+	names, err := e.appNetNames(ctx)
+	if err != nil || len(names) == 0 {
+		return nil, err
+	}
+	if nets, err := e.inspectNets(ctx, names...); err == nil {
+		return nets, nil
+	}
+	var all []appNet
+	for _, name := range names {
+		nets, err := e.inspectNets(ctx, name)
 		if err == nil {
-			err = json.Unmarshal(out, &nets)
+			all = append(all, nets...)
+			continue
 		}
-		if err == nil {
-			return nets, nil
+		now, lerr := e.appNetNames(ctx) // listed after its inspect failed: still there, the failure is the daemon's
+		if lerr != nil {
+			return nil, lerr
+		}
+		if slices.Contains(now, name) {
+			return nil, fmt.Errorf("docker network inspect %s: %w", name, err)
 		}
 	}
-	return nil, fmt.Errorf("docker network inspect: %w", err)
+	return all, nil
+}
+
+// appNetNames is the canyon-app networks docker lists now; never nil, so a list with none is told from none read.
+func (e *Executor) appNetNames(ctx context.Context) ([]string, error) {
+	out, err := child(ctx, e.docker(), "network", "ls", "--filter", "name=canyon-app-", "--format", "{{.Name}}").Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker network ls: %w", err)
+	}
+	names := slices.DeleteFunc(strings.Fields(string(out)), func(n string) bool { return !strings.HasPrefix(n, "canyon-app-") }) // the filter matches anywhere in a name
+	return append([]string{}, names...), nil
+}
+
+// inspectNets is docker network inspect of names, parsed.
+func (e *Executor) inspectNets(ctx context.Context, names ...string) ([]appNet, error) {
+	out, err := child(ctx, e.docker(), append([]string{"network", "inspect"}, names...)...).Output()
+	var nets []appNet
+	if err == nil {
+		err = json.Unmarshal(out, &nets)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("docker network inspect: %w", err)
+	}
+	return nets, nil
 }
 
 // MaxCallers bounds the addresses one POST /callers asks about.

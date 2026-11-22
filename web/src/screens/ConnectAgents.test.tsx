@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONNECT as T, CONNECTOR_DOCS, S } from "../strings";
 import { ConnectAgents } from "./ConnectAgents";
@@ -28,6 +28,22 @@ const served = { status: 200, body: { resource: ADDRESS, authorization_servers: 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Connect an agent", () => {
+  // Every line to run has its own Copy (#99): the commands are what a person types, and copying them is the job.
+  it("copies each line to run on its own", async () => {
+    server({ [METADATA]: served });
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    render(<ConnectAgents signIn />);
+    const lines = [INSTALL, `canyon login ${location.origin}`, "canyon skill install"];
+    const copies = laptop().getAllByRole("button", { name: /^Copy / });
+    expect(copies.map((one) => one.getAttribute("aria-label"))).toEqual([T.stepInstall, T.stepLogin, T.stepSkill].map((step) => `${T.copy} ${step}`));
+    for (const [i, one] of copies.entries()) {
+      fireEvent.click(one);
+      await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(lines[i]));
+    }
+    expect(laptop().getByText("Copied")).toBeDefined();
+  });
+
   it("gives the laptop's three steps for this host, and the address with each cloud agent's way to it", async () => {
     server({ [METADATA]: served });
     const writeText = vi.fn(async () => {});

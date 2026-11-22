@@ -115,6 +115,17 @@ describe("Settings' pages", () => {
     expect(connect.nextElementSibling).toBe(sessions);
   });
 
+  // Connecting an agent is what every member can do on this page, so it and Sessions lead it, above the forms that
+  // set who signs in (#99).
+  it("People & sign-in opens with Connect an agent, above who may sign in", async () => {
+    window.location.hash = "#/settings/people";
+    server(golden.get);
+    render(<Settings />);
+    const connect = await screen.findByRole("region", { name: "Connect an agent" });
+    const who = await screen.findByRole("region", { name: "Who may sign in" });
+    expect(connect.compareDocumentPosition(who) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   // With sign-in off there is nobody to admit and every caller is an admin: forms would do nothing.
   it("People & sign-in on a host with sign-in off says so, and draws no form", async () => {
     window.location.hash = "#/settings/people";

@@ -67,6 +67,13 @@ export function journey<C extends object>(name: string, j: { given?: (page: Page
           // ui/Table.tsx's rule, at every width: the page never scrolls sideways; tables do.
           const [scroll, width] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
           if (scroll > width) browser.push(`the page is ${scroll}px wide in a ${width}px window: it scrolls sideways`);
+          // The rail's column runs the page's full height, so a full-page picture never shows the page's grey under it (#99).
+          const [rail, tall] = await page.evaluate(() => {
+            let el = document.querySelector<HTMLElement>('nav[aria-label="Canyon"]');
+            while (el !== null && getComputedStyle(el).backgroundColor === "rgba(0, 0, 0, 0)") el = el.parentElement;
+            return [el === null || window.innerWidth <= 860 ? -1 : Math.round(el.getBoundingClientRect().height), document.documentElement.scrollHeight];
+          });
+          if (rail >= 0 && rail < tall) browser.push(`the rail's column is ${rail}px tall on a ${tall}px page`);
           const wrong = [...undeclared(s.changes ?? {}, d), ...browser, ...d.logs.filter(alarming).map((l) => `server: ${l}`)];
           expect(wrong, `${s.name}: what happened that the step did not declare`).toEqual([]);
         });

@@ -641,6 +641,83 @@ describe("the guardrails screen", () => {
   });
 });
 
+// The tab opens with what agents read and only then what sets it (#99; design/specs/mcp.md §12): the text an agent is
+// handed, exactly, collapsed to fourteen lines, copied whole; then the stacks and the design system, saved from a bar that
+// shows only once something changed.
+describe("what agents are told, first", () => {
+  beforeEach(() => { window.location.hash = "#/guardrails/agents"; });
+  afterEach(() => { window.location.hash = ""; });
+  const ready = async () => { render(<Guardrails />); await screen.findByRole("button", { name: "Add a stack" }); };
+  const text = handed(golden.manifest, true);
+  const lines = text.split("\n");
+  const shownText = () => skill().getByTestId("told").textContent;
+
+  it("shows the text agents read, its first fourteen lines, then all of it", async () => {
+    server(reads);
+    await ready();
+    expect(shownText()).toBe(lines.slice(0, 14).join("\n"));
+    fireEvent.click(skill().getByRole("button", { name: `Show all ${lines.length} lines` }));
+    expect(shownText()).toBe(text);
+    fireEvent.click(skill().getByRole("button", { name: "Show fewer" }));
+    expect(shownText()).toBe(lines.slice(0, 14).join("\n"));
+    for (const one of golden.manifest.policies) expect(skill().queryByText(one.id)).toBeNull(); // an agent never reads a rule's id
+  });
+
+  it("copies all of the text, not the lines it shows", async () => {
+    server(reads);
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    await ready();
+    fireEvent.click(skill().getByRole("button", { name: "Copy" }));
+    expect(await skill().findByText("Copied")).toBeDefined();
+    expect(writeText).toHaveBeenCalledWith(text);
+  });
+
+  it("sends policies and playbooks to their tabs, and comes before the settings", async () => {
+    server(reads);
+    await ready();
+    expect(skill().getByRole("link", { name: "Policies" }).getAttribute("href")).toBe("#/guardrails/policies");
+    expect(skill().getByRole("link", { name: "Playbooks" }).getAttribute("href")).toBe("#/guardrails/playbooks");
+    const told = screen.getByRole("region", { name: "What agents are told" });
+    const stacks = screen.getByRole("region", { name: "Stacks agents are told to use" });
+    expect(told.compareDocumentPosition(stacks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Approved buildpacks" })).toBeNull(); // Policies' now, on its rule's row
+  });
+
+  it("offers Save only once something changed, and Discard puts the record back", async () => {
+    server(reads);
+    await ready();
+    expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    fireEvent.change(region("Stack 1").getByLabelText("Language"), { target: { value: "Elixir" } });
+    const bar = within(screen.getByRole("region", { name: "Unsaved changes" }));
+    expect(bar.getByRole("button", { name: "Save" })).toBeDefined();
+    fireEvent.click(bar.getByRole("button", { name: "Discard" }));
+    expect(value(region("Stack 1"), "Language")).toBe(golden.preferences.stacks[0]?.language);
+    expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
+  });
+
+  it("saves the stacks and the design system, and nothing of the buildpacks", async () => {
+    const sent = server({ ...reads, [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response } });
+    await ready();
+    fireEvent.change(picker(), { target: { value: "" } });
+    fireEvent.click(within(screen.getByRole("region", { name: "Unsaved changes" })).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved.")).toBeDefined();
+    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, design_system_id: null })}`);
+  });
+
+  it("says type something first only after an empty Send", async () => {
+    const sent = server({ ...reads, [`POST ${SETUP}`]: { body: golden.setup.response } });
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Your message"));
+    expect(screen.queryByText("Type something first.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(screen.getByText("Type something first.")).toBeDefined();
+    expect(posted(sent)).toHaveLength(0);
+  });
+});
+
 // Guardrails' five tabs: each is its own route, the bare one is Pipeline, a rule's link is the tab its
 // row is on, and only the page shown is read.
 describe("the guardrails tabs", () => {

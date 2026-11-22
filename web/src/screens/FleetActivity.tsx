@@ -202,7 +202,11 @@ export function Row({ line }: { line: Line }) {
 
 const GROUP = "pt-3 text-sm font-semibold tracking-wide text-text-faint uppercase";
 
-// Polled like the table above it; `org` names whose platform reported. Two reads: the newest 100 rows
+// How often the fleet's table and its activity are read again while the tab shows: the fleet read costs seconds on a
+// large fleet (#87).
+export const POLL_MS = 10_000;
+
+// Polled like the table above it, every ten seconds while the tab shows (Fleet.tsx); `org` names whose platform reported. Two reads: the newest 100 rows
 // for the timeline, and the last day's for what is pinned, so a failure 20 hours old in a busy org is
 // pinned however far down the timeline's page it sits.
 export function RecentActivity({ org, names }: { org: string; names?: Map<string, string> }) {
@@ -211,6 +215,8 @@ export function RecentActivity({ org, names }: { org: string; names?: Map<string
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const again = () => { clearTimeout(timer); timer = setTimeout(() => void (document.visibilityState === "hidden" ? again() : read()), POLL_MS); };
+    const shown = () => { if (document.visibilityState !== "hidden" && live) { clearTimeout(timer); void read(); } };
     const read = async () => {
       const ask = (more: Record<string, string>) => listAudit(new URLSearchParams({ action: ACTIVITY_ACTIONS.join(","), ...more }).toString());
       try {
@@ -219,10 +225,11 @@ export function RecentActivity({ org, names }: { org: string; names?: Map<string
       } catch (err) {
         if (live) setFailure((err as Error).message);
       }
-      if (live) timer = setTimeout(read, 2000);
+      if (live) again();
     };
     void read();
-    return () => { live = false; clearTimeout(timer); };
+    document.addEventListener("visibilitychange", shown);
+    return () => { live = false; clearTimeout(timer); document.removeEventListener("visibilitychange", shown); };
   }, []);
 
   const now = Date.now();

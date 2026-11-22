@@ -16,7 +16,7 @@ import { CELL, Table, TableWrap, WRAP_CELL } from "../ui/Table";
 import { Patched } from "../ui/Patched";
 import { shareParts } from "./Access";
 import { Assign, Claim } from "./Claim";
-import { RecentActivity } from "./FleetActivity";
+import { POLL_MS, RecentActivity } from "./FleetActivity";
 import { NeedsAttention } from "./FleetAttention";
 import { FleetFilters } from "./FleetFilters";
 import { HoldCell, HoldDialog, type Acting } from "./FleetHold";
@@ -239,12 +239,15 @@ export function Fleet({ org }: { org: string | null }) {
     return () => window.removeEventListener("hashchange", follow);
   }, []);
 
-  // The current page is read again two seconds after each answer; an answer to an older query is
-  // dropped, and the page it answered goes with it, so one query's rows are never shown under another.
+  // The current page is read again every ten seconds while the tab shows, and at once when it shows again: the read costs
+  // seconds on a large fleet (#87), and two seconds after each answer kept one always in flight. An answer to an older
+  // query is dropped, and the page it answered goes with it, so one query's rows are never shown under another.
   useEffect(() => {
     setPage(null);
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const again = () => { clearTimeout(timer); timer = setTimeout(() => void (document.visibilityState === "hidden" ? again() : read()), POLL_MS); };
+    const shown = () => { if (document.visibilityState !== "hidden" && live) { clearTimeout(timer); void read(); } };
     const read = async () => {
       try {
         // A cursor from an older link is never sent: the screen pages by number (contracts/routes.md, the fleet read).
@@ -255,10 +258,11 @@ export function Fleet({ org }: { org: string | null }) {
       } catch (err) {
         if (live) { setPage(null); setFailure((err as Error).message); }
       }
-      if (live) timer = setTimeout(read, 2000);
+      if (live) again();
     };
     void read();
-    return () => { live = false; clearTimeout(timer); };
+    document.addEventListener("visibilitychange", shown);
+    return () => { live = false; clearTimeout(timer); document.removeEventListener("visibilitychange", shown); };
   }, [query]);
 
   useEffect(() => {

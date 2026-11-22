@@ -372,7 +372,7 @@ func TestMCPRemoteReviewReadsARunBackAsFarAsThePersonMay(t *testing.T) {
 	base, _ := start(t, pool, time.Hour)
 	seedTeamApp(t, ctx, pool, base, signedIn(t, ctx, pool, base, "sub-olive", "olive@meridian.example", false))
 	if _, err := pool.Exec(ctx, `INSERT INTO runs (id, project_id, package_id, state, ended_at, deploys)
-		SELECT id, 'claims-portal', package_id, 'clean', now(), deploys FROM runs, (VALUES ('gr_check', false), ('gr_deploy', true)) v(id, deploys) WHERE runs.id = 'gr_seed'`); err != nil {
+		SELECT v.id, 'claims-portal', r.package_id, 'clean', now(), v.deploys FROM runs r, (VALUES ('gr_check', false), ('gr_deploy', true)) v(id, deploys) WHERE r.id = 'gr_seed'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO timeline_rows (scope, run_id, project_id, kind, data) VALUES ('run', 'gr_check', 'claims-portal', 'run.state', '{"state":"clean"}')`); err != nil {

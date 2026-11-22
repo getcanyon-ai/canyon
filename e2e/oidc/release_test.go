@@ -3,6 +3,10 @@
 package oidc
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -115,6 +119,32 @@ func TestTheReleaseScreensAtEachLevel(t *testing.T) {
 	}
 
 	// The put-back question: a newer request replaces the first, so it is walked apart.
+	// The screens since #50, as each person (the v0.11.0 release): an MCP client's consent page at read and at act,
+	// Sessions with that person's agent connected and Disconnect, the Connect an agent panel, the app page a secret link
+	// opens, and the rail #52 fixed. Each person's agent is their own: a session they connected, and two requests left
+	// unanswered for the consent page to show.
+	for _, who := range []string{"owner", "contributor", "viewer", "none", "admin"} {
+		agent := "Release walk agent " + who
+		connect(t, sessions[who], agent)
+		mine := map[string]string{"RELEASE_AGENT": agent, "RELEASE_EMAIL": people[who], "RELEASE_OWNER_EMAIL": people["owner"],
+			"RELEASE_CONSENT_READ": authorize(t, sessions[who], agent, "read"), "RELEASE_CONSENT_ACT": authorize(t, sessions[who], agent, "read act")}
+		for k, v := range walk {
+			mine[k] = v
+		}
+		walkRelease(t, sessions[who], who, "the agent screens", mine)
+		var list struct {
+			Sessions []struct{ Client string } `json:"sessions"`
+		}
+		if code := get(t, sessions[who], host+"/api/v1/sessions", &list); code != http.StatusOK {
+			t.Fatalf("%s's sessions: %d", who, code)
+		}
+		for _, s := range list.Sessions {
+			if s.Client == agent {
+				t.Errorf("%s disconnected %s on Sessions, and it is still listed", who, agent)
+			}
+		}
+	}
+
 	walk["RELEASE_APPROVAL"] = asked("deploy", "--env", "prod", "--version", first, "--reason", "e2e: the release walk puts v1 back")
 	walk["RELEASE_PUT_BACK"] = first
 	for _, who := range []string{"owner", "contributor", "viewer", "none", "admin"} {
@@ -158,5 +188,72 @@ func sql(t *testing.T, query string) {
 	cmd.Dir = filepath.Join("..", "..")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("psql: %v\n%s", err, out)
+	}
+}
+
+// walkRedirect is the redirect an MCP client registers for the walk: nothing listens there, and nothing is sent to it.
+const walkRedirect = "http://127.0.0.1:47124/callback"
+
+// authorize is an MCP client named name asking for scope as the person browser signs in as (design/AUTH.md §4.7): it
+// registers, and the person's browser is sent to the consent page, whose request id comes back unanswered.
+func authorize(t *testing.T, browser *http.Client, name, scope string) string {
+	t.Helper()
+	id, _ := agentRequest(t, browser, name, scope)
+	return id
+}
+
+func agentRequest(t *testing.T, browser *http.Client, name, scope string) (request, client string) {
+	t.Helper()
+	res, err := http.Post(host+"/oauth/register", "application/json", strings.NewReader(`{"client_name":"`+name+`","redirect_uris":["`+walkRedirect+`"]}`)) //nolint:noctx,gosec // the stack's own host
+	must(t, err)
+	var registered struct {
+		ID string `json:"client_id"`
+	}
+	raw, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated || json.Unmarshal(raw, &registered) != nil {
+		t.Fatalf("register %s: %d %s", name, res.StatusCode, raw)
+	}
+	sum := sha256.Sum256([]byte(walkVerifier))
+	q := url.Values{"response_type": {"code"}, "client_id": {registered.ID}, "redirect_uri": {walkRedirect}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])},
+		"code_challenge_method": {"S256"}, "resource": {host + "/mcp"}, "scope": {scope}, "state": {"release-walk"}}
+	staying := &http.Client{Jar: browser.Jar, Transport: browser.Transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err = staying.Get(host + "/oauth/authorize?" + q.Encode()) //nolint:noctx // the client's timeout bounds it
+	must(t, err)
+	_ = res.Body.Close()
+	at, err := res.Location()
+	if err != nil || !strings.HasPrefix(at.Fragment, "/oauth?request=") {
+		t.Fatalf("authorize sent %s's browser to %v (%d)", name, at, res.StatusCode)
+	}
+	return strings.TrimPrefix(at.Fragment, "/oauth?request="), registered.ID
+}
+
+const walkVerifier = "release-walk-verifier-release-walk-verifier-0123"
+
+// connect is an MCP client named name connected as the person browser signs in as: allowed on the consent page's own
+// route, from Canyon's origin as the page sends it, and its code redeemed, so Sessions lists it as name (MCP).
+func connect(t *testing.T, browser *http.Client, name string) {
+	t.Helper()
+	request, client := agentRequest(t, browser, name, "read act")
+	req, err := http.NewRequest(http.MethodPost, host+"/api/v1/oauth/requests/"+url.PathEscape(request)+"/approve", nil) //nolint:noctx // the client's timeout bounds it
+	must(t, err)
+	req.Header.Set("Origin", host)
+	res, err := browser.Do(req)
+	must(t, err)
+	raw, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	var allowed struct{ Redirect string }
+	if res.StatusCode != http.StatusOK || json.Unmarshal(raw, &allowed) != nil {
+		t.Fatalf("allow %s: %d %s", name, res.StatusCode, raw)
+	}
+	back, err := url.Parse(allowed.Redirect)
+	must(t, err)
+	res, err = http.PostForm(host+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")}, "client_id": {client}, //nolint:noctx,gosec // the stack's own host
+		"redirect_uri": {walkRedirect}, "code_verifier": {walkVerifier}})
+	must(t, err)
+	raw, _ = io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("%s's token: %d %s", name, res.StatusCode, raw)
 	}
 }

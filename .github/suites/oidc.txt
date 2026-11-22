@@ -36,6 +36,14 @@ e2e/ui/harness/**
 e2e/ui/playwright.config.ts
 e2e/ui/package*.json
 web/src/screens/Secrets*
+# the screens since the release walk began, as each person: an MCP client's consent page, Sessions with an agent and
+# Disconnect, Connect an agent, the app page a secret link opens, the rail (e2e/ui/release, the agent screens)
+web/src/screens/Consent*
+web/src/screens/ConnectAgents*
+web/src/ui/Rail*
+cmd/canyon-server/oauth.go
+e2e/ui/consent/**
+e2e/ui/connect/**
 web/src/api.ts
 web/src/strings.ts
 # an MCP client through Canyon's OAuth and its own /mcp (e2e/oidc/oauth_test.go, e2e/ui/consent): consent, tokens, the tools

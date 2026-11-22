@@ -117,6 +117,84 @@ async function people(page: Page, who: string) {
   await walked(page, "people", who);
 }
 
+// An MCP client's consent page, unanswered: at read it names only seeing, at act seeing and acting, and each names the
+// person who opened it, never anyone else.
+async function consentPage(page: Page, who: string, request: string, scope: "read" | "act") {
+  await page.goto(`/#/oauth?request=${request}`);
+  const agent = env("RELEASE_AGENT");
+  await expect(page.getByRole("heading", { name: `Allow ${agent} to use Canyon as you?` })).toBeVisible();
+  await expect(page.getByText(new RegExp(`^${escape(agent)} will act as .* \\(${escape(env("RELEASE_EMAIL"))}\\) on `))).toBeVisible();
+  const may = page.getByRole("region", { name: "What it may do" });
+  await expect(may.getByText(READ_SCOPE)).toBeVisible();
+  await expect(may.getByText(ACT_SCOPE)).toHaveCount(scope === "act" ? 1 : 0);
+  await expect(page.getByText("It can do only what you can. It can't approve findings, change settings or sharing, or see secret values.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Don't allow", exact: true })).toBeVisible();
+  await walked(page, `consent-${scope}`, who);
+}
+const READ_SCOPE = "See your org's rules, and the apps you can see: their status, and logs where you're a contributor";
+const ACT_SCOPE = "Check, deploy and promote the apps you contribute to";
+
+// Settings › People & sign-in: the Connect an agent panel, the same for everyone, then Sessions with the person's own
+// agent listed and Disconnect, which ends it. Only an admin sees everyone's sessions, and the rail's Guardrails (#52).
+async function sessions(page: Page, who: string) {
+  await page.goto("/#/settings/people");
+  const connect = page.getByRole("region", { name: "Connect an agent" });
+  await expect(connect.getByRole("region", { name: "On your laptop" }).getByText(`canyon login ${env("E2E_CANYON_URL")}`, { exact: true })).toBeVisible();
+  await expect(connect.getByRole("textbox", { name: "Canyon's address for agents", exact: true })).toHaveValue(`${env("E2E_CANYON_URL")}/mcp`);
+  await expect(connect.getByText("Claude Code on the web", { exact: true })).toBeVisible();
+  await expect(connect.getByText("claude mcp add", { exact: false })).toHaveCount(0);
+  await connect.scrollIntoViewIfNeeded();
+  await walked(page, "connect", who);
+  await expect(page.getByRole("navigation", { name: "Canyon" }).getByRole("link", { name: "Guardrails" })).toHaveCount(who === "admin" ? 1 : 0);
+
+  const list = page.getByRole("region", { name: "Sessions" });
+  const mine = list.getByRole("row").filter({ hasText: `${env("RELEASE_AGENT")} (MCP)` });
+  await expect(mine).toHaveCount(1);
+  await expect(list.getByRole("columnheader", { name: "Person" })).toHaveCount(who === "admin" ? 1 : 0);
+  // someone else's sessions: the owner's, to the admin alone; nobody else's agent, to anyone but the admin
+  if (who === "admin") await expect(list.getByRole("cell", { name: env("RELEASE_OWNER_EMAIL"), exact: true }).first()).toBeVisible();
+  else await expect(list.getByRole("row").filter({ hasText: /Release walk agent / }).filter({ hasNotText: env("RELEASE_AGENT") })).toHaveCount(0);
+  await list.scrollIntoViewIfNeeded();
+  await walked(page, "sessions", who);
+  await mine.getByRole("button", { name: /^Disconnect / }).click();
+  await expect(mine).toHaveCount(0);
+  await walked(page, "sessions-disconnected", who);
+}
+
+// The app page a secret link opens (canyon_secret_link): for a contributor and above the Secrets form on that secret and
+// environment, its value's field focused and empty, whatever the link says of a value; read-only for a viewer, and the
+// no-access page for no access.
+async function secretLink(page: Page, who: string) {
+  await page.goto(`/#/apps/${env("RELEASE_APP")}/secrets?name=RELEASE_WALK_TOKEN&env=prod&value=${LINKED}`);
+  const form = page.getByRole("form", { name: "Set a secret" });
+  if (who === "none") {
+    await expect(page).toHaveURL(/#\/no-access\//);
+    await expect(form).toHaveCount(0);
+  } else if (who === "viewer") {
+    await expect(page.getByText("Your access: read-only.")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Secrets" })).toHaveCount(0);
+    await expect(form).toHaveCount(0);
+  } else {
+    await expect(form.getByLabel("Name")).toHaveValue("RELEASE_WALK_TOKEN");
+    await expect(form.getByLabel("Environment")).toHaveValue("prod");
+    await expect(form.getByLabel("Value")).toBeFocused();
+    await expect(form.getByLabel("Value")).toHaveValue("");
+  }
+  expect(await page.content()).not.toContain(LINKED);
+  await walked(page, "secret-link", who);
+}
+const LINKED = "sk_test_51Hlinked000000000000000000"; // a synthetic shape a link may carry, never taken as a value
+
+for (const who of [...members, "admin"]) {
+  test(`the agent screens as ${who}`, async ({ page }) => {
+    await consentPage(page, who, env("RELEASE_CONSENT_READ"), "read");
+    await consentPage(page, who, env("RELEASE_CONSENT_ACT"), "act");
+    await sessions(page, who);
+    await secretLink(page, who);
+  });
+}
+
 for (const who of [...members, "admin"]) {
   test(`the release screens as ${who}`, async ({ page }) => {
     await playbooks(page, who);

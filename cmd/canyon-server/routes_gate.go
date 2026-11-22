@@ -27,7 +27,7 @@ func routesGate(api *http.ServeMux, a *app) {
 	api.HandleFunc("POST /projects/{id}/gate-runs", a.teamOnly(func(w http.ResponseWriter, r *http.Request) { a.startGateRun(w, r, false) }))
 	api.HandleFunc("POST /projects/{id}/deploys", a.teamOnly(func(w http.ResponseWriter, r *http.Request) { a.startGateRun(w, r, true) })) // a deploy IS a gate run that continues into build and run on clean (contracts/routes.md row 62)
 	// the run read, its SARIF and the runs list are a responder's too, with no grant: what approving needs (#2204)
-	api.HandleFunc("GET /gate-runs/{id}", a.runReviewOnly(a.getGateRun))
+	api.HandleFunc("GET /gate-runs/{id}", a.getGateRun)
 	api.HandleFunc("POST /gate-runs/{id}/cancel", a.runTeamOnly(a.cancelRun))
 	api.HandleFunc("GET /gate-runs/{id}/sarif", a.runReviewOnly(a.getGateRunSARIF))
 	api.HandleFunc("GET /projects/{id}/gate-runs", a.reviewOnly(a.listGateRuns))

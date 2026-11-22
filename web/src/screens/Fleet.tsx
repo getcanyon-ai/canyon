@@ -220,11 +220,8 @@ export function Fleet({ org }: { org: string | null }) {
   const asker = useRef<Element | null>(null);
   const asked = useRef(0);
   const act = (next: Omit<Acting, "asked">) => { asker.current = document.activeElement; asked.current += 1; setActing({ ...next, asked: asked.current }); };
-  // The page read again at once, so a hold just placed or lifted shows without waiting for the next poll.
-  const readNow = useRef<() => void>(() => {});
   const answered = (one: Acting) => () => {
     if (asked.current !== one.asked) return;
-    readNow.current();
     setActing(null);
     (asker.current as HTMLElement | null)?.focus?.();
   };
@@ -248,7 +245,7 @@ export function Fleet({ org }: { org: string | null }) {
   useEffect(() => {
     setPage(null);
     let live = true;
-    const { now, stop } = poll(async () => {
+    const { stop } = poll(async () => {
       try {
         // A cursor from an older link is never sent: the screen pages by number (contracts/routes.md, the fleet read).
         const sent = new URLSearchParams(query);
@@ -259,7 +256,6 @@ export function Fleet({ org }: { org: string | null }) {
         if (live) { setPage(null); setFailure((err as Error).message); }
       }
     }, POLL_MS);
-    readNow.current = now;
     return () => { live = false; stop(); };
   }, [query]);
 

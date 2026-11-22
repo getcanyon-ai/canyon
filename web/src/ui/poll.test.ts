@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CHANGED } from "../api";
 import { poll } from "./poll";
 
 afterEach(() => {
@@ -53,6 +54,10 @@ describe("poll", () => {
     await vi.advanceTimersByTimeAsync(0);
     now();
     expect(reads).toBe(3);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    window.dispatchEvent(new Event(CHANGED)); // a call that writes succeeded
+    expect(reads).toBe(4);
     release();
     stop();
   });

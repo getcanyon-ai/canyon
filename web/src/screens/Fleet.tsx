@@ -16,13 +16,14 @@ import { CELL, Table, TableWrap, WRAP_CELL } from "../ui/Table";
 import { Patched } from "../ui/Patched";
 import { shareParts } from "./Access";
 import { Assign, Claim } from "./Claim";
-import { RecentActivity } from "./FleetActivity";
+import { POLL_MS, RecentActivity } from "./FleetActivity";
 import { NeedsAttention } from "./FleetAttention";
 import { FleetFilters } from "./FleetFilters";
 import { HoldCell, HoldDialog, type Acting } from "./FleetHold";
 import { FleetPanel } from "./FleetPanel";
 import { OwnerApps, ownerHref, ownerName } from "./Owner";
 import { fleetHref, hashQuery } from "./query";
+import { poll } from "../ui/poll";
 
 // Each column answers one question (the redesign): which version, did it pass review, what runs in
 // preview, what runs in production, who owns it, when it last moved. Access only where people sign
@@ -239,13 +240,12 @@ export function Fleet({ org }: { org: string | null }) {
     return () => window.removeEventListener("hashchange", follow);
   }, []);
 
-  // The current page is read again two seconds after each answer; an answer to an older query is
-  // dropped, and the page it answered goes with it, so one query's rows are never shown under another.
+  // The current page is read again every ten seconds while the tab shows, one read at a time (poll; #87). An answer to an
+  // older query is dropped, and the page it answered goes with it, so one query's rows are never shown under another.
   useEffect(() => {
     setPage(null);
     let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async () => {
+    const { stop } = poll(async () => {
       try {
         // A cursor from an older link is never sent: the screen pages by number (contracts/routes.md, the fleet read).
         const sent = new URLSearchParams(query);
@@ -255,10 +255,8 @@ export function Fleet({ org }: { org: string | null }) {
       } catch (err) {
         if (live) { setPage(null); setFailure((err as Error).message); }
       }
-      if (live) timer = setTimeout(read, 2000);
-    };
-    void read();
-    return () => { live = false; clearTimeout(timer); };
+    }, POLL_MS);
+    return () => { live = false; stop(); };
   }, [query]);
 
   useEffect(() => {

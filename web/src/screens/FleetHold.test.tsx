@@ -266,7 +266,7 @@ describe("stopping and lifting from the fleet", () => {
     expect(dialog.queryByRole("button", { name: /^Start / })).toBeNull();
   });
 
-  // A hold placed again while the question is open — read on the fleet's next poll — is said, and the
+  // A hold placed again while the question is open — read on the fleet's next read — is said, and the
   // question offers nothing on it: its choices were the old hold's.
   it("a hold that changes under the lift's question offers nothing more", async () => {
     let again = false;
@@ -274,8 +274,9 @@ describe("stopping and lifting from the fleet", () => {
     await show();
     fireEvent.click(within(row("claims-portal")).getByRole("button", liftOf("claims-portal")));
     again = true;
+    window.dispatchEvent(new Event("focus")); // the fleet's next read: at once on focus, as every ten seconds
     const dialog = within(screen.getByRole("dialog", { name: "Lift the hold on claims-portal?" }));
-    expect(await dialog.findByText(S.holdChanged, {}, { timeout: 3000 })).toBeDefined();
+    expect(await dialog.findByText(S.holdChanged)).toBeDefined();
     expect(dialog.queryByRole("button", { name: "Leave production stopped" })).toBeNull();
     expect(dialog.queryByRole("button", { name: /^Start / })).toBeNull();
     expect(sent()).toEqual([]);

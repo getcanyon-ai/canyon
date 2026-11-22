@@ -270,11 +270,15 @@ export const said = (err: unknown) => ((err as ApiError).body as { message?: str
 // A 401 from any call is announced on the window: the shell replaces the whole app with the
 // sign-in page (design/AUTH.md §8), whichever screen made the read.
 export const UNAUTHENTICATED = "canyon:unauthenticated";
+// A change the person made, announced on the window after any call that writes succeeds: what polls reads again at once
+// (ui/poll.ts), so a claim, an approval or a hold shows without waiting for the next poll.
+export const CHANGED = "canyon:changed";
 
 async function send(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<Response> {
   const res = await fetch(`/api/v1${path}`, { method, headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify(body) });
   if (res.status === 401) window.dispatchEvent(new Event(UNAUTHENTICATED));
   if (!res.ok) throw new ApiError(method, path, res.status, await res.json().catch(() => null));
+  if (method !== "GET") window.dispatchEvent(new Event(CHANGED));
   return res;
 }
 

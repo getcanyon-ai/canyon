@@ -314,15 +314,39 @@ describe("the fleet screen", () => {
     expect(names()).toEqual(["claims-portal"]);
   });
 
+  // The fleet read costs seconds on a large fleet (#87): the table and its activity are read again every ten seconds,
+  // never two seconds after each answer, which kept one read always in flight; none while the tab is hidden; and the
+  // trail's last day, for what is pinned, once a minute.
+  it("reads the fleet and its activity again every ten seconds, and not while the tab is hidden", async () => {
+    vi.useFakeTimers();
+    const sent = server(() => golden);
+    render(<Fleet org="Meridian Insurance" />);
+    const table = () => sent().filter((url) => url.startsWith("/api/v1/fleet") && !url.includes("needs_you")).length;
+    const trail = () => sent().filter((url) => url.startsWith("/api/v1/audit")).length;
+    await vi.advanceTimersByTimeAsync(100);
+    const [first, firstTrail] = [table(), trail()];
+    await vi.advanceTimersByTimeAsync(9_800);
+    expect([table(), trail()]).toEqual([first, firstTrail]); // nothing again inside ten seconds
+    await vi.advanceTimersByTimeAsync(20_200);
+    expect([table(), trail()]).toEqual([first + 3, firstTrail + 3]); // at 10, 20 and 30 seconds: the trail's newest rows, its last day's once a minute
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect([table(), trail()]).toEqual([first + 3, firstTrail + 3]);
+    hidden.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(100);
+    expect([table(), trail()]).toEqual([first + 4, firstTrail + 5]); // shown again, read at once, the last day's too a minute on
+  });
+
   it("stops asking the server once the screen is gone", async () => {
     vi.useFakeTimers();
     const sent = server(() => golden);
     const { unmount } = render(<Fleet org="Meridian Insurance" />);
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(sent()).toHaveLength(7); // the fleet and the trail's reads, and what needs a person, read once while its count holds
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sent()).toHaveLength(6); // the fleet and the trail's two reads at once, the fleet and the trail's newest ten seconds on, and what needs a person once
     unmount();
-    await vi.advanceTimersByTimeAsync(10000);
-    expect(sent()).toHaveLength(7);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sent()).toHaveLength(6);
   });
 
   for (const [banner, shown, hidden] of [

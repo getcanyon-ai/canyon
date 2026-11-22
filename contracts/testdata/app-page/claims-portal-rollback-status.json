@@ -55,7 +55,7 @@
         "name": "A person promotes",
         "blocks": true,
         "passed": true,
-        "why": "a person promotes, or an agent they ask, with their CLI sign-in"
+        "why": "a person promotes, or an agent they ask, signed in as them"
       },
       {
         "id": "stack.blessed",

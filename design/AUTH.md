@@ -444,9 +444,10 @@ Some organisations will not accept §4.4's answer, and they should not have to a
 product about it. One setting, **off by default**, admin-only, on Settings › People & sign-in, the
 page about who is who:
 
-> **Production is approved in the dashboard.** On: `canyon deploy --env prod` asks, and a person on
-> the app's team approves it here in Canyon. Off: anyone on the app's team can promote from the CLI,
-> including an agent they ask to.
+> **Production is approved in the dashboard.** On: the CLI and agents only ask, and a person on the
+> app's team approves it here in Canyon. Off: anyone on the app's team can promote, and so can an
+> agent they ask, through the CLI or Canyon's tools. (Amended 2026-11-22: agents also promote through
+> Canyon's MCP tools, signed in as their person.)
 
 Wording rule: it names a place, not a prohibition. "Production is approved in the dashboard"
 describes where the act happens. "Agents can't promote" would describe a control §4.4 has just

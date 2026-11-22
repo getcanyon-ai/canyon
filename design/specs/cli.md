@@ -2008,7 +2008,7 @@ $ canyon status
   ✓ Production needs a passing review
       v1.3 passed review: no blocking finding
   ✓ A person promotes
-      a person promotes, or an agent they ask, with their CLI sign-in
+      a person promotes, or an agent they ask, signed in as them
   · Approved stacks only
       no approved stacks set
   ✓ Every app has an owner
@@ -2232,7 +2232,7 @@ fleet url: http://localhost:7777/#/apps/claims-portal
 
 production checklist:
   passed: Production needs a passing review (prod.clean-gate): v1.3 passed review: no blocking finding
-  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, with their CLI sign-in
+  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, signed in as them
   not set: Approved stacks only (stack.blessed): no approved stacks set
   passed: Every app has an owner (owner.required): owned by Dana Whitfield
 ```
@@ -2321,7 +2321,7 @@ $ canyon status
   ✓ Production needs a passing review
       v1.3 passed review: no blocking finding
   ✓ A person promotes
-      a person promotes, or an agent they ask, with their CLI sign-in
+      a person promotes, or an agent they ask, signed in as them
   · Approved stacks only
       no approved stacks set
   ✓ Every app has an owner
@@ -2618,7 +2618,7 @@ the `[9.2s]` beside `✓ Promote` went too: one call has one clock, and it is `D
 
 **Unchanged by identity, 2026-09-19 (AUTH).** The transcript, the prompt and `--yes` all stay. What
 changes is the receipt: `prod.human-approval` now reads `asked by Dana Whitfield, a person` instead
-of naming nobody (amended 2026-10-01, `canyonv2-5r11.20`: it states its rule; amended 2026-10-07, #1820: `a person promotes, or an agent they ask, with their CLI sign-in`, since `agents can't` was not true), and the promotion row records her. A person's session is that person, and what
+of naming nobody (amended 2026-10-01, `canyonv2-5r11.20`: it states its rule; amended 2026-10-07, #1820: `a person promotes, or an agent they ask, signed in as them`, since `agents can't` was not true), and the promotion row records her. A person's session is that person, and what
 runs under it — a terminal, an agent in a harness — acts as them, the way their shell already does.
 A rule demanding that the confirming act come from a browser was designed and then dropped, because
 an agent can drive a browser too: it would have been a speed bump described as a boundary, on the
@@ -2627,7 +2627,7 @@ one claim the product cannot afford to have disbelieved. `design/AUTH.md` §4.4 
 **Approved in the dashboard** (decided 2026-10-07, #1820; `design/AUTH.md` §4.5). An org that wants
 a person to approve production turns on *Production is approved in the dashboard* (off by default,
 Settings › People & sign-in). With it on, the receipt's `prod.human-approval` row reads
-`a person approves it in Canyon's dashboard; the CLI only asks` and is the only rule that fails, so
+`a person approves it in Canyon's dashboard; an agent or the CLI only asks` and is the only rule that fails, so
 the verb prints what would ship, asks nothing — the one confirmation is the person's click — and
 sends the promotion, which the host answers with a production approval rather than a run
 (contracts/routes.md, the promotions row). With or without `--yes`, nothing is promoted from the
@@ -2768,7 +2768,7 @@ fleet url: http://localhost:7777/#/apps/claims-portal
 
 production checklist:
   blocking: Production needs a passing review (prod.clean-gate): v1.4's review found 1 blocking finding, not approved
-  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, with their CLI sign-in
+  passed: A person promotes (prod.human-approval): a person promotes, or an agent they ask, signed in as them
   not set: Approved stacks only (stack.blessed): no approved stacks set
   passed: Every app has an owner (owner.required): owned by Dana Whitfield
 

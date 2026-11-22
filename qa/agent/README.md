@@ -301,15 +301,22 @@ A hosted scenario's lines:
   stops the scenario when a `canyon` is on the agent's PATH or anywhere in its HOME; the agent's PATH is its
   HOME's `.local/bin`, holding a link to `claude` alone, and the system's directories, and `Bash(canyon:*)`
   is not allowed.
-- `linked repo: {{REPO}}`: the seed goes to the scenario's branch, and the app is linked to the repository.
+- `linked repo: {{REPO}}`: the seed goes to the scenario's branch, in a folder named after the app, and the app is
+  linked to that folder of the repository: one repository and folder link to one app alone, and every linked scenario
+  shares `{{REPO}}`. The agent works in the clone, whose one folder is its app.
 - `app: agent`: the runner makes no app; the agent makes it with `canyon_create_app`. An app it made is read
   from its turn and taken offline with the run.
 - `home: <label>`: the template, and so the grant and the person, the scenario runs under.
 - `expect tool: <name>`, or `<name> once`: the agent called that tool at least once, or exactly once.
+- `expect said: <words>`: a Canyon tool's answer held those words, as Canyon says them, for an answer that is no
+  RESULT block (why nothing was promoted, say). The agent's own words and a shell's output don't count.
+- `expect first: any`: the scenario rests on its other lines, so whichever review the agent read first, if any, is
+  not judged.
 - `prod approval: on|off`: the host's production approval setting the scenario needs, checked before the app
   is made; an admin sets it in the dashboard.
-- `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: the runner sets the secret,
-  a made-up value, just before that turn, as the person would in the dashboard, not before the seed.
+- `secret: <env> <NAME>` with a `### N (once the person sets the secrets)` turn: once the agent's deploy has ended
+  (an app that reads the secret fails its start until it is set), the runner sets the secret, a made-up value, just before that turn, as the person would from the app's page, not
+  before the seed.
 - `### N (once a person disconnects the agent)`: the turn waits until the grant is refused, polling `/mcp`.
   Disconnecting is a browser's alone (`DELETE /api/v1/sessions/:id` refuses any other session), so the runner
   writes `<name>/revoke.sql`, which ends that grant's session by its digest, and says to run it through the

@@ -5,7 +5,6 @@ via: mcp-remote
 scope: act
 home: revoke
 linked repo: {{REPO}}
-expect mcp: connected
 expect tool: canyon_deploy_ref
 expect first: PASSED
 promote from turn: never

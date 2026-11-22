@@ -421,9 +421,12 @@ func TestMCPPromoteAsksThePersonFirst(t *testing.T) {
 		isError bool
 	}{
 		{"asked, yes", "accept", false, 1, "RESULT: PROMOTED", false},
-		{"asked, no", "decline", false, 0, "Nothing was promoted.", false},
-		{"asked, no, confirm set", "decline", true, 0, "Nothing was promoted.", false}, // the person's answer outranks the agent's confirm
-		{"can't ask, no confirm", "", false, 0, "Ask the user whether to put", true},   // the verb's exit 1: the agent asks, and calls again
+		{"asked, no", "decline", false, 0, "Nothing was promoted: the person said no.", false},
+		{"asked, no, confirm set", "decline", true, 0, "Nothing was promoted: the person said no.", false}, // the person's answer outranks the agent's confirm
+		// dismissed, as a headless client answers: never a yes, whatever the agent's confirm, and said as unanswered
+		{"asked, unanswered", "cancel", false, 0, "Nothing was promoted: nobody answered the question.", false},
+		{"asked, unanswered, confirm set", "cancel", true, 0, "Nothing was promoted: nobody answered the question.", false},
+		{"can't ask, no confirm", "", false, 0, "Ask the user whether to put", true}, // the verb's exit 1: the agent asks, and calls again
 		{"can't ask, confirm", "", true, 1, "RESULT: PROMOTED", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -443,6 +446,10 @@ func TestMCPPromoteAsksThePersonFirst(t *testing.T) {
 			res, text := callTool(t, cs, mcptools.Promote, map[string]any{"confirm": c.confirm})
 			if len(h.posts) != c.posts || !strings.Contains(text, c.says) || res.IsError != c.isError {
 				t.Errorf("posts %q, isError %v, text:\n%s", h.posts, res.IsError, text)
+			}
+			if (c.elicit == "decline" || c.elicit == "cancel") && (!strings.Contains(text, server.URL+"/#/apps/claims-portal") ||
+				!strings.Contains(text, "canyon deploy --env prod in a terminal where they can answer") || strings.Contains(text, "--yes")) {
+				t.Errorf("a %s says where a person promotes it, never --yes:\n%s", c.elicit, text)
 			}
 			if c.elicit != "" && !slices.Equal(asked, []string{"Promote claims-portal v1.3 to production?"}) { // D5's, as the terminal asks it
 				t.Errorf("asked %q", asked)
@@ -497,7 +504,7 @@ func TestMCPPromoteAsksAgainWhenPreviewMoves(t *testing.T) {
 		return &mcp.ElicitResult{Action: "decline"}, nil
 	}}
 	cs, _ := mcpConnect(t, server.URL, clock{now: func() time.Time { return h.tick }, sleep: func(d time.Duration) { h.tick = h.tick.Add(d) }}, opts)
-	if res, text := callTool(t, cs, mcptools.Promote, nil); len(h.posts) != 0 || len(asked) != 2 || !strings.Contains(text, "Nothing was promoted.") {
+	if res, text := callTool(t, cs, mcptools.Promote, nil); len(h.posts) != 0 || len(asked) != 2 || !strings.Contains(text, "Nothing was promoted: the person said no.") {
 		t.Errorf("posts %q, asked %q, isError %v, text:\n%s", h.posts, asked, res.IsError, text)
 	}
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: mcptools.Promote, InputResponses: mcp.InputResponseMap{"promote": &mcp.ElicitResult{Action: "accept"}}})

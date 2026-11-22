@@ -166,23 +166,34 @@ func TestTheFleetDerivationReadsEachAppsVerdictByItsRun(t *testing.T) {
 	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+needFactsSQL, "dana@meridian.example", []string{"", "sub-dana"}, []string{}, true, "").Scan(&plan); err != nil {
 		t.Fatal(err)
 	}
-	var bad []string
-	var walk func(node map[string]any, index string)
-	walk = func(node map[string]any, index string) {
+	// indexes is the indexes a scan reads by: an index scan's own, a bitmap heap scan's every bitmap index scan's (a
+	// BitmapAnd of two included)
+	var indexes func(node map[string]any) []string
+	indexes = func(node map[string]any) []string {
+		if name, ok := node["Index Name"].(string); ok {
+			return []string{name}
+		}
+		var out []string
 		kids, _ := node["Plans"].([]any)
-		if node["Node Type"] == "Bitmap Heap Scan" && len(kids) == 1 { // its index is its child's
-			index, _ = kids[0].(map[string]any)["Index Name"].(string)
-		} else if name, ok := node["Index Name"].(string); ok {
-			index = name
-		}
-		if loops, _ := node["Actual Loops"].(float64); node["Relation Name"] == "timeline_rows" && loops > 1 && index != "timeline_rows_run" {
-			bad = append(bad, fmt.Sprintf("%s on timeline_rows by %q, %v times", node["Node Type"], index, loops))
-		}
 		for _, kid := range kids {
-			walk(kid.(map[string]any), "")
+			if k := kid.(map[string]any); strings.HasPrefix(k["Node Type"].(string), "Bitmap") {
+				out = append(out, indexes(k)...)
+			}
+		}
+		return out
+	}
+	var bad []string
+	var walk func(node map[string]any)
+	walk = func(node map[string]any) {
+		if loops, _ := node["Actual Loops"].(float64); node["Relation Name"] == "timeline_rows" && loops > 1 && !slices.Contains(indexes(node), "timeline_rows_run") {
+			bad = append(bad, fmt.Sprintf("%s on timeline_rows by %q, %v times", node["Node Type"], indexes(node), loops))
+		}
+		kids, _ := node["Plans"].([]any)
+		for _, kid := range kids {
+			walk(kid.(map[string]any))
 		}
 	}
-	walk(plan[0]["Plan"].(map[string]any), "")
+	walk(plan[0]["Plan"].(map[string]any))
 	if len(bad) > 0 {
 		t.Errorf("the fleet derivation reads timeline_rows once an app without the run's index:\n%s", strings.Join(bad, "\n"))
 	}

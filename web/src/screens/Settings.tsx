@@ -118,7 +118,7 @@ export function Settings() {
   return (
     <div className="flex min-h-screen items-start max-[860px]:block">
       <Rail current="settings" />
-      <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
+      <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
         <h1 className="text-title font-semibold tracking-tight">Settings</h1>
         <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border max-[520px]:gap-4">
           {PAGES.filter(([key]) => (key !== "github" && key !== "integrations" && key !== "telemetry" && key !== "licence") || admin).map(([key, label]) => (
@@ -139,12 +139,15 @@ export function Settings() {
         {record !== null && page === "organisation" && <OrganisationSettings record={record} adopt={setRecord} />}
         {record !== null && page === "people" && (
           <section aria-label="People & sign-in">
-            {/* With sign-in off there is nobody to admit and every caller is an admin: forms here
-                would do nothing (the audit's C9). */}
-            {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
-            {/* Connect an agent directly above Sessions: an agent is connected and disconnected in one place (screens.md) */}
+            {/* Connect an agent directly above Sessions, so an agent is connected and disconnected in one place, and both
+                first: they are what every member acts on here, the forms below an admin's (screens.md; #99). */}
             {auth !== null && <ConnectAgents signIn={auth === "oidc"} />}
             {auth !== "off" && <Sessions admin={admin} />}
+            {/* With sign-in off there is nobody to admit and every caller is an admin: forms here
+                would do nothing (the audit's C9). */}
+            <div className="mt-8 border-t border-border pt-2">
+              {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
+            </div>
           </section>
         )}
         {read !== null && record !== null && page === "hosting" && read.runtime === "kubernetes" && (

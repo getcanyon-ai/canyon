@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BETA, getAuthConfig, getPolicies, getPreferences, previewPolicy, putPreferences, said, type Blocked, type Policy } from "../api";
+import { BETA, getAuthConfig, getPolicies, getPreferences, previewPolicy, putPreferences, said, type Blocked, type Policy, type Preferences } from "../api";
 import { S } from "../strings";
 import { Chip } from "../ui/Chip";
 import { Dial } from "../ui/Dial";
@@ -65,9 +65,11 @@ export function Policies() {
   // Whether the org has picked no default design system, so design.org-system checks nothing
   // (design/specs/screens.md). The line is a pointer, not the rule: a read that fails draws no line.
   const [noDesignSystem, setNoDesignSystem] = useState(false);
+  // The buildpacks Approved stacks only accepts, set on its row (#99): the record they are read from and saved to.
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
   useEffect(() => {
     let live = true;
-    getPreferences().then((prefs) => { if (live) setNoDesignSystem(prefs.design_system === null); }, () => undefined);
+    getPreferences().then((record) => { if (live) { setNoDesignSystem(record.design_system === null); setPrefs(record); } }, () => undefined);
     return () => { live = false; };
   }, []);
 
@@ -112,6 +114,7 @@ export function Policies() {
                 {rule.id === "design.org-system" && noDesignSystem && (
                   <span className="text-md text-text-dim">Checks nothing until you <a className="text-link" href="#/guardrails/agents">pick a default design system</a>.</span>
                 )}
+                {rule.id === "stack.blessed" && prefs !== null && <Buildpacks record={prefs} adopt={setPrefs} />}
                 <Scheduled rule={rule} flow={flow} />
               </span>
               <Dial name={rule.name} value={flow.state(rule)} change={(state) => void flow.ask(rule, { state })} />
@@ -135,6 +138,30 @@ export function Policies() {
       {rows !== null && <CustomRules policies={rows} flow={flow} saved={() => setReads((n) => n + 1)} />}
       <SaveBar flow={flow} />
     </section>
+  );
+}
+
+// The buildpacks Approved stacks only accepts (#99): every one an app's build ran, and any accepted that none runs now,
+// each by its builder's name where it has one, else its id, ticked when accepted. Saved as it is ticked, sorted by id;
+// a refused save says the server's words and keeps the record as it was.
+function Buildpacks({ record, adopt }: { record: Preferences; adopt: (next: Preferences) => void }) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const approved = record.approved_buildpacks ?? [];
+  const named = new Map((record.buildpacks_seen ?? []).map((bp) => [bp.id, bp.name ?? bp.id]));
+  const offered = [...new Set([...(record.buildpacks_seen ?? []).map((bp) => bp.id), ...approved])].sort();
+  const choose = (next: string[]) => putPreferences({ approved_buildpacks: next }).then((answer) => { adopt(answer); setFailure(null); }, (err: unknown) => setFailure(said(err)));
+  return (
+    <span className="mt-2 grid gap-1">
+      <span className="text-md text-text-dim">Buildpacks this rule accepts. Canyon lists the ones it has seen apps build with.</span>
+      {offered.length === 0 && <span className="text-md text-text-faint">No app has been built yet.</span>}
+      {offered.map((id) => (
+        <label key={id} className="flex items-center gap-2 text-md">
+          <input type="checkbox" checked={approved.includes(id)} onChange={(event) => void choose(event.target.checked ? [...approved, id].sort() : approved.filter((one) => one !== id))} />
+          {named.get(id) ?? id}
+        </label>
+      ))}
+      {failure !== null && <span className="text-md text-critical">{failure}</span>}
+    </span>
   );
 }
 

@@ -22,7 +22,7 @@ const laptop = () => within(panel().getByRole("region", { name: T.laptop }));
 const steps = () => laptop().getAllByRole("listitem").map((step) => step.textContent);
 const INSTALL = "curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh";
 // The laptop's three steps, with this host filled in: the CLI, a sign-in to this Canyon, and every agent on the machine.
-const threeSteps = () => [`${T.stepInstall}${INSTALL}`, `${T.stepLogin}canyon login ${location.origin}`, `${T.stepSkill}canyon skill install`];
+const threeSteps = () => [`1.${T.stepInstall}${INSTALL}${T.copy}`, `2.${T.stepLogin}canyon login ${location.origin}${T.copy}`, `3.${T.stepSkill}canyon skill install${T.copy}`];
 const served = { status: 200, body: { resource: ADDRESS, authorization_servers: ["https://canyon.example.com"], scopes_supported: ["read", "act"] } };
 
 afterEach(() => vi.unstubAllGlobals());

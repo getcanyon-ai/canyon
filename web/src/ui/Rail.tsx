@@ -32,7 +32,10 @@ export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
   const { org, viewer, admin, needs = 0 } = useContext(RailContext);
   const [open, setOpen] = useState(false);
   return (
-    <nav aria-label="Canyon" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} className="sticky top-0 flex h-screen w-[224px] min-w-[224px] flex-col gap-5 overflow-y-auto border-r border-border bg-surface px-3 py-4 max-[860px]:static max-[860px]:h-auto max-[860px]:w-auto max-[860px]:min-w-0 max-[860px]:gap-0 max-[860px]:border-r-0 max-[860px]:border-b max-[860px]:px-4 max-[860px]:py-3">
+    // The column carries the rail's colour down the whole page, and the nav in it stays in view: a full-page picture
+    // never shows the page's grey under it (#99).
+    <div className="self-stretch border-r border-border bg-surface max-[860px]:border-r-0">
+    <nav aria-label="Canyon" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} className="sticky top-0 flex h-screen w-[224px] min-w-[224px] flex-col gap-5 overflow-y-auto px-3 py-4 max-[860px]:static max-[860px]:h-auto max-[860px]:w-auto max-[860px]:min-w-0 max-[860px]:gap-0 max-[860px]:border-b max-[860px]:border-border max-[860px]:px-4 max-[860px]:py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5 px-2 text-base font-semibold max-[860px]:px-0"><Mark /><Wordmark /></div>
         <button type="button" className="-mr-2.5 hidden size-11 place-items-center rounded-[7px] text-text-dim hover:bg-surface-2 max-[860px]:grid" aria-expanded={open} aria-controls="rail-menu" onClick={() => setOpen(!open)}>
@@ -87,5 +90,6 @@ export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
         <a href={SOURCE} target="_blank" rel="noreferrer" className={`${viewer === null ? "mt-auto " : ""}-my-2 px-2 py-2 text-sm text-text-faint no-underline hover:underline max-[860px]:-my-3 max-[860px]:py-3`}>{S.sourceCode}</a>
       </div>
     </nav>
+    </div>
   );
 }

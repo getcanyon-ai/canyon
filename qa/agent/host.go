@@ -259,8 +259,8 @@ func hostDBProd(home, want, approval string) error {
 		DBProd       *string `json:"db_prod"`
 		ProdApproval *bool   `json:"prod_approval"`
 	}
-	if a.status != http.StatusOK || json.Unmarshal([]byte(a.said), &p) != nil || p.DBProd == nil || p.ProdApproval == nil {
-		return fmt.Errorf("GET /api/v1/preferences names no db_prod or prod_approval: %s", a)
+	if a.status != http.StatusOK || json.Unmarshal([]byte(a.said), &p) != nil || want != "" && p.DBProd == nil || approval != "" && p.ProdApproval == nil {
+		return fmt.Errorf("GET /api/v1/preferences names no db_prod or prod_approval, whichever the scenario needs: %s", a)
 	}
 	if want != "" && *p.DBProd != want {
 		return fmt.Errorf("db prod: %s, and the host's db_prod is %s: no screen sets it yet (#2121), so set it on the host, then run this scenario in its own batch", want, *p.DBProd)

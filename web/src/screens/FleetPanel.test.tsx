@@ -329,7 +329,7 @@ describe("the fleet's side panel", () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(bandNow("claims-portal")).toMatch(/blocked/);
     last = "gr_again";
-    await act(() => vi.advanceTimersByTimeAsync(2000));
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // the fleet's next poll
     expect(inPanel("claims-portal").queryByRole("region", { name: "Where it stands" })).toBeNull();
   });
 
@@ -361,7 +361,7 @@ describe("the fleet's side panel", () => {
     expect(bandNow("claims-portal")).toMatch(/^Reviewing v1\.4/);
     state = "blocked";
     latest = { ...portal.latest };
-    await act(() => vi.advanceTimersByTimeAsync(2000));
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // the fleet's next poll
     expect(bandNow("claims-portal")).toMatch(/^v1\.4 is blocked/);
   });
 
@@ -385,7 +385,7 @@ describe("the fleet's side panel", () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(bandNow("premium-ledger")).toMatch(/^v5\.0 is live in production/);
     prod = { ...prod, state: "stopped" };
-    await act(() => vi.advanceTimersByTimeAsync(2000));
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // the fleet's next poll
     expect(inPanel("premium-ledger").queryByRole("region", { name: "Where it stands" })).toBeNull(); // never "live" from the last read
   });
 
@@ -400,7 +400,7 @@ describe("the fleet's side panel", () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(bandNow("premium-ledger")).toMatch(/^v5\.0 is live in production/);
     prod = { ...prod, state: "stopped" };
-    await act(() => vi.advanceTimersByTimeAsync(2000));
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // the fleet's next poll
     expect(bandNow("premium-ledger")).toMatch(/^Production is down/);
   });
 
@@ -447,7 +447,7 @@ describe("the fleet's side panel", () => {
     expect(runReads(sent())).toHaveLength(1);
     expect(statusReads(sent())).toHaveLength(1);
     last = "gr_newer";
-    await act(() => vi.advanceTimersByTimeAsync(2000));
+    await act(() => vi.advanceTimersByTimeAsync(10_000)); // the fleet's next poll
     expect(runReads(sent())).toContain("/api/v1/gate-runs/gr_newer");
     expect(statusReads(sent())).toHaveLength(2);
   });

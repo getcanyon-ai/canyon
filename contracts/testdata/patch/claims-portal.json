@@ -45,7 +45,7 @@
   "org": [{"id": 1, "ts": "2026-10-18T10:35:30Z", "scope": "org", "project": "claims-portal", "kind": "run.transition", "data": {"project": "claims-portal", "run": "gr_9c4e1a", "state": "clean", "kind": "patch"}}],
   "run": {
     "run": {
-      "id": "gr_9c4e1a",
+      "id": "gr_9c4e1a", "project": "claims-portal",
       "package": "pkg_7d3e8f",
       "state": "clean",
       "kind": "patch",
@@ -167,7 +167,7 @@
     ],
     "run": {
       "run": {
-        "id": "gr_a5f3c2",
+        "id": "gr_a5f3c2", "project": "claims-portal",
         "package": "pkg_7d3e8f",
         "state": "failed",
         "failure_reason": "reverted",
@@ -267,7 +267,7 @@
       {"id": 22, "ts": "2026-10-25T09:17:28Z", "scope": "run", "run": "gr_r3b1d0", "project": "claims-portal", "kind": "build.log", "data": {"line": "The watch passed: the patched app neither exited nor restarted"}},
       {"id": 23, "ts": "2026-10-25T09:17:29Z", "scope": "run", "run": "gr_r3b1d0", "project": "claims-portal", "kind": "run.state", "data": {"state": "clean"}}
     ],
-    "run": {"run": {"id": "gr_r3b1d0", "package": "pkg_7d3e8f", "state": "clean", "kind": "patch", "blocking": 0, "warnings": 0, "progress": [{"step": "scan", "tool": "trivy", "status": "done", "duration_ms": 2100}, {"step": "build", "status": "done", "duration_ms": 120000}, {"step": "image-sbom", "status": "done", "duration_ms": 9800}, {"step": "start", "status": "done", "duration_ms": 11000}, {"step": "watch", "status": "done", "duration_ms": 900000}], "findings": []}},
+    "run": {"run": {"id": "gr_r3b1d0", "project": "claims-portal", "package": "pkg_7d3e8f", "state": "clean", "kind": "patch", "blocking": 0, "warnings": 0, "progress": [{"step": "scan", "tool": "trivy", "status": "done", "duration_ms": 2100}, {"step": "build", "status": "done", "duration_ms": 120000}, {"step": "image-sbom", "status": "done", "duration_ms": 9800}, {"step": "start", "status": "done", "duration_ms": 11000}, {"step": "watch", "status": "done", "duration_ms": 900000}], "findings": []}},
     "audit": [
       {"id": "ev_e4a2", "ts": "2026-10-25T09:17:30Z", "actor": {"kind": "canyon", "subject": "patch", "display": "Canyon"}, "action": "request patch approval", "category": "governance", "via": "canyon", "project": "claims-portal", "run": "gr_r3b1d0", "detail": {"package": "pkg_7d3e8f", "code": "R4BD-7Q2M", "image": "sha256:c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"}},
       {"id": "ev_e4a1", "ts": "2026-10-25T09:02:28Z", "actor": {"kind": "canyon", "subject": "patch", "display": "Canyon"}, "action": "patch preview", "category": "outcome", "via": "canyon", "project": "claims-portal", "run": "gr_r3b1d0", "detail": {"package": "pkg_7d3e8f", "run": "gr_r3b1d0", "replaces": "sha256:4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c", "image": "sha256:c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2", "proof": "same_inputs", "same_inputs": {"values_key": 1, "buildpacks": ["paketo-buildpacks/ca-certificates", "paketo-buildpacks/node-engine", "paketo-buildpacks/npm-install", "paketo-buildpacks/node-start"]}, "fixed": [{"name": "cross-spawn", "from": "7.0.3", "to": "7.0.5", "vulnerability": "CVE-2024-21538", "class": "runtime"}]}}

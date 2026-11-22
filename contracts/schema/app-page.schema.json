@@ -388,7 +388,7 @@
       "type": "object", "additionalProperties": false, "required": ["run"],
       "properties": {
         "run": {
-          "type": "object", "additionalProperties": false, "required": ["id", "package", "state", "blocking", "warnings", "progress", "findings"],
+          "type": "object", "additionalProperties": false, "required": ["id", "project", "package", "state", "blocking", "warnings", "progress", "findings"],
           "if": { "required": ["failure_reason"], "properties": { "failure_reason": { "const": "detect" } } },
           "then": { "required": ["builds"] },
           "else": { "not": { "anyOf": [{ "required": ["builds"] }, { "required": ["errored"] }] } },
@@ -399,6 +399,8 @@
             "fix": { "required": ["state", "failure_reason"], "properties": { "state": { "const": "failed" }, "failure_reason": { "pattern": "^(detect|start)$" } } } },
           "properties": {
             "id": { "$ref": "#/definitions/runId" },
+            "project": { "type": "string", "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$", "description": "the run's app (routes.md, the run read; amended 2026-11-22)" },
+            "deploys": { "const": true, "description": "on a run POST …/deploys started, absent on a check's and every other: canyon_review follows it as the verb that started it (routes.md, the run read; amended 2026-11-22)" },
             "package": { "$ref": "#/definitions/packageId" },
             "state": { "enum": ["pending", "running", "clean", "blocked", "failed"] },
             "failure_reason": { "enum": ["interrupted", "error", "model", "build", "detect", "start", "no_room", "scan_no_room", "image_gone", "not_platform_only", "not_same_inputs", "patch_regressed", "patch_ineffective", "reverted"] },

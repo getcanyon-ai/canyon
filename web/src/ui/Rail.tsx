@@ -34,7 +34,8 @@ export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
   return (
     // The column carries the rail's colour down the whole page, and the nav in it stays in view: a full-page picture
     // never shows the page's grey under it (#99).
-    <div className="self-stretch border-r border-border bg-surface max-[860px]:border-r-0">
+    // planted fault (#99 red): the column stops at the window's height
+    <div className="border-r border-border bg-surface max-[860px]:border-r-0">
     <nav aria-label="Canyon" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} className="sticky top-0 flex h-screen w-[224px] min-w-[224px] flex-col gap-5 overflow-y-auto px-3 py-4 max-[860px]:static max-[860px]:h-auto max-[860px]:w-auto max-[860px]:min-w-0 max-[860px]:gap-0 max-[860px]:border-b max-[860px]:border-border max-[860px]:px-4 max-[860px]:py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5 px-2 text-base font-semibold max-[860px]:px-0"><Mark /><Wordmark /></div>

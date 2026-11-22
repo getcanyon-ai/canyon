@@ -8,7 +8,8 @@ const H3 = "text-lg font-semibold";
 const SUB = "mt-1 text-md text-text-dim";
 const CARD = "mt-4 rounded-xl border border-border bg-surface px-4 py-3.5";
 // A line to run scrolls inside itself, never the page (#99: on a phone the install line widened every Settings tab).
-const CODE = "block min-w-0 flex-1 overflow-x-auto rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm whitespace-pre";
+// planted fault (#99 red): a line to run as wide as its text
+const CODE = "block flex-1 overflow-x-auto rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-sm whitespace-pre";
 
 // The CLI's install line, as the README and the docs give it.
 const INSTALL = "curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh";
@@ -42,11 +43,11 @@ export function ConnectAgents({ signIn }: { signIn: boolean }) {
         <h3 className={H3}>{T.laptop}</h3>
         <ol className="mt-2 grid gap-3 text-md">
           {steps.map(([step, run], at) => (
-            <li key={step} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-1">
+            <li key={step} className="grid grid-cols-[1.5rem_1fr] gap-x-1">
               <span className="font-semibold text-text-faint">{at + 1}.</span>
-              <span className="grid min-w-0 gap-1">
+              <span className="grid gap-1">
                 <span>{step}</span>
-                <span className="flex min-w-0 items-center gap-2">
+                <span className="flex items-center gap-2">
                   <code className={CODE}>{run}</code>
                   <Button size="sm" label={`${T.copy} ${step}`} onClick={() => void copy(run).then((ok) => setLine({ at, ok }))}>{T.copy}</Button>
                 </span>

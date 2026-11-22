@@ -118,7 +118,8 @@ export function Settings() {
   return (
     <div className="flex min-h-screen items-start max-[860px]:block">
       <Rail current="settings" />
-      <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
+      <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
+        {/* planted fault (#99 red): the column widens to its widest line */}
         <h1 className="text-title font-semibold tracking-tight">Settings</h1>
         <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border max-[520px]:gap-4">
           {PAGES.filter(([key]) => (key !== "github" && key !== "integrations" && key !== "telemetry" && key !== "licence") || admin).map(([key, label]) => (

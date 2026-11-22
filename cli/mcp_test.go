@@ -450,8 +450,9 @@ func TestMCPPromoteAsksThePersonFirst(t *testing.T) {
 				t.Errorf("posts %q, isError %v, text:\n%s", h.posts, res.IsError, text)
 			}
 			if (c.elicit == "decline" || c.elicit == "cancel") && (!strings.Contains(text, server.URL+"/#/apps/claims-portal") ||
-				!strings.Contains(text, "canyon deploy --env prod in a terminal where they can answer") || strings.Contains(text, "--yes")) {
-				t.Errorf("a %s says where a person promotes it, never --yes:\n%s", c.elicit, text)
+				!strings.Contains(text, "canyon deploy --env prod in a terminal where they can answer") || strings.Contains(text, "--yes") ||
+				!strings.Contains(text, notAnotherWay)) { // the agent read a no and ran canyon deploy --env prod --yes itself (#90)
+				t.Errorf("a %s says where a person promotes it, and that the agent doesn't, never --yes:\n%s", c.elicit, text)
 			}
 			if c.elicit != "" && !slices.Equal(asked, []string{"Promote claims-portal v1.3 to production?"}) { // D5's, as the terminal asks it
 				t.Errorf("asked %q", asked)
@@ -634,3 +635,9 @@ func TestMCPAClientThatPrefersStructuredContentReadsTheNextSteps(t *testing.T) {
 		t.Errorf("%s sends structuredContent", mcptools.Playbook)
 	}
 }
+
+// notAnotherWay and notAnotherWayRemote are the last line of canyon_promote's answer to a no (design/EXPERIENCE.md, D5).
+const (
+	notAnotherWay       = "Don't promote it another way, such as running canyon deploy --env prod yourself: the person decides what goes to production."
+	notAnotherWayRemote = "Don't promote it another way: the person decides what goes to production."
+)

@@ -4561,6 +4561,10 @@ otherwise run `canyon check` again after that time, never in a loop before it.
   production should go without it. Never ask for the value in the chat. Never
   tell the user a person on the team will promote it when you are the one who
   runs the command.
+- When `canyon_promote` says nothing was promoted, the person said no or didn't
+  answer its question. Never run `canyon deploy --env prod` yourself then, with
+  or without `--yes`: tell the user where they can promote it, as its answer
+  says. The person decides what goes to production.
 - Where the org has a person approve production, that same command ends WAITING
   FOR APPROVAL with an approval url: give the user the link, say a person on the
   app's team approves it in Canyon, and stop. Never open or approve that url
@@ -4909,7 +4913,7 @@ Outbound: an app's environment may be under an allowlist, where Canyon refuses c
 
 Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there.
 
-Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.
+Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says.
 ```
 
 **How to pass what blocks** (amended 2026-11-03, #2622: agents were blocked at preview by rules the

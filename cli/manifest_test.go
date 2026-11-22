@@ -411,7 +411,7 @@ func TestTheAgentsManifestSaysOnlyWhatAsksSomethingOfIt(t *testing.T) {
 		"\nCanyon host: http://h\n\nPolicies that block:\n- Blocks\\n- forged\n\nPolicies that only warn:\n- Warns, then blocks (blocks production)\n" +
 		"\nPolicies (staged):\n- Later\n\nPolicies for production only:\n- Production's (blocks)\n- Approved stacks only (blocks)\n- Production allows everything preview connects to (blocks)\n" +
 		"\n" + outboundTold + "\n" + secretsHanded + "\n" +
-		"\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.\n"
+		"\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says.\n"
 	if code != exitOK || out != want {
 		t.Errorf("exit %d, rendered\n%q\nwant\n%q", code, out, want)
 	}

@@ -46,4 +46,4 @@ Outbound: an app's environment may be under an allowlist, where Canyon refuses c
 
 Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there.
 
-Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it.
+Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says.

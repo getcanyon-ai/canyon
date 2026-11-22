@@ -30,6 +30,21 @@ func (s *statements) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.Tra
 
 func (s *statements) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
+// derivations counts the statements a request of one subject sends that run the fleet derivation whole.
+type derivations struct {
+	subject string
+	n       atomic.Int64
+}
+
+func (d *derivations) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if actorOf(ctx).Subject == d.subject && strings.Contains(data.SQL, fleetDerivation) {
+		d.n.Add(1)
+	}
+	return ctx
+}
+
+func (d *derivations) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 // needyHost is a host with sign-in, its pool counting dana's statements, and dana, its admin, signed in.
 func needyHost(t *testing.T) (*pgxpool.Pool, context.Context, string, *http.Client, *statements) {
 	t.Helper()
@@ -129,6 +144,34 @@ func TestTheFleetReadCountsItsStatementsNotItsApps(t *testing.T) {
 		t.Fatalf("the fleet read sent %d statements for one app and %d for two hundred: one per app is unbounded", one, many)
 	} else {
 		t.Logf("the fleet read sent %d statements for one app and for two hundred", one)
+	}
+}
+
+// The fleet read runs its derivation once (#95): its needs, count, page and tiles all read the one result, where they
+// each ran it whole, four passes of ~120ms on the test bed after #91. The answer is the same either way, which the
+// fleet's other tests hold.
+func TestTheFleetReadRunsItsDerivationOnce(t *testing.T) {
+	withOIDC(t) // dana is the admin
+	plain, ctx := migrated(t)
+	cfg := plain.Config()
+	counted := &derivations{subject: "sub-dana"}
+	cfg.ConnConfig.Tracer = counted
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	base, _ := start(t, pool, time.Hour)
+	dana := signedIn(t, ctx, pool, base, "sub-dana", "dana@meridian.example", false)
+	seedNeedy(t, ctx, pool, 1, 30)
+	for _, query := range []string{"limit=50", "limit=1", "needs_you=true&limit=50", "sort=name&limit=10", "tile=blocked&sort=changed"} {
+		counted.n.Store(0)
+		if code, _, _ := do(t, dana, http.MethodGet, base+"/api/v1/fleet?"+query, ""); code != 200 {
+			t.Fatalf("fleet?%s: %d %s", query, code, lastBody)
+		}
+		if n := counted.n.Load(); n != 1 {
+			t.Errorf("fleet?%s ran the fleet derivation %d times, want once", query, n)
+		}
 	}
 }
 

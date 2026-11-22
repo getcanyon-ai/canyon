@@ -3,6 +3,7 @@ import { listAudit, version, type Actor as ActorRef, type AuditEvent } from "../
 import { actorName, anonymous } from "../ui/Actor";
 import { dependency, sentence } from "../ui/Audit";
 import { Avatar } from "../ui/Avatar";
+import { poll } from "../ui/poll";
 import { Icon } from "../ui/Icon";
 
 // The fleet's Recent activity (the approved redesign, "what changed in my apps"): one line per run, the
@@ -205,31 +206,31 @@ const GROUP = "pt-3 text-sm font-semibold tracking-wide text-text-faint uppercas
 // How often the fleet's table and its activity are read again while the tab shows: the fleet read costs seconds on a
 // large fleet (#87).
 export const POLL_MS = 10_000;
+// How often the last day's rows, for what is pinned, are read again: once a minute.
+const DAY_EVERY_MS = 60_000;
 
-// Polled like the table above it, every ten seconds while the tab shows (Fleet.tsx); `org` names whose platform reported. Two reads: the newest 100 rows
-// for the timeline, and the last day's for what is pinned, so a failure 20 hours old in a busy org is
-// pinned however far down the timeline's page it sits.
+// Polled like the table above it, every ten seconds while the tab shows, one read at a time (poll); `org` names whose
+// platform reported. Two reads: the newest 100 rows for the timeline, each poll, and the last day's for what is pinned,
+// so a failure 20 hours old in a busy org is pinned however far down the timeline's page it sits, read once a minute.
 export function RecentActivity({ org, names }: { org: string; names?: Map<string, string> }) {
   const [events, setEvents] = useState<{ newest: AuditEvent[]; day: AuditEvent[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const again = () => { clearTimeout(timer); timer = setTimeout(() => void (document.visibilityState === "hidden" ? again() : read()), POLL_MS); };
-    const shown = () => { if (document.visibilityState !== "hidden" && live) { clearTimeout(timer); void read(); } };
-    const read = async () => {
+    let pinnedAt = -Infinity; // when the last day's rows were last read
+    let lastDay: AuditEvent[] = [];
+    const stop = poll(async () => {
       const ask = (more: Record<string, string>) => listAudit(new URLSearchParams({ action: ACTIVITY_ACTIONS.join(","), ...more }).toString());
       try {
-        const [newest, day] = await Promise.all([ask({ limit: "100" }), ask({ since: new Date(Date.now() - DAY_MS).toISOString(), limit: "200" })]);
-        if (live) { setEvents({ newest: newest.events, day: day.events }); setFailure(null); }
+        const due = Date.now() - pinnedAt >= DAY_EVERY_MS;
+        const [newest, day] = await Promise.all([ask({ limit: "100" }), due ? ask({ since: new Date(Date.now() - DAY_MS).toISOString(), limit: "200" }) : null]);
+        if (day !== null) [pinnedAt, lastDay] = [Date.now(), day.events];
+        if (live) { setEvents({ newest: newest.events, day: lastDay }); setFailure(null); }
       } catch (err) {
         if (live) setFailure((err as Error).message);
       }
-      if (live) again();
-    };
-    void read();
-    document.addEventListener("visibilitychange", shown);
-    return () => { live = false; clearTimeout(timer); document.removeEventListener("visibilitychange", shown); };
+    }, POLL_MS);
+    return () => { live = false; stop(); };
   }, []);
 
   const now = Date.now();

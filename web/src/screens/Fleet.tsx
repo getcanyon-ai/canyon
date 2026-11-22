@@ -23,6 +23,7 @@ import { HoldCell, HoldDialog, type Acting } from "./FleetHold";
 import { FleetPanel } from "./FleetPanel";
 import { OwnerApps, ownerHref, ownerName } from "./Owner";
 import { fleetHref, hashQuery } from "./query";
+import { poll } from "../ui/poll";
 
 // Each column answers one question (the redesign): which version, did it pass review, what runs in
 // preview, what runs in production, who owns it, when it last moved. Access only where people sign
@@ -239,16 +240,12 @@ export function Fleet({ org }: { org: string | null }) {
     return () => window.removeEventListener("hashchange", follow);
   }, []);
 
-  // The current page is read again every ten seconds while the tab shows, and at once when it shows again: the read costs
-  // seconds on a large fleet (#87), and two seconds after each answer kept one always in flight. An answer to an older
-  // query is dropped, and the page it answered goes with it, so one query's rows are never shown under another.
+  // The current page is read again every ten seconds while the tab shows, one read at a time (poll; #87). An answer to an
+  // older query is dropped, and the page it answered goes with it, so one query's rows are never shown under another.
   useEffect(() => {
     setPage(null);
     let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const again = () => { clearTimeout(timer); timer = setTimeout(() => void (document.visibilityState === "hidden" ? again() : read()), POLL_MS); };
-    const shown = () => { if (document.visibilityState !== "hidden" && live) { clearTimeout(timer); void read(); } };
-    const read = async () => {
+    const stop = poll(async () => {
       try {
         // A cursor from an older link is never sent: the screen pages by number (contracts/routes.md, the fleet read).
         const sent = new URLSearchParams(query);
@@ -258,11 +255,8 @@ export function Fleet({ org }: { org: string | null }) {
       } catch (err) {
         if (live) { setPage(null); setFailure((err as Error).message); }
       }
-      if (live) again();
-    };
-    void read();
-    document.addEventListener("visibilitychange", shown);
-    return () => { live = false; clearTimeout(timer); document.removeEventListener("visibilitychange", shown); };
+    }, POLL_MS);
+    return () => { live = false; stop(); };
   }, [query]);
 
   useEffect(() => {

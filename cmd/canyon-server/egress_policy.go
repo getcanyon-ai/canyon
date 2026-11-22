@@ -153,11 +153,14 @@ func (s *policyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// where an answer waited, said with a failure or an answer past a second: egress-control gives a pull 5 s, and past
 	// 30 s without one it knows no caller (#86)
 	began, step := time.Now(), "resolve"
-	waited := func() string {
-		st := s.pool.Stat()
-		return fmt.Sprintf("in %s after %v; pool %d of %d in use, %d idle", step, time.Since(began).Round(time.Millisecond), st.AcquiredConns(), st.MaxConns(), st.IdleConns())
-	}
 	asked, refetch := q["caller"]
+	waited := func() string {
+		st, ask := s.pool.Stat(), "a poll"
+		if refetch {
+			ask = "a refetch"
+		}
+		return fmt.Sprintf("%s from %s, in %s after %v; pool %d of %d in use, %d idle", ask, replica, step, time.Since(began).Round(time.Millisecond), st.AcquiredConns(), st.MaxConns(), st.IdleConns())
+	}
 	if refetch {
 		if addr, err := netip.ParseAddr(asked[0]); len(asked) != 1 || err != nil || !addr.Is4() || addr.String() != asked[0] {
 			writeErr(w, http.StatusBadRequest, "invalid_caller", "caller is one IPv4 address", nil)

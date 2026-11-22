@@ -88,6 +88,24 @@ Without `?apply=true`, the call only previews: it answers whether the version th
 has findings the addition would block, and saves nothing. Add `?apply=true` to save it. `DELETE` on the same address takes the
 addition away.
 
+## Canyon's MCP server
+
+Coding agents in the cloud reach Canyon over MCP at `/mcp`, with a token from Canyon's own OAuth
+sign-in ([Connect your agent](/start/connect-your-agent/#in-the-cloud)). The agent finds every
+address below on its own, from the first. They are served only with sign-in on.
+
+| Address | What it is |
+|---|---|
+| `POST /mcp` | Canyon's MCP server, over MCP's streamable HTTP transport. It takes a bearer token from `/oauth/token`, and each tool is checked as the matching `/api/v1` call would be, as the person who allowed the agent. With sign-in off it answers `404`, `mcp_needs_sign_in`. |
+| `GET /.well-known/oauth-protected-resource/mcp` | Where `/mcp` gets its tokens, and its two scopes, `read` and `act` |
+| `GET /.well-known/oauth-authorization-server` | Canyon's OAuth addresses |
+| `GET /oauth/authorize` | Opens the consent page in the browser. It requires PKCE with `S256` and `resource=<your Canyon>/mcp`. |
+| `POST /oauth/token` | Exchanges the code for a token that lasts an hour, and refreshes it. The connection lasts 7 days from when you allowed it. |
+| `POST /oauth/register` | Registers a client that has no client ID document of its own. Public clients only, with no secret. |
+
+An agent's calls are recorded in the audit trail as yours, made through MCP. A script uses a CLI
+sign-in, as above, not these addresses.
+
 ## What needs the dashboard
 
 On a Canyon with sign-in on, these calls take a dashboard session only. A CLI sign-in, and so a coding
@@ -104,6 +122,8 @@ agent, gets `403 dashboard_required`, with a message that says where in the dash
 | `DELETE /api/v1/projects/<app>/envs/prod/hold` | Lifting a hold on production |
 | `POST /api/v1/gate-runs/<run>/findings/<fingerprint>/approve`, `POST /api/v1/gate-runs/<run>/findings/approve`, for a blocking finding | Approving a blocking finding |
 | `GET /api/v1/github/link` | Linking your GitHub account |
+| `POST /api/v1/oauth/requests/<request>/approve`, `POST …/deny` | Allowing or refusing a coding agent's connection |
+| `DELETE /api/v1/sessions/<session>` | Ending one session, such as disconnecting an agent |
 
 While production approval is on, these move to the dashboard too:
 

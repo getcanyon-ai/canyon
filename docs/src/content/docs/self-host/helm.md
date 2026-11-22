@@ -176,6 +176,16 @@ against your cluster's key set. Two things are yours:
   `kubectl -n canyon-auth logs job/canyon-bootstrap` shows what it did. Without the bundled Pocket ID,
   set the front door by hand under **Settings › App hosting**.
 
+## Connect your agents
+
+Your developers connect their coding agents in one of two ways ([Connect your agent](/start/connect-your-agent/)):
+
+- **On a laptop:** `canyon login https://<domain>`, then `canyon skill install`. It sets up Canyon's skill, its
+  session hook and its MCP server for each agent it finds.
+- **In the cloud:** Claude Code on the web and Cursor's cloud agents connect to `https://<domain>/mcp`, and each
+  person allows it once in the browser. That needs Canyon reachable from the internet, Canyon's GitHub
+  App on your repositories ([Connect GitHub](/build/github/)), and each person's GitHub account linked.
+
 ## Platform notes
 
 - **`canyon.patching`** is `CANYON_PATCHING`, **beta**, `"off"` by default, and `canyon.patchConcurrency`

@@ -244,12 +244,15 @@ Then offer these four ways on, once, each as one line, and let the user pick or 
      run, and hands production to their own Argo CD or Flux through a deploy repo. Canyon's docs
      have these under Build, GitHub and under Self-host, Hand-off.
   3. Set this up for my team. This demo has sign-in off and keeps nothing. Canyon's docs, under
-     Self-host, have one Kubernetes node with the Helm chart and one Linux server with Docker.
+     Self-host, have one Kubernetes node with the Helm chart and one Linux server with Docker. On a
+     team's Canyon, laptops connect with the CLI as here, and coding agents in the cloud, such as
+     Claude Code on the web, connect by its address followed by /mcp.
   4. Run real workloads. Canyon on their own Kubernetes cluster, with their registry, gateway,
      identity provider and Postgres. Canyon's docs, under Self-host, have what production needs.
 
-Then say in one line: Canyon's docs, under Get started, Connect your agent, show how to give any of
-their coding agents Canyon's tools.
+Then say in one line: Canyon's docs, under Get started, Connect your agent, show how to connect
+their other coding agents: on a laptop with canyon skill install, in the cloud by a team Canyon's
+address.
 
 Last, say that canyon demo down stops the demo and frees the disk. Run it only if asked.
 `,
@@ -334,10 +337,12 @@ var tourHuman = map[int]string{
                                   docs: Build, GitHub, and Self-host, Hand-off.
     Set this up for your team     This demo has sign-in off and keeps nothing. Canyon's docs,
                                   under Self-host, have one Kubernetes node and one Linux server.
+                                  Cloud agents connect to it by address; laptops use the CLI.
     Run real workloads            Canyon on your own Kubernetes cluster. Canyon's docs, under
                                   Self-host, have the install and what production needs.
 
-  To give your other coding agents Canyon's tools: Canyon's docs, Get started, Connect your agent.
+  To connect your other coding agents, with the CLI on a laptop or by a team Canyon's address in
+  the cloud: Canyon's docs, Get started, Connect your agent.
 
   To stop the demo: canyon demo down.
   canyon demo tour reset starts the tour again.

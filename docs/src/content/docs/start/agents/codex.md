@@ -136,11 +136,16 @@ network_access = true
 
 Canyon's MCP server, `canyon mcp`, gives Codex Canyon as tools, with typed arguments and results,
 beside the `canyon` commands it already runs: your org's rules, an app's status and logs, and checking, deploying and promoting it. It runs
-as the `canyon` you installed, signed in as it is. One command adds it to `~/.codex/config.toml`:
+as the `canyon` you installed, signed in as it is. `canyon skill install` adds it for you. To add only
+the server, one command writes it into `~/.codex/config.toml`:
 
 ```sh
 codex mcp add canyon -- canyon mcp
 ```
+
+Codex's cloud tasks, run from ChatGPT, don't read this configuration, and OpenAI's docs don't
+describe connecting them to an MCP server yet (checked in November 2026,
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp)). Use Codex on your machine with the CLI.
 
 ## With AGENTS.md instead
 

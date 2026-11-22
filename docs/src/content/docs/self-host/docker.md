@@ -266,6 +266,16 @@ with them, Canyon shows them a page that says whom to ask, with an **Ask for acc
 it is shared, the app answers them with Canyon's identity token, which says who they are
 ([Sign-in inside your app](/build/sign-in-in-your-app/)).
 
+## 8. Connect your agents
+
+Your developers connect their coding agents in one of two ways ([Connect your agent](/start/connect-your-agent/)):
+
+- **On a laptop:** `canyon login https://$DOMAIN`, then `canyon skill install`. It sets up Canyon's skill, its
+  session hook and its MCP server for each agent it finds.
+- **In the cloud:** Claude Code on the web and Cursor's cloud agents connect to `https://$DOMAIN/mcp`, and each
+  person allows it once in the browser. That needs Canyon reachable from the internet, Canyon's GitHub
+  App on your repositories ([Connect GitHub](/build/github/)), and each person's GitHub account linked.
+
 ## Back up, upgrade and uninstall
 
 **Back up** Canyon's Postgres, the apps' Postgres and the server's key and code, all three at the same

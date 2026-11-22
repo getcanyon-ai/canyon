@@ -105,6 +105,16 @@ claim still makes them an admin.
 send your developers there once setup is finished. On a Canyon with sign-in off, `canyon login`
 connects without a code.
 
+## Connect your developers' agents
+
+Your developers connect their coding agents in one of two ways ([Connect your agent](/start/connect-your-agent/)):
+
+- **On a laptop:** `canyon login <Canyon's address>`, then `canyon skill install`. It sets up Canyon's skill, its
+  session hook and its MCP server for each agent it finds.
+- **In the cloud:** Claude Code on the web and Cursor's cloud agents connect to `<Canyon's address>/mcp`, and each
+  person allows it once in the browser. That needs Canyon reachable from the internet, Canyon's GitHub
+  App on your repositories ([Connect GitHub](/build/github/)), and each person's GitHub account linked.
+
 ## Usage reports
 
 Once a day, Canyon sends a short report of counts, never names. It's on by default.

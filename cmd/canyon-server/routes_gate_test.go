@@ -141,7 +141,7 @@ func TestAGateRunReachesItsVerdictAndTheRunReadShowsItsFindings(t *testing.T) {
 	if got["state"] != "blocked" || got["blocking"] != 1.0 || got["warnings"] != 3.0 || len(findings) != 4 || got["package"] != packageOf(body)["id"] {
 		t.Fatalf("the golden log blocks with one blocking and three advisory findings: %s", lastBody)
 	}
-	if _, has := got["failure_reason"]; has || len(got) != 8 || got["approvable"] != true { // sign-in off: the anonymous admin approves
+	if _, has := got["failure_reason"]; has || len(got) != 9 || got["project"] != "claims-portal" || got["approvable"] != true { // sign-in off: the anonymous admin approves; a check's: no deploys
 		t.Fatalf("the run read's keys: %s", lastBody)
 	}
 	last, _ := findings[3].(map[string]any) // the reviewer's three, then gitleaks' key
@@ -261,10 +261,10 @@ func TestTheRunReadAnswersTheSeamShapeBeforeAVerdictAndAFailedRunShowsItsReason(
 	pool, ctx, base, c := withProject(t)
 	_, body := upload(t, c, base, "claims-portal", tarOf(t, map[string]string{"a": "1"}), "", "")
 	pkg, _ := packageOf(body)["id"].(string)
-	if _, err := pool.Exec(ctx, "INSERT INTO runs (id, project_id, package_id, state) VALUES ('gr_pend000000', 'claims-portal', $1, 'pending')", pkg); err != nil {
+	if _, err := pool.Exec(ctx, "INSERT INTO runs (id, project_id, package_id, state, deploys) VALUES ('gr_pend000000', 'claims-portal', $1, 'pending', false)", pkg); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _ = do(t, c, http.MethodGet, base+"/api/v1/gate-runs/gr_pend000000", ""); lastBody != `{"run":{"id":"gr_pend000000","package":"`+pkg+`","state":"pending","approvable":true,"blocking":0,"warnings":0,"progress":[],"findings":[]}}` {
+	if _, _, _ = do(t, c, http.MethodGet, base+"/api/v1/gate-runs/gr_pend000000", ""); lastBody != `{"run":{"id":"gr_pend000000","package":"`+pkg+`","state":"pending","project":"claims-portal","approvable":true,"blocking":0,"warnings":0,"progress":[],"findings":[]}}` {
 		t.Fatalf("before the verdict: %s", lastBody)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE runs SET state = 'failed', failure_reason = 'interrupted', ended_at = now() WHERE id = 'gr_pend000000'"); err != nil {

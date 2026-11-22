@@ -692,8 +692,7 @@ it can run itself are *Canyon-run tools*, below.
   nor one of the words `critical`, `high`, `medium`, `low` or `info` in any ASCII case; a rule's
   `shortDescription.text` over 1,024 characters; a
   result with no `ruleId` (or `rule.id`) of 1 to 128 printable ASCII characters and no whitespace;
-  `level: none`; no `message.text`, or one over 4,096 characters; a fix it takes
-  (`fixes[0].description.text`, or the rule's `help.text` in its place, unless it is the rule's whole document, which is no fix) over 4,096 characters;
+  `level: none`; no `message.text`;
   no `locations[0].physicalLocation` with an `artifactLocation.uri`, or one whose `region` has no
   `startLine`; a region the input rules below refuse; a live key the unredacted-literal
   check finds, or a `ruleId` carrying region text it finds. Otherwise a result is **dropped and counted**, never refused, when its `kind` is
@@ -704,6 +703,15 @@ it can run itself are *Canyon-run tools*, below.
   or it is file-level and its file, valid UTF-8, has no non-empty line; the answer is
   `{tool, category, results, dropped, first_dropped?}`. Nothing is
   decided in a run: a run never drops an imported result and never fails on one.
+- **An over-long text is cut, never refused** (amended 2026-11-22, the v0.11.0 tester journey: trivy 0.74.0 writes an
+  advisory's whole details as its rule's `help.text`, 13,503 characters for one, and three of the vendored opengrep
+  rules' messages pass 4,096; refused, one such result voided the tool's whole report, and every real finding in it read
+  as could not check). A result's `message.text`, and the fix it takes (`fixes[0].description.text`, or the rule's
+  `help.text` in its place, unless it is the rule's whole document, which is no fix), are kept to 4,096 code points:
+  past that, cut at the last line break in the kept text's second half, else its last space, else at a code point, and
+  ended with the line `[Canyon cut the rest of this text: it ran past 4,096 characters.]` after a line break, the whole
+  4,096 code points at most. The unredacted-literal check reads each whole, before the cut: a live key past the cut
+  still refuses the report. The bound keeps what is stored and shown, and the masking that reads it, to a known size.
 - **Input rules.** `artifactLocation.uri` is percent-decoded once, and the decoded uri — the tree
   path the result is stored, sorted and fingerprinted under — is looked up exactly in the package's tree index — never joined to a filesystem path — and its result dropped
   if it is absolute, carries a `..` segment, a backslash or any scheme (`file://` included), or a

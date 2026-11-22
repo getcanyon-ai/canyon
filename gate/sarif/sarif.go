@@ -327,13 +327,14 @@ func (a *attach) result(res result) (finding.Result, string, error) {
 	if full := strings.TrimSpace(r.FullDescription.Text); full != "" && strings.TrimSpace(fix) == full { // the rule's whole document, no fix of the tool's own
 		fix = ""
 	}
+	// What is stored and shown of the result's text and fix is cut to 4,096 characters, never refused: one advisory's
+	// help that runs on (trivy writes an advisory's whole details) once voided the tool's whole report. The live-key
+	// check below reads them whole, so a key past the cut still refuses the report (contracts/finding.md).
+	wholeText, wholeFix := text, fix
+	about, fix = cutText(about), cutText(fix)
 	switch {
 	case text == "":
 		return finding.Result{}, "", Invalid{"no message.text"}
-	case utf8.RuneCountInString(text) > 4096:
-		return finding.Result{}, "", Invalid{"message.text is over 4,096 characters"}
-	case utf8.RuneCountInString(fix) > 4096: // the tool's fix or its rule's help, the other text the check below reads
-		return finding.Result{}, "", Invalid{"its fix is over 4,096 characters"}
 	case utf8.RuneCountInString(short) > 1024:
 		return finding.Result{}, "", Invalid{"its rule's shortDescription is over 1,024 characters"}
 	case title == "":
@@ -374,7 +375,7 @@ func (a *attach) result(res result) (finding.Result, string, error) {
 	// A dependency result — trivy's, its rule tagged vulnerability — may quote its region, a lockfile's
 	// package entry: its advisory link and the entry's resolved URL share https:// (finding.md).
 	dependency := a.tool == "trivy" && slices.Contains(r.Properties.Tags, "vulnerability")
-	for _, s := range []struct{ name, text string }{{"ruleId", id}, {"message.text", text}, {"its fix", fix}, {"its rule's shortDescription", short}} {
+	for _, s := range []struct{ name, text string }{{"ruleId", id}, {"message.text", wholeText}, {"its fix", cmp.Or(wholeFix, fix)}, {"its rule's shortDescription", short}} {
 		if finding.HasLiveKey([]byte(s.text)) {
 			return finding.Result{}, "", Invalid{s.name + " carries a live key"}
 		}
@@ -483,6 +484,28 @@ func once(short string) string {
 		return rest
 	}
 	return short
+}
+
+// maxText is the most of a result's text or fix Canyon keeps, in characters (contracts/finding.md).
+const maxText = 4096
+
+// cutLine ends a text Canyon cut to maxText, so a reader knows there was more (contracts/finding.md).
+const cutLine = "\n[Canyon cut the rest of this text: it ran past 4,096 characters.]"
+
+// cutText is s, or, past maxText characters, its head cut at the last line break in its second half, else at the last
+// space, else at a character, with cutLine after it: maxText characters at most, whole lines where it can.
+func cutText(s string) string {
+	if utf8.RuneCountInString(s) <= maxText {
+		return s
+	}
+	r := []rune(s)
+	head := string(r[:maxText-utf8.RuneCountInString(cutLine)])
+	if i := strings.LastIndexByte(head, '\n'); i > len(head)/2 {
+		head = head[:i]
+	} else if i := strings.LastIndexFunc(head, unicode.IsSpace); i > len(head)/2 {
+		head = head[:i]
+	}
+	return strings.TrimRightFunc(head, unicode.IsSpace) + cutLine
 }
 
 // titleOf is a problem's first sentence, clipped to 120 code points.

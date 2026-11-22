@@ -219,7 +219,7 @@ export function RecentActivity({ org, names }: { org: string; names?: Map<string
     let live = true;
     let pinnedAt = -Infinity; // when the last day's rows were last read
     let lastDay: AuditEvent[] = [];
-    const stop = poll(async () => {
+    const { stop } = poll(async () => {
       const ask = (more: Record<string, string>) => listAudit(new URLSearchParams({ action: ACTIVITY_ACTIONS.join(","), ...more }).toString());
       try {
         const due = Date.now() - pinnedAt >= DAY_EVERY_MS;

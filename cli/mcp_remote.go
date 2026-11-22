@@ -202,14 +202,19 @@ func handoffOf(a *app) time.Duration {
 	return mcptools.Handoff
 }
 
-// mcpReview is canyon_review: a run of the app named, read once it has ended and said as canyon check says a verdict,
-// every finding with how to fix it; while it runs, that it does.
-func (a *app) mcpReview(ctx context.Context, app, run string) *mcp.CallToolResult {
-	c := a.sub(ctx, "")
-	c.verb, c.named = command{name: "check"}, app
-	client := c.http
-	at := "/api/v1/projects/" + url.PathEscape(app)
-	if err := client.get(ctx, at+"/status?run="+url.QueryEscape(run), &struct{}{}); err != nil { // one that isn't this app's gate run is 404
+// mcpReview is canyon_review: a run a hand-off gave the agent, a check's or a deploy's, followed again from its first
+// row as the verb that started it, so it ends as that verb ends (a deploy that went live with its url), or is handed
+// off again. A run of another app than the one named is refused; one the caller may not read, the run read refuses.
+func (a *app) mcpReview(ctx context.Context, dir, app, run string) *mcp.CallToolResult {
+	c := a.sub(ctx, dir)
+	if app == "" {
+		app = c.dirApp()
+	}
+	if !names.ValidProject(app) || len(app) > maxProjectName {
+		return toolRefused(fmt.Errorf("app %q is not a Canyon app id: name the app the run is of", app))
+	}
+	client, err := c.client()
+	if err != nil {
 		return toolRefused(c.refusal(err))
 	}
 	var read struct {
@@ -218,18 +223,23 @@ func (a *app) mcpReview(ctx context.Context, app, run string) *mcp.CallToolResul
 	if err := client.get(ctx, "/api/v1/gate-runs/"+url.PathEscape(run), &read); err != nil {
 		return toolRefused(c.refusal(err))
 	}
-	if read.Run.State == "pending" || read.Run.State == "running" {
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf(reviewRunning, cell(run), cell(app))}}}
+	if read.Run.Project != app {
+		return toolRefused(fmt.Errorf(notThisAppsRun, cell(run), cell(app))) //nolint:staticcheck // D5's line, said whole
 	}
-	checked := checkRun{App: app, Host: client.page(), Run: read.Run.ID, Package: read.Run.Package, Result: read.Run}
+	c.named, c.handoff = app, handoffOf(a)
+	followed := checkRun{App: app, Host: client.page(), Package: read.Run.Package}
+	c.verb = command{name: "check"}
+	follow := c.followCheck
+	if read.Run.Deploys {
+		c.verb, follow = command{name: "deploy"}, c.followDeploy
+	}
 	c.park()
-	c.appRules(ctx, client, &checked)
-	code := c.verdict(checked)
+	code := follow(ctx, client, followed, run, time.Now())
 	return &mcp.CallToolResult{IsError: code == exitError, Content: []mcp.Content{&mcp.TextContent{Text: c.said()}}}
 }
 
-// reviewRunning is canyon_review's line for a run still going (design/EXPERIENCE.md, D5).
-const reviewRunning = "%s is still running. Call canyon_review with app %s and this run again in a minute."
+// notThisAppsRun is canyon_review's refusal of a run of another app (design/EXPERIENCE.md, D5).
+const notThisAppsRun = "%s is not a run of %s."
 
 // secretSet is how a step names setting the secret NAME: local, as the CLI says it, or on /mcp the link canyon_secret_link
 // answers, opened in the person's own browser (design/specs/mcp.md §2.3); env is the environment a remote step names.

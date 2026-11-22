@@ -2,6 +2,7 @@
   "run": {
     "run": {
       "id": "gr_6e03",
+      "project": "birthday-list",
       "package": "pkg_b7d1",
       "state": "blocked",
       "blocking": 1,

@@ -110,7 +110,7 @@ func (a *app) mcpTool(t *mcp.Tool) mcp.ToolHandler {
 		case mcptools.CheckRef:
 			return a.mcpVerdict(ctx, req, "", args.App, args.Ref, command{name: "check", run: runCheck}), nil
 		case mcptools.Review:
-			return a.mcpReview(ctx, args.App, args.Run), nil
+			return a.mcpReview(ctx, dir, args.App, args.Run), nil
 		case mcptools.DeployRef:
 			return a.mcpVerdict(ctx, req, "", args.App, args.Ref, command{name: "deploy", run: runDeploy}), nil
 		case mcptools.Promote:

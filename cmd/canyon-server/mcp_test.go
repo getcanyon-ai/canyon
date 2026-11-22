@@ -362,3 +362,45 @@ func TestMCPRemoteCreateApp(t *testing.T) {
 		t.Errorf("after the calls at once, /mcp answered %d", code)
 	}
 }
+
+// canyon_review over /mcp reads a run back only as far as the person may see it (design/PERMISSIONS.md: a run is
+// technical detail, a contributor's): carl, a contributor, reads back a check he started through the check route as a
+// check; vic, read-only, gets the run read's own refusal. The run read names its app, and says deploys on a deploy's
+// run alone: a check's never, though the column's default is true.
+func TestMCPRemoteReviewReadsARunBackAsFarAsThePersonMay(t *testing.T) {
+	withOIDC(t)
+	pool, ctx := migrated(t)
+	base, _ := start(t, pool, time.Hour)
+	seedTeamApp(t, ctx, pool, base, signedIn(t, ctx, pool, base, "sub-olive", "olive@meridian.example", false))
+	carl, vic := signedIn(t, ctx, pool, base, "sub-carl", "carl@meridian.example", false), signedIn(t, ctx, pool, base, "sub-vic", "vic@meridian.example", false)
+	_, started, _ := do(t, carl, http.MethodPost, base+"/api/v1/projects/claims-portal/gate-runs", "")
+	check, _ := runOf(started)["id"].(string)
+	waitVerdict(t, carl, base, check)
+	if _, err := pool.Exec(ctx, `INSERT INTO runs (id, project_id, package_id, state, ended_at, deploys)
+		SELECT 'gr_deploy', 'claims-portal', package_id, 'clean', now(), true FROM runs WHERE id = 'gr_seed'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{check, "gr_deploy"} {
+		_, body, _ := do(t, carl, http.MethodGet, base+"/api/v1/gate-runs/"+id, "")
+		if run := runOf(body); run["project"] != "claims-portal" || (run["deploys"] == true) != (id == "gr_deploy") {
+			t.Errorf("%s's run read: %v", id, run)
+		}
+	}
+	const redirect = "https://claude.ai/cb"
+	review := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"canyon_review","arguments":{"app":"claims-portal","run":"` + check + `"}}}`
+	for _, c := range []struct {
+		who     string
+		as      *http.Client
+		says    string
+		refused bool
+	}{
+		{"carl, a contributor", carl, "nothing was deployed", false}, // a check's verdict, passed or blocked, and no live url
+		{"vic, read-only", vic, "Ask sub-olive to add you to claims-portal", true},
+	} {
+		token, _ := signedInOver(t, base, c.as, register(t, base, redirect), redirect, "read")
+		code, _, body := mcpCall(t, base, token, review, nil)
+		if code != http.StatusOK || !strings.Contains(body, c.says) || strings.Contains(body, "live url: ") || strings.Contains(body, `"isError":true`) != c.refused {
+			t.Errorf("%s: %d %s", c.who, code, body)
+		}
+	}
+}

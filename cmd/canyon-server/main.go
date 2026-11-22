@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
+	"github.com/getcanyon-ai/canyon/cli"
 	"github.com/getcanyon-ai/canyon/contracts"
 	"github.com/getcanyon-ai/canyon/db"
 	"github.com/getcanyon-ai/canyon/executor"
@@ -45,6 +46,7 @@ var commands = []string{"egress-control", "rotate-kek", "reissue-db-passwords", 
 const usage = "usage: canyon-server [egress-control | rotate-kek | reissue-db-passwords | egress-policy-cert]\nWith no command, it runs the server.\n"
 
 func main() {
+	cli.Version = version // /mcp's tools head their answers with this server's version, as canyon mcp's with its binary's
 	if len(os.Args) > 1 && !slices.Contains(commands, os.Args[1]) {
 		fmt.Fprintf(os.Stderr, "canyon-server: unknown command %q\n%s", os.Args[1], usage)
 		os.Exit(2)

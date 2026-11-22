@@ -26,6 +26,8 @@ import (
 // the timeline's verdict row, which is the audit copy of the same thing.
 type runResult struct {
 	ID            string    `json:"id"`
+	Project       string    `json:"project"` // the run's app
+	Deploys       bool      `json:"deploys"` // a deploy started it, not a check
 	Package       string    `json:"package"`
 	State         string    `json:"state"`
 	FailureReason string    `json:"failure_reason"`
@@ -190,6 +192,12 @@ func runCheck(ctx context.Context, a *app, args []string) int {
 	if err != nil {
 		return a.fail(err)
 	}
+	return a.followCheck(ctx, client, run, started, began)
+}
+
+// followCheck follows the review started, from its first row, to its verdict, or hands it off where a tool stops
+// following: canyon check's, and canyon_review's for a check's run it was handed (mcp_remote.go).
+func (a *app) followCheck(ctx context.Context, client *Client, run checkRun, started string, began time.Time) int {
 	each, stop := a.narrate(&run)
 	seen, err := a.poll(ctx, client, started, checkCeiling, each)
 	stop()

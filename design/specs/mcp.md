@@ -38,6 +38,7 @@ because a device code shown inside a tool result would have the agent driving th
 | `canyon_deploy` | Deploys a directory to preview, as `canyon deploy`, writing the app's id into `canyon.toml` itself | `POST …/packages`, `POST …/deploys`, then polls | the verdict, and on success the deploy's `url`, `answered` and access line |
 | `canyon_status` | The app's environments, receipt and needs, as `canyon status` | `GET …/status` | the status read, as the caller's level trims it (§4) |
 | `canyon_logs` | The app's last lines in one environment | `GET …/logs?env=&lines=&redaction=masked` | text, at most 200 lines, the masked read's limit |
+| `canyon_review` | Reads back a check or deploy a tool handed off (below, *Long runs*), followed again as the verb that started it: a check's verdict, or a deploy's with its `url` once live (amended 2026-11-22) | `GET /api/v1/gate-runs/:id` (its `project` must be the app named, its `deploys` the verb), then polls | the verdict, as `canyon_check` or `canyon_deploy` ends |
 | `canyon_promote` | Promotes what preview runs, or puts back an earlier version, as `canyon deploy --env prod [--version]` | `GET …/status`, `POST …/promotions`, then polls | the promote block, as text: its fields, or the approval URL when a person approves production |
 
 - **Arguments.**
@@ -63,7 +64,7 @@ because a device code shown inside a tool result would have the agent driving th
   - When the org has a person approve production, the tool asks nothing and returns the approval URL, as the CLI's WAITING FOR APPROVAL block does.
 - **Long runs.** A check or deploy outlasts most clients' tool-call timeout.
   - The tool sends MCP progress notifications from the run's timeline (seam 2), one per `progress` row.
-  - Past 10 minutes it returns `state: "running"`, the run id and `fleet_url`, the app's page. `canyon_status` then reads where it ended, as the CLI's "keeps going without this terminal" line does today.
+  - Past 10 minutes it hands the run off with its id, and its steps name `canyon_review`, which follows that run again as the check or deploy it is, until it ends (§2.3; amended 2026-11-22: `canyon_status` never names a check's run).
 
 ### 1.2 No secret value passes through a tool
 
@@ -156,13 +157,14 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
 ### 2.3 Tools
 
 The remote server has every local tool except `canyon_check` and `canyon_deploy`, which read a local
-directory. It adds three tools that work from a repository:
+directory. It adds the tools below that work from a repository or from what Canyon holds (`canyon_review` is on both
+servers):
 
 | Tool | Does | Calls |
 |---|---|---|
 | `canyon_check_ref` | Reviews a linked repository's ref without deploying | `POST …/packages/from-repository {ref}` (new, §5), then `POST …/gate-runs` |
 | `canyon_deploy_ref` | Deploys a linked repository's ref to preview | the same package, then `POST …/deploys` |
-| `canyon_review` | Reads a review `canyon_check_ref` or `canyon_deploy_ref` handed off: its verdict and every finding once it ends (amended 2026-11-21) | `GET …/status?run=` (the run is the app's), then `GET /api/v1/gate-runs/:id` |
+| `canyon_review` | As locally (§1.1): a check or deploy `canyon_check_ref` or `canyon_deploy_ref` handed off, read back as the verb that started it (amended 2026-11-21; 2026-11-22) | `GET /api/v1/gate-runs/:id`, then polls |
 | `canyon_secret_link` | The link that opens the app page's Secrets form on one secret, `<public URL>/#/apps/<app>/secrets?name=&env=`, for the person to set its value in their own browser (amended 2026-11-21) | `GET /api/v1/projects/:id` (the caller reads the app) |
 | `canyon_create_app` | Makes an app from a repository the org's Canyon App sees, the caller its owner, linked to it (amended 2026-11-21) | `POST /api/v1/projects {name}`, then `PUT …/repository {full_name, folder}`; when the link is refused, `DELETE /api/v1/projects/:id` |
 
@@ -272,6 +274,7 @@ result it wasn't allowed.
 | `canyon_rules` with `app`, `canyon://manifest/<app>` | viewer on the app | `team_required`, with the owners to ask |
 | `canyon_status` | viewer; contributor for technical detail | a viewer gets the reduced read; a responder with no grant gets the receipt-only read (PERMISSIONS.md, *Security responders*) |
 | `canyon_logs` | contributor | `team_required`, or `403` with the reduced-read message |
+| `canyon_review` | contributor, as the run read (PERMISSIONS.md, *technical detail*) | `team_required`; a run of another app than the one named: `<run> is not a run of <app>.` |
 | `canyon_check`, `canyon_check_ref` | contributor | `team_required` |
 | `canyon_deploy`, `canyon_deploy_ref` | contributor | `team_required` |
 | `canyon_promote` | contributor, and not held | `team_required` · `409 held` · the approval URL where a person approves production |

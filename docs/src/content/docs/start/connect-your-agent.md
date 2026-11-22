@@ -114,7 +114,7 @@ The connection lasts 7 days, as a CLI sign-in does; then you allow it again. Und
 | `canyon_status`, `canyon_logs` | An app's status, and its last log lines with secrets masked |
 | `canyon_secret_link` | A link for you to open: the app's Secrets form, filled in with the secret's name and environment, where you type the value. The agent never sees it |
 | `canyon_check_ref`, `canyon_deploy_ref` | Reviews a pushed branch, tag or commit of the app's repository, or deploys it to preview |
-| `canyon_review` | How a review or deploy ended, when it took longer than one call can wait: after 45 seconds the agent gets the run back, and calls this until the run ends |
+| `canyon_review` | How a review or deploy ended, when it took longer than one call can wait: after 45 seconds the agent gets the run back, and calls this until the run ends. A deploy that went live says so, with its address |
 | `canyon_create_app` | Makes an app from a GitHub repository, with you as its owner, linked to the repository. At most 10 a day for each person |
 | `canyon_promote` | Promotes to production, after asking you |
 

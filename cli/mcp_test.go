@@ -153,7 +153,7 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
 		schema, _ := json.Marshal(tool.InputSchema)
-		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs || tool.Name == mcptools.Playbook
+		reads := tool.Name == mcptools.Rules || tool.Name == mcptools.Status || tool.Name == mcptools.Logs || tool.Name == mcptools.Playbook || tool.Name == mcptools.Review
 		hints := tool.Annotations
 		if hints == nil || hints.ReadOnlyHint != reads || bytes.Contains(schema, []byte(`"dir"`)) == (tool.Name == mcptools.Playbook) || // a playbook is the org's: no dir
 			!reads && (hints.DestructiveHint == nil || *hints.DestructiveHint != (tool.Name == mcptools.Promote) || hints.IdempotentHint ||
@@ -164,7 +164,7 @@ func TestMCPListsTheToolsAndTheManifestResources(t *testing.T) {
 			t.Errorf("%s declares an outputSchema", tool.Name)
 		}
 	}
-	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Playbook, mcptools.Promote, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
+	if want := []string{mcptools.Check, mcptools.Deploy, mcptools.Logs, mcptools.Playbook, mcptools.Promote, mcptools.Review, mcptools.Rules, mcptools.Status}; !slices.Equal(names, want) {
 		t.Errorf("tools %v, want %v", names, want)
 	}
 	resources, err := cs.ListResources(context.Background(), nil)
@@ -387,7 +387,8 @@ func TestMCPDeployCarriesTheURLAndTheRunsProgress(t *testing.T) {
 	}
 }
 
-// Past the hand-off a run is state running, its id and its page: the tool answers, and the run goes on.
+// Past the hand-off a run is state running, its id and its page: the tool answers, the run goes on, and its steps
+// name canyon_review, which reads a check's run back where canyon status never names it.
 func TestMCPHandsARunOffAfterTenMinutes(t *testing.T) {
 	h := &gateHost{run: aRun("clean", 0, 0), start: reply{http.StatusAccepted, `{"run":{"id":"gr_8f2a","state":"pending"}}`},
 		page: `{"rows":[],"next":7}`} // a run that never ends
@@ -400,7 +401,8 @@ func TestMCPHandsARunOffAfterTenMinutes(t *testing.T) {
 	clk := clock{now: func() time.Time { mu.Lock(); defer mu.Unlock(); return now }, sleep: func(d time.Duration) { mu.Lock(); defer mu.Unlock(); now = now.Add(d) }}
 	cs, _ := mcpConnect(t, server.URL, clk, nil)
 	res, text := callTool(t, cs, mcptools.Check, nil)
-	if res.IsError || !strings.Contains(text, "gr_8f2a") || !strings.Contains(text, "/#/apps/claims-portal") || !strings.Contains(text, "after 10 minutes") {
+	if res.IsError || !strings.Contains(text, "gr_8f2a") || !strings.Contains(text, "/#/apps/claims-portal") || !strings.Contains(text, "after 10 minutes") ||
+		!strings.Contains(text, "Call canyon_review with app claims-portal and run gr_8f2a in a minute") {
 		t.Errorf("isError %v, text:\n%s", res.IsError, text)
 	}
 	if followed := clk.now().Sub(start); followed < mcptools.Handoff || followed > mcptools.Handoff+time.Minute {

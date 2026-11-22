@@ -402,7 +402,8 @@ func (a *app) confirm(yes bool, question, declined string) (int, bool) {
 
 // notPromoted is what an MCP client's answer other than yes to production's question leaves: why nothing was promoted,
 // the person's no or a question nobody answered, and where a person can promote it, their answer theirs to give. Never
-// --yes: the agent's word is not theirs. On /mcp, where no terminal is in reach, the app's page alone.
+// --yes: the agent's word is not theirs. On /mcp, where no terminal is in reach, the app's page alone. Last, that the
+// agent promotes it no other way: one read "Nothing was promoted." and ran canyon deploy --env prod --yes itself (#90).
 func (a *app) notPromoted(out promoted, action string) {
 	why := "nobody answered the question" // cancel, or anything else a client answers
 	if action == "decline" {
@@ -411,8 +412,9 @@ func (a *app) notPromoted(out promoted, action string) {
 	page := out.host + "/#/apps/" + out.app
 	a.printf("\n  Nothing was promoted: %s.\n", why)
 	if a.remote {
-		a.printf("  To promote it, a person opens %s.\n", cell(page))
+		a.printf("  To promote it, a person opens %s.\n  Don't promote it another way: the person decides what goes to production.\n", cell(page))
 		return
 	}
 	a.printf("  To promote it, a person opens %s, or runs canyon deploy --env prod in a terminal where they can answer.\n", cell(page))
+	a.printf("  Don't promote it another way, such as running canyon deploy --env prod yourself: the person decides what goes to production.\n")
 }

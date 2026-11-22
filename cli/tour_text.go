@@ -208,7 +208,8 @@ Wait until they send it. Never promote on something they said earlier.
 Beat 3. The promotion. Never set confirm on your own: only the person's yes in this conversation
 sets it, and their message in beat 2 is that yes. With it, call canyon_promote with confirm true
 (canyon deploy --env prod --yes) for ./canyon-tour. If the client asks them itself, let them answer
-there. Without it, ask whether to put the claims tracker in production, and wait. If Canyon refuses,
+there: a no, or no answer, means nothing is promoted, so stop, and never promote it another way.
+Without it, ask whether to put the claims tracker in production, and wait. If Canyon refuses,
 show what it printed and stop. Then run canyon fleet.
 - What happened: the reviewed version runs in production. Give the link and who can open it.
 - How Canyon helped: it promoted the exact version that passed, and recorded who asked.

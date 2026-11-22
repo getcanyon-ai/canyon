@@ -199,6 +199,10 @@ otherwise run `canyon check` again after that time, never in a loop before it.
   production should go without it. Never ask for the value in the chat. Never
   tell the user a person on the team will promote it when you are the one who
   runs the command.
+- When `canyon_promote` says nothing was promoted, the person said no or didn't
+  answer its question. Never run `canyon deploy --env prod` yourself then, with
+  or without `--yes`: tell the user where they can promote it, as its answer
+  says. The person decides what goes to production.
 - Where the org has a person approve production, that same command ends WAITING
   FOR APPROVAL with an approval url: give the user the link, say a person on the
   app's team approves it in Canyon, and stop. Never open or approve that url

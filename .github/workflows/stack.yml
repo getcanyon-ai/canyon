@@ -56,9 +56,10 @@ jobs:
   e2e-ui:
     if: github.repository == 'getcanyon-ai/canyon'
     uses: ./.github/workflows/e2e-ui.yml
-    permissions:
+    permissions: # what its jobs ask for, and no more: a called job asking beyond these fails the whole run at startup (#70)
       contents: read
       actions: read # its stacks' jobs read the run's jobs (.github/actions/scan-dbs)
+      pull-requests: read # its paths job reads a pull request's labels (reach.sh)
 
   patch-e2e:
     if: github.repository == 'getcanyon-ai/canyon'

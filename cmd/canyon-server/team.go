@@ -233,6 +233,9 @@ func (a *app) runTeam(next http.HandlerFunc, responders bool) http.HandlerFunc {
 			}
 			return
 		}
-		next(w, r) // PLANTED FAULT: a run's routes skip the team check
+		if a.teamRequired(ctx, w, a.pool, project) {
+			return
+		}
+		next(w, r)
 	}
 }

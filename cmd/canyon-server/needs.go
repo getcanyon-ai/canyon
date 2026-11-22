@@ -142,9 +142,17 @@ var needFactsSQL = fleetDerivation + `SELECT id, level, team, claimable, secrets
   open_blocking, preview_at, prod_at
 FROM fleet WHERE $5::text = '' OR id = $5 ORDER BY id`
 
+// needFactsOnceSQL is needFactsSQL in the fleet read, from its materialised rows (fleetOnce).
+var needFactsOnceSQL = fleetOnce(needFactsSQL)
+
 // needFactsOf reads the facts of every app the caller sees, or of id alone.
 func needFactsOf(ctx context.Context, q querier, id string) ([]needFacts, error) {
-	rows, err := q.Query(ctx, needFactsSQL, append(callerArgs(ctx), id)...)
+	return needFactsBy(ctx, q, needFactsSQL, id)
+}
+
+// needFactsBy is needFactsOf by statement: needFactsSQL, or needFactsOnceSQL in the fleet read.
+func needFactsBy(ctx context.Context, q querier, sql, id string) ([]needFacts, error) {
+	rows, err := q.Query(ctx, sql, append(callerArgs(ctx), id)...)
 	if err != nil {
 		return nil, err
 	}

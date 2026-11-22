@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -62,20 +63,33 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 			held = "all"
 		}
 	}
+	// The derivation runs once for the read (#95): its rows for the caller, materialised in this transaction, which the
+	// needs, the count, the page and the tiles below all read. Nothing is written but the read's own temporary table, and
+	// every statement of the read is the transaction's: one connection a read, never a second taken while it holds one.
+	tx, err := a.pool.Begin(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
+		return
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(r.Context())) }()
+	if _, err := tx.Exec(r.Context(), fleetMaterialize, callerArgs(r.Context())...); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
+		return
+	}
 	// What needs a person, of every app the caller reads (needs.go; #2724): a fixed set of statements and one executor call,
 	// whatever the fleet's size. The rows' needs, needs_you, the refused tile and the risk sort all read this one list.
-	facts, err := needFactsOf(r.Context(), a.pool, "")
+	facts, err := needFactsBy(r.Context(), tx, needFactsOnceSQL, "")
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
 	states := a.statesOf(r.Context(), facts)
-	needs, err := a.needsFrom(r.Context(), a.pool, facts, states)
+	needs, err := a.needsFrom(r.Context(), tx, facts, states)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
-	org, err := a.orgNeeds(r.Context(), a.pool) // the org's own needs, an admin's alone: none for anyone else
+	org, err := a.orgNeeds(r.Context(), tx) // the org's own needs, an admin's alone: none for anyone else
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
@@ -108,7 +122,7 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 	}
 	filters := []any{q.Get("tile"), q.Get("owner"), q.Get("stage"), q.Get("running"), q.Get("stack"), q.Get("q"), needsYou, q.Get("access"), q.Get("scope") == "team", held, refusing}
 	var total, offset int
-	if err := a.pool.QueryRow(r.Context(), fleetCountSQL, slices.Concat(callerArgs(r.Context()), filters)...).Scan(&total); err != nil {
+	if err := tx.QueryRow(r.Context(), fleetCountSQL, slices.Concat(callerArgs(r.Context()), filters)...).Scan(&total); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
@@ -117,7 +131,7 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 		n := servedPage(asked, total, limit)
 		page, offset = n, (n-1)*limit
 	}
-	rows, next, err := fleetPage(r.Context(), a.pool, filters, top, after, limit, offset)
+	rows, next, err := fleetPage(r.Context(), tx, filters, top, after, limit, offset)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
@@ -135,7 +149,7 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 			team[f.ID] = f.Envs
 		}
 	}
-	if _, err := a.sayPatch(r.Context(), a.pool, team); err != nil {
+	if _, err := a.sayPatch(r.Context(), tx, team); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
@@ -144,7 +158,7 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 		apps[i] = f.read(role == "responder", needs[f.ID])
 	}
 	var t [14]int // the seven tiles, then the seven stats, in the order the statement counts them
-	if err := a.pool.QueryRow(r.Context(), fleetTilesSQL, append(callerArgs(r.Context()), refusing)...).Scan(&t[0], &t[1], &t[2], &t[3], &t[4], &t[5], &t[6], &t[7], &t[8], &t[9], &t[10], &t[11], &t[12], &t[13]); err != nil {
+	if err := tx.QueryRow(r.Context(), fleetTilesSQL, append(callerArgs(r.Context()), refusing)...).Scan(&t[0], &t[1], &t[2], &t[3], &t[4], &t[5], &t[6], &t[7], &t[8], &t[9], &t[10], &t[11], &t[12], &t[13]); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
 	}
@@ -154,7 +168,7 @@ func (a *app) fleet(w http.ResponseWriter, r *http.Request) {
 	// the GitHub accounts the reader linked, and whether this host can link one: never with sign-in off (#2228)
 	var logins []string
 	var linkable bool
-	if err := a.pool.QueryRow(r.Context(), `SELECT ARRAY(SELECT login FROM github_links WHERE subject = $1 ORDER BY login),
+	if err := tx.QueryRow(r.Context(), `SELECT ARRAY(SELECT login FROM github_links WHERE subject = $1 ORDER BY login),
 		$2 AND EXISTS (SELECT 1 FROM github_app WHERE sealed_client_secret IS NOT NULL)`, act.Subject, a.auth == authOIDC).Scan(&logins, &linkable); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return

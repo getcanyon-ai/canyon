@@ -154,6 +154,24 @@ func seenOf(env, at string) string {
     ORDER BY r.created_at DESC, r.id DESC LIMIT 1)`
 }
 
+// fleetMaterialize runs the derivation once for a fleet read (#95): its rows, for the caller ($1 to $4), into a table
+// the read's transaction drops, which the read's needs, count, page and tiles all read (fleetOnce) — one pass of the
+// derivation where each ran it whole.
+var fleetMaterialize = `CREATE TEMP TABLE fleet_read ON COMMIT DROP AS ` + fleetDerivation + `SELECT * FROM fleet`
+
+// fleetOnceHead stands where the derivation stood in a statement of the fleet read: fleet is fleet_read's rows, and $1 to
+// $4, which the materialised rows already answered for, keep their types so every statement keeps its numbering.
+const fleetOnceHead = `WITH caller AS (SELECT $1::text, $2::text[], $3::text[], $4::bool), fleet AS (SELECT * FROM fleet_read) `
+
+// fleetOnce is a statement on the derivation, read from fleet_read in the fleet read's transaction instead.
+func fleetOnce(sql string) string {
+	tail, ok := strings.CutPrefix(sql, fleetDerivation)
+	if !ok {
+		panic("fleetOnce: a statement that does not start with the fleet derivation")
+	}
+	return fleetOnceHead + tail
+}
+
 // fleetRowSQL selects the one row shape every project read answers — the fleet page, the project
 // list and the single project read each add their own WHERE and ORDER BY and scan with scanFleetRow.
 var fleetRowSQL = fleetDerivation + `SELECT id, name, stack, owners, owner_groups, summary, gate_state, last_run, warnings, package, label, stage, since, rank, level, team, everyone, people, group_grants, requests, claimable,
@@ -184,7 +202,7 @@ const fleetWhere = `WHERE ($5::text = '' OR team AND CASE $5 WHEN 'secrets_expos
 `
 
 // fleetCountSQL is how many rows the filters select, across every page (contracts/routes.md, the fleet read: total).
-var fleetCountSQL = fleetDerivation + `SELECT count(*) FROM fleet ` + fleetWhere
+var fleetCountSQL = fleetOnce(fleetDerivation + `SELECT count(*) FROM fleet ` + fleetWhere)
 
 // fleetSorts is each sort's page statement: the cursor a strict comparison on the sort key past the last row
 // ($16 on: an empty id is no cursor), then the limit plus one — the extra row says there is a next page — and a numbered page's offset. Under risk
@@ -192,12 +210,12 @@ var fleetCountSQL = fleetDerivation + `SELECT count(*) FROM fleet ` + fleetWhere
 // rows read whole that carry needs by their first need's rank ($16 the apps, $17 their ranks; noNeed for every other row), so its
 // cursor from $18.
 var fleetSorts = map[string]string{
-	"risk": fleetRowSQL + `LEFT JOIN unnest($16::text[], $17::int[]) AS need(app, top) ON need.app = fleet.id
+	"risk": fleetOnce(fleetRowSQL) + `LEFT JOIN unnest($16::text[], $17::int[]) AS need(app, top) ON need.app = fleet.id
 ` + fleetWhere + `  AND ($21::text = '' OR (coalesce(need.top, ` + fmt.Sprint(noNeed) + `), rank, since, id) > ($18::int, $19::int, $20::timestamptz, $21))
 ORDER BY coalesce(need.top, ` + fmt.Sprint(noNeed) + `), rank, since, id LIMIT $22 OFFSET $23`,
-	"changed": fleetRowSQL + fleetWhere + `  AND ($18::text = '' OR (rank = 8)::int > $16::int OR (rank = 8)::int = $16 AND (since < $17::timestamptz OR since = $17 AND id > $18))
+	"changed": fleetOnce(fleetRowSQL) + fleetWhere + `  AND ($18::text = '' OR (rank = 8)::int > $16::int OR (rank = 8)::int = $16 AND (since < $17::timestamptz OR since = $17 AND id > $18))
 ORDER BY rank = 8, since DESC, id LIMIT $19 OFFSET $20`,
-	"name": fleetRowSQL + fleetWhere + `  AND ($17::text = '' OR (lower(name), id) > (lower($16::text), $17))
+	"name": fleetOnce(fleetRowSQL) + fleetWhere + `  AND ($17::text = '' OR (lower(name), id) > (lower($16::text), $17))
 ORDER BY lower(name), id LIMIT $18 OFFSET $19`,
 }
 
@@ -207,7 +225,7 @@ var projectsSQL = fleetRowSQL + `WHERE $5::text = '' OR id = $5 ORDER BY id`
 // narrows either (contracts/routes.md, the fleet read): owners are the distinct addresses with an owner grant on them, and the
 // deploys their deploy rows on the trail in the seven days before the read, Canyon's or, where the org runs it, its platform's.
 // $5 is the apps whose rows carry a refused need (needs.go), the refused tile's.
-var fleetTilesSQL = fleetDerivation + `SELECT count(*) FILTER (WHERE secrets), count(*) FILTER (WHERE stage = 'blocked'), count(*) FILTER (WHERE stage = 'approved'),
+var fleetTilesSQL = fleetOnce(fleetDerivation + `SELECT count(*) FILTER (WHERE secrets), count(*) FILTER (WHERE stage = 'blocked'), count(*) FILTER (WHERE stage = 'approved'),
   count(*) FILTER (WHERE gate_state = 'never_reviewed'), count(*) FILTER (WHERE owners_n = 0), count(*) FILTER (WHERE stage = 'failed'),
   count(*) FILTER (WHERE id = ANY($5)),
   count(*), count(*) FILTER (WHERE prod_url IS NOT NULL), count(*) FILTER (WHERE preview_url IS NOT NULL), count(*) FILTER (WHERE gate_state = 'clean'),
@@ -215,7 +233,7 @@ var fleetTilesSQL = fleetDerivation + `SELECT count(*) FILTER (WHERE secrets), c
   (SELECT count(*) FROM audit_events e WHERE e.action IN ('deploy preview', 'deploy prod', 'platform reported deployed', 'release live by check-in') AND e.ts > now() - interval '7 days' AND e.project_id IN (SELECT id FROM fleet WHERE team)),
   (SELECT count(*) FROM audit_events e WHERE (e.action = 'deploy prod' OR e.action IN ('platform reported deployed', 'release live by check-in') AND e.detail->>'env' = 'prod')
     AND e.ts > now() - interval '7 days' AND e.project_id IN (SELECT id FROM fleet WHERE team))
-FROM fleet WHERE team`
+FROM fleet WHERE team`)
 
 type fleetRow struct {
 	project
@@ -490,7 +508,7 @@ func scanFleetRow(rows pgx.Rows) (fleetRow, fleetCursor, error) {
 // cursor (one with no id: the start) and offset rows past it, fetching one row past the limit: if it arrives it is dropped and the cursor points
 // after the last kept row. Each row is whole: the caller answers it read(). top is the first need's rank of each row read whole that
 // carries one, which risk sorts by first.
-func fleetPage(ctx context.Context, pool *pgxpool.Pool, filters []any, top map[string]int, after fleetCursor, limit, offset int) ([]fleetRow, *string, error) {
+func fleetPage(ctx context.Context, pool querier, filters []any, top map[string]int, after fleetCursor, limit, offset int) ([]fleetRow, *string, error) {
 	sorted := []any{}
 	if after.Sort == "risk" {
 		apps, ranks := []string{}, []int{}

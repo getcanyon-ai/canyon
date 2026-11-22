@@ -119,13 +119,13 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 func (a *app) promote(ctx context.Context, client *Client, at string, read statusRead, out promoted, gateRun string, asks, yes, wait bool) int {
 	if !asks {
 		if !yes && a.elicit != nil { // an MCP client that can ask the person asks them, the CLI's own question
-			asked, said := a.elicit(out.question, out.app+" "+out.ships)
-			if asked && !said {
-				a.printf("\n  Nothing was promoted.\n")
+			asked, action := a.elicit(out.question, out.app+" "+out.ships)
+			if asked && action != "accept" { // a no, and a question dismissed unanswered (cancel: Esc, or a client that can't show it) is never a yes
+				a.notPromoted(out, action)
 				a.declined = true
 				return exitError
 			}
-			yes = said
+			yes = asked
 		}
 		if !yes && a.render.Format == FormatAI { // nothing here can answer the question: the agent asks the user (#2875)
 			return a.aiUnasked(out, read.Envs["prod"].running())
@@ -398,4 +398,21 @@ func (a *app) confirm(yes bool, question, declined string) (int, bool) {
 		return exitError, false
 	}
 	return exitOK, true
+}
+
+// notPromoted is what an MCP client's answer other than yes to production's question leaves: why nothing was promoted,
+// the person's no or a question nobody answered, and where a person can promote it, their answer theirs to give. Never
+// --yes: the agent's word is not theirs. On /mcp, where no terminal is in reach, the app's page alone.
+func (a *app) notPromoted(out promoted, action string) {
+	why := "nobody answered the question" // cancel, or anything else a client answers
+	if action == "decline" {
+		why = "the person said no"
+	}
+	page := out.host + "/#/apps/" + out.app
+	a.printf("\n  Nothing was promoted: %s.\n", why)
+	if a.remote {
+		a.printf("  To promote it, a person opens %s.\n", cell(page))
+		return
+	}
+	a.printf("  To promote it, a person opens %s, or runs canyon deploy --env prod in a terminal where they can answer.\n", cell(page))
 }

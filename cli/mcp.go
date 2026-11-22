@@ -347,13 +347,13 @@ func (a *app) mcpPromote(ctx context.Context, req *mcp.CallToolRequest, dir, nam
 	}
 	var wanted, id string
 	if p := req.Session.InitializeParams(); p != nil && p.Capabilities != nil && p.Capabilities.Elicitation != nil { // a client that can ask the person always does: confirm is the agent's word, not theirs
-		c.elicit = func(question, ships string) (asked, yes bool) {
+		c.elicit = func(question, ships string) (asked bool, action string) {
 			id = promoteAsk(question, ships)
 			if answer, answered := req.Params.InputResponses[id].(*mcp.ElicitResult); answered { // an answer to this question about this release, and no other
-				return true, answer.Action == "accept"
+				return true, answer.Action
 			}
 			wanted = question
-			return false, false
+			return false, ""
 		}
 	} else if confirm {
 		args = append(args, "--yes")

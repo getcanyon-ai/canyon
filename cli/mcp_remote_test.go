@@ -143,13 +143,13 @@ func TestMCPRemotePromoteAsksThePersonFirst(t *testing.T) {
 	whole := page(t)
 	hosts := map[string]*promoteHost{}
 	servers := map[string]string{}
-	for _, answer := range []string{"accept", "decline"} { // the fixtures are read before the directory changes
+	for _, answer := range []string{"accept", "decline", "cancel"} { // the fixtures are read before the directory changes
 		hosts[answer] = clean(t, whole, http.StatusAccepted, started)
 		servers[answer] = hosts[answer].serve(t).URL
 		hosts[answer].pages, hosts[answer].tick = listed(t, whole, "pkg_7a1c", "not-this-directory"), at
 	}
 	hostile(t)
-	for _, answer := range []string{"accept", "decline"} {
+	for _, answer := range []string{"accept", "decline", "cancel"} {
 		h, server := hosts[answer], servers[answer]
 		var asked []string
 		opts := &mcp.ClientOptions{ElicitationHandler: func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
@@ -158,9 +158,13 @@ func TestMCPRemotePromoteAsksThePersonFirst(t *testing.T) {
 		}}
 		cs := remoteConnect(t, server, clock{now: func() time.Time { return h.tick }, sleep: func(d time.Duration) { h.tick = h.tick.Add(d) }}, opts)
 		_, text := callTool(t, cs, mcptools.Promote, map[string]any{"app": "claims-portal"})
-		wantPosts := map[string]int{"accept": 1, "decline": 0}[answer]
+		wantPosts := map[string]int{"accept": 1, "decline": 0, "cancel": 0}[answer]
 		if len(h.posts) != wantPosts || !slices.Equal(asked, []string{"Promote claims-portal v1.3 to production?"}) {
 			t.Errorf("%s: posts %q, asked %q, text:\n%s", answer, h.posts, asked, text)
+		}
+		why := map[string]string{"decline": "Nothing was promoted: the person said no.", "cancel": "Nothing was promoted: nobody answered the question."}[answer]
+		if why != "" && (!strings.Contains(text, why) || !strings.Contains(text, "a person opens "+remoteBase+"/#/apps/claims-portal") || cliCommand.MatchString(text)) {
+			t.Errorf("%s on /mcp: want %q and the app's page, no CLI command:\n%s", answer, why, text)
 		}
 	}
 }

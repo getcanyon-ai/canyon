@@ -140,7 +140,11 @@ jobs:
       matrix:
         part:
           - name: floor # the egress floor, Envoy and its check (e2e/egress_test.go): ~20 minutes on #2850's run
-            tests: 'EnvoyLossesReachTheRecords|EnvoyTunnelIsItsRowWhileOpen'
+            tests: 'Connect|Floor|Envoy|Control'
+          - name: floor 2 # DIAGNOSTIC (#86), to be reverted: the whole floor again, on a stack of its own
+            tests: 'Connect|Floor|Envoy|Control'
+          - name: floor 3 # DIAGNOSTIC (#86), to be reverted
+            tests: 'Connect|Floor|Envoy|Control'
           - name: layer 3 # interception (e2e/intercept_test.go), a route's credential at its upstream (e2e/inject_test.go) and over HTTP/2 and gRPC, and a destination with no route never decrypted (e2e/layer3_test.go): ~12 minutes
             tests: 'Interception$|ForgedInterceptHeaderRejected$|ARouteCredentialReachesItsUpstream$|ForcedHTTP2CarriesTheRouteCredential$|GRPCCarriesTheRouteCredential$|PassThroughDestinationIsNeverDecrypted$'
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
@@ -169,9 +173,9 @@ jobs:
         run: |
           want=$(go test -tags stack -list "$TESTS" ./e2e/ | grep '^Test' | sort)
           rc=0
-          go test -tags stack -count=8 -timeout 40m -json -run "$TESTS\$" ./e2e/ > "$RUNNER_TEMP/floor.json" || rc=$?
+          go test -tags stack -count=1 -timeout 30m -json -run "$TESTS" ./e2e/ > "$RUNNER_TEMP/floor.json" || rc=$?
           jq -j 'select(.Output) | .Output' "$RUNNER_TEMP/floor.json"
-          passed=$(jq -r 'select(.Action == "pass" and .Test and (.Test | contains("/") | not)) | .Test' "$RUNNER_TEMP/floor.json" | sort -u) # top-level tests, as -list names them: a subtest's failure fails its test
+          passed=$(jq -r 'select(.Action == "pass" and .Test and (.Test | contains("/") | not)) | .Test' "$RUNNER_TEMP/floor.json" | sort) # top-level tests, as -list names them: a subtest's failure fails its test
           skipped=$(jq -r 'select(.Action == "skip" and .Test) | .Test' "$RUNNER_TEMP/floor.json" | sort) # a test or a subtest: a skipped subtest leaves its test passed
           if [ "$rc" != 0 ] || [ -z "$want" ] || [ "$want" != "$passed" ] || [ -n "$skipped" ]; then
             printf 'go test exited %s\nlisted:\n%s\npassed:\n%s\nskipped:\n%s\n' "$rc" "$want" "$passed" "$skipped"; exit 1
@@ -182,6 +186,8 @@ jobs:
           check: 'true'
       - if: failure()
         run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --tail=200 server executor egress egress-envoy egress-control
+      - if: always() # DIAGNOSTIC (#86), to be reverted: every policy answer that failed or ran slow, pass or fail
+        run: docker compose -f docker-compose.yml -f e2e/compose.e2e.yml logs --no-color --timestamps server egress-control | grep -E 'egress policy|policy .* old|unknown_caller' | tail -150
 
 
   oidc:

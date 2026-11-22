@@ -1404,7 +1404,7 @@ def receipt_check(label, receipt, snap):
             errors.append(f"app-page: {label} rule {r['id']} is named {r['name']!r}; the snapshot says {s['name']!r}")
         if r["blocks"] != (production(s) == "blocking"):
             errors.append(f"app-page: {label} rule {r['id']} has blocks={r['blocks']} but its state before production is {production(s)}")
-        if r["id"] == "prod.human-approval" and r["why"] != "a person promotes, or an agent they ask, with their CLI sign-in":
+        if r["id"] == "prod.human-approval" and r["why"] != "a person promotes, or an agent they ask, signed in as them":
             errors.append(f"app-page: {label}'s prod.human-approval says {r['why']!r}; it states the rule in force — the fixtures' org leaves production approval off — never who is reading")
     for r in receipt["rules"]:  # only a rule with nothing set to check against is neutral, on its one line; anything else unset hides a blocker
         if r.get("unset") and NEUTRAL.get(r["id"]) != r["why"]:

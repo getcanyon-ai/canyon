@@ -436,7 +436,7 @@ describe("after the review", () => {
   });
 
   it("disables Promote with the rule's words while a person must promote", async () => {
-    const why = "a person promotes, or an agent they ask, with their CLI sign-in";
+    const why = "a person promotes, or an agent they ask, signed in as them";
     server(reads(reviewed("clean"), failing("prod.human-approval", why)));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();

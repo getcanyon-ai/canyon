@@ -144,6 +144,8 @@ async function sessions(page: Page, who: string) {
   await expect(connect.getByRole("textbox", { name: "Canyon's address for agents", exact: true })).toHaveValue(`${env("E2E_CANYON_URL")}/mcp`);
   await expect(connect.getByText("Claude Code on the web", { exact: true })).toBeVisible();
   await expect(connect.getByText("claude mcp add", { exact: false })).toHaveCount(0);
+  // directly above Sessions, so an agent is connected and disconnected in one place (screens.md, Connect an agent)
+  expect(await connect.evaluate((panel) => panel.nextElementSibling?.getAttribute("aria-label"))).toBe("Sessions");
   await connect.scrollIntoViewIfNeeded();
   await walked(page, "connect", who);
   await expect(page.getByRole("navigation", { name: "Canyon" }).getByRole("link", { name: "Guardrails" })).toHaveCount(who === "admin" ? 1 : 0);
@@ -180,6 +182,9 @@ async function secretLink(page: Page, who: string) {
     await expect(form.getByLabel("Environment")).toHaveValue("prod");
     await expect(form.getByLabel("Value")).toBeFocused();
     await expect(form.getByLabel("Value")).toHaveValue("");
+    // the review beside it read and said, never a heading over white space (the v0.11.0 role walk)
+    await expect(page.getByRole("region", { name: "Review" }).getByText(/^nothing blocking/)).toBeVisible();
+    await expect(page.getByText("Reading the review…")).toHaveCount(0);
   }
   expect(await page.content()).not.toContain(LINKED);
   await walked(page, "secret-link", who);

@@ -58,7 +58,7 @@ export function ConnectAgents({ signIn }: { signIn: boolean }) {
           {copied === false && <p role="alert" className="text-md text-critical">{S.copyFailed}</p>}
           <dl className="mt-1 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-md">
             <dt className="font-semibold">{T.claudeWeb}</dt>
-            <dd>{T.claudeWebHow} <a href={CONNECTOR_DOCS} target="_blank" rel="noreferrer">{T.claudeDocs}</a></dd>
+            <dd>{T.claudeWebHow} <a className="text-link no-underline hover:underline" href={CONNECTOR_DOCS} target="_blank" rel="noreferrer">{T.claudeDocs}</a></dd>
             <dt className="font-semibold">{T.cursorCloud}</dt><dd>{T.cursorCloudHow}</dd>
             <dt className="font-semibold">Codex</dt><dd>{T.codexCloud}</dd>
           </dl>

@@ -524,6 +524,21 @@ describe("the app page", () => {
     expect(screen.queryByText(S.appReading)).toBeNull();
   });
 
+  // Until the newest review's read answers, the Review section says it's reading it: never a heading over white space
+  // beside the go-live checks, which a person reads as a review that found nothing (the v0.11.0 role walk).
+  it("says the review is being read until its read answers", async () => {
+    server(reads(() => page.status));
+    const stub = vi.mocked(globalThis.fetch);
+    const answered = stub.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>;
+    let release: (value: Response) => void = () => {};
+    stub.mockImplementation((url, init) => (`${init?.method} ${String(url)}` === RUN ? new Promise<Response>((resolve) => { release = resolve; }) : answered(String(url), init)));
+    render(<App id="claims-portal" auth="oidc" />);
+    const review = within(await screen.findByRole("region", { name: "Review" }));
+    expect(await review.findByText(S.reviewReading)).toBeDefined();
+    await act(async () => { release(answer({ run })); });
+    await waitFor(() => expect(review.queryByText(S.reviewReading)).toBeNull());
+  });
+
   it("heads the page with the id alone when the name is the id", async () => {
     server(reads(() => page.status));
     render(<App id="claims-portal" auth="oidc" />);

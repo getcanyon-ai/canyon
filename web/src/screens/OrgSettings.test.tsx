@@ -94,7 +94,7 @@ describe("Settings › Organisation and People & sign-in", () => {
     const sent = server({ body: { ...ADMIN, prod_approval: true } });
     show(ADMIN);
     const production = region("Production");
-    expect(production.getByText("On: canyon deploy --env prod asks, and a person on the app's team approves it here in Canyon. Off: anyone on the app's team can promote from the CLI, including an agent they ask to.")).toBeTruthy();
+    expect(production.getByText("On: the CLI and agents only ask, and a person on the app's team approves it here in Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.")).toBeTruthy();
     const box = production.getByRole("checkbox", { name: "Production is approved in the dashboard" }) as HTMLInputElement;
     expect(box.checked).toBe(false);
     save(PEOPLE);

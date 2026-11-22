@@ -238,9 +238,9 @@ func evaluate(in receiptInput) receipt {
 		case "prod.clean-gate":
 			passed, why = cleanGateRule(in)
 		case "prod.human-approval": // EXPERIENCE.md: a person clicks promote, solo click OK; the org's prod_approval decides where (design/AUTH.md §4.5)
-			passed, why = in.actor.Kind == "person", "a person promotes, or an agent they ask, with their CLI sign-in" // the rule, never who is reading
+			passed, why = in.actor.Kind == "person", "a person promotes, or an agent they ask, signed in as them" // the rule, never who is reading
 			if in.approvalOn {
-				passed, why = passed && (in.dashboard || in.fleet), "a person approves it in Canyon's dashboard; the CLI only asks"
+				passed, why = passed && (in.dashboard || in.fleet), "a person approves it in Canyon's dashboard; an agent or the CLI only asks"
 			}
 		case "stack.blessed":
 			passed, why = blessed(in.approved, in.ran)

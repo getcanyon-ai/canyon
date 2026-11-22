@@ -380,9 +380,9 @@ promotes; only an admin or a security responder approves a blocking finding.`, a
 *Add* puts the cursor in the row it adds, a field wide enough for a whole address (amended 2026-10-15,
 #2258) — the groups claim, and
 *Production is approved in the dashboard*, a switch
-with the one line `On: canyon deploy --env prod asks, and a person on the app's team approves it here
-in Canyon. Off: anyone on the app's team can promote from the CLI, including an agent they ask to.` (amended
-2026-10-07, #1820; `design/AUTH.md` §4.5); on a host with sign-in off, one line saying so and no
+with the one line `On: the CLI and agents only ask, and a person on the app's team approves it here in
+Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.`
+(amended 2026-10-07, #1820; amended 2026-11-22: agents also promote through Canyon's tools; `design/AUTH.md` §4.5); on a host with sign-in off, one line saying so and no
 form), **App hosting** (`#/settings/hosting`, *How people reach apps*: the front door), and **AI
 review** (`#/settings/ai`: whether a model is set up). A key the environment pins is shown with its
 variable and never sent, and a Save sends only what changed. An edit not saved is dropped when the

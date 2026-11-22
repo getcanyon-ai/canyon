@@ -779,10 +779,11 @@ preview* can be promoted, never how the app is doing, so it reads as nothing els
   that line. A preview the org runs carries no `state` and never waits on it.
 - **`prod.human-approval` states its rule**, whoever is reading, and the org's `prod_approval`
   (Platform, the preferences row) is that rule (amended 2026-10-07, #1820: the line said `agents
-  can't`, and an agent holding its person's CLI session promoted). **Off**: `why` is
-  `a person promotes, or an agent they ask, with their CLI sign-in`, and `passed` is whether the
+  can't`, and an agent holding its person's CLI session promoted; amended 2026-11-22: an agent also promotes through
+  Canyon's MCP tools, signed in as its person). **Off**: `why` is
+  `a person promotes, or an agent they ask, signed in as them`, and `passed` is whether the
   actor reading or asking is a person — a CLI session is its person. **On**: `why` is
-  `a person approves it in Canyon's dashboard; the CLI only asks`, `passed` is whether the actor is a
+  `a person approves it in Canyon's dashboard; an agent or the CLI only asks`, `passed` is whether the actor is a
   person on a browser session (`flow: browser`) — or, for a patch approval the fleet approval decides, the
   admin who gave it in the browser (the Platform rows; amended 2026-10-29, #2571) — and the rule blocks whatever its policy state, so
   the CLI's receipt reads it failed and the promotions route answers the CLI with a production

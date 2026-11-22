@@ -16,11 +16,11 @@ go-live checks says what that covers:
 
 ```text wrap
 ✓ A person promotes
-    a person promotes, or an agent they ask, with their CLI sign-in
+    a person promotes, or an agent they ask, signed in as them
 ```
 
 An org can go further. With **Production is approved in the dashboard** turned on, in the
-Production section of Settings › People & sign-in, the CLI only asks. `canyon deploy --env prod` prints a link and a code that expires in
+Production section of Settings › People & sign-in, the CLI and agents only ask. `canyon deploy --env prod` prints a link and a code that expires in
 24 hours, and a person on the app's team approves the promotion in Canyon's dashboard:
 
 ```text wrap

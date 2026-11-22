@@ -82,8 +82,8 @@ func askApproval(t *testing.T, cli *http.Client, base, run string) string {
 }
 
 const (
-	whyOff = "a person promotes, or an agent they ask, with their CLI sign-in"
-	whyOn  = "a person approves it in Canyon's dashboard; the CLI only asks"
+	whyOff = "a person promotes, or an agent they ask, signed in as them"
+	whyOn  = "a person approves it in Canyon's dashboard; an agent or the CLI only asks"
 )
 
 var shownCode = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$`)

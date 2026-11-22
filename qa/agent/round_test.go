@@ -447,21 +447,34 @@ func TestAHandedOffRunScoresByItsVerdict(t *testing.T) {
 	}
 }
 
-// A turn that waits for the person to set a secret waits first for the agent's deploy to end: the person sets it on the
-// app's page once the deploy is over, and an app that reads the secret fails its start until then, so the run's end,
-// failed included, is what to wait for.
+// A turn that waits for the person to set a secret waits first for the agent's deploy to end, failed included: the
+// status read names the last run by its id, and the run's own read says its state.
 func TestTheSecretsTurnWaitsForTheRunToEnd(t *testing.T) {
-	for body, want := range map[string]bool{
-		`{"last_run":{"state":"failed"}}`:  true,
-		`{"last_run":{"state":"clean"}}`:   true,
-		`{"last_run":{"state":"running"}}`: false,
-		`{"last_run":{"state":"pending"}}`: false,
-		`{"last_run":null}`:                false,
-		`not json`:                         false,
-	} {
-		if _, got := runEnded([]byte(body)); got != want {
-			t.Errorf("%s: %v", body, got)
+	state := "running"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/projects/qa-x/status":
+			_, _ = w.Write([]byte(`{"envs":{},"last_run":"gr_1","project":"qa-x"}`))
+		case "/api/v1/gate-runs/gr_1":
+			_, _ = w.Write([]byte(`{"run":{"id":"gr_1","state":"` + state + `"}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
+	}))
+	defer srv.Close()
+	s, err := signedIn(signedInTo(t, srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ state, want string }{{"running", "running"}, {"pending", "pending"}, {"failed", "failed"}, {"clean", "clean"}} {
+		state = c.state
+		if got := runState(s, "qa-x"); got != c.want {
+			t.Errorf("a run %s reads %q", c.state, got)
+		}
+	}
+	state = "failed"
+	if err := waitRunEnded(t.Context(), signedInTo(t, srv.URL), "qa-x", time.Second); err != nil {
+		t.Errorf("a failed run is an ended one: %v", err)
 	}
 }
 

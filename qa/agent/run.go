@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -336,7 +337,7 @@ func runOne(ctx context.Context, template, runDir, file string, s scenario, o op
 			continue
 		}
 		if t.OnceSecrets { // the person sets them once the agent's deploy has ended, as they would from the app's page
-			if _, err := waitRead(ctx, home, name, "/api/v1/projects/"+name+"/status", "the last run", "the last run never ended", refusedFor, runEnded); err != nil {
+			if err := waitRunEnded(ctx, home, name, refusedFor); err != nil {
 				return fmt.Errorf("turn %d: %w", i+1, err)
 			}
 			if err := setSecrets(ctx, home, dir, code, s.Secrets); err != nil {
@@ -714,19 +715,61 @@ func inFolder(files []seedFile, folder string) []seedFile {
 	return moved
 }
 
-// runEnded judges a status read: whether the app's last run has ended, however it ended. An app that needs a secret
-// fails its start until the person sets it, so preview running is no sign to wait for.
-func runEnded(body []byte) (string, bool) {
+// waitRunEnded waits until the app's last run has ended, however it ended: the status read names the run by its id
+// (contracts/routes.md, GET …/status, last_run), and the run's read says its state. An app that needs a secret fails its
+// start until the person sets it, so preview running is no sign to wait for.
+func waitRunEnded(ctx context.Context, home, app string, wait time.Duration) error {
+	s, err := signedIn(home)
+	if err != nil {
+		return err
+	}
+	last := ""
+	for deadline := time.Now().Add(wait); ; {
+		state := runState(s, app)
+		if state != last {
+			fmt.Printf("%s: the last run %s\n", app, state)
+			last = state
+		}
+		if state == "clean" || state == "blocked" || state == "failed" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s: the last run never ended within %s: it reads %s", app, wait, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(patchEvery):
+		}
+	}
+}
+
+// runState is the app's last run's state, or what kept it from being read.
+func runState(s session, app string) string {
+	a, err := s.call(http.MethodGet, "/api/v1/projects/"+app+"/status", nil)
+	if err != nil || a.status != http.StatusOK {
+		return fmt.Sprintf("unread: %v %v", a, err)
+	}
 	var st struct {
-		LastRun *struct {
+		LastRun string `json:"last_run"`
+	}
+	if json.Unmarshal([]byte(a.said), &st) != nil {
+		return "unread: the status read is no JSON"
+	}
+	if st.LastRun == "" {
+		return "none yet"
+	}
+	a, err = s.call(http.MethodGet, "/api/v1/gate-runs/"+st.LastRun, nil)
+	if err != nil || a.status != http.StatusOK {
+		return fmt.Sprintf("unread: %v %v", a, err)
+	}
+	var run struct {
+		Run struct {
 			State string `json:"state"`
-		} `json:"last_run"`
+		} `json:"run"`
 	}
-	if json.Unmarshal(body, &st) != nil {
-		return "unread", false
+	if json.Unmarshal([]byte(a.said), &run) != nil || run.Run.State == "" {
+		return "unread: the run's read names no state"
 	}
-	if st.LastRun == nil {
-		return "none yet", false
-	}
-	return st.LastRun.State, st.LastRun.State != "pending" && st.LastRun.State != "running"
+	return run.Run.State
 }

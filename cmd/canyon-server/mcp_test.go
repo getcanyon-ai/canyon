@@ -394,12 +394,12 @@ func TestMCPRemoteReviewReadsARunBackAsFarAsThePersonMay(t *testing.T) {
 		says    string
 		refused bool
 	}{
-		{"carl, a contributor", carl, "nothing was deployed", false}, // a check's verdict, passed or blocked
+		{"carl, a contributor", carl, "nothing was deployed", false}, // a check's verdict, passed or blocked, and no live url
 		{"vic, read-only", vic, "Ask sub-olive to add you to claims-portal", true},
 	} {
 		token, _ := signedInOver(t, base, c.as, register(t, base, redirect), redirect, "read")
 		code, _, body := mcpCall(t, base, token, review, nil)
-		if code != http.StatusOK || !strings.Contains(body, c.says) || strings.Contains(body, "live url") || strings.Contains(body, `"isError":true`) != c.refused {
+		if code != http.StatusOK || !strings.Contains(body, c.says) || strings.Contains(body, "live url: ") || strings.Contains(body, `"isError":true`) != c.refused {
 			t.Errorf("%s: %d %s", c.who, code, body)
 		}
 	}

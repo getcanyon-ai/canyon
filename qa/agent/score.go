@@ -305,6 +305,7 @@ type transcript struct {
 	// secret: line ever reached a transcript.
 	Tools      map[string]int
 	SecretSeen bool
+	Answers    []string // every Canyon tool's answer, for an expect said: line
 }
 
 // playbookRead is one read of an org playbook, in turn Turn: Way is the tool line, so the card says how.
@@ -389,6 +390,8 @@ type reader struct {
 	hosts     map[string]bool // Canyon's host, as its own blocks name it (host: …)
 	prodCalls map[string]bool // this turn's tool calls that deploy to production, by id
 	prodQuery map[string]bool // this turn's tool calls that run canyon db query --env prod, by id
+	// canyonTool are the calls to Canyon's MCP tools, by id: their answers are what an expect said: line reads
+	canyonTool map[string]bool
 }
 
 type reach struct {
@@ -417,6 +420,7 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 		calls = []canyonCall{call}
 		r.t.ByTool++
 		r.t.Tools[strings.TrimPrefix(name, "mcp__canyon__")]++
+		r.canyonTool[id] = true
 	} else {
 		r.t.ByShell += len(calls)
 	}
@@ -446,6 +450,9 @@ func (r *reader) use(n int, id, name string, input json.RawMessage) {
 
 // result is what the tool with that id printed: every Canyon block in it, once per run.
 func (r *reader) result(n int, id, text string) {
+	if r.canyonTool[id] {
+		r.t.Answers = append(r.t.Answers, text)
+	}
 	// A DB QUERY block is a query of production's data only as the output of a canyon db query --env prod the agent ran:
 	// never one it printed again (an earlier answer read back), nor a query of preview's.
 	blocks := slices.DeleteFunc(parseBlocks(text), func(b *block) bool { return b.Kind == "DB QUERY" && !r.prodQuery[id] })
@@ -459,8 +466,8 @@ func (r *reader) result(n int, id, text string) {
 		blocks = append(blocks, b)
 	}
 	for _, b := range blocks {
-		seen := b.Run
-		if b.Kind == outboundKind { // the same refusals read again are one result; a count that moved is another
+		seen := b.Run + "\n" + b.Result // a handed-off run's STILL RUNNING and then its verdict are two results
+		if b.Kind == outboundKind {     // the same refusals read again are one result; a count that moved is another
 			seen = outboundKind + "\n" + strings.Join(b.Head, "\n")
 		}
 		if seen != "" && r.seen[seen] {
@@ -492,7 +499,7 @@ func readTranscript(dir, agent string) transcript {
 			t.Cursor = "not recorded"
 		}
 	}
-	r := &reader{t: &t, seen: map[string]bool{}, hosts: map[string]bool{}}
+	r := &reader{t: &t, seen: map[string]bool{}, hosts: map[string]bool{}, canyonTool: map[string]bool{}}
 	sent, _ := filepath.Glob(filepath.Join(dir, "turn-*.jsonl"))
 	skipped, _ := filepath.Glob(filepath.Join(dir, "turn-*.skipped"))
 	for n := 1; n <= len(sent)+len(skipped); n++ { // a skipped turn leaves a gap in the numbers, never the end
@@ -750,6 +757,9 @@ func met(e expect, b *block) bool {
 	if e.Result == noResult {
 		return b == nil
 	}
+	if e.Result == anyResult {
+		return true
+	}
 	if b == nil || b.Result != e.Result || (e.Kind != "" && b.Kind != e.Kind) {
 		return false
 	}
@@ -818,8 +828,8 @@ func keptNotes(path string) string {
 
 func scorecard(s scenario, t transcript) (string, string) {
 	var results []step // what a RESULT expect is judged against, with its turn: reviews and promotions, never what status said
-	for _, st := range t.Steps {
-		if st.Result != nil && st.Result.Kind != outboundKind {
+	for i, st := range t.Steps {
+		if st.Result != nil && st.Result.Kind != outboundKind && !handedOff(st.Result, t.Steps[i+1:]) {
 			results = append(results, st)
 		}
 	}
@@ -966,6 +976,14 @@ func mcpRows(b *strings.Builder, s scenario, t transcript) string {
 		}
 		row("Canyon reached by", want, fmt.Sprintf("%d tool calls · %d canyon in a shell", t.ByTool, t.ByShell), t.ByTool > 0 && t.ByShell == 0)
 	}
+	for _, said := range s.Said {
+		heard := slices.ContainsFunc(t.Answers, func(a string) bool { return strings.Contains(a, said) })
+		got := "not in any Canyon answer"
+		if heard {
+			got = "said"
+		}
+		row("Canyon said", said, got, heard)
+	}
 	for _, e := range s.Tools {
 		want, n := e.Name, t.Tools[e.Name]
 		if e.Once {
@@ -1100,4 +1118,11 @@ func oneLine(s string) string {
 		return string(r[:240]) + "…"
 	}
 	return s
+}
+
+// handedOff is whether b is a run's STILL RUNNING that a later result of the same run ended: a hand-off, not a verdict
+// (design/specs/mcp.md §2.3, canyon_review).
+func handedOff(b *block, later []step) bool {
+	return b.Result == "STILL RUNNING" && b.Run != "" &&
+		slices.ContainsFunc(later, func(st step) bool { return st.Result != nil && st.Result.Run == b.Run && st.Result.Result != b.Result })
 }

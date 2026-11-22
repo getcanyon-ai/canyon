@@ -314,6 +314,33 @@ func (e *Executor) RecreateNetwork(ctx context.Context, app string, internal boo
 	return err
 }
 
+// appNets is every canyon-app network, inspected. A network removed between the list and the inspect — an app
+// deleted, a network recreated — fails the inspect whole, so it lists and inspects again, once: one gone meanwhile
+// never makes every caller of the fleet unknown (#86). A second failure is the daemon's, and an error.
+func (e *Executor) appNets(ctx context.Context) ([]appNet, error) {
+	var err error
+	for range 2 {
+		var out []byte
+		out, err = child(ctx, e.docker(), "network", "ls", "--filter", "name=canyon-app-", "--format", "{{.Name}}").Output()
+		if err != nil {
+			return nil, fmt.Errorf("docker network ls: %w", err)
+		}
+		names := slices.DeleteFunc(strings.Fields(string(out)), func(n string) bool { return !strings.HasPrefix(n, "canyon-app-") }) // the filter matches anywhere in a name
+		if len(names) == 0 {
+			return nil, nil
+		}
+		out, err = child(ctx, e.docker(), append([]string{"network", "inspect"}, names...)...).Output()
+		var nets []appNet
+		if err == nil {
+			err = json.Unmarshal(out, &nets)
+		}
+		if err == nil {
+			return nets, nil
+		}
+	}
+	return nil, fmt.Errorf("docker network inspect: %w", err)
+}
+
 // MaxCallers bounds the addresses one POST /callers asks about.
 const MaxCallers = 1024
 
@@ -328,21 +355,12 @@ func (e *Executor) Callers(ctx context.Context, addresses []string) ([]Caller, e
 	if err != nil {
 		return nil, err
 	}
-	out, err := child(ctx, e.docker(), "network", "ls", "--filter", "name=canyon-app-", "--format", "{{.Name}}").Output()
+	nets, err := e.appNets(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("docker network ls: %w", err)
+		return nil, err
 	}
-	names := slices.DeleteFunc(strings.Fields(string(out)), func(n string) bool { return !strings.HasPrefix(n, "canyon-app-") }) // the filter matches anywhere in a name
-	if len(names) == 0 {
+	if len(nets) == 0 {
 		return []Caller{}, nil
-	}
-	out, err = child(ctx, e.docker(), append([]string{"network", "inspect"}, names...)...).Output()
-	var nets []appNet
-	if err == nil {
-		err = json.Unmarshal(out, &nets)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("docker network inspect: %w", err)
 	}
 	claims := map[netip.Addr]int{}
 	found := map[netip.Addr]Caller{}

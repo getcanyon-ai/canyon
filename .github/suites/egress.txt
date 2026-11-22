@@ -17,6 +17,8 @@ executor/appfloor*
 executor/buildnet.go
 executor/executor.go
 cmd/canyon-server/routes_egress*.go
+cmd/canyon-server/egress.go
+cmd/canyon-server/egress_policy.go
 # the stack it runs on
 Dockerfile
 Dockerfile.executor

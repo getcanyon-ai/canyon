@@ -20,28 +20,20 @@ registry, both Postgres servers, kpack, an OIDC provider (Pocket ID), a TLS gate
 Headlamp. Every setting is a value (`values.yaml`, each key commented). The objects are
 `deploy/k8s`'s, with the same invariants.
 
-```mermaid title="The demo Helm chart: Canyon and everything it needs, on one node, from one release"
-flowchart TD
-  people["People and coding agents"]
-  subgraph node["One Kubernetes node"]
-    caddy["Caddy, the gateway<br>canyon-gateway"]
-    canyon["Canyon, deploy/k8s's objects<br>its four namespaces"]:::canyon
-    pocket["Pocket ID, the sign-in provider<br>canyon-auth"]
-    headlamp["Headlamp<br>a cluster dashboard"]
-    kpack["kpack"]
-    reg["Registry<br>canyon-infra"]
-    pg[("Canyon's Postgres<br>canyon-infra")]
-    apg[("The apps' Postgres<br>canyon-infra")]
-  end
-  people --> caddy
-  caddy --> canyon
-  caddy --> pocket
-  caddy --> headlamp
-  canyon -->|"sign-in"| pocket
-  canyon --> pg
-  canyon --> apg
-  canyon --> kpack
-  kpack --> reg
+```diagram kind=layers title="The demo Helm chart: Canyon and everything it needs, on one node, from one release"
+layers:
+  - band: Outside
+    tiles:
+      - {icon: people, who: People and coding agents, what: "Canyon, its apps, the sign-in page and the cluster dashboard"}
+  - via: "through Caddy, the gateway, `canyon-gateway`"
+  - band: One Kubernetes node
+    tiles:
+      - {tone: canyon, what: Canyon, more: "deploy/k8s's objects, its four namespaces"}
+      - {icon: key, what: "Pocket ID", more: "the sign-in provider Canyon signs people in with, `canyon-auth`"}
+      - {what: Headlamp, more: a cluster dashboard}
+      - {what: kpack, more: "builds, pushing to the registry"}
+      - {what: Registry, more: "`canyon-infra`"}
+      - {what: "Canyon's Postgres and the apps' Postgres", more: "`canyon-infra`"}
 ```
 
 Start from the chart's own values, and keep secrets apart from them, in a file only you can read:

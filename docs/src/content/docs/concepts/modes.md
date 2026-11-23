@@ -18,23 +18,20 @@ picture and when to pick which; the page it links sets the choice up.
 
 ## Where Canyon runs
 
-```mermaid title="Where Canyon runs: two places to try it, three to run it"
-flowchart TD
-  want["What do you want from Canyon?"]
-  subgraph try["Try it: nothing to keep"]
-    demo["Your laptop<br>docker compose, sign-in off"]:::canyon
-    helm["One Kubernetes or k3s node<br>the Helm chart, everything bundled"]:::canyon
-  end
-  subgraph run["Run it: your sign-in, your backups"]
-    docker["One server, plain Docker<br>docker compose, sign-in on"]:::canyon
-    k3s["One server, step by step<br>k3s, the install base"]:::canyon
-    k8s["Your Kubernetes cluster<br>the install base and your overlay"]:::canyon
-  end
-  want -->|"see it work, today"| demo
-  want -->|"try it on Kubernetes"| helm
-  want -->|"a team, on one Docker server"| docker
-  want -->|"a team, on one server, on Kubernetes"| k3s
-  want -->|"production"| k8s
+```diagram kind=choose title="Where Canyon runs: two places to try it, three to run it"
+question: What do you want from Canyon?
+groups:
+  - label: Try it
+    sub: Nothing to keep, and not for production.
+    options:
+      - {who: "See it work, today", icon: laptop, what: Your laptop, more: "`docker compose`, sign-in off", link: /start/try-it-on-your-laptop/}
+      - {who: Try it on Kubernetes, icon: server, what: One Kubernetes or k3s node, more: "The Helm chart, everything bundled", link: /self-host/helm/}
+  - label: Run it
+    sub: Your sign-in, your backups.
+    options:
+      - {who: "A team, one server", icon: server, tone: canyon, what: Plain Docker, more: "`docker compose`, sign-in on", link: /self-host/docker/}
+      - {who: "A team, one server", icon: server, tone: canyon, what: "k3s, step by step", more: The install base, link: /self-host/k3s/}
+      - {who: Production, icon: cloud, tone: canyon, what: Your Kubernetes cluster, more: The install base and your overlay, link: /self-host/kubernetes/}
 ```
 
 **To try it**, pick one of these. Nothing on them is worth keeping, and neither is for production.

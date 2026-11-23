@@ -18,7 +18,11 @@ const theme = {
   muted: "var(--ds-color-text-dim)",
   surface: "var(--ds-color-surface)",
   border: "var(--ds-color-border-strong)",
-  font: "IBM Plex Sans", // the page's own face (tokens.css); the renderer would otherwise fetch Inter
+  // IBM Plex Sans, the dashboard's face (tokens.css), not the body's Space Grotesk: the renderer sizes each box for
+  // its text with Inter-like widths, which Plex fits and Space Grotesk, about a tenth wider, overflows. It would
+  // otherwise fetch Inter.
+  font: "IBM Plex Sans",
+  padding: 12, // the figure frames it; the renderer's own 40 shrinks a wide diagram's text further
   transparent: true,
 };
 

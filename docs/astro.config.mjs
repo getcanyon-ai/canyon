@@ -8,6 +8,7 @@ import starlightLinksValidator from "starlight-links-validator";
 import starlightLlmsTxt from "starlight-llms-txt";
 import starlightDotMd from "starlight-dot-md";
 import { mermaid } from "./src/plugins/mermaid.mjs";
+import { diagram } from "./src/plugins/diagram.mjs";
 import { instructions } from "./src/llms.mjs";
 
 const fonts = fileURLToPath(new URL("./src/fonts", import.meta.url));
@@ -29,7 +30,7 @@ export default defineConfig({
   // Where the site is served, for llms.txt's links and the sitemap; unset, astro preview's own address.
   site: process.env.CANYON_DOCS_URL ?? "http://localhost:4321",
   base,
-  markdown: { processor: satteri({ mdastPlugins: [mermaid] }) },
+  markdown: { processor: satteri({ mdastPlugins: [mermaid, diagram(base)] }) },
   // The fonts are the dashboard's own: src/fonts links to web/src/fonts, and tokens.css names them under this alias.
   vite: {
     define: { __CANYON_DOCS_VERSION__: JSON.stringify(version) },
@@ -41,7 +42,7 @@ export default defineConfig({
       title: "Canyon docs",
       description: "Canyon reviews every deploy your coding agents make, and runs the apps that pass.",
       social: [{ icon: "github", label: "Downloads", href: releases }],
-      customCss: ["./src/styles/tokens.css", "./src/styles/canyon.css", "./src/styles/brand.css"],
+      customCss: ["./src/styles/tokens.css", "./src/styles/canyon.css", "./src/styles/diagrams.css", "./src/styles/brand.css"],
       components: { SiteTitle: "./src/components/SiteTitle.astro", SocialIcons: "./src/components/SocialIcons.astro" },
       lastUpdated: false,
       // Grouped by who reads: developers (Get started, Build and ship apps), operators (Install and run

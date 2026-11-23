@@ -16,23 +16,24 @@ Every app gets an owner, a review history and an audit trail.
 
 ## What happens on a deploy
 
-```mermaid title="Who does what on a deploy, from the agent's upload to production"
-sequenceDiagram
-  participant A as Agent and CLI
-  participant S as canyon-server
-  participant E as Executor
-  participant P as A person
-  A->>S: Upload the source
-  S->>E: Run the scanners
-  E-->>S: Findings
-  Note over S: The AI review and your rules decide
-  S-->>A: Blocked: file, line, fix
-  A->>S: Upload the fixed source
-  Note over S: Review passes
-  S->>E: Build and run in preview
-  S-->>A: Live at the preview address
-  P->>S: Promote to production
-  S->>E: Run the same image in prod
+```diagram kind=flow title="Who does what on a deploy, from the agent's upload to production"
+steps:
+  - {who: Agent and CLI, icon: agent, step: 1, what: Uploads the source, more: "Without `.env` files, `node_modules` or `.git`."}
+  - {who: "`canyon-server` and the executor", icon: server, tone: canyon, step: 2, what: Run the scanners, more: "gitleaks on the server; Trivy, Opengrep, ESLint and Checkov, and Grype where an admin turns it on, through the executor."}
+  - {who: "`canyon-server`", icon: canyon, tone: canyon, step: 3, what: "The AI review and your rules decide", more: "Every finding names a rule, set to Off, Advisory or Blocking."}
+  - paths:
+      - label: A finding blocks
+        tone: blocked
+        steps:
+          - {who: "`canyon-server`", tone: blocked, what: "Blocked: file, line, fix", more: "Nothing is built, and the version that was running keeps running."}
+          - {who: Agent and CLI, what: Uploads the fixed source}
+        loop: Back to step 2.
+      - label: The review passes
+        tone: passed
+        steps:
+          - {who: Executor, icon: passed, tone: passed, step: 4, what: Builds it and runs it in preview, more: "The agent gets the preview address."}
+          - {who: A person, icon: person, tone: person, step: 5, what: Promotes it to production, more: "Or approves the promotion in the dashboard, where the org asks for that."}
+          - {who: Executor, icon: server, tone: canyon, step: 6, what: Runs the same image in production, more: "With production's own secrets."}
 ```
 
 1. **The CLI uploads the app's source.** It leaves out `.env` files, `node_modules` and `.git`.

@@ -16,20 +16,20 @@ deployed. A rule that is Blocking only before production lets the version reach 
 its promotion instead ([below](#approve-it-instead)). The output says what to change, where, and
 which rule asked for it.
 
-```mermaid title="A blocked deploy: fix the code, or have someone approve the finding"
-flowchart TD
-  review["canyon deploy<br>the review"]:::canyon
-  blocked["Blocked<br>nothing is built"]:::blocked
-  fix["Fix the code<br>canyon check"]
-  approve["An admin or responder<br>approves, with a reason"]:::person
-  again["canyon deploy<br>again"]:::canyon
-  preview["Running in preview"]:::passed
-  review -->|"blocking finding"| blocked
-  blocked --> fix
-  blocked --> approve
-  fix --> again
-  approve --> again
-  again -->|"nothing blocking"| preview
+```diagram kind=flow title="A blocked deploy: fix the code, or have someone approve the finding"
+steps:
+  - {who: Your coding agent, icon: agent, what: "`canyon deploy`", more: The review runs before anything is built.}
+  - {who: Canyon, icon: blocked, tone: blocked, what: "Blocked: nothing is built", more: "A rule that is Blocking before preview found a high or critical problem."}
+  - paths:
+      - label: The code is wrong
+        steps:
+          - {who: Your coding agent, icon: agent, what: Fixes the code, more: "`canyon check` runs the same review without deploying."}
+      - label: The code is right as it is
+        tone: person
+        steps:
+          - {who: An admin or a security responder, icon: person, tone: person, what: "Approves the finding, with a reason", more: "And an expiry, 30 days unless they change it, at most 90. Never on a deploy they started."}
+  - {who: Your coding agent, icon: agent, what: "`canyon deploy` again"}
+  - {who: Passed, icon: passed, tone: passed, what: Running in preview, more: Nothing blocking.}
 ```
 
 ## What a blocked deploy prints

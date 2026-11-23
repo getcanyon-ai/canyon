@@ -124,17 +124,20 @@ An admin can turn on **Production is approved in the dashboard**, in Settings â€
 Production. It needs sign-in on. Then `canyon deploy --env prod` promotes nothing itself. It sends
 a promotion request and prints a link to it, a code, and how long the request lasts.
 
-```mermaid title="When production is approved in the dashboard"
-flowchart TD
-  cli["canyon deploy --env prod"]
-  req["A promotion request<br>a link, valid 24 hours"]:::canyon
-  person["An owner, contributor<br>or admin opens it<br>in the dashboard"]:::person
-  prod["Promoted"]:::passed
-  denied["Denied<br>nothing changes"]:::blocked
-  cli --> req
-  req --> person
-  person -->|"Approve"| prod
-  person -->|"Deny"| denied
+```diagram kind=flow title="When production is approved in the dashboard"
+steps:
+  - {who: You or your agent, icon: agent, what: "`canyon deploy --env prod`", more: Promotes nothing itself.}
+  - {who: Canyon, icon: canyon, tone: canyon, what: A promotion request, more: "A link, valid 24 hours. A new request replaces the one still waiting."}
+  - {who: "An owner, a contributor or an admin", icon: person, tone: person, what: Opens it in the dashboard, more: "Signed in, and decides."}
+  - paths:
+      - label: Approve
+        tone: passed
+        steps:
+          - {who: Canyon, icon: passed, tone: passed, what: Promoted, more: "Unless preview runs another version by then: then nothing is promoted."}
+      - label: Deny
+        tone: blocked
+        steps:
+          - {who: Canyon, tone: blocked, what: Denied, more: Nothing changes.}
 ```
 
 - **A person decides, in the dashboard.** Someone on the app's team (an owner or a contributor) or an

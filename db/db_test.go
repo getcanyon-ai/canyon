@@ -425,9 +425,9 @@ func TestAnExecutorRowFromBeforeItsVersionReadsCanyonV1(t *testing.T) {
 }
 
 // No migration turns telemetry off (the owner, 2026-11-12: on by default): the row v0.9.0 left, on, stays on with its
-// instance id and its last send, one an admin turned off stays off, and a new install's row is on.
+// instance id and its last send, one an admin turned off, or whose one try was unreachable, stays off, and a new install's row is on.
 func TestNoMigrationTurnsTelemetryOff(t *testing.T) {
-	for name, want := range map[string]string{"NULL": "on", "'admin'": "admin"} {
+	for name, want := range map[string]string{"NULL": "on", "'admin'": "admin", "'unreachable'": "unreachable"} {
 		p, ctx := pgtest.Schema(t)
 		if _, err := migrate(ctx, p, upTo(t, "migrations/0139")); err != nil { // v0.9.0's schema
 			t.Fatal(err)

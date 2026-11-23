@@ -71,9 +71,10 @@ Any one of these turns it off:
   on while one is set.
 - `telemetry.enabled: false` in the Helm chart's values.
 - `CI` set in the server's environment, so test and pipeline installs never send.
-- The server can't reach Canyon's collector, `usage.myagentcontrol.ai`, on its first send, as in an air-gapped install. It tries
-  once, for 2 seconds, then stays off until an admin turns it back on in **Settings › Telemetry**. It
-  never retries, and never logs an error.
+- The server can't reach Canyon's collector, `usage.myagentcontrol.ai`, and never has, as in an air-gapped install. It
+  tries again after at least 1 hour, then at least 2, 4, 8 and so on, up to a week: at most 20 tries over 90 days, each
+  of at most 2 seconds. Nothing waits for them and none is logged. Then it stays off until an admin turns it back on in
+  **Settings › Telemetry**. To stop it at once, use any of the ways above.
 
 Only an admin can see the report or turn it on or off. For anyone else, these commands and the
 Settings page are refused. Turning it on is done in the dashboard, by a person: an agent, or an admin's

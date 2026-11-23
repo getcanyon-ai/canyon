@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // telemetryHost answers GET and PUT /api/v1/telemetry from the contract's golden report, enabled and off_because as
@@ -66,7 +67,7 @@ func TestTelemetryShowPrintsTheReportAsSent(t *testing.T) {
 		{true, "", "Telemetry is on. Canyon sends this report once a day, exactly as it reads here:"},
 		{false, "env", "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI). It would send:"},
 		{false, "admin", "Telemetry is off: an admin turned it off. It would send:"},
-		{false, "unreachable", "Telemetry is off: its first send couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry. It would send:"},
+		{false, "unreachable", "Telemetry is off: it couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry. It would send:"},
 		{false, "not_seen", "Telemetry is off (not_seen). It would send:"},
 	} {
 		h, asked, report := telemetryHost(t, c.enabled, c.off)
@@ -79,6 +80,34 @@ func TestTelemetryShowPrintsTheReportAsSent(t *testing.T) {
 	h, _, _ := telemetryHost(t, true, "")
 	if out, _, _ := run(t, map[string]string{"CANYON_HOST": h.URL, "XDG_CONFIG_HOME": t.TempDir()}, false, "telemetry", "show"); out != golden(t, "telemetry-show.txt") {
 		t.Errorf("canyon telemetry show printed\n%s\ntestdata/telemetry-show.txt wants\n%s", out, golden(t, "telemetry-show.txt"))
+	}
+}
+
+// While no report has reached the collector, show says so, when the next try comes and when it gives up, in this
+// machine's time; a host from before that says neither, and prints as on.
+func TestTelemetryShowSaysItIsStillTrying(t *testing.T) {
+	raw, err := os.ReadFile("../contracts/testdata/telemetry/report.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var golden struct {
+		State map[string]any `json:"state_retrying"`
+	}
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatal(err)
+	}
+	golden.State["report"] = "{}"
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(golden.State)
+	}))
+	defer h.Close()
+	was := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = was }()
+	out, errs, code := run(t, map[string]string{"CANYON_HOST": h.URL, "XDG_CONFIG_HOME": t.TempDir(), "NO_COLOR": "1"}, false, "telemetry", "show")
+	if want := "Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after 24 Nov 21:04 and gives up by 21 Feb. It would send:\n{}\n"; code != exitOK || errs != "" || out != want {
+		t.Errorf("exit %d, stderr %q\n%s\nwant\n%s", code, errs, out, want)
 	}
 }
 

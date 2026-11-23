@@ -78,12 +78,15 @@ jobs:
     # ./cmd/canyon-server's tests, most of the suite's time, split by name across the matrix (make
     # test-shards): each shard first checks that every test the package lists is in exactly one
     # shard, so a test in none fails here. On main and on a pull request alike: never affected-only.
+    # Eight, so a slow runner finishes inside go test's 10 minutes: four ran 296 to 482 s, and a runner 2.65
+    # times slow took noee's fourth, 340 s elsewhere, past 10 minutes (#124). Seven would leave noee's
+    # longest at 248 s, past them on that runner; eight, at 194 s. No timeout raised: it would only hide a hang.
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 30
     strategy:
       fail-fast: false # TEMPORARY
       matrix:
-        shard: [1, 2, 3, 4] # N is this list's length
+        shard: [1, 2, 3, 4, 5, 6, 7, 8] # N is this list's length
     services:
       postgres:
         image: postgres:16-alpine
@@ -111,7 +114,7 @@ jobs:
       - run: make web # as test-rest
       - if: matrix.shard == 1 # TEMPORARY, reverted before merge: main's test and this branch's with every policy answer held 1.3 s, and this branch's with the wait skipped past its bound
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           t=cmd/canyon-server/egress_policy_pull_test.go
           run() { go test -race -count="$1" -run '^TestRunWaitsForEveryReplica$' ./cmd/canyon-server; echo "exit $?"; }
           slow='s/\t_, policy := policyAt\(t, pool\)\n\tvar epoch string/\tslowed, policy := policyAt(t, pool)\n\tslowed.platform = func(context.Context, querier) ([]string, error) { time.Sleep(1300 * time.Millisecond); return []string{}, nil }\n\tvar epoch string/ or die "no policyAt"'
@@ -175,7 +178,7 @@ jobs:
     strategy:
       fail-fast: false # every shard's verdict: a core test that leans on ee/ is named wherever it sorts
       matrix:
-        shard: [1, 2, 3, 4] # N is this list's length
+        shard: [1, 2, 3, 4, 5, 6, 7, 8] # N is this list's length
     services:
       postgres:
         image: postgres:16-alpine

@@ -154,7 +154,7 @@ BASE ?= origin/main
 test-rest: ## every package but the sharded ones, whose tests test-shards runs
 	pkgs=$$(go list $(RACE) ./...) || exit 1; rest=$$(printf '%s\n' $$pkgs | grep -vxF $(addprefix -e ,$(SHARDED))) || exit 1; go test $(RACE) $$rest
 
-test-shards: ## each sharded package's tests (SHARDED: the server's, runs) split by name into N (2) go test processes run at once, or SHARD_PKG=<package> SHARD=i/n the i-th of n of one package alone (CI's matrices: the server's 4, runs 3); every test a package lists must be in exactly one shard before any runs, and each shard must run exactly its own tests (internal/tools/testsel)
+test-shards: ## each sharded package's tests (SHARDED: the server's, runs) split by name into N (2) go test processes run at once, or SHARD_PKG=<package> SHARD=i/n the i-th of n of one package alone (CI's matrices: the server's 8, runs 3); every test a package lists must be in exactly one shard before any runs, and each shard must run exactly its own tests (internal/tools/testsel)
 	set -e; for p in $(or $(SHARD_PKG),$(SHARDED)); do go run ./internal/tools/testsel shards $(if $(SHARD),-shard $(SHARD),-n $(N)) $$p $(RACE); done
 
 test-affected: ## only the packages a change since BASE's merge base (origin/main) can affect, from Go's own graph under -race (internal/tools/testsel), plus the declared readers of a changed directory's Go source; every package runs when a changed file is not Go source (go.mod, go.sum, this Makefile, db/migrations, testdata, goldens, docs, contracts) or is Go source no package builds (a build tag, a testdata app). The test cache stays on; a sharded package runs in N shards

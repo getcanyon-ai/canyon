@@ -150,6 +150,67 @@ func TestVersionEpochNeverGoesBackward(t *testing.T) {
 	}
 }
 
+// A slow answer's log line, and a failed one's, says how long each step took, so the slow step is the one named (#86).
+func TestASlowPolicyAnswerNamesItsSlowStep(t *testing.T) {
+	h := outboundHost(t)
+	s, base := policyAt(t, h.pool)
+	var logs bytes.Buffer
+	s.log = log.New(&logs, "", 0)
+	callers, platform := s.callers, s.platform
+	for _, c := range []struct {
+		name, query, slow string
+		code              int
+		steps             []string
+		failed            bool
+	}{
+		{name: "a poll", slow: "answer", code: http.StatusOK, steps: []string{"answer", "seen"}},
+		{name: "a refetch", query: "&caller=172.28.3.11", slow: "resolve", code: http.StatusOK, steps: []string{"resolve", "answer", "seen"}},
+		{name: "a poll", slow: "answer", code: http.StatusInternalServerError, steps: []string{"answer"}, failed: true},
+		{name: "a refetch", query: "&caller=172.28.3.12", slow: "resolve", code: http.StatusServiceUnavailable, steps: []string{"resolve"}, failed: true},
+	} {
+		s.callers, s.platform = callers, platform
+		slow, err := 1100*time.Millisecond, error(nil)
+		if c.failed { // a failure is logged however fast it came
+			slow, err = 0, errors.New("no answer")
+		}
+		if c.slow == "answer" {
+			s.platform = func(ctx context.Context, q querier) ([]string, error) {
+				time.Sleep(slow)
+				if err != nil {
+					return nil, err
+				}
+				return platform(ctx, q)
+			}
+		} else {
+			s.callers = func(ctx context.Context, addrs []string) ([]executor.Caller, error) {
+				time.Sleep(slow)
+				if err != nil {
+					return nil, err
+				}
+				return callers(ctx, addrs)
+			}
+		}
+		logs.Reset()
+		if code, _ := pullPolicyRaw(t, base, "canyon-egress-a", "have="+c.query); code != c.code {
+			t.Fatalf("%s slow in %s: %d, want %d", c.name, c.slow, code, c.code)
+		}
+		line := logs.String()
+		_, said, _ := strings.Cut(line, "("+c.name+" from canyon-egress-a in ")
+		total, said, _ := strings.Cut(said, ": ")
+		said, _, _ = strings.Cut(said, "; pool ")
+		var steps []string
+		took := map[string]time.Duration{}
+		for step := range strings.SplitSeq(said, ", ") {
+			name, d, _ := strings.Cut(step, " ")
+			steps = append(steps, name)
+			took[name], _ = time.ParseDuration(d)
+		}
+		if whole, err := time.ParseDuration(total); err != nil || whole < slow || !slices.Equal(steps, c.steps) || took[c.slow] < slow {
+			t.Errorf("%s slow in %s said %q, want the time of each of %v, %s's at least %v", c.name, c.slow, line, c.steps, c.slow, slow)
+		}
+	}
+}
+
 // design/EGRESS.md §3.2, Convergence: a /run under via canyon names its env in the policy first, then waits until
 // every live egress-control replica holds that version; past the bound it fails closed naming the replica behind,
 // and nothing starts. A replica unseen for longer than three polls is not live and is not waited for.

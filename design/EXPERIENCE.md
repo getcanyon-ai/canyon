@@ -566,7 +566,7 @@ rule.
   - What keeps a version from production is the promote receipt, which lists every rule placed before production.
   - An approval covers its finding in both gates.
 - **The org's rules are the admin's; an app's additions only tighten.**
-  - Admins place, move and set the org's rules on Guardrails › Pipeline: a rule's checkbox `Also before production`, or dragging it there. Guardrails opens on Policies, Pipeline its second tab, and below 1440px Pipeline stacks its stages, Upload ↓ Before preview ↓ Preview ↓ Before production ↓ Production, so each rule reads full width (amended 2026-11-23, getcanyon-ai/canyon#118).
+  - Admins place, move and set the org's rules on Guardrails › Pipeline: a rule's checkbox `Also before production`. Guardrails opens on Policies, Pipeline its second tab, whose stages stack, Upload ↓ Before preview ↓ Preview ↓ Before production ↓ Production, so each rule reads full width: pages stop growing at 1280px, where two gates side by side never fit a rule's name, so nothing is dragged between them either. Under the tabs, `Before preview (<n>)` · `Before production (<n>)` link the gates, each with the checks it lists (amended 2026-11-23, getcanyon-ai/canyon#118).
   - An app owner may add to their own app: a rule this host has that the org does not run, or an org rule raised in a gate. Writing a custom rule stays an admin's.
   - An addition never removes or weakens an org rule: for every rule in every gate, the state in force is the stricter of the org's and the app's (Off < Advisory < Blocking).
   - An app's additions are part of its runs' snapshot, and so of the verdict cache's key (ARCHITECTURE.md).

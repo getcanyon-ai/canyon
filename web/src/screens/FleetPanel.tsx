@@ -13,7 +13,8 @@ import { useBroke } from "./BuildFailure";
 import { Claim } from "./Claim";
 import { ACTIVITY_ACTIONS, activity, Row } from "./FleetActivity";
 import { prodPending } from "./Outbound";
-import { HoldCell, type Acting } from "./FleetHold";
+import { HoldCell } from "./FleetHold";
+import type { Acting } from "./HoldDialog";
 import { ownerHref } from "./Owner";
 
 const H3 = "text-sm font-semibold tracking-wide text-text-faint uppercase";

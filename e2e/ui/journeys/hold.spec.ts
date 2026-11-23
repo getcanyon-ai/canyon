@@ -9,16 +9,18 @@ type Finding = { partialFingerprints: Record<string, string>; properties: { cany
 // stopped: #2723), and lifts the hold from the fleet, starting what production ran again (design/OPERATIONS.md §3.8). On Docker nobody signs in and every caller is the anonymous admin,
 // who holds and lifts: a responder's session needs a sign-in, which only the test cluster has.
 const fleetRow = (page: Page, app: string) => page.goto(`/#/fleet?q=${app}`);
-// The rows, a table or the phone's cards, with a row's side pane: Needs you above them offers the same Lift on a held
-// production (D15).
+// The rows, a table or the phone's cards.
 const rows = (page: Page) => page.locator("[aria-label='Apps']");
-// A team row's side pane, where Stop production and Lift the hold are on a desktop (the UX review: never on every
-// row); a phone's card, which has no pane, offers them itself.
+// Where Stop production and Lift the hold are for a team's app (the UX review: never on its row or card): its side pane
+// on a desktop, and on a phone, whose cards have no pane, the app page's headline (#102).
 const peek = async (page: Page, app: string) => {
   await rows(page).getByRole("link", { name: app, exact: true }).first().waitFor(); // the page read, before asking what it offers
   const details = page.getByRole("button", { name: `Details for ${app}` });
   if (await details.count() > 0) await details.click();
+  else await page.goto(`/#/apps/${app}`);
 };
+// Lift the hold, where the reader is: Needs you, the pane, or the app page's banner, each asking the same question (D15).
+const lift = (page: Page, app: string) => page.getByRole("button", { name: `Lift the hold on ${app}` }).first();
 
 journey("stop production, read the banner, lift the hold", {
   given: async () => {
@@ -47,7 +49,7 @@ journey("stop production, read the banner, lift the hold", {
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await expect(page.getByRole("main").getByText("Held", { exact: true }).first()).toBeVisible(); // the row's, and on a desktop its pane's too
-        await expect(rows(page).getByRole("button", { name: `Lift the hold on ${app}` })).toBeVisible();
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -74,8 +76,8 @@ journey("stop production, read the banner, lift the hold", {
       do: async (page, { app, version }) => {
         await fleetRow(page, app);
         await peek(page, app);
-        await rows(page).getByRole("button", { name: `Lift the hold on ${app}` }).click();
-        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: `Start ${version} again` }).click();
+        await lift(page, app).click();
+        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: `Lift the hold and start ${version}` }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);
       },
@@ -107,7 +109,7 @@ journey("stop production, read the banner, lift the hold", {
       },
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(rows(page).getByRole("button", { name: `Lift the hold on ${app}` })).toBeVisible();
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -121,8 +123,8 @@ journey("stop production, read the banner, lift the hold", {
     {
       name: "lift the hold leaving production stopped: production is empty",
       do: async (page, { app }) => {
-        await rows(page).getByRole("button", { name: `Lift the hold on ${app}` }).click();
-        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: "Leave production stopped" }).click();
+        await lift(page, app).click();
+        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: "Lift the hold, keep it stopped" }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);
       },

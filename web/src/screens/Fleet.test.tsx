@@ -464,7 +464,7 @@ describe("the fleet screen", () => {
     render(<Fleet org="Meridian Insurance" />);
     const card = (await screen.findAllByRole("link", { name: "claims-portal" }))[0]!.closest("li") as HTMLElement; // the first: the activity below names it too
     expect(screen.queryByRole("table")).toBeNull();
-    expect(card.textContent).toBe("claims-portalBlockedv1.4 · Preview runs v1.3 · Dana WhitfieldHold production"); // an admin's card, with nothing in production: a hold
+    expect(card.textContent).toBe("claims-portalBlockedv1.4 · Preview runs v1.3 · Dana Whitfield"); // an admin's card: holding is the app page's, never the card's (the UX review)
   });
 
   // A phone's card says what the table says (the UX review): the platform's state in the short form, never that

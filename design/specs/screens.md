@@ -1244,7 +1244,7 @@ responders*. While production is held, the read's `hold` (and the receipt's `hel
   row not held asks `Stop and hold <app> in production?` over the CLI's two lines and a reason (sent
   once one is typed). On a held row, `Lift the hold`, offered to an admin and to a responder whose row
   is reduced — off the app's team; one on it reads the team's row and is offered none — asks `Lift the
-  hold on <app>?` over the sentence, with `Leave production stopped` and `Start <version> again` (no
+  hold on <app>?` over the sentence, with `Lift the hold, keep it stopped` and `Lift the hold and start <version>` (no
   start when production ran nothing). The row's buttons are named with the app (`Stop production of
   <app>`, `Lift the hold on <app>`). A question sends once — while it sends, `Stopping production…` or
   `Lifting the hold…` stands in for its buttons and neither Cancel nor Escape closes it — and its answer

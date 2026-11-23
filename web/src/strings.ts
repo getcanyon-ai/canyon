@@ -212,10 +212,8 @@ export const S = {
   offlineOrStop: "To stop it and block every promotion during an incident, use Stop production.",
   liftHold: "Lift the hold",
   liftAsk: "Lift the hold on <app>?",
-  leaveStopped: "Leave production stopped",
-  // The lift's two answers as the app page's question says them (#102); the fleet's says the two above until it uses it.
+  // The lift's two answers, wherever the hold is lifted: the app page, the fleet and its pane (#102).
   liftKeepStopped: "Lift the hold, keep it stopped",
-  startAgain: "Start <version> again",
   liftAndStart: "Lift the hold and start <version>",
   holdChanged: "production's hold changed since you read it: read it again",
   // The same hold where production runs nothing (#2696): nothing stops, so the row, its question and its

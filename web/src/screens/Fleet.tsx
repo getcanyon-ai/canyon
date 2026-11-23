@@ -19,7 +19,8 @@ import { Assign, Claim } from "./Claim";
 import { POLL_MS, RecentActivity } from "./FleetActivity";
 import { NeedsAttention } from "./FleetAttention";
 import { FleetFilters } from "./FleetFilters";
-import { HoldCell, HoldDialog, type Acting } from "./FleetHold";
+import { HoldCell } from "./FleetHold";
+import { HoldDialog, type Acting } from "./HoldDialog";
 import { FleetPanel } from "./FleetPanel";
 import { OwnerApps, ownerHref, ownerName } from "./Owner";
 import { fleetHref, hashQuery } from "./query";
@@ -232,7 +233,7 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
       <small className="text-sm text-text-faint">
         {app.latest.package !== null && `${version(app.latest.package, app.latest.label)} · `}{where} · {owner}{page.banner === "none" && ` · ${shared(app.access)}`}
       </small>
-      <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>{/* a card has no side pane: it keeps them until the app's ⋯ menu offers them */}
+      {app.hold !== undefined && <span className="inline-flex items-center gap-1 text-sm font-medium text-critical"><Icon name="blocked" size={14} />{S.heldMark}</span>}{/* stopping and lifting are the app page's (#102), never a card's (the UX review) */}
       {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
     </li>
   );

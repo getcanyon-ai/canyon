@@ -423,8 +423,8 @@ what stand between them and a wrong-host write. cli.md §8.2 and §8.4 are the d
    check in `cancelled(…, deploy=true)`, and the shared production writer. The receipt carries `held`,
    so the CLI, status and the disabled Promote button say why with no per-route code. Preview,
    checks and secrets go on: the team ships its fix to preview and rotates what leaked.
-5. **Lifting.** A responder or an admin lifts the hold, in the dashboard only. They choose *Leave
-   production stopped* or *Start v1.4 again*: a `/run` of the held image's exact bytes, which were
+5. **Lifting.** A responder or an admin lifts the hold, in the dashboard only. They choose *Lift the hold, keep it
+   stopped* or *Lift the hold and start v1.4*: a `/run` of the held image's exact bytes, which were
    kept while held.
 
 ```
@@ -620,7 +620,7 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   Exit `2`.
 - **Dashboard**: the fleet's Held filter and, for responders and admins, *Stop production* on each
   row; the app page's banner and Promote disabled with its sentence (D6); for responders and admins,
-  *Lift the hold* in the fleet (a team row's side pane, a reduced row), with `Leave production stopped` · `Start v1.4 again`, offered to
+  *Lift the hold* in the fleet (a team row's side pane, a reduced row), with `Lift the hold, keep it stopped` · `Lift the hold and start v1.4`, offered to
   no one holding a grant on the app but an admin (§3.6); Settings › People & sign-in, the responders
   list and the claim.
 

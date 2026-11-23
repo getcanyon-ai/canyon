@@ -20,16 +20,16 @@ kind: ClusterStore
 metadata: {name: canyon}
 spec:
   sources:
-    - {image: docker.io/paketobuildpacks/ruby@sha256:f390bd757f1d3db374f9fec35e274fbbdc822aa37a318ece46a9d58ad010ddde}
-    - {image: docker.io/paketobuildpacks/dotnet-core@sha256:edc4d9456c4cd131b32c1b8c5153d182a1c8cfdc2631cd0f9d9f3d8c3f02a459}
-    - {image: docker.io/paketobuildpacks/go@sha256:dfdadd182ef49e7aecb3d7d06fb78556322771b197b596033c41df9c013f7506}
-    - {image: docker.io/paketobuildpacks/python@sha256:f63bb55db737a068e6ee5bc782392a8eeb72c8a253c9b58ab106e162001b3729}
-    - {image: docker.io/paketobuildpacks/php@sha256:5689f7b91548da58276367e9072b014c324bcff017bc7e32cf454ffde34b9a25}
-    - {image: docker.io/paketobuildpacks/web-servers@sha256:4d04b87be1b46e303167b78fa389b90343d369a64444d5bc8ef1fb72a147eb41}
-    - {image: docker.io/paketobuildpacks/java-native-image@sha256:600dd5d0b775d5f755c2cd6d06f6d8263748aee9d22dbc89c46ba19a98310301}
-    - {image: docker.io/paketobuildpacks/java@sha256:1431100daf37f54fdecc120646ee7e02992099bd768feafde4b5c43618a16ccf}
-    - {image: docker.io/paketobuildpacks/nodejs@sha256:c9206489678dfb781fe1426bbb8abe1eb5e8fe46a9d99efd41b53803e8c6bd92}
-    - {image: docker.io/paketobuildpacks/procfile@sha256:b1ba859292c4b622682ccd4f787a52cd8c66b6da5c75ccfc2923e021d6fe3478}
+    - {image: docker.io/paketobuildpacks/ruby@sha256:34f98ac9a162aeeb4d49df493a776eaadee75f33e73162578389f0946aaff137}
+    - {image: docker.io/paketobuildpacks/dotnet-core@sha256:02160f7339e1fed14f3dc48843f37f19fab8422f84e7217cbf5f9775c7abd6c8}
+    - {image: docker.io/paketobuildpacks/go@sha256:db78f48f0b6d51607537db04c91e1611cea283bc05e09ab9554ddb9af7b33253}
+    - {image: docker.io/paketobuildpacks/python@sha256:a0dfb1b73cdc69c9d31638ad1e1ebce55f2aded0c3061c40c2d502de3d59a965}
+    - {image: docker.io/paketobuildpacks/php@sha256:3cee3ccfaaf4eda4b1341f211af9fbbe55ed2955ae71b29c5c6abd8fac1d7801}
+    - {image: docker.io/paketobuildpacks/web-servers@sha256:a01f811143ca2629a1cfb2b053a63de0b845cf6e38d19ca375f2c3d6c62c6e97}
+    - {image: docker.io/paketobuildpacks/java-native-image@sha256:60486e497d2554626f621fef1ab8866acd23328541d0f5bc34d2689a5630af0c}
+    - {image: docker.io/paketobuildpacks/java@sha256:fc85cd4628fcdb50089d55331e2b48511195993111972d05b24d3df40332e153}
+    - {image: docker.io/paketobuildpacks/nodejs@sha256:ba6341b9dee1a3733f912fcf843e4c0e4b251dbf0ea5abdc09a819f2c3015f79}
+    - {image: docker.io/paketobuildpacks/procfile@sha256:61314f913a2feeacd652a20fe499a7a3e68c9517aaa6349eb666d2a87d7723d7}
 ---
 apiVersion: kpack.io/v1alpha2
 kind: ClusterBuilder

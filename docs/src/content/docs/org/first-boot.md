@@ -10,7 +10,7 @@ sign-in on, and `CANYON_ADMINS` names you.
 steps:
   - {who: Canyon, icon: canyon, tone: canyon, step: 1, what: Starts in setup, more: "With sign-in on, and `CANYON_ADMINS` naming its first admins."}
   - {who: Canyon, icon: key, tone: canyon, step: 2, what: "Only the `CANYON_ADMINS` addresses can sign in", more: "Canyon serves nothing but the setup screen, and nobody can approve a CLI sign-in yet."}
-  - {who: The first admin, icon: person, tone: person, step: 3, what: Answers Set up Canyon, more: "The organisation's name, who may sign in, and who administers Canyon."}
+  - {who: The first admin, icon: person, tone: person, step: 3, what: Answers Set up Canyon, more: "The organization's name, who may sign in, and who administers Canyon."}
   - via: Finish setup
   - {who: Everyone on the lists, icon: passed, tone: passed, step: 4, what: Can sign in, more: The fleet and every other page open.}
 ```
@@ -85,7 +85,7 @@ variable's name. Change it there, not on the screen.
 
 Every answer is on **Settings** later, in the same words:
 
-- **Organisation** holds the name.
+- **Organization** holds the name.
 - **People & sign-in** holds who may sign in, who administers Canyon, and **Groups**: the groups
   claim, the sign-in claim that lists a person's groups (`CANYON_GROUPS_CLAIM` fixes it on the
   server). Once it is set, owners can share an app with a group. It also holds the **Production** switch, "Production is approved in the dashboard".

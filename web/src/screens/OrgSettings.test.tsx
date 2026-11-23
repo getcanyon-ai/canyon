@@ -129,14 +129,47 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(admins.queryByRole("textbox", { name: "Claim" })).toBeNull();
   });
 
-  // The member's read carries no claim and no value, but `overridden` still names the pair: the
-  // screen says the environment sets it rather than showing an empty list, which would read as no
-  // claim at all.
-  it("a member is told the claim is pinned without being shown it", () => {
-    show(MEMBER);
+  // The people are everyone's to read, the environment's admins too; a variable's name is an admin's alone (#118). So a
+  // member reads every admin there is in one list, what each pinned key holds, and no CANYON_ name, nor a sign-in group.
+  it("a member reads every admin, what each pinned key holds, and no variable's name", () => {
+    const pinned: Preferences = { ...MEMBER, allowed_emails: [THEIRS], groups_claim: "teams", overridden: ["org_name", "allowed_emails", "allowed_domains", "admin_claim", "admin_value", "groups_claim"] };
+    show(pinned);
     const admins = region("Who administers Canyon");
-    expect(admins.getByText(/Set on the server, by CANYON_ADMIN_CLAIM and CANYON_ADMIN_VALUE/)).toBeTruthy();
+    expect(admins.getByText("dana@meridian.example")).toBeTruthy();
+    expect(admins.getByText("founder@meridian.example")).toBeTruthy();
+    expect(admins.queryByText("From the environment")).toBeNull();
+    expect(admins.queryByText("By sign-in group (optional)")).toBeNull();
+    expect(region("Who may sign in").getByText(THEIRS)).toBeTruthy();
+    expect(region("Who may sign in").getByText(MEMBER.allowed_domains[0]!)).toBeTruthy();
+    expect(region("Groups").getByText("teams")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("CANYON_");
+    cleanup();
+    show(pinned, "organisation");
+    expect(screen.getByText(MEMBER.org_name)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("CANYON_");
+    cleanup();
+    // An admin by both is one person, named once.
+    show({ ...MEMBER, bootstrap_admins: MEMBER.admin_emails });
+    expect(region("Who administers Canyon").getAllByText("dana@meridian.example")).toHaveLength(1);
+  });
+
+  // A member is not sent the admin group, so a list with no address says only that (#118), never nobody.
+  it("a member where no admin is listed is never told nobody administers Canyon", () => {
+    show({ ...MEMBER, admin_emails: [], bootstrap_admins: [] });
+    const admins = region("Who administers Canyon");
     expect(admins.queryByText("Nobody.")).toBeNull();
+    expect(admins.getByText("No admin is listed by email address.")).toBeTruthy();
+  });
+
+  // No one by address while a domain lets people in is not nobody (#118): the line says who can sign in.
+  it("a member with no addresses and a domain reads who can sign in", () => {
+    show(MEMBER);
+    const who = region("Who may sign in");
+    expect(who.getByText(`No one by address; anyone at ${MEMBER.allowed_domains[0]} can sign in.`)).toBeTruthy();
+    expect(who.queryByText("Nobody.")).toBeNull();
+    cleanup();
+    show({ ...MEMBER, allowed_domains: ["meridian.example", "acme.example", "globex.example"] });
+    expect(region("Who may sign in").getByText("No one by address; anyone at meridian.example, acme.example or globex.example can sign in.")).toBeTruthy();
   });
 
   // Every rule is the server's. The screen sends what was typed, renders the sentence that comes
@@ -168,8 +201,8 @@ describe("Settings › Organisation and People & sign-in", () => {
   it("each page saves only its own keys, and never a pinned one", async () => {
     const sent = server({ body: ADMIN });
     show(ADMIN, "organisation");
-    fireEvent.change(screen.getByRole("textbox", { name: "Organisation name" }), { target: { value: "Meridian" } });
-    save("Organisation");
+    fireEvent.change(screen.getByRole("textbox", { name: "Organization name" }), { target: { value: "Meridian" } });
+    save("Organization");
     await waitFor(() => expect(sent()).toHaveLength(1));
     expect(Object.keys(sent()[0]!)).toEqual(["org_name"]);
     expect(sent()[0]!.org_name).toBe("Meridian");
@@ -238,7 +271,7 @@ describe("Settings › Organisation and People & sign-in", () => {
     server({ body: ADMIN });
     show(ADMIN, "organisation");
     expect(screen.queryByRole("status")).toBeNull();
-    save("Organisation");
+    save("Organization");
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Saved.");
   });
 });

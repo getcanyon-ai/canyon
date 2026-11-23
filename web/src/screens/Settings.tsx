@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { allowDestination, ApiError, getAuthConfig, getEgress, getFrontDoor, getPreferences, getProject, getProjectEgress, getScannerData, listProjectIds, putEgress, putFrontDoor, recreateNetwork, reduced, said, type AddressForm, type EgressDestination, type EgressCaps, type EgressMode, type EgressSetting, type FrontDoor, type FrontDoorEdit, type FrontDoorRead, type Preferences, type ScanDB } from "../api";
+import { allowDestination, ApiError, caOf, getAuthConfig, getEgress, getFrontDoor, getPreferences, getProject, getProjectEgress, getScannerData, listProjectIds, putEgress, putFrontDoor, recreateNetwork, reduced, said, type AddressForm, type EgressDestination, type EgressCaps, type EgressMode, type EgressSetting, type FrontDoor, type FrontDoorEdit, type FrontDoorRead, type Preferences, type ScanDB } from "../api";
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, age } from "../ui/Age";
@@ -15,7 +15,7 @@ import { isAdmin, OrganisationSettings, PeopleSettings, Sessions } from "./OrgSe
 import { pendingLine } from "../ui/pending";
 import { AllowedLine, allowedLine, Refusals, wouldRefuse } from "./Outbound";
 import { DatabasesSettings } from "./Databases";
-import { OutboundKeys } from "./OutboundKeys";
+import { OutboundKeys, subCAEnding } from "./OutboundKeys";
 import { PatchingSettings } from "./Patching";
 import { TelemetrySettings } from "./Telemetry";
 import { LicenceSettings } from "./Licence";
@@ -64,11 +64,14 @@ function bodyOf(draft: Draft, defaultDomain: string): FrontDoorEdit {
   return { choice: 1, gateway: "oidc", issuer: draft.issuer, audience: draft.audience, jwks_url: draft.jwks_url, cookie: draft.cookie, ...where };
 }
 
+// The docs on closing an app's way to its own node, Host firewall (#118).
+const FIREWALL_DOCS = "https://www.getcanyon.ai/docs/self-host/kubernetes/#host-firewall";
+
 // The pages of Settings (the redesign): who the org is, who may sign in and who administers it, how
 // people reach apps, whether AI review is on, and, for admins, the GitHub organizations. Each is #/settings/<page>; the bare route
 // is the first.
 const PAGES = [
-  ["organisation", "Organisation"],
+  ["organisation", "Organization"], // the address keeps its old spelling, so links to it work (#118)
   ["people", "People & sign-in"],
   ["agents", "Agents"], // every member's: connecting an agent, and the sessions to disconnect one (#100's review)
   ["hosting", "App hosting"],
@@ -122,7 +125,7 @@ export function Settings() {
       <Rail current="settings" />
       <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
         <h1 className="text-title font-semibold tracking-tight">Settings</h1>
-        <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border pr-4 max-[520px]:gap-4">
+        <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border max-[860px]:-mx-4 max-[860px]:px-4 max-[520px]:gap-4">
           {PAGES.filter(([key]) => (key !== "github" && key !== "integrations" && key !== "telemetry" && key !== "licence") || admin).map(([key, label]) => (
             <a key={key} href={`#/settings/${key}`} aria-current={page === key ? "page" : undefined} aria-describedby={key === "outbound" ? "settings-outbound-beta" : undefined}
               className={`flex items-center gap-1.5 py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-faint hover:text-text"}`}>
@@ -168,7 +171,8 @@ export function Settings() {
                   {read.front_door === null
                     ? <p className={NOTE}>{S.frontDoorNone}</p>
                     : <p className={NOTE}><Actor actor={read.front_door.set_by} /> · <Age at={read.front_door.set_at} /></p>}
-                  {read.warning !== "" && <p role="note" className="text-md text-amber">{read.warning} {S.hostFirewall}</p>}
+                  {/* The probe's warning in plain words, the docs a link away (#118): its whole text, ports and all, is canyon status's. */}
+                  {read.warning !== "" && <p role="note" className="text-md text-amber">{S.reachesNode} <a className="text-link no-underline hover:underline" href={FIREWALL_DOCS} target="_blank" rel="noreferrer">{S.reachesNodeHow}</a></p>}
                   {read.grants_note !== "" && <p role="note" className="text-md text-amber">{read.grants_note}</p>}
                   {read.egress_note !== "" && <p role="note" className="text-md text-amber">{read.egress_note}</p>}
                   {read.discovery_note !== "" && <p role="note" className="text-md text-amber">{read.discovery_note}</p>}
@@ -460,8 +464,15 @@ function OutboundSettings() {
   const live = useRef(true);
   const impactRead = useRef(0); // reads overlap: only the newest one's answer is drawn
   const yes = useRef<HTMLButtonElement>(null);
+  // Advanced (#118) opens by itself when a read lands that needs a person, judged as it lands and never again as the page
+  // redraws; nothing here closes it. `landed` is when, so a replica's age says what the read said.
+  const [advanced, setAdvanced] = useState(false);
+  const [landed, setLanded] = useState(0);
   const adopt = (answer: EgressSetting) => {
     if (!live.current) return;
+    const now = Date.now();
+    setLanded(now);
+    if (needsPerson(answer, now)) setAdvanced(true);
     setRead(answer); setVia(answer.via); setMode(answer.mode); setRoutes(answer.credential_routes); setAskingMode(false);
     setCaps(answer.caps === undefined ? null : { new_names: String(answer.caps.new_names), destinations: String(answer.caps.destinations), pending: String(answer.caps.pending) });
   };
@@ -708,47 +719,56 @@ function OutboundSettings() {
                 </ul>
               )}
           </>)}
-          {/* The limits, an admin's (#2691): a server from before them names none, and then none is shown. */}
-          {caps !== null && read.caps !== undefined && (() => {
-            const moved = capsMoved();
-            return (
-              <section aria-label={S.capsHeading} className="mt-6">
-                <h2 className="text-base font-semibold">{S.capsHeading}</h2>
-                <p className={NOTE}>{S.capsNote}</p>
-                {CAPS.map(([key, label, note, [min, max]]) => (
-                  <div key={key} className="mt-2 grid gap-1">
-                    <label htmlFor={`egress-cap-${key}`} className="text-base font-semibold">{label}</label>
-                    <input id={`egress-cap-${key}`} type="number" inputMode="numeric" min={min} max={max} step={1} value={caps[key]} aria-describedby={`egress-cap-${key}-note`}
-                      className="w-32 rounded border border-border bg-surface px-2 py-1 text-base"
-                      onChange={(e) => { setCaps({ ...caps, [key]: e.target.value }); setCapsSaved(false); setCapsPending(null); }} />
-                    <p id={`egress-cap-${key}-note`} className={NOTE}>{note} {S.capRange.replace("<min>", () => min.toLocaleString("en")).replace("<max>", () => max.toLocaleString("en"))}.</p>
-                  </div>
-                ))}
-                {moved !== null && <span className="mt-3 flex"><Button variant="primary" label="Save limits" onClick={() => void saveCaps(moved)}>Save</Button></span>}
-                {capsSaved && moved === null && (capsPending === null ? <p role="status" className="mt-2 text-md text-ok">{S.capsSaved}</p>
-                  : <p role="status" className="mt-2 text-md text-amber">{capsPending}</p>)}
-              </section>
-            );
-          })()}
-          {(read.replicas?.length ?? 0) > 0 && (<>
-            <h2 className="mt-6 text-base font-semibold">{S.replicasHeading}</h2>
-            <p className={NOTE}>{S.replicasNote}</p>
-            <ul className="mt-2 grid gap-1">
-              {read.replicas?.map((one) => {
-                const line = policyAge(one.current_at);
-                return (
-                  <li key={one.replica} className="flex flex-wrap items-center gap-3">
-                    <span className="font-mono text-base break-all">{one.replica}</span>
-                    <span className={line === S.replicaCurrent ? NOTE : "text-md text-amber"}>{line}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          </>)}
         </fieldset>
       )}
       {busy !== null && <p role="status" className={NOTE}>{busy}</p>}
-      {read !== null && <OutboundKeys setting={read} adopt={adopt} />}
+      {/* Advanced (#118): the limits, the gateway replicas and the certificates, an admin's, folded away until a read needs
+          a person, so a warning is never folded by itself. */}
+      {read !== null && ((caps !== null && read.caps !== undefined) || (read.replicas?.length ?? 0) > 0 || caOf(read) !== null) && (
+        <details className="mt-6 rounded-[10px] border border-border bg-surface px-4 py-3" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-normal text-text-dim">{S.advancedWhat}</span></summary>
+          <fieldset disabled={busy !== null} className="min-w-0">
+            {/* The limits, an admin's (#2691): a server from before them names none, and then none is shown. */}
+            {caps !== null && read.caps !== undefined && (() => {
+              const moved = capsMoved();
+              return (
+                <section aria-label={S.capsHeading} className="mt-6">
+                  <h2 className="text-base font-semibold">{S.capsHeading}</h2>
+                  <p className={NOTE}>{S.capsNote}</p>
+                  {CAPS.map(([key, label, note, [min, max]]) => (
+                    <div key={key} className="mt-2 grid gap-1">
+                      <label htmlFor={`egress-cap-${key}`} className="text-base font-semibold">{label}</label>
+                      <input id={`egress-cap-${key}`} type="number" inputMode="numeric" min={min} max={max} step={1} value={caps[key]} aria-describedby={`egress-cap-${key}-note`}
+                        className="w-32 rounded border border-border bg-surface px-2 py-1 text-base"
+                        onChange={(e) => { setCaps({ ...caps, [key]: e.target.value }); setCapsSaved(false); setCapsPending(null); }} />
+                      <p id={`egress-cap-${key}-note`} className={NOTE}>{note} {S.capRange.replace("<min>", () => min.toLocaleString("en")).replace("<max>", () => max.toLocaleString("en"))}.</p>
+                    </div>
+                  ))}
+                  {moved !== null && <span className="mt-3 flex"><Button variant="primary" label="Save limits" onClick={() => void saveCaps(moved)}>Save</Button></span>}
+                  {capsSaved && moved === null && (capsPending === null ? <p role="status" className="mt-2 text-md text-ok">{S.capsSaved}</p>
+                    : <p role="status" className="mt-2 text-md text-amber">{capsPending}</p>)}
+                </section>
+              );
+            })()}
+            {(read.replicas?.length ?? 0) > 0 && (<>
+              <h2 className="mt-6 text-base font-semibold">{S.replicasHeading}</h2>
+              <p className={NOTE}>{S.replicasNote}</p>
+              <ul className="mt-2 grid gap-1">
+                {read.replicas?.map((one) => {
+                  const line = policyAge(one.current_at, landed);
+                  return (
+                    <li key={one.replica} className="flex flex-wrap items-baseline gap-x-3">
+                      <span className="font-mono text-base break-all">{one.replica}</span>
+                      <span className={line === S.replicaCurrent ? NOTE : "text-md text-amber"}>{line}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>)}
+          </fieldset>
+          <OutboundKeys setting={read} adopt={adopt} />
+        </details>
+      )}
     </section>
   );
 }
@@ -760,11 +780,15 @@ const CAPS: [keyof EgressCaps, string, string, [number, number]][] = [
   ["pending", S.capPending, S.capPendingNote, [1, 500]],
 ];
 
+// What in a read needs a person, and opens Settings › Outbound's Advanced (#118): a replica that doesn't hold the current
+// policy, or the org's own sub-CA ending.
+const needsPerson = (read: EgressSetting, now: number) => (read.replicas ?? []).some((one) => policyAge(one.current_at, now) !== S.replicaCurrent) || subCAEnding(read, now) !== null;
+
 // A replica's policy age, now less the last time it held the current one (design/EGRESS.md §3.2): an old one is
 // cut off from Canyon, which is why it alarms. Under a minute it asked within its 5 s polls.
-const policyAge = (currentAt: string | null) => {
+const policyAge = (currentAt: string | null, now: number) => {
   if (currentAt === null) return S.replicaNone;
-  return Date.now() - new Date(currentAt).getTime() < 60_000 ? S.replicaCurrent : S.replicaAge.replace("<age>", () => age(currentAt));
+  return now - new Date(currentAt).getTime() < 60_000 ? S.replicaCurrent : S.replicaAge.replace("<age>", () => age(currentAt));
 };
 
 // Settings › Outbound for a member (design/PERMISSIONS.md, Outbound, Host settings): the host's via and the

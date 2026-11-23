@@ -113,7 +113,7 @@ canyon share everyone
 ```
 
 Owners, contributors and read-only people can all open the app. `everyone` means everyone in your
-organisation, read-only. A person's roles are the roles of every grant that names them, their
+organization, read-only. A person's roles are the roles of every grant that names them, their
 groups or everyone. Admins open every app, but hold only the roles a grant gives them.
 
 Someone without access is sent to a page in Canyon that says whom to ask, with an

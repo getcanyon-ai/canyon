@@ -72,8 +72,9 @@ repository with the change. Nobody edits `apps/canyon-docs` by hand: the next pu
 - Four tones give a card or a band meaning, as they do in a `mermaid` block's classes: `canyon`,
   what Canyon does; `person`, a person decides; `blocked`; and `passed`. Use them for nothing else.
 - A technical sequence or graph stays a fenced `mermaid` block with a `title="…"`, its caption and
-  its text for screen readers. The build draws it as an SVG in the tokens' colours, and GitHub draws
-  the same block. Its classes are those four tones.
+  its text for screen readers. The build draws it as an SVG in the tokens' colours, at its own size:
+  one wider than the column scrolls sideways in its frame and says so. GitHub draws the same block.
+  Its classes are those four tones. Keep it narrow: past a phone's width, a flow reads better.
 - The build fails on a link to a page or heading that doesn't exist (starlight-links-validator), and
   `make docs-links` checks the repository's other Markdown.
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { holdProduction, liftHold, reduced, said, type App, type Reduced, type Viewer } from "../api";
 import { S } from "../strings";
 import { Button } from "../ui/Button";
@@ -38,7 +38,10 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
   const holds = kind === "stop" && empty(app);
   const title = (kind === "stop" ? (holds ? S.holdAsk : S.stopAsk) : S.liftAsk).replace("<app>", () => app.name);
   const confirm = holds ? S.holdProduction : S.stopProduction;
-  const cancel = sending ? null : <Button variant="ghost" onClick={close}>Cancel</Button>;
+  // A lift's keyboard lands on Cancel, its safe answer: Enter on what opened the question, and Enter again, lifts nothing.
+  // A stop's lands on its reason. Placed as the button mounts, which Modal then keeps.
+  const safe = useCallback((button: HTMLButtonElement | null) => { if (kind === "lift") button?.focus(); }, [kind]);
+  const cancel = sending ? null : <Button ref={safe} variant="ghost" onClick={close}>Cancel</Button>;
   const going = <p role="status" className="text-md text-text-dim">{kind === "stop" ? (holds ? "Holding production…" : "Stopping production…") : "Lifting the hold…"}</p>;
   return (
     <Modal label={title} close={close} busy={sending}>
@@ -67,7 +70,7 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
             {sending ? going : !changed && (
               <>
                 <Button variant="secondary" onClick={() => void send(() => liftHold(app.id, app.hold!.at, false))}>{S.liftKeepStopped}</Button>
-                {app.hold.version !== null && <Button variant="primary" onClick={() => void send(() => liftHold(app.id, app.hold!.at, true))}>{S.liftAndStart.replace("<version>", () => app.hold!.version!)}</Button>}
+                {app.hold.version !== null && <Button variant="secondary" onClick={() => void send(() => liftHold(app.id, app.hold!.at, true))}>{S.liftAndStart.replace("<version>", () => app.hold!.version!)}</Button>}
               </>
             )}
             {cancel}

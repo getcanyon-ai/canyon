@@ -427,9 +427,17 @@ describe("the shell", () => {
     expect(sessionStorage.getItem("canyon_return")).toBe("#/no-access/claims-portal");
   });
 
-  it("restores nothing that is not one of the two pages", async () => {
+  it("comes back to the page a link named", async () => {
     server(prefs, () => answer(200, signedIn));
-    sessionStorage.setItem("canyon_return", "#/apps/claims-portal");
+    sessionStorage.setItem("canyon_return", "#/audit?range=7d");
+    render(<Shell />);
+    await waitFor(() => expect(window.location.hash).toBe("#/audit?range=7d"));
+    expect(sessionStorage.getItem("canyon_return")).toBeNull();
+  });
+
+  it("restores nothing that is not one of those pages", async () => {
+    server(prefs, () => answer(200, signedIn));
+    sessionStorage.setItem("canyon_return", "#/apps/claims-portal/../../evil");
     render(<Shell />);
     expect(await screen.findByRole("heading", { name: "Meridian Insurance" })).toBeDefined();
     expect(window.location.hash).toBe("#/fleet"); // where every other sign-in lands

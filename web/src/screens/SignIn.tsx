@@ -6,15 +6,26 @@ import { buttonClass } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 
 // The pages a sign-in comes back to (design/specs/screens.md, A0): the CLI's device page, an MCP client's consent page and the
-// production approval page, each with its code or request, and an app's no-access page. Kept in this tab for the length of the sign-in, and only ever a
-// hash of this dashboard, so a kept value can send the browser nowhere else.
+// production approval page, each with its code or request, an app's no-access page, and what a link may name: an app, the
+// trail, a Guardrails or Settings page, with its query. Kept in this tab for the length of the sign-in, and only ever a
+// hash of this dashboard, so a kept value can send the browser nowhere else: each page is spelt out, and a link's query
+// is the characters a URL's query has and no longer than a link of ours.
 const RETURN = "canyon_return";
-const returnable = /^#\/((device|approve|oauth)(\?[^#]*)?|no-access\/[a-z]([a-z0-9-]*[a-z0-9])?)$/;
+const APP = "[a-z]([a-z0-9-]*[a-z0-9])?";
+const QUERY = "(\\?[A-Za-z0-9._~%&=+:,@/*-]{0,512})?";
+const step = new RegExp(`^#/((device|approve|oauth)(\\?[^#]*)?|no-access/${APP})$`);
+const linked = new RegExp(`^#/(apps/${APP}(/(outbound|secrets))?|audit|(guardrails|settings)(/[a-z-]{1,40})?)${QUERY}$`);
+const returnable = (hash: string) => step.test(hash) || linked.test(hash);
 
-// A browser that refuses storage (a private window) signs in all the same and lands on the fleet.
-function keep(hash: string) {
-  if (!returnable.test(hash)) return;
-  try { sessionStorage.setItem(RETURN, hash); } catch { /* the fleet is where a sign-in lands without it */ }
+// A browser that refuses storage (a private window) signs in all the same and lands on the fleet. A sign-in begun on any
+// other page forgets what an earlier one kept; trying a refused one again doesn't. After a sign-out the person chose, a
+// step of signing in is still come back to (the device page's Switch account), a page someone was reading is not: the
+// next person to sign in here may be another.
+function keep(hash: string, reason: Reason | undefined) {
+  try {
+    if (step.test(hash) || (reason !== "signed-out" && linked.test(hash))) sessionStorage.setItem(RETURN, hash);
+    else if (reason !== "failed") sessionStorage.removeItem(RETURN);
+  } catch { /* the fleet is where a sign-in lands without it */ }
 }
 
 // takeReturn is the page a sign-in began on, read once and cleared, or null.
@@ -22,7 +33,7 @@ export function takeReturn(): string | null {
   try {
     const hash = sessionStorage.getItem(RETURN);
     sessionStorage.removeItem(RETURN);
-    return hash !== null && returnable.test(hash) ? hash : null;
+    return hash !== null && returnable(hash) ? hash : null;
   } catch {
     return null; // nothing could be kept, so there is nothing to come back to
   }
@@ -61,10 +72,10 @@ export function SignIn({ reason }: { reason?: Reason }) {
     <AuthCard org={org}>
       <AuthHead eyebrow={cli ? <CliStep step={1} /> : undefined} title={cli ? S.signInForCli : agent ? S.signInForAgent : AUTH.signIn} line={note === null ? line : undefined} />
       {note !== null && <AuthNote tone={note.tone} icon={note.icon} title={note.title}>{note.line}</AuthNote>}
-      <a className={buttonClass("primary", "block")} href={reason === "signed-out" ? "/auth/start?prompt=select_account" : "/auth/start"} onClick={() => { keep(window.location.hash); setOpening(true); }}>
+      <a className={buttonClass("primary", "block")} href={reason === "signed-out" ? "/auth/start?prompt=select_account" : "/auth/start"} onClick={() => { keep(window.location.hash, reason); setOpening(true); }}>
         {opening ? <><span className="animate-spin"><Icon name="working" /></span>{AUTH.signingIn}</> : reason === "failed" ? AUTH.tryAgain : AUTH.signInGo}
       </a>
-      {reason !== "signed-out" && <p className="flex items-center gap-1.5 text-md text-text-faint"><Icon name="locked" size={14} />{AUTH.noPassword}</p>}
+      {reason !== "signed-out" && <p className="flex items-center gap-1.5 text-md text-text-faint">{window.location.protocol === "https:" && <Icon name="locked" size={14} />}{AUTH.noPassword}</p>}
     </AuthCard>
   );
 }

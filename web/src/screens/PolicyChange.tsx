@@ -114,13 +114,27 @@ const asked = ({ rule, change }: Change) => {
 
 // What a rule blocks today, beside its control: the server's preview of the change asked of it, else of
 // the rule at its own state (`today`: absent until read, a sentence when the read failed), never a guess.
+// Judged when an app is promoted, from the server's own state: no review holds a finding of one, so the preview, which
+// reads reviews, names no app for it (contracts/routes.md, the policies row). The other two go-live rules it reads now.
+const AT_PROMOTION = ["prod.clean-gate", "prod.human-approval", "stack.blessed", "owner.required"];
+const READ_NOW = ["platform.known-vuln", "prod.egress-allowed"];
+// What an empty preview means. It counts apps a gate at blocking would hold, so it says nothing of a looser rule, nor
+// before preview of a rule no review had on; before production it names an app whose review had the rule off.
+function nobody(rule: Policy, one: Change | undefined): string {
+  const to = one?.change ?? { state: rule.state, production: rule.production };
+  if (!named(to).some((gate) => to[gate] === "blocking")) return one === undefined ? "No app is affected today." : loosens(one) ? "Canyon doesn't check which apps this lets through." : "A warning blocks no app.";
+  if (AT_PROMOTION.includes(rule.id)) return "Not known yet: Canyon checks this rule when an app is promoted.";
+  if (!READ_NOW.includes(rule.id) && to.state === "blocking" && now(rule, "state") === "off" && now(rule, "production") === "off") return "Not known yet: reviews may not check a rule while it's Off.";
+  return "No app is affected today.";
+}
+
 export function Impact({ flow, rule, today }: { flow: Flow; rule: Policy; today?: Blocked[] | string }) {
   const one = flow.of(rule.id);
   const blocked = one === undefined ? today : one.wouldBlock;
   if (blocked === undefined) return null;
   if (typeof blocked === "string") return <span className="text-md text-text-faint">{`Couldn't check today's apps: ${blocked}`}</span>;
   if (blocked === null) return <span className="text-md text-text-faint">Checking…</span>;
-  if (blocked.length === 0) return <span className="text-md text-text-dim">No app is affected today.</span>;
+  if (blocked.length === 0) return <span className="text-md text-text-dim">{nobody(rule, one)}</span>;
   return (
     <span className="text-md font-medium text-critical" title={blocked.map((app) => `${app.project}: ${plural(app.findings, "finding")}`).join("\n")}>
       {`${plural(blocked.length, "app")} could not promote today: ${blocked.map((app) => app.project).join(", ")}`}

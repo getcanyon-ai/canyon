@@ -129,7 +129,7 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
   // null while it is read: the question is not answered before what it names has been said.
   const [lacks, setLacks] = useState<string[] | Error | null>(null);
   const goLive = useRef<HTMLButtonElement>(null);
-  const confirming = useRef<HTMLButtonElement>(null);
+  const cancelling = useRef<HTMLButtonElement>(null);
   // What production lacks, read when the question is asked and again whenever a secret is set beside it.
   const readLacks = () => {
     setLacks(null);
@@ -157,12 +157,13 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
 
   // The question replaces the button that asked it, so the keyboard follows the question, and
   // comes back to the button when the question closes. Without this the focus falls to the
-  // document body and the next Enter does nothing. `asked` keeps a first render from taking it.
+  // document body and the next Enter does nothing. It lands on Cancel, the safe answer: Enter on Promote, and Enter again,
+  // promotes nothing. `asked` keeps a first render from taking it.
   const asked = useRef(false);
   useEffect(() => {
-    if (asking) { asked.current = true; confirming.current?.focus(); } // again once the confirm appears, after the secrets read
+    if (asking) { asked.current = true; cancelling.current?.focus(); }
     else if (asked.current) { asked.current = false; goLive.current?.focus(); }
-  }, [asking, lacks === null]);
+  }, [asking]);
 
   const label = shown === null ? "Promote to production" : `Promote ${shown} to production`;
   const odd = oddAnswer(answered);
@@ -198,8 +199,8 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
                 ))}
               <span className="flex flex-wrap gap-2">
                 {lacks === null ? <span className="text-md text-text-dim">Checking production's secrets…</span>
-                  : <Button ref={confirming} variant={odd !== null ? "secondary" : "primary"} onClick={() => void ask()}>{odd !== null ? "Promote anyway" : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
-                <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+                  : <Button variant={odd !== null ? "secondary" : "primary"} onClick={() => void ask()}>{odd !== null ? "Promote anyway" : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
+                <Button ref={cancelling} variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
               </span>
             </div>
           )

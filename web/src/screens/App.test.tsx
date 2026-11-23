@@ -1139,13 +1139,13 @@ describe("the app page", () => {
   }
 
   // Clicking the button takes it off the screen, so the keyboard has nowhere to stand unless the
-  // confirmation catches it: the next Enter has to be the answer to the question just asked.
-  it("hands the keyboard to the confirmation", async () => {
+  // question catches it, on its safe answer: Enter on the button, and Enter again, promotes nothing.
+  it("hands the keyboard to the question, on Cancel", async () => {
     server({ ...reads(() => open), [PROMOTE]: { body: page.promotion } });
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
-    const confirm = await screen.findByRole("button", { name: "Promote v1.3" }); // once production's secrets are read
-    await waitFor(() => expect(document.activeElement).toBe(confirm));
+    await screen.findByRole("button", { name: "Promote v1.3" }); // once production's secrets are read
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
   });
 
   it("hands the keyboard back when the question is cancelled", async () => {

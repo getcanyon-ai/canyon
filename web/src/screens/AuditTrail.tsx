@@ -224,7 +224,7 @@ export function AuditTrail({ query }: { query: string }) {
               {apps.map((one) => <option key={one.id} value={one.id}>{one.name}</option>)}
             </select>}
             <select aria-label="Via" className={FIELD} value={via ?? ""} onChange={(event) => go({ via: event.target.value === "" ? null : event.target.value })}>
-              <option value="">Any way</option>
+              <option value="">From anywhere</option>
               {(Object.entries(VIA_FILTER) as [Via, string][]).map(([value, word]) => <option key={value} value={value}>{word}</option>)}
             </select>
             <select aria-label="Kind" className={FIELD} value={category ?? ""} onChange={(event) => go({ category: event.target.value === "" ? null : event.target.value })}>
@@ -235,9 +235,9 @@ export function AuditTrail({ query }: { query: string }) {
                 {RANGES.map((one) => <option key={one.key} value={one.key}>{one.label}</option>)}
               </select>
             )}
-            <details className="relative" onKeyDown={(event) => { if (event.key === "Escape") { close(event); event.currentTarget.querySelector("summary")?.focus(); } }}>
+            <details className="relative max-[860px]:static" onKeyDown={(event) => { if (event.key === "Escape") { close(event); event.currentTarget.querySelector("summary")?.focus(); } }}>
               <summary className={`${FIELD} cursor-pointer list-none`}>Export ▾</summary>
-              <div className="absolute right-0 z-10 mt-1.5 grid w-[200px] rounded-[10px] border border-border bg-surface p-1.5 shadow-overlay max-[520px]:right-auto max-[520px]:left-0">
+              <div className="absolute right-0 z-10 mt-1.5 grid w-[200px] rounded-[10px] border border-border bg-surface p-1.5 shadow-overlay max-[860px]:inset-x-4 max-[860px]:w-auto">
                 <button type="button" disabled={exporting} className={ITEM} onClick={(event) => { close(event); void exported("csv"); }}>CSV</button>
                 <button type="button" disabled={exporting} className={ITEM} onClick={(event) => { close(event); void exported("json"); }}>JSON</button>
                 <button type="button" className={ITEM} onClick={(event) => { close(event); void copy(); }}>Copy link to this view</button>

@@ -11,10 +11,10 @@ told before they write code.
 coding agents are told." Only an admin can open it. A member who follows a link there is told "Only
 an admin can open Guardrails." What an app must pass is on that app's page.
 
-It has five pages:
+It has five pages, and opens on the first:
 
-- **Pipeline:** where each rule is checked, before preview or before production.
 - **Policies:** each rule's state, and your own custom rules.
+- **Pipeline:** where each rule is checked, before preview or before production.
 - **Scanners:** the tools Canyon runs, and their settings.
 - **Playbooks:** how your org builds, written down for coding agents to read.
 - **What agents are told:** the stacks, buildpacks and design system coding agents are told to use.
@@ -81,9 +81,9 @@ steps:
 - **Before production**: "Checked when a person clicks Promote. A Blocking check keeps the button
   disabled."
 
-To also check a rule before production, drag it into that box, or click "Also before production"
-under its control. Each place then has its own state for that rule. "Take out of before production"
-removes it again.
+To also check a rule before production, tick "Also before production" under its control. Each place
+then has its own state for that rule. Untick it to take the rule out again. Under the tabs, "Before
+preview" and "Before production" take you to each one's rules.
 
 Six rules only ever run before production, because they are about going live. They are the
 **go-live checks** on each app's page:
@@ -237,7 +237,7 @@ When Opengrep runs, it always uses GitLab's open-source security rules (sast-rul
 Canyon, and Canyon's own SQL rule. You can add a rules repository of your own, at a fixed commit, and
 say which of its folders to read. "Use the community rules" fills in a community repository that
 adds SQL injection rules for Ruby, PHP and Java. Its licence carries the Commons Clause, which limits
-selling software built on it, so whether your organisation may use it is your decision.
+selling software built on it, so whether your organization may use it is your decision.
 
 A private rules repository needs a username and token, saved once. Canyon never shows the token
 again, only that a credential is set, for which repository, by whom and when. "Remove" deletes it,

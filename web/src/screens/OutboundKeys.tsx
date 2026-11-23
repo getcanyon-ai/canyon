@@ -30,6 +30,12 @@ function Root({ root, signing }: { root: EgressRoot; signing: boolean }) {
   );
 }
 
+// The org's own sub-CA, while it ends within 60 days: warned of here, and what opens Settings › Outbound's Advanced (#118).
+export function subCAEnding(setting: EgressSetting, now = Date.now()) {
+  const newest = caOf(setting)?.roots[0];
+  return newest?.byo === true && Date.parse(newest.ends_at) - now < 60 * DAY ? newest : null;
+}
+
 // `setting` is the admin's read Settings › Outbound holds, and `adopt` takes the read a rotation answers. `now` is when the
 // page reads it: a sub-CA's end is warned of from 60 days before it.
 export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: EgressSetting; adopt: (answer: EgressSetting) => void; now?: number }) {
@@ -57,8 +63,7 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
     }
     if (live.current) setBusy(false);
   };
-  const newest = ca.roots[0];
-  const byoEnding = newest?.byo === true && Date.parse(newest.ends_at) - now < 60 * DAY ? newest : null;
+  const byoEnding = subCAEnding(setting, now);
   return (
     <section aria-label={S.keysHeading} className="mt-6">
       <h2 className="text-base font-semibold">{S.keysHeading}</h2>

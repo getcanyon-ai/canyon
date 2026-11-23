@@ -884,7 +884,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         <Icon name="more" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] max-[520px]:right-auto max-[520px]:left-0 rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
+        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
           {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
           {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}

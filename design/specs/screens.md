@@ -396,8 +396,9 @@ to its page (the read's `projects`; an admin sees every app), or `No app waits f
 can't tell which system libraries it uses now, or whether apps wait for newer ones.` when the read can't tell; then each
 platform identity, its system libraries image, wave and apps — paused, `Canyon paused patching with <image>: <n> apps
 reverted after the patch.` with **Resume** (also offered on a stalled one), and **Approve for every app**, which
-asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Every such image
-reads `system libraries image <12 hex>`, the only place Canyon names it (#2605), its whole reference folded under it (#2582). Its apps by
+asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Each card is
+`Newest system libraries` (exactly one) or `Earlier system libraries, planned <date>`, the same for build tools, and every button on
+it ends its accessible name with that; its image sits folded inside it as `Image <12 hex>` (#2582; getcanyon-ai/canyon#118). Its apps by
 state include `turned down for production`, those whose team denied the patch, production still unpatched (#2601). An
 identity's work left is its apps `planned`, `patched_preview` and `asked`: its wave is said, and **Approve for every
 app** offered, only while it has some, since the fleet approval decides only patch approvals, filed once a
@@ -487,7 +488,8 @@ the drafts below:
   app's newest run says it — a deploy is never a pass, and a block is never hidden behind where a
   version runs); Preview and Production the version each runs, linking to it, or `—`;
   Owner the person, or `No owner` with `Assign` (admins, sign-in hosts) and `Claim` where the row says
-  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). A row click
+  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). Updated gives
+  way below 1360px and while the details panel is open, which says it (amended 2026-11-23). A row click
   opens the details panel; so does the chevron at the row's end, for the keyboard.
 - `Recent activity` under the table, `Open audit` beside its title; empty, it reads `Nothing
   recorded yet. Deploys, reviews and promotions appear here.` A member's is what the audit read
@@ -1244,7 +1246,7 @@ responders*. While production is held, the read's `hold` (and the receipt's `hel
   row not held asks `Stop and hold <app> in production?` over the CLI's two lines and a reason (sent
   once one is typed). On a held row, `Lift the hold`, offered to an admin and to a responder whose row
   is reduced — off the app's team; one on it reads the team's row and is offered none — asks `Lift the
-  hold on <app>?` over the sentence, with `Leave production stopped` and `Start <version> again` (no
+  hold on <app>?` over the sentence, with `Lift the hold, keep it stopped` and `Lift the hold and start <version>` (no
   start when production ran nothing). The row's buttons are named with the app (`Stop production of
   <app>`, `Lift the hold on <app>`). A question sends once — while it sends, `Stopping production…` or
   `Lifting the hold…` stands in for its buttons and neither Cancel nor Escape closes it — and its answer
@@ -1339,6 +1341,8 @@ Export: `CSV` · `JSON` · `Copy link to this view`. One line, no configuration 
 **Emotional beat:** *"I can govern this."* Specifically: *"I could make this stricter, and I could make it looser, and both are one click."*
 
 **An admin's screen** (**amended 2026-10-07**). A member's rail has no Guardrails, and `#/guardrails` opened by a member is the admins-only page: `Guardrails` as its heading, `Only an admin can open Guardrails.`, `What an app must pass is on that app's page.` and `Back to the fleet` — never the form read-only. It is the dashboard's choice, not the API's: agents and the CLI still read the policies (`GET /api/v1/policies`, `canyon manifest`, the session hook) as any member.
+
+**Its tabs** (amended 2026-11-23, getcanyon-ai/canyon#118): Policies, Pipeline, Scanners, Playbooks, *What agents are told*. `#/guardrails` opens on Policies, the first: the rules and their dials are what an admin comes for, and Pipeline, where a rule is also placed before production, reads as a diagram of the same rules. Pipeline stacks its stages so each rule reads full width, a line under the tabs links both gates with how many checks each lists (`Before preview (<n>)` · `Before production (<n>)`), and a rule's `Also before production` is a checkbox. Policies draws *Affects today* once a rule keeps an app out or a change is asked; a column saying no app is affected on every row is noise. On a phone the strip of tabs runs to the screen's edges, the tab shown scrolled to the middle of it.
 
 **Layout:** Four rows. That's the screen. Each row is a policy, and the copy is a plain sentence, not a rule name.
 
@@ -1688,7 +1692,7 @@ Every one is a fact plus one action. No illustrations, no mascot, no exclamation
 
 | Screen | Copy |
 |---|---|
-| No apps yet | `No apps yet. Run canyon deploy in any app directory.` |
+| No apps yet | `No apps yet`, then the two ways in: from your machine with the CLI or a coding agent (`Connect an agent →`), and from GitHub (`Connect GitHub →` to an admin, the admin's job to anyone else); to an admin, `See them in Guardrails →` for the rules every app is checked against. The strings are EXPERIENCE.md D5's (amended 2026-11-23, the UX review). |
 | Never reviewed | `Canyon can't tell you whether this app is safe. It has never been through a gate.` `[ Run review ]` |
 | Review queue clear | `Nothing needs you.` `4 apps shipped overnight, all clean. 0 blocked.` |
 | Audit, no events | `Nothing happened in the last 24 hours. Try a wider range.` |

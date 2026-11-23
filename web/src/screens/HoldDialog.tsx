@@ -30,7 +30,9 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
       await call();
       close();
     } catch (err) {
-      setFailure(said(err));
+      // fetch rejects with a TypeError when no answer came. Asking again is safe: the server resumes a stop it began, and
+      // answers 409 held to one it finished (contracts/routes.md, The hold).
+      setFailure(err instanceof TypeError && kind === "stop" && !empty(app) ? S.stopUnknown : said(err));
     }
     setSending(false);
   };
@@ -77,7 +79,7 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
           </span>
         </>
       )}
-      {failure !== null && <p className="text-base text-critical">{failure}</p>}
+      {failure !== null && <p role="alert" className="text-base text-critical">{failure}</p>}
     </Modal>
   );
 }

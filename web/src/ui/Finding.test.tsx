@@ -231,7 +231,54 @@ stop and show the user the remaining findings. Do not keep looping.
     expect((screen.getByLabelText("Approval expires") as HTMLInputElement).value).toBe("2026-10-25");
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "  a test key  " } });
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    await vi.waitFor(() => expect(sent).toEqual([{ reason: "a test key", expires_at: "2026-10-25T00:00:00Z" }]));
+    await vi.waitFor(() => expect(sent).toEqual([{ reason: "a test key", expires_at: "2026-10-25T23:59:59Z" }]));
+    vi.useRealTimers();
+  });
+
+  // The picked day counts whole, and the server takes 90 days at most (contracts/routes.md, the approve row): the last day
+  // offered, to its last second, is one it takes at any time of day, and the day after it never is.
+  it("ends an approval with the picked day, inside the server's 90 days whatever the time", () => {
+    for (const now of ["2026-09-25T00:00:00Z", "2026-09-25T12:00:00Z", "2026-09-25T23:59:58Z"]) {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(now));
+      render(<Finding finding={blocking} app="claims-portal" approve={{ org: "Meridian", send: async () => {} }} />);
+      fireEvent.click(screen.getByRole("button", { name: "Approve with a reason" }));
+      const field = screen.getByLabelText("Approval expires") as HTMLInputElement;
+      const limit = Date.parse(now) + 90 * 86_400_000;
+      expect(field.max).toBe("2026-12-23");
+      expect(Date.parse(`${field.max}T23:59:59Z`)).toBeLessThanOrEqual(limit);
+      expect(Date.parse("2026-12-24T23:59:59Z")).toBeGreaterThan(limit);
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
+  it("refuses a date outside them where it is typed, in words, and sends nothing", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T12:00:00Z"));
+    const send = vi.fn(async () => {});
+    render(<Finding finding={blocking} app="claims-portal" approve={{ org: "Meridian", send }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve with a reason" }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "a test key" } });
+    for (const date of ["2026-09-25", "2026-12-24", "2030-01-01"]) {
+      fireEvent.change(screen.getByLabelText("Approval expires"), { target: { value: date } });
+      expect(screen.getByText("Pick a date from 26 Sept 2026 to 23 Dec 2026."), date).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    }
+    expect(send).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Approval expires"), { target: { value: "2026-12-23" } });
+    expect(screen.queryByText(/^Pick a date/)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("says what an approval covers, to when, and that it stands if the problem comes back", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T12:00:00Z"));
+    render(<Finding finding={blocking} app="claims-portal" approve={{ org: "Meridian", send: async () => {} }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve with a reason" }));
+    expect(screen.getByText("Covers this problem in every version of the app until the end of 25 Oct 2026 (UTC), production included, even if it's fixed and comes back.")).toBeDefined();
+    fireEvent.change(screen.getByLabelText("Approval expires"), { target: { value: "2026-11-01" } });
+    expect(screen.getByText(/until the end of 1 Nov 2026 \(UTC\)/)).toBeDefined();
     vi.useRealTimers();
   });
 

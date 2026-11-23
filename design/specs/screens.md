@@ -161,9 +161,13 @@ the page: its edges drop away and the buttons are thumb height.
   code; opened from `/#/approve` it lands back there with its code; opened from `/#/no-access/<app>`,
   signing in lands back there. The browser keeps that page
   for the length of the sign-in and nothing else.
+- **A page of the dashboard comes back too** (amended 2026-11-23, #145): opened signed out, or on a
+  `401` mid-session, its address is kept for the sign-in and opened after it, if it is one `SignIn.tsx` lists (an app's
+  pages, Audit and the like), written in the characters those use. Any other address lands on the
+  fleet, so a link can't make Canyon send a person elsewhere. Signing out on purpose keeps none.
 - **Expiry lands here too**, with no warning modal and no countdown beforehand. A `401` mid-session
-  shows this screen; signing back in returns to the fleet (or to one of the two pages above), not
-  to whatever was half-done. Losing an
+  shows this screen; signing back in returns to that page as above, not to whatever was half-done
+  on it. Losing an
   unsaved approval reason is the right trade against carrying a draft across an authentication
   boundary.
 
@@ -732,7 +736,7 @@ finding and no other, and opens an inline field under the card, not a modal (ame
 `canyonv2-5r11.10`; the checklist's `Approve these 2 problems with a reason →` link is gone, so
 there is one way to approve). A blocking finding is one that blocks before preview, or before
 production — the run read's `blocks_production`, the server's answer, never worked out from the rules
-on the page (#2206) — and that one reads `Doesn't stop preview. Stops production until fixed or approved.` (**amended 2026-11-23**, #102) and
+on the page (#2206) — and that one reads `Doesn't block preview. Blocks going live until it's fixed or approved.` (**amended 2026-11-23**, #102, #145) and
 carries the button too. The button shows only where the run read is `approvable` for the reader: an
 admin, or a responder, who did not start the run (amended 2026-10-12, #2204; design/PERMISSIONS.md) —
 the run shown, the newest or one pinned by `?run=` alike, an older run's or a rollback review's, and
@@ -756,10 +760,15 @@ every finding:
 >
 > **Approval expires**
 > `[ 2026-12-14 ]`
-> After that date the problems come back in the checklist.
+> Covers this problem in every version of the app until the end of 14 Dec 2026 (UTC), production included, even if it's fixed and comes back.
+> After that date the problem comes back in the checklist.
 > Attributed to Dana Whitfield · in the audit, visible to every Meridian admin
 >
 > `[ Approve ]`  `Cancel`
+
+The date is tomorrow to 89 days on, and counts whole: it is sent as that day's last second, UTC. Any
+other date is refused where it is typed, with `Pick a date from 26 Sept 2026 to 23 Dec 2026.` in the
+place of the line that says what it covers (#145).
 
 It approves and promotes nothing: one approval per blocking problem, and the next deploy of that
 version goes ahead carrying them. Once it lands, the card reads `Approved by Dana Whitfield until
@@ -805,7 +814,7 @@ stood, among what blocks while any of them is not approved and among the rest on
 - **Approve all.** For two to the route's 200 findings nobody has approved, `[ Approve all <n> for
   <name> <version> ]` opens the same form under the card, `<n>` counting those, headed `Approves these
   <n> blocking findings of <name> <version>, found by <tool>:` with each one's title on its own line,
-  and its expiry note reads `After that date the problems come back in the checklist.` `[ Approve all
+  its covers line reads `Covers these problems in every version of the app until the end of 14 Dec 2026 (UTC), production included, even if they're fixed and come back.`, and its expiry note reads `After that date the problems come back in the checklist.` `[ Approve all
   <n> ]` sends them together (`POST /findings/approve`): one approval per finding, each as if approved
   alone, and one audit row naming the dependency and listing the findings, which the trail reads
   `approved <n> problems in <name> <version> with a reason`. Every row then reads approved.
@@ -1122,15 +1131,20 @@ If only one animation in Canyon gets built carefully, it's this one.
 
 Click → a small confirm inline in the same panel, not a modal:
 
-> **Promote `claims-portal` to production?**
+> Promotes claims-portal v1.4, replacing v1.3.
 > Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
-> `[ Promote ]`  `Cancel`
+> `[ Promote v1.4 ]`  `Cancel`
+
+With nothing in production the first line reads `Promotes claims-portal v1.4. Nothing runs in
+production yet.` The keyboard lands on `Cancel`, so the Enter that asked can't also answer (amended
+2026-11-23, #145). Where the question warns, of what preview answered, what production will refuse,
+or a secret production lacks or that couldn't be read, the button reads `Promote v1.4 anyway`, secondary.
 
 **When preview answered an error** (amended 2026-10-08, the owner; QA round 4, django-400 was promoted
 answering 400): when preview's `answered` is an answer to say beside readiness (contracts/routes.md,
 `envs.<env>.answered`), the confirm says so in amber under the question —
 `v1.4 answered 400 at / on preview. Check the app before promoting it.`, or `gave no answer at /` —
-and its button reads `Promote anyway`, secondary, never the primary fill: the eye goes to the warning, not to the risky button. That click is the person's override: it sends
+and its button reads `Promote v1.4 anyway`, secondary, never the primary fill: the eye goes to the warning, not to the risky button. That click is the person's override: it sends
 `promote_anyway`, which counts only from the dashboard (the CLI is refused, whatever its flags), and the trail's row reads `Started a promotion of v1.4, despite preview
 answering 400 at /` (`Approved for production v1.4, despite …` from the approval screen).
 

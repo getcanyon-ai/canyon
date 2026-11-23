@@ -13,7 +13,7 @@ describe("promoting is answered on purpose", () => {
     let answer = (_: unknown) => {};
     vi.stubGlobal("fetch", vi.fn(() => new Promise((done) => { answer = done; })));
     const send = vi.fn(async () => null);
-    render(<Promote id="claims-portal" shown="v1.4" live={false} receipt={receipt} answered={undefined} gateRun="gr_1" send={send} ended={() => {}} />);
+    render(<Promote id="claims-portal" replaces={null} shown="v1.4" live={false} receipt={receipt} answered={undefined} gateRun="gr_1" send={send} ended={() => {}} />);
     const open = screen.getByRole("button", { name: "Promote v1.4 to production" });
     open.focus();
     fireEvent.click(open);

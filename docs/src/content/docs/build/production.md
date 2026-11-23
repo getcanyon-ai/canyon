@@ -111,7 +111,7 @@ canyon deploy --env prod --yes
   secrets production lacks before you confirm.
 - **Preview answering with an error:** when the version in preview answers its address with an
   error, the CLI won't promote it, with or without `--yes`. A person can still promote it from the
-  app's page in the dashboard, with **Promote anyway**.
+  app's page in the dashboard, with **Promote _version_ anyway**.
 - **A pull request's version** can run in preview but is never promoted. Merge it, then deploy the
   default branch ([GitHub](/build/github/)).
 - **Taking production offline:** `canyon undeploy --env prod` asks first (`--yes` in CI). The app's

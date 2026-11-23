@@ -1,5 +1,5 @@
 import { version, type Actor as ActorRef, type AuditEvent } from "../api";
-import { ACCESS_WORD, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_LIFT_STARTED, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, PATCHING, S } from "../strings";
+import { ACCESS_WORD, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_HELD_NOTHING, AUDIT_LIFT_STARTED, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, PATCHING, S } from "../strings";
 import { Actor, actorName } from "./Actor";
 import { Age } from "./Age";
 import { Icon } from "./Icon";
@@ -36,6 +36,7 @@ function policySet(detail: Record<string, unknown>): string {
 
 function worded(action: string, detail: Record<string, unknown>): string {
   const words = detail.kind === "check" ? AUDIT_CHECK : action === "lift hold" && detail.started === true && typeof detail.package === "string" ? AUDIT_LIFT_STARTED
+    : action === "stop app" && typeof detail.image_digest !== "string" ? AUDIT_HELD_NOTHING
     : action === "egress.networks.recreate" && detail.failed !== null && detail.failed !== undefined ? AUDIT_RECREATE_FAILED
     : action === "egress.route.set" && typeof detail.secret === "string" ? AUDIT_ROUTE_MOVED
     : action === "egress.ca.rotate" && detail.byo === true ? AUDIT_CA_BYO : AUDIT_ACTIONS[action];

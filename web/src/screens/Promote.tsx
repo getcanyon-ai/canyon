@@ -97,8 +97,10 @@ export function PromotionProgress({ run, ended }: { run: string; ended: () => vo
 
 const PROGRESS_MS = 1000; // clients poll about once a second while a run is going (contracts/events.md)
 
-export function Promote({ id, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses, quiet = false, setSecret, secretsSet = 0 }: {
+export function Promote({ id, name = id, replaces, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses, quiet = false, setSecret, secretsSet = 0 }: {
   id: string;
+  name?: string; // the app as a person knows it
+  replaces: string | null; // the version production runs, null while it runs none
   // The page's own read of a hold (the status read's), which says whether production ran anything when it was held.
   hold?: Hold;
   // The version preview runs, which is what a promotion ships: the button names it.
@@ -167,6 +169,12 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
 
   const label = shown === null ? "Promote to production" : `Promote ${shown} to production`;
   const odd = oddAnswer(answered);
+  const refuse = refusing(refuses, S.willRefuse.replace("<version>", () => shown ?? "this version"));
+  // It warns: of what preview answered, what production will refuse, or a secret it lacks or could not read. Its button
+  // then says anyway and is never the main one; only what preview answered is an override the server is sent.
+  const warns = odd !== null || refuse.length > 0 || lacks instanceof Error || (lacks ?? []).length > 0;
+  const says = (replaces === null ? S.promoteFirst : S.promoteReplaces.replace("<old>", () => replaces))
+    .replace("<app>", () => name).replace("<version>", () => shown ?? "this version");
   // Holding the reason that has just gone is why the line doesn't blink blank for 160ms.
   const why = blocked ?? held;
   const ask = async () => {
@@ -185,9 +193,10 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
         : asking
           ? (
             <div className="flex flex-col items-start gap-1.5">
+              <p className="text-md text-text">{says}</p>
               <p className="text-md text-text-dim">{S.promoteConfirm}</p>
               {odd !== null && <p className="text-md text-amber">{`${shown ?? "This version"} ${odd} on preview. Check the app before promoting it.`}</p>}
-              {refusing(refuses, S.willRefuse.replace("<version>", () => shown ?? "this version")).map((line) => <p key={line} className="text-md text-amber">{line}</p>)}
+              {refuse.map((line) => <p key={line} className="text-md text-amber">{line}</p>)}
               {lacks instanceof Error ? <p className="text-md text-amber">{`Couldn't check production's secrets: ${lacks.message}`}</p>
                 : (lacks ?? []).map((name) => (
                   <p key={name} className="text-md text-amber">
@@ -199,7 +208,7 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
                 ))}
               <span className="flex flex-wrap gap-2">
                 {lacks === null ? <span className="text-md text-text-dim">Checking production's secrets…</span>
-                  : <Button variant={odd !== null ? "secondary" : "primary"} onClick={() => void ask()}>{odd !== null ? "Promote anyway" : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
+                  : <Button variant={warns ? "secondary" : "primary"} onClick={() => void ask()}>{warns ? S.promoteAnyway.replace("<version> ", () => (shown === null ? "" : `${shown} `)) : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
                 <Button ref={cancelling} variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
               </span>
             </div>

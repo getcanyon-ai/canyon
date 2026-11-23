@@ -76,15 +76,16 @@ describe("an audit row's sentence", () => {
     ["policy.set", { rule: "secrets.client-bundle", before: "blocking", after: "blocking", production: { before: "blocking", after: "advisory" } }, "set the policy secrets.client-bundle before production to advisory"],
     ["policy.set", { rule: "secrets.client-bundle", before: "advisory", after: "blocking", production: { before: "off", after: "blocking" } }, "set the policy secrets.client-bundle to blocking, and put it before production, blocking"],
     ["custom_rule.set", { rule: "custom.no-pii", version: 2 }, "saved version 2 of the custom rule custom.no-pii"],
-    ["DELETE /api/v1/projects/{id}/envs/{env}", { env: "preview", package: "pkg_9e40" }, "stopped the app in preview, keeping its data"],
+    ["DELETE /api/v1/projects/{id}/envs/{env}", { env: "preview", package: "pkg_9e40" }, "took preview offline, keeping its data"],
     ["delete resource", { name: "db", type: "postgres", env: "prod" }, "deleted the resource db in production, with its data"],
     ["gate run from github", { package: "pkg_9e40" }, "started a review of 9e40 from GitHub"],
     ["POST /api/v1/gate-runs/{id}/cancel", { package: "pkg_9e40", kind: "promote", started_by: { kind: "agent", subject: "claude-code:dana@meridian.example", display: "Claude Code" } }, "cancelled the promotion of 9e40 · started by Claude Code"],
     ["POST /api/v1/gate-runs/{id}/cancel", { package: "pkg_9e40", kind: "gate", started_by: null }, "cancelled the run of 9e40 · started by someone"],
     // The hold's two rows (design/OPERATIONS.md §3.9, #2244): a lift that started production again names the version.
-    ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"],
-    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "let production run again"],
-    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: true, package: "pkg_9e40", label: "v1.4" }, "let production run again and started v1.4"],
+    ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "stopped and held production: Exports claimant SSNs (INC-2231)"],
+    ["stop app", { env: "prod", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // it ran nothing (contracts/routes.md: image_digest absent)
+    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "lifted the hold, leaving production stopped"],
+    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: true, package: "pkg_9e40", label: "v1.4" }, "lifted the hold and started v1.4"],
     ["POST /api/v1/nothing/{id}", {}, "POST /api/v1/nothing/{id}"], // a route the bundle was built before: shown as written, never blank
   ] as const) {
     it(`says "${said}"`, () => expect(sentence(event(action, detail))).toBe(said));

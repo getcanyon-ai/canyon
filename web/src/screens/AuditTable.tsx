@@ -68,7 +68,7 @@ const TRIED: Record<string, string> = {
   "POST /api/v1/gate-runs/{id}/cancel": "cancel a run",
   "POST /api/v1/gate-runs/{run}/findings/{fingerprint}/approve": "approve a blocking problem",
   "POST /api/v1/gate-runs/{run}/findings/approve": "approve one dependency's blocking problems",
-  "DELETE /api/v1/projects/{id}/envs/{env}": "stop the app",
+  "DELETE /api/v1/projects/{id}/envs/{env}": "take the app offline",
   "PUT /api/v1/projects/{id}/secrets/{name}": "set a secret",
   "DELETE /api/v1/projects/{id}/secrets/{name}": "remove a secret",
   // A credential Canyon adds and the roots its certificates are signed under (#2145).
@@ -160,7 +160,7 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "POST /api/v1/projects": return { verb: "Created the app" };
     case "DELETE /api/v1/projects/{id}": return { verb: "Deleted the app" };
     case "PUT /api/v1/projects/{id}/owner": return { verb: "Claimed the app" };
-    case "DELETE /api/v1/projects/{id}/envs/{env}": return { verb: "Stopped the app", rest: `in ${env(event)}, keeping its data` };
+    case "DELETE /api/v1/projects/{id}/envs/{env}": return { verb: "Took offline", rest: `${env(event)}, keeping its data` };
     case "declare resource": return { verb: "Declared a resource", rest: text(d.name) };
     case "ensure resource": return { verb: "Made a resource ready", rest: `${text(d.name)} in ${env(event)}` };
     case "reissue resource password": return { verb: "Gave a resource a new password", rest: `${text(d.name)} in ${env(event)}` };

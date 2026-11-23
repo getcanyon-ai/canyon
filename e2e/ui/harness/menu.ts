@@ -10,7 +10,7 @@ export async function opensInside(page: Page, opener: Locator, items: Locator) {
   const place = () => opener.evaluate((one) => { const { left, top, width, height } = one.getBoundingClientRect(); return { left: Math.round(left + scrollX), top: Math.round(top + scrollY), width: Math.round(width), height: Math.round(height) }; });
   const wrong: string[] = [];
   for (const height of [own.height, 375]) {
-    for (const width of [667, 859, ...Array.from({ length: 49 }, (_, i) => 320 + 20 * i)]) {
+    for (const width of [390, 667, 859, ...Array.from({ length: 49 }, (_, i) => 320 + 20 * i)]) {
       await page.setViewportSize({ width, height });
       await page.evaluate(() => scrollTo(0, 60));
       const closed = JSON.stringify(await place());

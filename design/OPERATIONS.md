@@ -642,8 +642,9 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   line (the pending-stop lines land with the brake seam, PR 2). Schemas — `role` in `access`, `app-page`, `fleet`,
   `guardrails`; `hold` in `app-page` and `fleet`.
 - **Audit** (both `governance`): `stop app` `{env, package?, image?, reason, cancelled[]}`, written
-  when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244): `held
-  production: <reason>` · `let production run again` · `let production run again and started
+  when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244, amended
+  by #145): `stopped and held production: <reason>`, or `held production: <reason>` where nothing ran
+  (no `image_digest`) · `lifted the hold, leaving production stopped` · `lifted the hold and started
   <version>`.
 
 ### 3.10 Testing

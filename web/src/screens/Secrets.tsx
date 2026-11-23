@@ -28,7 +28,9 @@ const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 // asked is what a link to the section names (#/apps/<app>/secrets?name=&env=, design/specs/mcp.md §2.3, canyon_secret_link):
 // the form opens on that secret, scrolled to with its value's field ready. Only a name a secret may have and an
 // environment there is are taken; a value never comes from a link.
-export function Secrets({ id, asked }: { id: string; asked?: { name: string | null; env: string | null } }) {
+// back is the way back to what sent the reader here, offered once the secret is set (#102: promote's missing secret);
+// saved is told each time one is set.
+export function Secrets({ id, asked, back, saved }: { id: string; asked?: { name: string | null; env: string | null }; back?: { label: string; go: () => void }; saved?: () => void }) {
   const [rows, setRows] = useState<Secret[] | null>(null);
   const [unread, setUnread] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
@@ -71,6 +73,7 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
       setName(""); // a name left in the field would invite the next value to overwrite the same secret
       setSaid(named(env === "prod" ? T.setProd : T.setPreview, name));
       setOpen(false);
+      saved?.();
       setReads((n) => n + 1);
     } catch (err) {
       setRefusal(said(err));
@@ -94,7 +97,11 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
   };
   useEffect(() => {
     if (asked === undefined) return;
+    if (asked.name != null && SECRET_NAME.test(asked.name)) setName(asked.name);
+    if (asked.env === "prod" || asked.env === "preview") setEnv(asked.env);
+    setSaid(null);
     setOpen(true);
+    value.current?.focus(); // already open, the open effect doesn't run again
     here.current?.scrollIntoView?.({ block: "start" });
   }, [asked]);
   // The value is the person's to type: focus goes there each time the form opens.
@@ -205,6 +212,7 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
       </form>}
       {refusal !== null && <p role="alert" className="text-md text-critical">{refusal}</p>}
       {said_ !== null && <p role="status" className="text-md text-ok">{said_}</p>}
+      {said_ !== null && back !== undefined && <span><Button variant="secondary" onClick={back.go}>{back.label}</Button></span>}
     </section>
   );
 }

@@ -56,7 +56,7 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
   return (
     <article aria-label={head} className="mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.blocksAtProduction : "advisory · does not block"}</Chip>
+        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.blocksAtProduction : S.doesntBlock}</Chip>
           : open ? <Chip tone="blocks">blocks</Chip> : <Chip tone="approved">approved</Chip>}
         <Chip tone={severity}>{capital(severity)}</Chip>
         <span className="text-lg font-semibold">{head}</span>

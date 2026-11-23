@@ -16,7 +16,7 @@ export type Act = "review" | "approve" | "cancel" | "promote" | "open" | "copy" 
 // covers: the needs that say what this band says (contracts/routes.md, *What needs a person*), so the two are never drawn
 // together (D15; leads, below). repeats: the needs whose own lines say what this band says without its steps, so it isn't
 // drawn while they are. tail: the environment that keeps restarting, whose last log lines the app page shows under it (#2744).
-export interface Band { tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; unshown?: string }
+export interface Band { running?: true; tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; unshown?: string }
 
 export interface Facts {
   latest: Latest; // the newest version
@@ -226,7 +226,7 @@ export function viewerBand(envs: { preview?: { state?: Env["state"] }; prod?: { 
   const any = (state: Env["state"]) => (preview ? [envs?.prod, envs?.preview] : [envs?.prod]).some((env) => env?.state === state);
   const title = runs(envs?.prod) ? "Running in production" : preview && runs(envs?.preview) ? "Running in preview"
     : any("unknown") ? "Canyon couldn't check whether it runs" : any("restarting") ? "Keeps restarting" : preview ? "Not running" : "Not running in production";
-  return { tone: "neutral", title, text: readOnly };
+  return { tone: "neutral", title, text: readOnly, ...(runs(envs?.prod) || (preview && runs(envs?.preview)) ? { running: true as const } : {}) };
 }
 
 const TONE: Record<Band["tone"], { box: string; icon: IconName; ink: string }> = {
@@ -295,7 +295,9 @@ export function Headline({ band, app, children }: { band: Band; app?: string; ch
   const text = band.text + (app !== undefined && band.tail !== undefined ? "" : band.unshown ?? ""); // the lines say why where they're shown
   return (
     <section aria-label="Where it stands" className={`grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-x-3.5 gap-y-1 rounded-[10px] border border-border border-l-4 px-[18px] py-4 max-[620px]:grid-cols-[22px_minmax(0,1fr)] ${tone.box}`}>
-      <span className={`mt-0.5 ${tone.ink}`}><Icon name={band.going ? "working" : tone.icon} size={20} /></span>
+      {/* running, the environment cards' green dot: the empty circle said nothing ran (#102) */}
+      {band.running ? <span className="mt-1.5 grid size-5 place-items-center"><span aria-hidden="true" className="size-2.5 rounded-full bg-ok" /></span>
+        : <span className={`mt-0.5 ${tone.ink}`}><Icon name={band.going ? "working" : tone.icon} size={20} /></span>}
       <div role="status" className="grid gap-1">
         <h2 className="text-[17px] font-semibold tracking-tight">{band.title}</h2>
         {text !== "" && <p className="max-w-[720px] text-base text-text-dim">{text}</p>}

@@ -979,6 +979,32 @@ describe("the app page", () => {
     expect(sent().filter((request) => request.startsWith(PROMOTE))).toHaveLength(0);
   });
 
+  // A secret production lacks is set from the question on this page, which stays open (#102): Set it for production opens
+  // the Secrets form on that name for production, the keyboard on its value; once set, the question reads what production
+  // lacks again, and the way back to it is offered.
+  it("sets a secret production lacks without leaving the promotion's question", async () => {
+    let prodHas = false;
+    const row = (name: string, env: "preview" | "prod") => ({ name, env, where: "runtime", origin: "user", version: 1, set_by: { kind: "person", subject: "dana", display: "Dana" }, set_at: "2026-10-01T00:00:00Z" });
+    const PUT = "PUT /api/v1/projects/claims-portal/secrets/STRIPE_KEY";
+    const sent = server({ ...reads(() => open), "GET /api/v1/projects/claims-portal/secrets": () => ({ body: { secrets: [row("STRIPE_KEY", "preview"), ...(prodHas ? [row("STRIPE_KEY", "prod")] : [])] } }),
+      [PUT]: () => { prodHas = true; return { status: 204, body: null }; } });
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set it for production" }));
+    const form = within(screen.getByRole("form", { name: "Set a secret" }));
+    expect((form.getByLabelText("Name") as HTMLInputElement).value).toBe("STRIPE_KEY");
+    expect((form.getByLabelText("Environment") as HTMLSelectElement).value).toBe("prod");
+    expect(document.activeElement).toBe(form.getByLabelText("Value"));
+    fireEvent.change(form.getByLabelText("Value"), { target: { value: "x" } });
+    fireEvent.click(form.getByRole("button", { name: "Set secret" }));
+    const back = await screen.findByRole("button", { name: "Back to promote v1.3" });
+    expect(sent()).toContain(`${PUT} {"value":"x","env":"prod","where":"runtime"}`);
+    await waitFor(() => expect(screen.queryByText(/is set for preview but not production/)).toBeNull()); // read again
+    fireEvent.click(back);
+    expect(screen.getByText(S.promoteConfirm)).toBeDefined(); // the question, still open
+    expect(within(screen.getByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Promote v1.3" })).toBe(document.activeElement);
+  });
+
   // Production runs preview's image with its own secrets (#1698): the question names each runtime value set
   // for preview and not for production, with the line that sets it; a resource's value, a build value and
   // one set for both say nothing, and none of it stops the promotion.
@@ -990,7 +1016,6 @@ describe("the app page", () => {
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
     expect(await screen.findByText("STRIPE_KEY is set for preview but not production. Without it, v1.3 may fail to start in production.", { exact: false })).toBeDefined();
-    expect(screen.getByRole("link", { name: "Set it for production" }).getAttribute("href")).toBe("#/apps/claims-portal/secrets?name=STRIPE_KEY&env=prod");
     expect(within(screen.getByRole("complementary", { name: "Promote" })).queryByText(/canyon secret set/)).toBeNull(); // the dashboard sets it, never the CLI's line (#102)
     expect(screen.getAllByText(/is set for preview but not production/)).toHaveLength(1);
     await confirmPromote();
@@ -1344,9 +1369,9 @@ describe("the app page", () => {
     const card = within(await screen.findByRole("article", { name: "lodash 4.17.4: 2 known vulnerabilities" }));
     expect(card.getByText("Upgrade lodash to 4.18.0 (fixes 1 of 2; 1 with no fixed version yet) and commit package-lock.json.")).toBeDefined();
     expect(card.getAllByRole("listitem")[1]!.textContent).toContain("· no fixed version yet");
-    fireEvent.click(screen.getByText("Doesn't block", { exact: false }));
+    fireEvent.click(screen.getByRole("heading", { name: /^Doesn't block/ }));
     const own = within(screen.getByRole("article", { name: "lodash 4.17.4: 1 known vulnerability" })); // its entry: advisory CVEs never join blocking ones
-    expect(own.getByText("advisory · does not block")).toBeDefined();
+    expect(own.getByText("Doesn't block")).toBeDefined();
     expect(own.getByText("package-lock.json:17 · lodash 4.17.4")).toBeDefined();
     expect(own.getByText(`· ${advisory.properties.canyon.severity[0]!.toUpperCase()}${advisory.properties.canyon.severity.slice(1)} · fixed in ${advisory.dependency!.fixed}`, { exact: false })).toBeDefined();
     expect(own.queryByText(/Installed Version/)).toBeNull();
@@ -1919,7 +1944,7 @@ describe("the app page", () => {
       "POST /api/v1/projects/claims-portal/deploys": { status: 202, body: { run: { id: "gr_again" } } } });
     render(<App id="claims-portal" auth="oidc" />);
     await screen.findByRole("heading", { name: "v1.4 is blocked: 1 of Canyon's checks couldn't finish" });
-    expect(within(screen.getByRole("region", { name: "Where it stands" })).getAllByRole("button").map((one) => one.textContent)).toEqual(["Hold production", "Approve with a reason", "Review v1.4 again"]); // an admin holds production from here too (#102)
+    expect(within(screen.getByRole("region", { name: "Where it stands" })).getAllByRole("button").map((one) => one.textContent)).toEqual(["Approve with a reason", "Review v1.4 again"]); // an admin's Hold waits in ⋯ while the headline isn't about production (#102)
     fireEvent.click(screen.getByRole("button", { name: "Review v1.4 again" }));
     await waitFor(() => expect(sent()).toContain(`POST /api/v1/projects/claims-portal/deploys {"package":"pkg_9e40"}`));
   });
@@ -1980,7 +2005,7 @@ describe("the app page", () => {
     expect(one.getByText(`approved by ${approval.approved_by.display} until ${new Date(approval.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`)).toBeTruthy();
     expect(one.getByText(approval.reason)).toBeTruthy();
     expect(one.queryByText("blocks")).toBeNull();
-    expect((await card(other.properties.canyon.title)).getByText("advisory · does not block")).toBeTruthy();
+    expect((await card(other.properties.canyon.title)).getByText("Doesn't block")).toBeTruthy();
   });
 
   // A finding advisory before preview that the run read says blocks before production: its card says both, never
@@ -1990,8 +2015,26 @@ describe("the app page", () => {
     render(<App id="claims-portal" auth="oidc" />);
     const one = await card(other.properties.canyon.title);
     expect(one.getByText("Doesn't stop preview. Stops production until fixed or approved.")).toBeTruthy();
-    expect(one.queryByText("advisory · does not block")).toBeNull();
+    expect(one.queryByText("Doesn't block")).toBeNull();
     expect(one.getByRole("button", { name: "Approve with a reason" })).toBeTruthy();
+  });
+
+  // An admin's headline offers Stop where it speaks of production itself, down here, and leaves it to ⋯ otherwise (#102).
+  it("offers an admin Stop production in the headline where production is down", async () => {
+    server(reads(() => ({ ...promoted, envs: { ...promoted.envs, prod: { ...(promoted.envs.prod as Env), state: "stopped" } } })));
+    render(<App id="claims-portal" auth="oidc" />);
+    const headed = await screen.findByRole("region", { name: "Where it stands" });
+    expect(await within(headed).findByRole("button", { name: "Stop production of claims-portal" })).toBeDefined();
+  });
+
+  // What stops production alone is never listed under "Doesn't block": it has a heading of its own (#102).
+  it("lists what stops production alone under its own heading, never under Doesn't block", async () => {
+    server({ ...reads(() => approved.status_approved), [RUN]: { body: approved.run_placed } });
+    render(<App id="claims-portal" auth="oidc" />);
+    const stops = within(await screen.findByRole("region", { name: "Stops production" }));
+    expect(stops.getByRole("article", { name: other.properties.canyon.title })).toBeDefined();
+    const doesnt = screen.queryByRole("heading", { name: /^Doesn't block/ })?.closest("details");
+    expect(doesnt === null || doesnt === undefined || !doesnt.textContent?.includes(other.properties.canyon.title)).toBe(true);
   });
 
   // The chip is the run read's answer, never the receipt's rule names: a finding of a rule placed blocking
@@ -2003,7 +2046,7 @@ describe("the app page", () => {
     server({ ...reads(() => status), [RUN]: { body: { run: at } } });
     render(<App id="claims-portal" auth="oidc" />);
     const one = await card(other.properties.canyon.title);
-    expect(one.getByText("advisory · does not block")).toBeTruthy();
+    expect(one.getByText("Doesn't block")).toBeTruthy();
     expect(one.queryByRole("button", { name: "Approve with a reason" })).toBeNull();
   });
 
@@ -2551,7 +2594,8 @@ describe("taking an environment offline and deleting the app", () => {
     fireEvent.keyDown(ask, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     await askOffline();
-    expect(screen.getByText(S.offlineOrStop)).toBeDefined();
+    const offline = screen.getByRole("dialog", { name: "Take production offline" }); // over the page, as Delete is
+    expect(within(offline).getByText(S.offlineOrStop)).toBeDefined();
   });
 
   it("lists what the delete destroys and enables it only on the exact name", async () => {

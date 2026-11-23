@@ -119,6 +119,14 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const [checked, setChecked] = useState<RunRow | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [gone, setGone] = useState(false); // no app has this id: the page says so, with the way back (#102)
+  // A secret production lacks, set from the promotion's question on this page, which stays open while it is (#102).
+  const [settingFor, setSettingFor] = useState<{ name: string; env: "prod" } | null>(null);
+  const [secretsSet, setSecretsSet] = useState(0);
+  const backToPromote = () => {
+    const box = document.getElementById("promote");
+    box?.scrollIntoView?.({ block: "center" });
+    (box?.querySelector<HTMLElement>("button:not([disabled])") ?? box)?.focus();
+  };
   const [run, setRun] = useState<RunRead | Error | null>(null);
   const [seen, setSeen] = useState<RunRead | null>(null);
   // The runs that cleared what preview and production run, read once each: a deployed version's
@@ -275,13 +283,16 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // The rest by policy, each group where its first finding stands, so seven advisories of one kind read
   // as one group with its count rather than seven cards in a row.
   const policyOf = (one: FindingRead) => one.properties.canyon.policy_name ?? one.properties.canyon.title;
-  const groups = [...new Set(rest.map(policyOf))].map((name) => ({ name, cards: rest.filter((one) => policyOf(one) === name) }));
   // Each card once: an entry's where its first finding stands.
   const shown = (list: FindingRead[]) => list.filter((one) => membersOf(one)[0] === one);
   // Approving acts on the settled run shown — the newest, or a pinned one (#2242) — never a check's, a finding at a
   // time; the run is read again after, so the card says approved and the verdict counts it.
   // A finding blocking before production is the run read's own answer, as the receipt counts it (#2206).
   const atProduction = (one: FindingRead) => one.blocks_production === true;
+  // What stops production, though not preview, under a heading of its own: never inside "Doesn't block" (#102).
+  const stopsProd = rest.filter((one) => membersOf(one).some((other) => atProduction(other) && other.approval === undefined));
+  const advisory = rest.filter((one) => !stopsProd.includes(one));
+  const groups = [...new Set(advisory.map(policyOf))].map((name) => ({ name, cards: advisory.filter((one) => policyOf(one) === name) }));
   const reread = async (id: string) => {
     const { run: at } = await getRun(id);
     setRun(at);
@@ -539,7 +550,9 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const role = viewer?.role ?? (admin ? "admin" : null);
   // Stop production, or hold it where nothing runs there: a responder's or an admin's, as the fleet offers it (#102). The
   // headline carries it, and the ⋯ menu too.
-  const unheld = project === null || status === null && !reduced(project) ? null : { ...project, hold: status?.hold };
+  // whether production runs anything: the status read's, the newest, for the team; a reduced read's own, which carries it
+  const unheld = project === null || status === null && !reduced(project) ? null
+    : { ...project, envs: reduced(project) ? project.envs : status?.envs ?? project.envs, hold: status?.hold } as typeof project;
   const stopWord = unheld !== null && empty(unheld) ? S.holdProduction : S.stopProduction;
   const stopping = unheld !== null && role !== null && stops(role, unheld) ? () => setLifting({ app: unheld, kind: "stop", asked: Date.now() }) : null;
   const stop = stopping === null || unheld === null ? null : <Button key="stop" variant="secondary" label={`${stopWord} of ${unheld.name}`} onClick={stopping}>{stopWord}</Button>;
@@ -552,6 +565,9 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const ownerless = status?.receipt.rules.some((rule) => rule.id === "owner.required" && rule.unset === true) === true;
   const needs: Need[] = (status?.needs ?? []).filter((need) => !(ownerless && need.kind === "unowned"));
   const top = leads(band, needs);
+  // Stop leads a responder's headline, whose step it is; an admin's only where the headline is about production itself,
+  // down or refusing, and otherwise waits in ⋯ (#102: it led an admin's blocked headline).
+  const headStop = role === "responder" || top.band?.covers?.includes("down:prod") === true || top.band?.repeats?.includes("refused:prod") === true ? stop : null;
   // A blocked version's step for whoever fixes it, the headline's one filled button (#102): every open blocking finding,
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
@@ -643,7 +659,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <a className="text-link no-underline hover:underline" href="#/fleet">{S.backToFleet}</a></p>
         )}
         {/* The question names the hold it read; the page's newest read, held or not, says when someone else changed it (#2723). */}
-        {lifting !== null && <HoldDialog acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); void tick.current(); }} />}
+        {lifting !== null && <HoldDialog offline={admin || project?.access.level === "owner"} acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); void tick.current(); }} />}
         {/* The body waits on the app's row and its status read, one after the other: until they answer, it says so (#2561). */}
         {project === null && failure === null && !gone && <p role="status" className="text-base text-text-dim">{S.appReading}</p>}
         {project !== null && reduced(project) && (
@@ -701,8 +717,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {(() => {
               const headed = top.band === null ? null : (
                 <Headline key="headline" band={top.band} app={admin || project.access.level === "owner" || project.access.level === "contributor" ? id : undefined}>
-                  {top.band.primary === undefined && top.band.secondary === undefined && stop === null && (lift === null || status.receipt.held === undefined) ? undefined
-                    : <>{status.receipt.held !== undefined && lift}{stop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
+                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && (lift === null || status.receipt.held === undefined) ? undefined
+                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
                 </Headline>
               );
               const listed = top.needs.length === 0 ? null : (
@@ -781,17 +797,23 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(fix).length}</span></h3>}
                 {whoApproves}
                 {shown(fix).map(card)}
+                {stopsProd.length > 0 && (
+                  <section aria-label={S.stopsProduction} className="grid grid-cols-[minmax(0,1fr)] gap-3">
+                    <h3 className={H2}>{S.stopsProduction}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(stopsProd).length}</span></h3>
+                    {shown(stopsProd).map(card)}
+                  </section>
+                )}
                 {/* Beside what blocks, what doesn't waits behind a click, its count on the summary; alone, it is the review's content. */}
                 {(() => {
                   const advisories = groups.map((group) => (
                     <section key={group.name} aria-label={group.name} className="grid grid-cols-[minmax(0,1fr)] gap-3">
-                      {shown(rest).length > 1 && <h4 className="text-md font-medium text-text-dim">{`${group.name} · ${shown(group.cards).length}`}</h4>}
+                      {shown(advisory).length > 1 && <h4 className="text-md font-medium text-text-dim">{`${group.name} · ${shown(group.cards).length}`}</h4>}
                       {shown(group.cards).map(card)}
                     </section>
                   ));
-                  return fix.length > 0 && rest.length > 0 ? (
+                  return (fix.length > 0 || stopsProd.length > 0) && advisory.length > 0 ? (
                     <details className="mt-2 grid gap-3">
-                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>Doesn't block<span className="ml-2 text-md font-normal text-text-faint">{`${shown(rest).length} ${shown(rest).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
+                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>{S.doesntBlock}<span className="ml-2 text-md font-normal text-text-faint">{`${shown(advisory).length} ${shown(advisory).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
                       {advisories}
                     </details>
                   ) : advisories;
@@ -813,7 +835,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                       ? <p className="text-md text-text-dim">{S.heldVersion.replace("<version>", () => status.hold!.version!)}</p>
                       : (preview.package !== project.latest.package || status.receipt.held !== undefined) && (
                       <Promote id={id} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
-                        quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)} />
+                        quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)}
+                        setSecret={(name) => setSettingFor({ name, env: "prod" })} secretsSet={secretsSet} />
                     )}
                   </aside>
                 )}
@@ -830,7 +853,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {/* What Canyon adds under the app, as its known-vulnerable check reads it: a contributor's and up (design/PERMISSIONS.md). */}
             <SystemLibraries id={id} envs={status.envs} />
             {/* The app's secrets by name, and the form that sets one: a contributor's and up (design/specs/mcp.md §10.1). */}
-            <Secrets id={id} asked={secret} />
+            <Secrets id={id} asked={secret ?? settingFor ?? undefined} saved={() => setSecretsSet((n) => n + 1)}
+              back={settingFor === null || preview === null ? undefined : { label: S.backToPromote.replace("<version>", () => version(preview.package, preview.label)), go: backToPromote }} />
             <AppSections project={project} envs={status.envs} refreshed={() => void tick.current()} />
           </>
         )}
@@ -868,10 +892,14 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
       )}
       {/* Deleting is over the page, the page dimmed and the keyboard kept in it (#102) */}
       {env === "delete" && <Modal label={TEARDOWN.deleteButton.replace("<app>", () => id)} close={close}><DeleteApp id={id} live={live} cancel={close} /></Modal>}
-      {env !== null && env !== "delete" && (
+      {(env === "preview" || env === "prod") && (
+        <Modal label={TEARDOWN.takeOffline.replace("<env>", env === "prod" ? "production" : "preview")} close={close}>
+          <TakeOffline key={env} id={id} env={env} done={async () => { await done(); setEnv(null); }} cancel={close} />
+        </Modal>
+      )}
+      {env === "rename" && (
         <div className="absolute right-0 z-10 mt-1.5 w-[360px] rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:fixed max-[520px]:inset-x-4 max-[520px]:w-auto">
-          {env === "rename" ? <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
-            : <TakeOffline key={env} id={id} env={env} done={async () => { await done(); setEnv(null); }} cancel={close} />}
+          <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}
     </div>

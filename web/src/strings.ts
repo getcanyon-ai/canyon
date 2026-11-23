@@ -662,6 +662,9 @@ export const S = {
   whatBlocksNewest: "What blocks the newest version",
   // A finding's chip where it lets preview go ahead and stops production (the run read's blocks_production; #102).
   blocksAtProduction: "Doesn't stop preview. Stops production until fixed or approved.",
+  // The review's two lists after what blocks (#102): what stops production alone, and what doesn't block, its chip too.
+  stopsProduction: "Stops production",
+  doesntBlock: "Doesn't block",
   // A secret's finding by where it is: its scanner's own sentence is its Why (#102).
   secretIn: "A secret is in <file>:<line>",
   // Approving a secret's finding, said above its Approve (#102).
@@ -670,6 +673,7 @@ export const S = {
   prodLacks: "<name> is set for preview but not production.",
   prodLacksSet: "Set it for production",
   prodLacksWhy: "Without it, <version> may fail to start in production.",
+  backToPromote: "Back to promote <version>",
   needApproval: "<who> asked to put <app> <version> in production.",
   needApprovalWhy: "Asked <age>. A person approves production here, in the dashboard.",
   reviewAndApprove: "Review and approve",

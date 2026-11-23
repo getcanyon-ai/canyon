@@ -187,7 +187,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         {approval !== undefined
           ? <Chip tone="approved">{`approved by ${actorName(approval.approved_by)} until ${shortDate(approval.expires_at)}`}</Chip>
           : unread ? <Chip tone="blocks">couldn't finish</Chip>
-          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.blocksAtProduction}</Chip> : <Chip tone="advisory">advisory · does not block</Chip>}
+          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.blocksAtProduction}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
         {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
         <span className="text-lg font-semibold">{heading}</span>

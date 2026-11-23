@@ -17,7 +17,8 @@ export const empty = (app: Row) => app.envs?.prod === undefined;
 
 // The question that stops or holds production, or lifts the hold, over the page (#102): Escape closes it unless it is
 // sending, and the keyboard stays in it.
-export function HoldDialog({ acting, now, close }: { acting: Acting; now: Row | undefined; close: () => void }) {
+// offline: the reader may also take production offline (an owner or an admin), so the stop question names that way too.
+export function HoldDialog({ acting, now, close, offline = false }: { acting: Acting; now: Row | undefined; close: () => void; offline?: boolean }) {
   const [reason, setReason] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -47,7 +48,7 @@ export function HoldDialog({ acting, now, close }: { acting: Acting; now: Row | 
           <p className="text-md text-text-dim">{holds ? S.holdNothing : S.stopping.replace("<app>", () => app.name)}</p>
           <p className="text-md text-text-dim">{S.stopPreview}</p>
           {/* the other way to take production down, for whoever wanted that one (#102) */}
-          {!holds && <p className="text-md text-text-dim">{S.stopOrOffline}</p>}
+          {!holds && offline && <p className="text-md text-text-dim">{S.stopOrOffline}</p>}
           <label className="grid gap-1 text-md font-medium text-text-dim">
             Reason
             <textarea maxLength={1024} rows={3} readOnly={sending} className="rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-base text-text" value={reason} onChange={(event) => setReason(event.target.value)} />

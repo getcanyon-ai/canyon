@@ -241,12 +241,13 @@ describe("a held production on the app page", () => {
       render(as("responder"));
       const stop = await screen.findByRole("button", { name: "Stop production of claims-portal" });
       expect(band().getByRole("button", { name: "Stop production of claims-portal" })).toBe(stop); // the headline's step
+      expect(screen.getByRole("region", { name: "Where it stands" }).querySelector(".bg-ok")).not.toBeNull(); // running: the green dot (#102)
       expect(band().queryByRole("button", { name: S.askForAccess })).toBeNull();
       fireEvent.click(stop);
       const ask = screen.getByRole("dialog", { name: "Stop and hold claims-portal in production?" });
       expect(ask.getAttribute("aria-modal")).toBe("true");
       expect(document.activeElement).toBe(within(ask).getByRole("textbox"));
-      expect(within(ask).getByText(S.stopOrOffline)).toBeDefined();
+      expect(within(ask).queryByText(S.stopOrOffline)).toBeNull(); // a responder can't take production offline
       fireEvent.change(within(ask).getByRole("textbox"), { target: { value: "INC-2240" } });
       fireEvent.click(within(ask).getByRole("button", { name: "Stop production" }));
       await waitFor(() => expect(sent()).toEqual([HOLD]));

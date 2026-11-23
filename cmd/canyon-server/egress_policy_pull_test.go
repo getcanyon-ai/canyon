@@ -168,7 +168,7 @@ func TestRunWaitsForEveryReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO egress_replicas (replica, have_epoch, have_seq, seen_at) VALUES
-		('canyon-egress-a', $1, $2, now()), ('canyon-egress-b', $1, $2, now()), ('canyon-egress-gone', $1, 1, now() - interval '1 minute')`, epoch, seq); err != nil {
+		('canyon-egress-a', $1, $2 + 1000, now()), ('canyon-egress-b', $1, $2, now()), ('canyon-egress-gone', $1, 1, now() - interval '1 minute')`, epoch, seq); err != nil {
 		t.Fatal(err)
 	}
 	image := "canyon/claims-portal@" + executortest.Digest
@@ -186,24 +186,11 @@ func TestRunWaitsForEveryReplica(t *testing.T) {
 			}
 		}
 	}
-	stop := make(chan struct{})
-	go keepPolling("canyon-egress-a", stop) // b stays live, at the version before the env
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			case <-time.After(100 * time.Millisecond):
-				if _, err := pool.Exec(ctx, "UPDATE egress_replicas SET seen_at = now() WHERE replica = 'canyon-egress-b'"); err != nil {
-					t.Error(err)
-				}
-			}
-		}
-	}()
+	// a holds a version later than any here and b the one before the env, both seen within replicaLive of the bound: a
+	// that had to poll its way to the version within the bound would be behind itself on a slow runner, and named first
 	began := time.Now()
 	_, _, _, err := pipe.RunApp(ctx, "gr_8f2a", "claims-portal", "preview", image, runs.Egress{Via: "canyon"}, "")
 	if err == nil || err.Error() != "the egress gateway has not taken this version (canyon-egress-b)" || fake.Runs.Load() != ran {
-		close(stop)
 		t.Fatalf("a replica behind past the bound: %v, %d /run(s); want the run failed closed naming canyon-egress-b, nothing started", err, fake.Runs.Load()-ran)
 	}
 	if waited := time.Since(began); waited < 2*time.Second {
@@ -212,12 +199,12 @@ func TestRunWaitsForEveryReplica(t *testing.T) {
 	if n := count(t, ctx, pool, "SELECT count(*) FROM egress_envs WHERE project_id = 'claims-portal' AND env = 'preview'"); n != 0 {
 		t.Errorf("the failed run left the env it named %d time(s), want it dropped", n)
 	}
-	close(stop)
 
-	both := make(chan struct{}) // a channel of its own: the goroutines above still read stop
-	defer close(both)
-	go keepPolling("canyon-egress-a", both)
-	go keepPolling("canyon-egress-b", both)
+	pipe.EgressConverge = 0 // the real bound: both poll their way to the version, however slowly, and the wait ends when they hold it
+	stop := make(chan struct{})
+	defer close(stop)
+	go keepPolling("canyon-egress-a", stop)
+	go keepPolling("canyon-egress-b", stop)
 	if _, _, _, err := pipe.RunApp(ctx, "gr_8f2a", "claims-portal", "preview", image, runs.Egress{Via: "canyon"}, ""); err != nil || fake.Runs.Load() != ran+1 {
 		t.Fatalf("every live replica current: %v, %d /run(s); want it started once", err, fake.Runs.Load()-ran)
 	}

@@ -272,8 +272,8 @@ as the person, with that route's level, refusals and audit rows; MCP adds no per
 - **In the cloud: `POST /mcp`** on the server, streamable HTTP and stateless, so any replica
   answers. It is an OAuth 2.1 protected resource: Canyon is its own authorization server
   (design/AUTH.md §4.7), a person allows a client once in the browser with scopes `read` or `act`,
-  and the token's session is a `flow: oauth` row the person disconnects under Settings › People &
-  sign-in. With sign-in off it serves nothing. It has no local directory, so it reviews and deploys
+  and the token's session is a `flow: oauth` row the person disconnects under Settings › Agents.
+  With sign-in off it serves nothing. It has no local directory, so it reviews and deploys
   a pushed ref of a linked repository (`canyon_check_ref`, `canyon_deploy_ref`), packaged on request
   only when the caller's own GitHub account reads it.
 - **One server per agent.** An org pushes the URL to cloud agents only; laptops keep `canyon mcp`.

@@ -809,7 +809,7 @@ export const CONSENT = {
   },
 } as const;
 
-// Settings › People & sign-in, the sessions list.
+// Settings › Agents, the sessions list.
 export const SESSIONS = {
   title: "Sessions",
   line: "Where you're signed in. Admins see everyone's.",

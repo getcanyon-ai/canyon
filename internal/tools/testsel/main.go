@@ -380,7 +380,10 @@ func check(names, patterns []string) error {
 }
 
 // event is one line of go test -json (test2json).
-type event struct{ Action, Test, Output string }
+type event struct {
+	Action, Test, Output string
+	Elapsed              float64
+}
 
 // runShard runs the shard's tests under go test -json and returns the top-level tests it ran and
 // what to show: the package's own output, and the output of each test that failed or never ended.
@@ -419,6 +422,9 @@ func runShard(dir, target string, flags []string, pattern string, want []string)
 			ended[e.Test] = true
 		case "pass", "skip":
 			ended[e.Test] = true
+			if e.Test != "" && !strings.Contains(e.Test, "/") {
+				fmt.Printf("TEMPORARY elapsed %.2f %s\n", e.Elapsed, e.Test)
+			}
 		}
 	}
 	if err := sc.Err(); err != nil {

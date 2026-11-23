@@ -11,10 +11,10 @@ told before they write code.
 coding agents are told." Only an admin can open it. A member who follows a link there is told "Only
 an admin can open Guardrails." What an app must pass is on that app's page.
 
-It has five pages:
+It has five pages, and opens on the first:
 
-- **Pipeline:** where each rule is checked, before preview or before production.
 - **Policies:** each rule's state, and your own custom rules.
+- **Pipeline:** where each rule is checked, before preview or before production.
 - **Scanners:** the tools Canyon runs, and their settings.
 - **Playbooks:** how your org builds, written down for coding agents to read.
 - **What agents are told:** the stacks, buildpacks and design system coding agents are told to use.
@@ -81,9 +81,9 @@ steps:
 - **Before production**: "Checked when a person clicks Promote. A Blocking check keeps the button
   disabled."
 
-To also check a rule before production, drag it into that box, or click "Also before production"
-under its control. Each place then has its own state for that rule. "Take out of before production"
-removes it again.
+To also check a rule before production, drag it into that box, or tick "Also before production"
+under its control. Each place then has its own state for that rule. Untick it to take the rule out
+again. On a screen narrower than 1440px the stages stack, one under the other.
 
 Six rules only ever run before production, because they are about going live. They are the
 **go-live checks** on each app's page:

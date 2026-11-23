@@ -49,7 +49,7 @@ Every row names who acted, as one of three kinds. The **Who** filter picks them:
   deployment platform's reports are recorded as your organisation's platform.
 - **Canyon**: Canyon's own steps, such as a review's result or a build that failed.
 
-How it was done is its own filter, **Via**: "Any way", "From the dashboard", "From the CLI", "From
+How it was done is its own filter, **Via**: "From anywhere", "From the dashboard", "From the CLI", "From
 GitHub", "From the platform" or "Canyon itself".
 
 ## Who sees what

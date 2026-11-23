@@ -1340,6 +1340,8 @@ Export: `CSV` · `JSON` · `Copy link to this view`. One line, no configuration 
 
 **An admin's screen** (**amended 2026-10-07**). A member's rail has no Guardrails, and `#/guardrails` opened by a member is the admins-only page: `Guardrails` as its heading, `Only an admin can open Guardrails.`, `What an app must pass is on that app's page.` and `Back to the fleet` — never the form read-only. It is the dashboard's choice, not the API's: agents and the CLI still read the policies (`GET /api/v1/policies`, `canyon manifest`, the session hook) as any member.
 
+**Its tabs** (amended 2026-11-23, getcanyon-ai/canyon#118): Policies, Pipeline, Scanners, Playbooks, *What agents are told*. `#/guardrails` opens on Policies, the first: the rules and their dials are what an admin comes for, and Pipeline, where a rule is also placed before production, reads as a diagram of the same rules. Below 1440px Pipeline stacks its stages so each rule reads full width, and a rule's `Also before production` is a checkbox. Policies draws *Affects today* once a rule keeps an app out or a change is asked; a column saying no app is affected on every row is noise. On a phone the strip of tabs runs to the screen's edges, the tab shown scrolled to the middle of it.
+
 **Layout:** Four rows. That's the screen. Each row is a policy, and the copy is a plain sentence, not a rule name.
 
 ```

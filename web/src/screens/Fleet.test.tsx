@@ -617,6 +617,15 @@ describe("the fleet screen", () => {
     expect(theirs.queryByRole("link", { name: FLEET.emptyRulesLink })).toBeNull();
   });
 
+  // The org's own needs, which no app carries, still show over an org with no apps.
+  it("keeps the org's own needs above No apps yet", async () => {
+    server(() => ({ ...golden, apps: [], total: 0, org_needs: [{ kind: "licence", env: null, rank: 2, since: "2026-11-01T00:00:00Z", you: true, ask: [], licence: "lapsed" }] }));
+    render(<Fleet org="Meridian Insurance" />);
+    await screen.findByRole("region", { name: FLEET.emptyTitle });
+    expect(screen.getByRole("heading", { name: /^Needs (attention|you)/ })).toBeDefined();
+    expect(screen.queryByText(/^Nothing needs you/)).toBeNull();
+  });
+
   it("says no app matches a filter that matches none, without the first-app guide", async () => {
     window.location.hash = "#/fleet?stage=blocked";
     server(() => ({ ...golden, apps: [], total: 0 }));

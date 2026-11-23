@@ -415,7 +415,7 @@ what stand between them and a wrong-host write. cli.md §8.2 and §8.4 are the d
    (amended 2026-10-13, the owner; #2204; design/PERMISSIONS.md wins). Nothing else of any app: no logs,
    preview, earlier versions or who deployed.
 3. **Stopping.** A responder stops an app's production with a reason, from the CLI (`canyon undeploy
-   --app <app> --env prod --hold --reason "…"`) or from the fleet's *Stop production* (in a team row's side pane, or on a reduced row or a phone's card). In one
+   --app <app> --env prod --hold --reason "…"`) or from the fleet's *Stop production* (in a team row's side pane, or on a reduced row of the table; on a phone, from the app page). In one
    transaction under the ledger lock, the hold is written; every pending or running run that would
    write production is cancelled, PATCHING's watch included; open production approvals turn
    `outdated`. Then the container stops (Canyon) or a `remove` release goes out (org).

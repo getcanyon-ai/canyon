@@ -208,7 +208,7 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
           </span>
         )}
         {page.banner === "none" && <span className="text-sm text-text-dim"><Asking app={app} /></span>}{/* the reader's level, as the table's Access column says it, where people sign in */}
-        <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>
+        {app.hold !== undefined && <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>}{/* held: the mark and its lift; stopping is the app page's (#102) */}
         {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
       </li>
     );

@@ -85,14 +85,15 @@ describe("the fleet's held rows, by who reads them", () => {
     expect(within(row("claims-portal")).getByRole("link", { name: "claims-portal" }).getAttribute("href")).toBe("#/apps/claims-portal");
   });
 
-  // On a phone each row is a card, with the same offers.
-  it("a responder's cards on a phone offer the same: Lift on the held one, Stop on the other", async () => {
+  // On a phone each row is a card: the held one is lifted there, and stopping is the app page's (#102), whose ⋯ menu and
+  // headline a responder reads too.
+  it("a responder's cards on a phone offer Lift on the held one, and no Stop or Hold on any", async () => {
     narrow();
     server(responder);
     await show();
     expect(within(card("claims-portal")).getByText("Held")).toBeDefined();
     expect(within(card("claims-portal")).getByRole("button", liftOf("claims-portal"))).toBeDefined();
-    expect(within(card("claims-archive")).getByRole("button", stopOf("claims-archive"))).toBeDefined();
+    expect(screen.queryByRole("button", { name: /^(Stop|Hold) production of/ })).toBeNull();
     expect(within(card("claims-archive")).queryByRole("button", liftOf("claims-archive"))).toBeNull();
   });
 
@@ -138,7 +139,7 @@ describe("the fleet's held rows, by who reads them", () => {
   });
 
   // A team row's phone card offers neither: the app page's headline and ⋯ menu do (#102), and on a phone it was the
-  // card's only action (the UX review). A reduced card, whose app page a responder may not open whole, keeps them.
+  // card's only action (the UX review).
   it("offers no stop or hold on a phone's card of a team row", async () => {
     narrow();
     server(as("responder", [other, empty]));

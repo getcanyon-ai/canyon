@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pending } from "../api";
-import { EnvCell, EnvLink, EnvOpen, EnvVersion, notRunning, restarts } from "./EnvLink";
+import { EnvCell, EnvLink, EnvOpen, EnvVersion, notRunning, restarts, shortPending } from "./EnvLink";
 
 describe("EnvLink", () => {
   afterEach(() => vi.useRealTimers());
@@ -32,6 +32,29 @@ describe("EnvLink", () => {
       expect(screen.queryByRole("link")).toBeNull();
       unmount();
     }
+  });
+
+  // The fleet's short form of each pending line (the UX review): what has none is said whole.
+  it("says a pending release short, and whole where there is no short form", () => {
+    const sentAt = "2026-09-27T10:00:00Z";
+    const clock = new Date(sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const of = (via: "webhook" | "repo", event: "deploy" | "remove", rest: Partial<Pending> = {}) => shortPending({ via, release: "rel_1", event, sent_at: sentAt, state: "accepted", ...rest } as Pending);
+    const pull_request = { number: 7, url: "https://github.com/meridian/deploy/pull/7" };
+    expect([of("webhook", "deploy"), of("webhook", "remove"), of("repo", "deploy"), of("repo", "remove"), of("repo", "remove", { pull_request })])
+      .toEqual([`Sent ${clock} · not running yet`, "Being removed", `Committed ${clock} · not running yet`, "Being removed", "Removed once merged"]);
+    expect([of("repo", "deploy", { pull_request }), of("webhook", "deploy", { missing: ["db"] }), of("webhook", "remove", { state: "refused" }), of("repo", "deploy", { state: "undelivered" })])
+      .toEqual([`waiting on your merge since ${clock}`, "Your platform's report left out where db is", "Your platform refused the release", "Canyon couldn't commit the release"]);
+  });
+
+  // The dot before a version is green only for what is known to run (the UX review).
+  it("marks what runs green, what the platform hasn't reported amber, and a fresh report neutral", () => {
+    const ago = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
+    const org = { url: "https://ledger.prod.meridian.example", package: "pkg_1a", label: "v2", image_digest: "sha256:1a", deployed_at: ago(120), gate_run: "gr_1", deployed_by: null, run_by: "org" as const };
+    const remove = { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: ago(2), state: "accepted" } as Pending;
+    const dots = [{ ...org, seen_at: ago(1) }, { ...org, seen_at: ago(20) }, { ...org, seen_at: ago(1), pending: remove }, org, { ...org, deployed_at: ago(2) },
+      { ...org, run_by: "canyon" as const, state: "running" as const }, { ...org, run_by: "canyon" as const, state: "unknown" as const }]
+      .map((env) => { const { container, unmount } = render(<EnvVersion env={env} name="production" />); const at = container.querySelector(".rounded-full")?.className.match(/bg-\S+/)?.[0]; unmount(); return at; });
+    expect(dots).toEqual(["bg-ok", "bg-amber", "bg-amber", "bg-amber", "bg-text-faint", "bg-ok", "bg-amber"]);
   });
 
   // A release open over what runs (a redeploy or a removal under org): the live version stays, and

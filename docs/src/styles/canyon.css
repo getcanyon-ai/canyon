@@ -34,32 +34,51 @@
 
 .diagram {
   margin: 1.5rem 0;
+}
+/* A diagram is drawn at its own size, never shrunk, so its text keeps the size it was drawn at. A wider one
+   scrolls sideways inside its frame, never the page: a shadow shows at each edge with more to scroll to (the
+   page-coloured covers scroll with the content and hide it at the ends, so one that fits shows none), and the
+   hint under it shows while it scrolls by more than 4px (src/scripts/diagram-scroll.js marks it). */
+.diagram-frame {
   overflow-x: auto;
+  --edge: color-mix(in srgb, var(--ds-color-text) 28%, transparent);
+  background:
+    linear-gradient(to right, var(--ds-color-bg) 40%, transparent) left / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--ds-color-bg) 40%, transparent) right / 2.5rem 100% no-repeat local,
+    linear-gradient(to right, var(--edge), transparent) left / 1.25rem 100% no-repeat scroll,
+    linear-gradient(to left, var(--edge), transparent) right / 1.25rem 100% no-repeat scroll;
+}
+.diagram-frame:focus-visible { outline: 2px solid var(--ds-color-accent); outline-offset: -2px; }
+/* Where the browser has scroll timelines, the edge with more to see also fades out: the fade's widths follow
+   the frame's own scroll, and a frame that doesn't scroll has no timeline, so no fade. */
+@property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes diagram-fade {
+  0% { --fade-start: 0px; --fade-end: 3rem; }
+  4%, 96% { --fade-start: 3rem; --fade-end: 3rem; }
+  100% { --fade-start: 3rem; --fade-end: 0px; }
+}
+@supports (animation-timeline: scroll()) {
+  .diagram-frame {
+    animation: diagram-fade linear both;
+    animation-timeline: scroll(self inline);
+    mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
+  }
 }
 .diagram svg {
   display: block;
-  max-width: 100%;
-  height: auto;
+  max-width: none;
   margin: 0 auto;
   font-family: var(--ds-font-sans);
 }
-/* On a phone, a wide diagram shrunk to the column's width has unreadable text: it keeps at least 32rem
-   and scrolls sideways inside its figure, never the page. A narrower one still fits as it is. A shadow
-   shows on each edge with more to scroll to: the page-coloured covers scroll with the content and hide
-   it at the ends, so a diagram that fits shows none. */
-@media (max-width: 40rem) {
-  .diagram svg {
-    max-width: max(100%, 32rem);
-  }
-  .diagram {
-    --edge: color-mix(in srgb, var(--ds-color-text) 22%, transparent);
-    background:
-      linear-gradient(to right, var(--ds-color-bg) 40%, transparent) left / 2.5rem 100% no-repeat local,
-      linear-gradient(to left, var(--ds-color-bg) 40%, transparent) right / 2.5rem 100% no-repeat local,
-      linear-gradient(to right, var(--edge), transparent) left / 1rem 100% no-repeat scroll,
-      linear-gradient(to left, var(--edge), transparent) right / 1rem 100% no-repeat scroll;
-  }
+.diagram-hint {
+  display: none;
+  margin: 0.35rem 0 0 !important;
+  color: var(--ds-color-text-dim);
+  font-size: var(--sl-text-sm);
+  text-align: center;
 }
+.diagram.scrolls .diagram-hint { display: block; }
 .diagram figcaption {
   margin-top: 0.5rem;
   color: var(--ds-color-text-dim);

@@ -6,15 +6,13 @@ description: What the first admin sees when Canyon starts with sign-in on, how s
 This page starts where [Sign-in, the AI model and keys](/org/set-up/) ends: Canyon is running with
 sign-in on, and `CANYON_ADMINS` names you.
 
-```mermaid title="First boot: only the first admins sign in until one of them finishes setup"
-flowchart TD
-  start["Canyon starts in setup"]:::canyon
-  only["Only the CANYON_ADMINS addresses can sign in<br>Canyon serves nothing but the setup screen"]
-  screen["The first admin answers Set up Canyon<br>the organisation's name, who may sign in,<br>who administers Canyon"]:::person
-  done["Setup is finished<br>everyone on the lists can sign in"]
-  start --> only
-  only --> screen
-  screen -->|"Finish setup"| done
+```diagram kind=flow title="First boot: only the first admins sign in until one of them finishes setup"
+steps:
+  - {who: Canyon, icon: canyon, tone: canyon, step: 1, what: Starts in setup, more: "With sign-in on, and `CANYON_ADMINS` naming its first admins."}
+  - {who: Canyon, icon: key, tone: canyon, step: 2, what: "Only the `CANYON_ADMINS` addresses can sign in", more: "Canyon serves nothing but the setup screen, and nobody can approve a CLI sign-in yet."}
+  - {who: The first admin, icon: person, tone: person, step: 3, what: Answers Set up Canyon, more: "The organisation's name, who may sign in, and who administers Canyon."}
+  - via: Finish setup
+  - {who: Everyone on the lists, icon: passed, tone: passed, step: 4, what: Can sign in, more: The fleet and every other page open.}
 ```
 
 ## Until setup is finished

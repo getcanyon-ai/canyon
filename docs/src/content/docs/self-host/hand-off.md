@@ -359,23 +359,17 @@ merges. External Secrets brings each release's access token into its namespace. 
 release checks in, its app answering and the branch holding exactly what Canyon committed, the
 environment is live.
 
-```mermaid title="A deploy through your deploy repo: Canyon commits, Argo CD or Flux syncs, the first check-in makes it live"
-sequenceDiagram
-  participant Dev as You or your coding agent
-  participant C as Canyon
-  participant G as Your deploy repo
-  participant A as Argo CD or Flux
-  participant E as External Secrets
-  participant S as Sidecar beside the app
-  Dev->>C: canyon deploy
-  C->>C: review, build, push the image to your registry
-  C->>G: commit the release's files (preview) or open a pull request (production)
-  A->>G: sync the branch
-  E->>C: fetch the release's access token, with the fetch-only token
-  A->>A: run the app and the sidecar
-  S->>C: pull the access list: the app answered
-  C->>G: is the branch's tree what Canyon committed?
-  C-->>Dev: live at the route's address · a pod checked in
+```diagram kind=flow title="A deploy through your deploy repo: Canyon commits, Argo CD or Flux syncs, the first check-in makes it live"
+steps:
+  - {who: You or your coding agent, icon: agent, step: 1, what: "`canyon deploy`"}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 2, what: "Reviews, builds, and pushes the image to your registry"}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 3, what: "Commits the release's files to your deploy repo", more: "Preview to its branch; production as a pull request into its branch, which your team merges."}
+  - {who: Argo CD or Flux, step: 4, what: Syncs the branch}
+  - {who: External Secrets, icon: key, step: 5, what: "Fetches the release's access token from Canyon", more: "With the fetch-only token."}
+  - {who: Argo CD or Flux, step: 6, what: Runs the app and the sidecar}
+  - {who: The sidecar beside the app, icon: canyon, tone: canyon, step: 7, what: "Pulls the access list from Canyon", more: "Its first check-in: the app answered."}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 8, what: "Checks the branch's tree is what it committed"}
+  - {who: Live, icon: passed, tone: passed, step: 9, what: "Live at the route's address", more: "Canyon tells you or your agent: a pod checked in."}
 ```
 
 ### What your platform team sets up once
@@ -1330,23 +1324,17 @@ A release can also be committed and still not go live:
 Under a webhook, Canyon posts each release to your pipeline, signed, and your pipeline runs it and
 reports back.
 
-```mermaid title="A deploy under hand-off: Canyon reviews and builds, your platform runs and reports back"
-sequenceDiagram
-  participant Dev as You or your coding agent
-  participant C as Canyon
-  participant R as Your registry
-  participant P as Your platform
-  participant S as Sidecar beside the app
-  Dev->>C: canyon deploy
-  C->>C: review and build
-  C->>R: push the image, by digest
-  C->>P: release, signed, to your platform webhook
-  P-->>C: 2xx: accepted
-  P->>C: fetch the release's access token, with the host token
-  P->>P: run the app and the sidecar
-  S->>C: pull the app's access list, then every minute
-  P->>C: report deployed, with the image's digest
-  C-->>Dev: live at the address your platform reported
+```diagram kind=flow title="A deploy under hand-off: Canyon reviews and builds, your platform runs and reports back"
+steps:
+  - {who: You or your coding agent, icon: agent, step: 1, what: "`canyon deploy`"}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 2, what: Reviews and builds}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 3, what: "Pushes the image to your registry, by digest"}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 4, what: "Sends the release, signed, to your platform's webhook", more: "Your platform answers 2xx: accepted."}
+  - {who: Your platform, icon: key, step: 5, what: "Fetches the release's access token from Canyon", more: "With the host token."}
+  - {who: Your platform, step: 6, what: Runs the app and the sidecar}
+  - {who: The sidecar beside the app, icon: canyon, tone: canyon, step: 7, what: "Pulls the app's access list from Canyon", more: "Then again every minute."}
+  - {who: Your platform, step: 8, what: "Reports deployed to Canyon", more: "With the image's digest."}
+  - {who: Live, icon: passed, tone: passed, step: 9, what: "Live at the address your platform reported", more: "Canyon tells you or your agent: your platform reported it running."}
 ```
 
 ### The release Canyon sends

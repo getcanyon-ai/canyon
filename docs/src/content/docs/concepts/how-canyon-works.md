@@ -12,35 +12,40 @@ The same parts run in two shapes: as containers on **one Docker host**, the lapt
 on **your Kubernetes cluster**. [Choices at a glance](/concepts/modes/#where-canyon-runs) says which to
 pick.
 
-```mermaid title="Canyon's parts: the server decides, the executor builds and runs, every app sits behind sign-in"
-flowchart TD
-  agent["Coding agent<br>with the canyon CLI"]
-  team["Your team<br>in the dashboard"]
-  users["People using the apps"]
-  idp["Your identity provider"]
-  model["Your AI model"]
-  subgraph host["Canyon, on your Docker host or Kubernetes cluster"]
-    server["canyon-server<br>API and dashboard · secrets vault<br>audit trail"]:::canyon
-    pg[("Canyon's Postgres")]
-    review["The review<br>gitleaks · Trivy · Opengrep · ESLint · Checkov<br>AI review · 21 rules you set"]:::canyon
-    executor["Executor<br>scans · builds · runs apps"]:::canyon
-    door["Sign-in in front of every app<br>when sign-in is on"]:::canyon
-    app["Your app"]
-    apppg[("Apps' Postgres")]
-    egress["Egress gateway, beta<br>records each call out"]:::canyon
-  end
-  agent -->|"canyon deploy"| server
-  team --> server
-  idp -->|"signs people in"| server
-  server --> pg
-  server -->|"every deploy"| review
-  review -->|"passed"| executor
-  model -.->|"reads the code, when set"| review
-  executor -->|"builds and starts"| app
-  users --> door
-  door --> app
-  app --> apppg
-  app -.->|"outbound through Canyon"| egress
+```diagram kind=layers title="Canyon's parts: the server decides, the executor scans, builds and runs, and every app sits behind sign-in"
+layers:
+  - band: Outside Canyon
+    tiles:
+      - {who: Agent, icon: agent, what: Coding agents, more: "on a laptop with the CLI, or in the cloud over MCP"}
+      - {who: People, icon: people, what: Your team, more: in the dashboard}
+      - {who: Sign-in, icon: key, what: Your identity provider}
+      - {who: Optional, what: Your AI model, more: reads the code for the AI review}
+  - via: deploys · the dashboard · sign-in · the AI review's call out
+  - band: "`canyon-server` decides"
+    note: and runs no app code
+    tone: canyon
+    tiles:
+      - {tone: canyon, what: API and dashboard}
+      - {tone: canyon, what: The review, more: "the scanners' findings, the AI review, your org's rules"}
+      - {tone: canyon, what: Secrets vault, more: sealed under its own key}
+      - {tone: canyon, what: Audit trail, more: "in Canyon's Postgres"}
+  - via: "scan · build · run: one app per call, never a vault key"
+  - band: The executor does
+    note: and keeps no org settings and no secrets
+    tone: canyon
+    tiles:
+      - {tone: canyon, what: Scans, more: "runs every scanner but gitleaks, which the server runs"}
+      - {tone: canyon, what: Builds, more: an image with buildpacks}
+      - {tone: canyon, what: Runs, more: "each app, in preview and production"}
+  - via: starts each app
+  - band: Your apps
+    note: each behind your company's sign-in
+    flow:
+      - {who: People, icon: people, what: People using the apps}
+      - {who: Canyon, icon: canyon, tone: canyon, what: Sign-in, more: "checks the person and the app's access list"}
+      - {who: Yours, what: Your app, more: "told who is calling, in a token Canyon signs"}
+      - {who: If it asks for one, what: Its own Postgres, more: "and, in beta, calls out through Canyon's egress gateway"}
+    wall: "An app can't reach Canyon's API, its database or another app."
 ```
 
 **Every app sits behind your company's sign-in.** On Kubernetes a Canyon sidecar,
@@ -51,28 +56,27 @@ token.
 
 ## What runs where, on one Docker host
 
-```mermaid title="Canyon on one Docker host: the server is also every app's front door"
-flowchart TD
-  cli["Coding agent and CLI"]
-  admins["People using Canyon"]
-  users["People using the apps"]
-  server["canyon-server<br>dashboard, API, review,<br>secrets, audit, and every<br>app's front door"]:::canyon
-  pg[("Canyon's Postgres")]
-  executor["canyon-executor<br>holds the Docker socket"]:::canyon
-  app["An app's container<br>on a Docker network of its own"]
-  apppg[("app-postgres<br>the apps' databases")]
-  egress["canyon-egress<br>Envoy and the egress check"]:::canyon
-  cli -->|"upload, deploy"| server
-  admins -->|"the dashboard"| server
-  users -->|"an app's address"| server
-  server --> pg
-  server -->|":7778"| executor
-  executor -->|"scans, builds, starts"| app
-  server -->|"the request, with the identity<br>token when sign-in is on"| app
-  server -->|"each app's database"| apppg
-  app --> apppg
-  app -.->|"outbound through Canyon"| egress
-  egress -->|"a record of each call"| server
+```diagram kind=layers title="Canyon on one Docker host: the server is also every app's front door"
+layers:
+  - band: Outside
+    tiles:
+      - {who: Agent, icon: agent, what: Coding agent and CLI, more: "uploads, deploys"}
+      - {who: People, icon: people, what: People using Canyon, more: the dashboard}
+      - {who: People, icon: people, what: People using the apps, more: "an app's address"}
+  - via: all three reach one address, the server's
+  - band: "`canyon-server`"
+    note: "dashboard, API, review, secrets, audit, and every app's front door"
+    tone: canyon
+    tiles:
+      - {tone: canyon, what: "Canyon's Postgres", more: on a network only the server joins}
+      - {tone: canyon, what: "`canyon-executor`", more: "on :7778; holds the Docker socket; scans, builds and starts apps"}
+  - via: the executor starts each app; the server forwards each request to it, with Canyon's identity token when sign-in is on
+  - band: Each app, on a Docker network of its own
+    flow:
+      - {who: Yours, what: "An app's container"}
+      - {who: Shared, what: "`app-postgres`", more: "the apps' databases, each app's made by the server"}
+      - {who: Beta, tone: canyon, what: "`canyon-egress`", more: "Envoy and the egress check, while its calls go through Canyon; records each call to the server"}
+    wall: "An app can't reach another app or Canyon's Postgres, and the server's API refuses connections from the app networks."
 ```
 
 - **The server answers every app's address itself.** With sign-in on, it checks the person's Canyon
@@ -89,38 +93,35 @@ flowchart TD
 
 ## What runs where, on Kubernetes
 
-```mermaid title="Canyon on a Kubernetes cluster: who talks to whom"
-flowchart TD
-  cli["Coding agent and CLI"]
-  admins["People using Canyon"]
-  gh["GitHub"]
-  users["People using the apps"]
-  gw["Your gateway or ingress<br>TLS"]
-  server["canyon-server<br>dashboard, API, review,<br>secrets, audit"]:::canyon
-  router["canyon-router"]:::canyon
-  out["Your identity provider, GitHub,<br>the AI model if you set one"]
-  pg[("Canyon's Postgres")]
-  executor["canyon-executor<br>scans, builds, runs apps"]:::canyon
-  scans["Scan jobs<br>no network but Trivy's database"]
-  builds["kpack builds"]
-  app["App pod<br>canyon-identity and the app"]
-  apppg[("Apps' Postgres :5433")]
-  egress["canyon-egress<br>Envoy and the egress check"]:::canyon
-  cli -->|"upload, deploy"| server
-  admins -->|"the dashboard"| server
-  gh -->|"webhooks"| server
-  users -->|"an app's address"| gw
-  gw --> router
-  server --> out
-  server --> pg
-  server -->|":7778"| executor
-  executor --> scans
-  executor --> builds
-  executor -->|"creates"| app
-  router -->|":4180"| app
-  app --> apppg
-  server -->|"each app's database"| apppg
-  app -.->|"outbound through Canyon"| egress
+```diagram kind=layers title="Canyon on a Kubernetes cluster: who talks to whom"
+layers:
+  - band: Outside
+    tiles:
+      - {who: Agent, icon: agent, what: Coding agent and CLI, more: "uploads, deploys"}
+      - {who: People, icon: people, what: People using Canyon, more: the dashboard}
+      - {who: GitHub, what: GitHub, more: webhooks}
+      - {who: People, icon: people, what: People using the apps, more: "through your gateway or ingress, which ends TLS"}
+  - via: Canyon's address to the server; each app's address to canyon-router
+  - band: "Canyon's own"
+    tone: canyon
+    tiles:
+      - {tone: canyon, what: "`canyon-server`", more: "dashboard, API, review, secrets, audit; calls your identity provider, GitHub and the AI model if you set one"}
+      - {tone: canyon, what: "Canyon's Postgres", more: reached by the server alone}
+      - {tone: canyon, what: "`canyon-router`", more: "sends each app's address to its pod, on :4180"}
+      - {tone: canyon, what: "`canyon-executor`", more: "on :7778, from the server only; works through the Kubernetes API"}
+  - via: the executor creates them
+  - band: What the executor runs
+    tiles:
+      - {what: Scan jobs, more: "no network, but Trivy's database"}
+      - {what: kpack builds, more: "DNS and public HTTP(S), for dependencies"}
+      - {what: App pods, more: "`canyon-identity` in front of each app"}
+  - band: Each app
+    flow:
+      - {who: Canyon, icon: canyon, tone: canyon, what: "`canyon-identity`", more: "checks who is signing in"}
+      - {who: Yours, what: "Your app, on :3000"}
+      - {who: Shared, what: "Apps' Postgres, :5433", more: "each app's database, made by the server"}
+      - {who: Beta, tone: canyon, what: "`canyon-egress`", more: "Envoy and the egress check, while its calls go through Canyon"}
+    wall: "An app never reaches the server, Canyon's Postgres or another app."
 ```
 
 | Part | Its job | What it may reach |

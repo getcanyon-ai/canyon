@@ -20,27 +20,27 @@ with the registry, both databases and the gateway in the cluster, see
 [One k3s host, step by step](/self-host/k3s/). To try Canyon on one node first, use
 [the Helm chart](/self-host/helm/). It is not for production.
 
-```mermaid title="Canyon on your cluster: the green parts are Canyon's, the white ones you bring"
-flowchart TD
-  gw["Your gateway or ingress, with TLS"]
-  server["Namespace canyon<br>canyon-server, the executor,<br>canyon-router, the egress gateway"]:::canyon
-  idp["Your identity provider"]
-  pg[("Postgres for Canyon")]
-  scans["Namespace canyon-scans<br>scan pods, nothing in or out<br>but Trivy's server"]:::canyon
-  builds["Namespace canyon-builds<br>kpack builds"]:::canyon
-  apps["Namespace canyon-apps<br>each app's pod, with<br>canyon-identity in front"]:::canyon
-  kpack["kpack"]
-  reg["Your OCI registry"]
-  apg[("Postgres for apps, port 5433")]
-  gw -->|"Canyon's address and<br>every app's address"| server
-  server -->|"sign-in"| idp
-  server --> pg
-  server --> scans
-  server --> builds
-  server --> apps
-  kpack -->|"runs"| builds
-  builds -->|"pushes images"| reg
-  apps --> apg
+```diagram kind=layers title="Canyon on your cluster: Canyon's four namespaces, between what you bring"
+layers:
+  - band: You bring
+    tiles:
+      - {what: "Your gateway or ingress, with TLS", more: "Canyon's address and every app's address"}
+      - {icon: key, who: Sign-in, what: Your identity provider}
+  - via: "both addresses reach the namespace `canyon`"
+  - band: "Canyon's namespaces"
+    tone: canyon
+    tiles:
+      - {tone: canyon, what: "`canyon`", more: "`canyon-server`, the executor, `canyon-router`, the egress gateway"}
+      - {tone: canyon, what: "`canyon-scans`", more: "scan pods, with nothing in or out but Trivy's server"}
+      - {tone: canyon, what: "`canyon-builds`", more: "kpack builds, which push images to your registry"}
+      - {tone: canyon, what: "`canyon-apps`", more: "each app's pod, with `canyon-identity` in front"}
+  - via: the server, the builds and the apps reach
+  - band: You bring
+    tiles:
+      - {what: "Postgres for Canyon"}
+      - {who: Optional, what: "Postgres for apps", more: "port 5433, for apps that declare a database"}
+      - {what: kpack, more: runs the builds}
+      - {what: Your OCI registry}
 ```
 
 The tables below list each part. [How Canyon works](/concepts/how-canyon-works/#what-runs-where-on-kubernetes)

@@ -81,16 +81,10 @@ describe("Guardrails › Pipeline", () => {
     expect(row("Before production", GO_LIVE.map((id) => golden.policies.policies.find((one) => one.id === id)!.name)[0]!).queryByRole("button")).toBeNull();
   });
 
-  it("an admin drags Dependencies to before production, sets it Blocking there, and saves: one PUT naming that gate", async () => {
+  it("an admin ticks Dependencies before production, sets it Blocking there, and saves: one PUT naming that gate", async () => {
     const sent = server(routes);
     await drawn();
-    const dragged = gate("Before preview").getByRole("region", { name: deps.name });
-    expect(dragged.getAttribute("draggable")).toBe("true");
-    fireEvent.dragStart(dragged, { dataTransfer: { setData: vi.fn(), effectAllowed: "" } });
-    expect(gate("Before production").getByText(`Drop here: ${deps.name}, before production`)).toBeDefined();
-    fireEvent.dragOver(screen.getByRole("region", { name: "Before production" }));
-    fireEvent.drop(screen.getByRole("region", { name: "Before production" }));
-    expect(gate("Before production").queryByText(/^Drop here/)).toBeNull();
+    fireEvent.click(place(deps.name));
     // It goes there at its state before preview, named for that gate; its Dial there makes it Blocking.
     expect(shown("Before production", there(deps.name))).toBe(deps.state);
     expect(gate("Before production").queryByRole("radiogroup", { name: deps.name })).toBeNull();
@@ -107,6 +101,25 @@ describe("Guardrails › Pipeline", () => {
       `PUT ${DEPS}?apply=true ${JSON.stringify(golden.production_apply.request)}`,
     ]);
     expect(shown("Before production", there(deps.name))).toBe(golden.production_apply.response.policy.production);
+  });
+
+  // Before production starts far below the fold (#118): a line under the tabs links both gates, each with how many checks it
+  // lists, and takes the reader there. Nothing is dragged: the two gates are never on screen together.
+  it("links both gates with how many checks each lists, and has no grip", async () => {
+    server(routes);
+    await drawn();
+    const line = within(screen.getByRole("navigation", { name: "Gates" }));
+    for (const name of ["Before preview", "Before production"] as const) {
+      const listed = within(screen.getByRole("region", { name })).getAllByRole("region").length;
+      const scrolled = vi.fn();
+      Element.prototype.scrollIntoView = scrolled;
+      try {
+        fireEvent.click(line.getByRole("button", { name: `${name} (${listed})` }));
+        expect(scrolled.mock.contexts).toEqual([screen.getByRole("region", { name })]);
+        expect(document.activeElement).toBe(screen.getByRole("region", { name }));
+      } finally { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; }
+    }
+    expect(document.querySelector('[draggable="true"]')).toBeNull();
   });
 
   it("a tightening before production may wait 14 days, and the row says what it becomes and when", async () => {
@@ -133,7 +146,6 @@ describe("Guardrails › Pipeline", () => {
     expect(shown("Before production", there(deps.name))).toBe(deps.state);
     expect(document.activeElement).toBe(box);
     expect(box.checked).toBe(true);
-    expect(gate("Before preview").getByRole("region", { name: deps.name }).getAttribute("draggable")).toBe("false"); // no grip: it is there already
     choose("Before production", there(deps.name), "blocking");
     choose("Before preview", deps.name, "off");
     await bar().findByText(sentences);
@@ -195,7 +207,7 @@ describe("Guardrails › Pipeline", () => {
     const scheduled = golden.production_scheduled.response.policy;
     const sent = server({ ...routes, [`GET ${POLICIES}`]: reading(scheduled), [`PUT ${DEPS}?apply=true`]: { body: { policy: { ...scheduled, scheduled_production: undefined }, would_block: [] } } });
     await drawn();
-    expect(gate("Before preview").getByRole("region", { name: scheduled.name }).getAttribute("draggable")).toBe("false");
+    expect(place(scheduled.name).checked).toBe(true);
     fireEvent.click(place(scheduled.name));
     await bar().findByText(`${scheduled.name}, keep Off before production.`, { exact: false });
     fireEvent.click(await bar().findByRole("button", { name: "Save" }));

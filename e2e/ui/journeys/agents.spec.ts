@@ -64,7 +64,14 @@ journey("read what agents are told, then how to connect one", {
     {
       name: "open Guardrails › Pipeline",
       do: async (page) => { await page.goto("/#/guardrails/pipeline"); },
-      see: async (page) => { await namesFit(page); },
+      see: async (page) => {
+        const size = page.viewportSize()!;
+        for (const width of size.width > 860 ? [1280, 1440, 1920] : [size.width]) { // pages stop growing at 1280px wide, so a wider window doesn't widen a name
+          await page.setViewportSize({ ...size, width });
+          await namesFit(page);
+        }
+        await page.setViewportSize(size);
+      },
     },
     {
       name: "open Guardrails › What agents are told",

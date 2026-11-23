@@ -85,10 +85,11 @@ for (const [width, height] of WINDOWS) {
         expect(at.x + at.width, "the ⋯'s right edge").toBeLessThanOrEqual(width);
       });
     }
-    // The fleet names every app in its list, in Needs you and in Recent activity; the audit in its rows and its App filter.
-    for (const [at, role] of [["fleet", "admin"], ["fleet", "responder"], ["fleet", "member"], ["audit", "admin"]] as const) {
-      test(`an app's name of 48 unbroken letters leaves the ${at} its width, as ${role}`, async ({ page }) => {
-        await answered(page, role);
+    // The fleet names every app in its list, in Needs you and in Recent activity, and on a host with sign-in off the first
+    // blocked one in its Start here; the audit in its rows and its App filter.
+    for (const [at, role, banner] of [["fleet", "admin", "none"], ["fleet", "admin", "exposed"], ["fleet", "responder", "none"], ["fleet", "member", "none"], ["audit", "admin", "none"]] as const) {
+      test(`an app's name of 48 unbroken letters leaves the ${at} its width, as ${role}${banner === "none" ? "" : ", told where to start"}`, async ({ page }) => {
+        await answered(page, role, banner);
         await page.goto(`/#/${at}`);
         await expect(page.getByText(unbroken(48)).first()).toBeAttached();
         if (at === "fleet") {
@@ -96,6 +97,7 @@ for (const [width, height] of WINDOWS) {
           const needs = page.getByRole("region", { name: role === "admin" ? "Needs attention" : "Needs you" });
           await needs.getByRole("button", { name: /^Show \d+ more/ }).click();
           await expect(needs.getByText(unbroken(48)).first()).toBeVisible();
+          await expect(page.getByRole("link", { name: `Open ${unbroken(48)} →` })).toHaveCount(banner === "none" ? 0 : 1);
         }
         expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(width);
       });

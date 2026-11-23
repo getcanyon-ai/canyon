@@ -11,13 +11,12 @@ const held = golden("app-page/claims-portal-held-status.json");
 const prefs = golden("guardrails/preferences.json");
 const webhook = golden("release/meridian.json");
 
-fleet.banner = "none";
 fleet.viewer = { display: "Dana Whitfield", role: "admin", github_logins: [], github_link: false };
 const row = (id: string) => structuredClone(fleet.apps.find((one: { id: string }) => one.id === id));
-// An app whose name is one unbroken word, in preview and in production, which needs all a golden app does.
+// An app whose name is one unbroken word, in preview and in production, which needs all the golden apps do and is blocked.
 const NEEDS = fleet.apps.flatMap((one: { needs: unknown[] }) => one.needs);
 export const unbroken = (length: number) => "m".repeat(length);
-for (const length of [30, 48]) fleet.apps.unshift({ ...row("premium-ledger"), id: unbroken(length), name: unbroken(length), envs: { ...row("claims-portal").envs, ...row("premium-ledger").envs }, needs: NEEDS });
+for (const length of [30, 48]) fleet.apps.unshift({ ...row("premium-ledger"), id: unbroken(length), name: unbroken(length), envs: { ...row("claims-portal").envs, ...row("premium-ledger").envs }, needs: NEEDS, gate_state: row("claims-portal").gate_state, latest: row("claims-portal").latest });
 // Its changes, among the golden's: the fleet's Recent activity and the audit trail tell them.
 const audit = structuredClone(app.audit[0]);
 for (const one of [...audit.events]) audit.events.push({ ...one, id: `${one.id}_long`, project: unbroken(48), ...(one.run === undefined ? {} : { run: `${one.run}_long` }) });
@@ -34,7 +33,7 @@ function blocked(rest: string) {
   return { status: 404, body: { error: "not_found", message: "not found" } };
 }
 
-function answer(method: string, path: string, role: string): { status: number; body: unknown } {
+function answer(method: string, path: string, role: string, banner: string): { status: number; body: unknown } {
   const ok = (body: unknown) => ({ status: 200, body });
   if (path === "/auth/config") return ok({ canyon: true, auth: "oidc", org: "Meridian Insurance", device: true });
   const at = path.replace("/api/v1", "");
@@ -62,7 +61,7 @@ function answer(method: string, path: string, role: string): { status: number; b
   switch (at) {
     case "/audit": return ok(audit);
     case "/preferences": return ok(prefs.preferences_admin);
-    case "/fleet": return ok({ ...fleet, viewer: { ...fleet.viewer, role } });
+    case "/fleet": return ok({ ...fleet, banner, viewer: { ...fleet.viewer, role } });
     case "/projects": return ok({ projects: fleet.apps });
     case "/policies": return ok(golden("policies/meridian.json").policies);
     case "/front-door": return ok(golden("front-door/meridian.json").get);
@@ -80,9 +79,9 @@ function answer(method: string, path: string, role: string): { status: number; b
   return { status: 404, body: { error: "not_found", message: "not found" } };
 }
 
-export async function answered(page: Page, role = "admin") {
+export async function answered(page: Page, role = "admin", banner = "none") {
   await page.route((url) => /^\/(api|auth)\//.test(url.pathname), async (route) => {
-    const { status: code, body } = answer(route.request().method(), new URL(route.request().url()).pathname, role);
+    const { status: code, body } = answer(route.request().method(), new URL(route.request().url()).pathname, role, banner);
     await route.fulfill({ status: code, contentType: "application/json", body: JSON.stringify(body) });
   });
 }

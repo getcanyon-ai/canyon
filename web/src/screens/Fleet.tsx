@@ -126,8 +126,8 @@ function DemoStrip({ page }: { page: FleetPage }) {
   return (
     <div className="flex flex-wrap items-center gap-2.5 rounded-[9px] bg-critical-dim px-3.5 py-2.5 text-base">
       <span className="text-critical"><Icon name="blocked" /></span>
-      <span className="min-w-0 flex-1 basis-[240px]"><b className="font-semibold">Start here:</b> {blocked.name}{shown} is blocked.</span>
-      <a className="ml-auto font-medium whitespace-nowrap text-link no-underline hover:underline" href={"#/apps/" + blocked.id}>Open {blocked.name} →</a>
+      <span className="min-w-0 flex-1 basis-[240px] wrap-anywhere"><b className="font-semibold">Start here:</b> {blocked.name}{shown} is blocked.</span>
+      <a className="ml-auto min-w-0 font-medium wrap-anywhere text-link no-underline hover:underline" href={"#/apps/" + blocked.id}>Open {blocked.name} →</a>
       <button type="button" aria-label="Dismiss" className="grid size-7 flex-none place-items-center rounded-[7px] text-text-dim hover:bg-surface" onClick={dismiss}><Icon name="close" size={14} /></button>
     </div>
   );

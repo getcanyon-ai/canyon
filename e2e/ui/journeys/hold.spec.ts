@@ -46,7 +46,7 @@ journey("stop production, read the banner, lift the hold", {
       },
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(page.getByRole("main").getByText("Held", { exact: true })).toBeVisible();
+        await expect(page.getByRole("main").getByText("Held", { exact: true }).first()).toBeVisible(); // the row's, and on a desktop its pane's too
         await expect(rows(page).getByRole("button", { name: `Lift the hold on ${app}` })).toBeVisible();
       },
       changes: {

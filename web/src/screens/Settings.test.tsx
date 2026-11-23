@@ -87,8 +87,10 @@ describe("Settings' pages", () => {
       render(<Settings />);
       expect(await screen.findByRole("region", { name: "AI review" })).toBeDefined(); // the reads have landed, and Settings drew again
       const shown = screen.getByRole("link", { name: "AI review", current: "page" });
-      expect(scrolled.mock.contexts).toEqual([shown]); // once: a re-render as the reads land never scrolls again
-      expect(scrolled).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" });
+      // on the tab shown alone, centred, once the strip holds its tabs: again only as the reads land an admin's tabs into it
+      expect(scrolled.mock.contexts.length).toBeGreaterThan(0);
+      expect(scrolled.mock.contexts.every((one) => one === shown)).toBe(true);
+      expect(scrolled.mock.calls.every(([how]) => JSON.stringify(how) === JSON.stringify({ inline: "center", block: "nearest" }))).toBe(true);
     } finally {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     }

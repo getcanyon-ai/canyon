@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createDesignSystem, getDesignSystems, getEgress, getPreferences, getSkillManifest, putPreferences, said, type DesignSystemRow, type Manifest, type Preferences, type Stack } from "../api";
 import { Button } from "../ui/Button";
+import { shownIntoView } from "../ui/media";
 import { Rail } from "../ui/Rail";
 import { isAdmin } from "./OrgSettings";
 import { Pipeline } from "./Pipeline";
@@ -65,9 +66,6 @@ function Register({ done, close }: { done: (row: DesignSystemRow) => void; close
 // the scanners, and what coding agents are told. Each is #/guardrails/<page>; the bare route is the
 // first, Pipeline, and a link to a rule's row (?rule=) is the tab that rule's row is on.
 const PAGES = [["pipeline", "Pipeline"], ["policies", "Policies"], ["scanners", "Scanners"], ["playbooks", "Playbooks"], ["agents", "What agents are told"]] as const;
-// intoView brings the tab shown into view: a phone's tabs scroll sideways (Settings' own, #100's review). One function,
-// so React calls it as a tab becomes the one shown, never again on a re-render.
-const intoView = (shown: HTMLElement | null) => shown?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
 const pageOf = (hash: string) => {
   const rule = new URLSearchParams(hashQuery()).get("rule");
   if (rule !== null) return SCANNER_RULES.includes(rule) ? "scanners" : "policies";
@@ -136,6 +134,8 @@ export function Guardrails() {
   // StrictMode runs setup, cleanup, setup on one instance in dev, and the ref outlives the cleanup:
   // the setup that follows has to turn it back on or every read lands on a screen that is "gone".
   useEffect(() => { live.current = true; void load(); return () => { live.current = false; }; }, []);
+  // Once the strip holds its tabs, and again for each tab shown: never on a re-render, which would yank it back.
+  useLayoutEffect(() => { shownIntoView("Guardrails"); }, [page, record !== null]);
   // The chat opened by its button takes the typing at once: the button says where it goes.
   useEffect(() => { if (chatting) box.current?.focus(); }, [chatting]);
 
@@ -198,9 +198,9 @@ export function Guardrails() {
       <main className="mx-auto max-w-[1280px] min-w-0 flex-1 px-8 pt-3.5 pb-24 max-[860px]:px-4">
         <h1 className="text-title font-semibold tracking-tight">Guardrails</h1>
         <p className={SUB}>What every app must pass before it reaches production, and what coding agents are told.</p>
-        {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border max-[520px]:gap-4">
+        {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border pr-4 max-[520px]:gap-4">
           {PAGES.map(([key, label]) => (
-            <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined} ref={page === key ? intoView : undefined}
+            <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined}
               className={`py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-dim hover:text-text"}`}>
               {label}
             </a>

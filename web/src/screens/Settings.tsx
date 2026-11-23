@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { allowDestination, ApiError, getAuthConfig, getEgress, getFrontDoor, getPreferences, getProject, getProjectEgress, getScannerData, listProjectIds, putEgress, putFrontDoor, recreateNetwork, reduced, said, type AddressForm, type EgressDestination, type EgressCaps, type EgressMode, type EgressSetting, type FrontDoor, type FrontDoorEdit, type FrontDoorRead, type Preferences, type ScanDB } from "../api";
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, age } from "../ui/Age";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
+import { shownIntoView } from "../ui/media";
 import { Rail } from "../ui/Rail";
 import { GitHubSettings } from "./GitHub";
 import { IntegrationsSettings } from "./Integrations";
@@ -82,9 +83,6 @@ const PAGES = [
 type Page = (typeof PAGES)[number][0];
 const pageOf = (hash: string): Page => PAGES.find(([key]) => hash.startsWith(`#/settings/${key}`))?.[0] ?? "organisation";
 
-// intoView brings the tab shown into view: a phone's tabs scroll sideways. One function, so React calls
-// it as a tab becomes the one shown, never again on a re-render, which would yank the page back up.
-const intoView = (shown: HTMLElement | null) => shown?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
 
 // toFrontDoor takes the checklist's step to the front door below it: scrolled to and focused, never a link, since
 // Settings routes on the hash and #front-door is no page of it.
@@ -115,16 +113,18 @@ export function Settings() {
   useEffect(() => { live.current = true; void load(); return () => { live.current = false; }; }, []);
   const page = pageOf(window.location.hash);
   const admin = record !== null && isAdmin(record);
+  // The tab shown, centred in its strip once the strip holds every tab it will (an admin's are more), and again for each
+  // tab shown: never on another re-render, which would yank the page back up (#100's review).
+  useLayoutEffect(() => { shownIntoView("Settings"); }, [page, admin]);
 
   return (
     <div className="flex min-h-screen items-start max-[860px]:block">
       <Rail current="settings" />
       <main className="mx-auto grid max-w-[1280px] min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 px-8 pt-7 pb-24 max-[860px]:px-4 max-[860px]:pt-4">
         <h1 className="text-title font-semibold tracking-tight">Settings</h1>
-        <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border max-[520px]:gap-4">
+        <nav aria-label="Settings" className="flex gap-5 overflow-x-auto border-b border-border pr-4 max-[520px]:gap-4">
           {PAGES.filter(([key]) => (key !== "github" && key !== "integrations" && key !== "telemetry" && key !== "licence") || admin).map(([key, label]) => (
             <a key={key} href={`#/settings/${key}`} aria-current={page === key ? "page" : undefined} aria-describedby={key === "outbound" ? "settings-outbound-beta" : undefined}
-              ref={page === key ? intoView : undefined}
               className={`flex items-center gap-1.5 py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-faint hover:text-text"}`}>
               {label}
               {key === "outbound" && <>{" "}<Chip tone="beta" why="settings-outbound-beta">{S.beta}</Chip></>}

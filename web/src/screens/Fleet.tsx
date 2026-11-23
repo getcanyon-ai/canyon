@@ -29,7 +29,7 @@ import { poll } from "../ui/poll";
 // Each column answers one question (the redesign): which version, did it pass review, what runs in
 // preview, what runs in production, who owns it, when it last moved. Access only where people sign
 // in, the one place an app can be shared.
-const NARROW_HIDDEN = "max-[1360px]:hidden"; // Updated gives way first: at 1280 the one-line Access column needs its width (the UX review)
+const NARROW_HIDDEN = "max-[1360px]:hidden"; // Updated gives way first: at 1280 the one-line Access column needs its width (the UX review); the pane says it
 const COLUMNS = [
   { key: "app", label: "App" },
   { key: "version", label: "Version" },
@@ -43,7 +43,7 @@ const ACCESS_COLUMN = { key: "access", label: "Access" };
 // With the side pane open beside it, the table folds away what the pane says for the selected row and
 // keeps what is read down the list (the approved fleet redesign), so it fits beside the pane unscrolled.
 const PEEKED = new Set(["version", "owner", "updated", "access"]); // Updated too: at 1280 the last column was cut off
-// The wordy cells wrap, and under 1100px Updated gives way, so the table fits a laptop's width with
+// The wordy cells wrap, and under 1360px Updated gives way, so the table fits a laptop's width with
 // Owner and its Claim in view.
 const WRAPS = new Set(["app", "preview", "prod"]); // Access is one line, and the environments a line or two in the short words (the UX review: rows swelled to six)
 // The row's own way into its panel for the keyboard; a click anywhere on the row does the same.

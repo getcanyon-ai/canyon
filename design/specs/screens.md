@@ -487,7 +487,8 @@ the drafts below:
   app's newest run says it — a deploy is never a pass, and a block is never hidden behind where a
   version runs); Preview and Production the version each runs, linking to it, or `—`;
   Owner the person, or `No owner` with `Assign` (admins, sign-in hosts) and `Claim` where the row says
-  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). A row click
+  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). Updated gives
+  way below 1360px and while the details panel is open, which says it (amended 2026-11-23). A row click
   opens the details panel; so does the chevron at the row's end, for the keyboard.
 - `Recent activity` under the table, `Open audit` beside its title; empty, it reads `Nothing
   recorded yet. Deploys, reviews and promotions appear here.` A member's is what the audit read

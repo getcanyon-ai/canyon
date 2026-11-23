@@ -81,6 +81,18 @@ describe("the fleet's side panel", () => {
     expect(inPanel("quote-engine").getByRole("link", { name: "Open app →" }).getAttribute("href")).toBe("#/apps/quote-engine");
   });
 
+  // The table drops Updated below 1360px and while the pane is open, so the pane says it, in the table's words.
+  it("says when the app last moved, as the table's Updated column does", async () => {
+    server(() => golden);
+    render(<Fleet org="Meridian Insurance" />);
+    const row = (await screen.findByRole("link", { name: "premium-ledger" })).closest("tr")!;
+    const heads = screen.getAllByRole("columnheader").map((one) => one.textContent);
+    const updated = row.cells[heads.indexOf("Updated")]!.textContent!;
+    expect(updated).toMatch(/ ago$/);
+    openPanel("premium-ledger");
+    expect(inPanel("premium-ledger").getByText(`Updated ${updated}`)).toBeDefined();
+  });
+
   // A failed build's band offers Copy for your agent on the app page: the pane's step opens it there.
   it("sends a failed build to the app page to see what broke", async () => {
     server(() => golden, { body: { run: { ...run, id: portal.last_run, package: portal.latest.package, state: "failed", failure_reason: "build", blocking: 0 } } });

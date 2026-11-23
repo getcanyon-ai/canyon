@@ -200,7 +200,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         : finding.tool !== undefined && <p className="mt-1.5 text-base text-text-dim">{`Found by ${plainName(finding.tool)}`}</p>}
       {!unread && (
         <>
-          <p className="mt-1.5 font-mono text-sm text-text-faint">{artifactLocation.uri}:{region.startLine}</p>
+          <p className="mt-1.5 font-mono text-sm wrap-anywhere text-text-faint">{artifactLocation.uri}:{region.startLine}</p>
           <pre className="mt-1.5 overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm">
             {(pointed ? [line, `${" ".repeat(caret)}^`, ...rest] : [line, ...rest]).join("\n")}
           </pre>

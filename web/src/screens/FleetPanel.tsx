@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getProjectEgress, getRun, getStatus, listAudit, version, waiting, type AuditEvent, type Env, type FleetRow, type Reduced, type RunRead, type Status, type Viewer } from "../api";
-import { S } from "../strings";
+import { FLEET, S } from "../strings";
 import { Actor } from "../ui/Actor";
+import { ago } from "../ui/Age";
 import { AppName } from "../ui/AppName";
 import { EnvCard } from "../ui/EnvCards";
 import { Headline, headline, leads, type Act } from "../ui/Headline";
@@ -132,6 +133,7 @@ export function FleetPanel({ app, display, org, close, viewer, signedIn, lift, a
             : app.owners.map((owner, at) => (
               <span key={owner.subject}>{at > 0 && ", "}<a className="text-link no-underline hover:underline" href={ownerHref(owner.subject)}><Actor actor={owner} /></a></span>
             ))}
+          {" · "}<span className="whitespace-nowrap">{FLEET.updated.replace("<age>", ago(app.latest.since))}</span>{/* the table's Updated, which it drops beside the pane and below 1360px */}
         </p>
         {app.owners.length === 0 && !needs.some((need) => need.kind === "unowned") && <Claim app={app} display={display} />}{/* else its need's line carries it */}
         {/* Stop production, Hold production or Lift the hold, where the reader may: the row's peek holds them, never every row */}

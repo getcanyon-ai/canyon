@@ -810,6 +810,7 @@ export const FLEET = {
   sharedEveryone: "shared with everyone",
   sharedWith: "shared with <n>",
   sharedWithAdmin: "Shared with <n>",
+  updated: "Updated <age>",
   readOnly: "Read-only",
   noAccess: "No access",
   askToJoin: "Ask to join",

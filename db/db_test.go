@@ -423,3 +423,31 @@ func TestAnExecutorRowFromBeforeItsVersionReadsCanyonV1(t *testing.T) {
 		t.Fatalf("after 0090: version %q, stopped %v (%v); want canyon-v1, running", version, stopped, err)
 	}
 }
+
+// No migration turns telemetry off (the owner, 2026-11-12: on by default): the row v0.9.0 left, on, stays on with its
+// instance id and its last send, one an admin turned off stays off, and a new install's row is on.
+func TestNoMigrationTurnsTelemetryOff(t *testing.T) {
+	for name, want := range map[string]string{"NULL": "on", "'admin'": "admin"} {
+		p, ctx := pgtest.Schema(t)
+		if _, err := migrate(ctx, p, upTo(t, "migrations/0139")); err != nil { // v0.9.0's schema
+			t.Fatal(err)
+		}
+		const id = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+		if _, err := p.Exec(ctx, `INSERT INTO telemetry (instance_id, off_because, claimed_at, sent_at, last_report) VALUES ('`+id+`', `+name+`, now() - interval '1 day', now() - interval '1 day', '{}')`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Migrate(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		if err := p.QueryRow(ctx, `SELECT coalesce(off_because, 'on') || ' ' || instance_id || ' ' || (sent_at IS NOT NULL) FROM telemetry`).Scan(&got); err != nil || got != want+" "+id+" true" {
+			t.Errorf("a v0.9.0 row with off_because %s, migrated: %q %v", name, got, err)
+		}
+		if _, err := p.Exec(ctx, "DELETE FROM telemetry"); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.QueryRow(ctx, `INSERT INTO telemetry DEFAULT VALUES RETURNING coalesce(off_because, 'on')`).Scan(&got); err != nil || got != "on" {
+			t.Errorf("a new install's row: %q %v", got, err)
+		}
+	}
+}

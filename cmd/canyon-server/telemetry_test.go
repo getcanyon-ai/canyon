@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +17,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -137,8 +141,8 @@ func TestTelemetryConfigOf(t *testing.T) {
 		{map[string]string{"CI": "1"}, true},
 	} {
 		got, err := telemetryConfigOf(func(k string) string { return c.env[k] })
-		if err != nil || got.envOff != c.off || got.url != telemetryEndpoint {
-			t.Errorf("%v: off %v, url %q, %v; want off %v", c.env, got.envOff, got.url, err, c.off)
+		if err != nil || got.envOff != c.off || got.url != telemetryEndpoint || got.every != telemetryEvery {
+			t.Errorf("%v: off %v, url %q, every %v, %v; want off %v", c.env, got.envOff, got.url, got.every, err, c.off)
 		}
 	}
 	if c, err := telemetryConfigOf(func(k string) string { return map[string]string{"CANYON_INSTALL_MODE": "helm_one_node"}[k] }); err != nil || c.mode != "helm_one_node" {
@@ -147,6 +151,175 @@ func TestTelemetryConfigOf(t *testing.T) {
 	if _, err := telemetryConfigOf(func(k string) string { return map[string]string{"CANYON_INSTALL_MODE": "acme-prod-cluster"}[k] }); err == nil {
 		t.Error("an install mode the schema does not name booted")
 	}
+}
+
+// telemetryOffVars are the variables that turn telemetry off on a server.
+var telemetryOffVars = []string{"CANYON_TELEMETRY", "DO_NOT_TRACK", "CI"}
+
+// shippedEnv decodes a YAML file into v.
+func shippedEnv(t *testing.T, file string, v any) {
+	t.Helper()
+	raw, err := os.ReadFile(file) //nolint:gosec // test: the repository's own files
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(raw, v); err != nil {
+		t.Fatalf("%s: %v", file, err)
+	}
+}
+
+// composeServerEnv is the server's environment in a compose file, NAME=value each.
+func composeServerEnv(t *testing.T, file string) map[string]string {
+	t.Helper()
+	var compose struct {
+		Services map[string]struct {
+			Environment []string `yaml:"environment"`
+			EnvFile     any      `yaml:"env_file"`
+		} `yaml:"services"`
+	}
+	shippedEnv(t, file, &compose)
+	server := compose.Services["server"]
+	if len(server.Environment) == 0 || server.EnvFile != nil {
+		t.Fatalf("%s: the server has %d variables and env_file %v; want its environment in the file", file, len(server.Environment), server.EnvFile)
+	}
+	env := map[string]string{}
+	for _, kv := range server.Environment {
+		name, value, _ := strings.Cut(kv, "=")
+		env[name] = value
+	}
+	return env
+}
+
+// manifestServerEnv is the server container's own environment in deploy/k8s/server.yaml.
+func manifestServerEnv(t *testing.T) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile("../../deploy/k8s/server.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	for docs := yaml.NewDecoder(bytes.NewReader(raw)); ; {
+		var d struct {
+			Kind string `yaml:"kind"`
+			Spec struct {
+				Template struct {
+					Spec struct {
+						Containers []struct {
+							Env []struct{ Name, Value string } `yaml:"env"`
+						} `yaml:"containers"`
+					} `yaml:"spec"`
+				} `yaml:"template"`
+			} `yaml:"spec"`
+		}
+		if err := docs.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil && d.Kind == "Deployment" {
+			t.Fatal(err)
+		}
+		if d.Kind == "Deployment" {
+			for _, c := range d.Spec.Template.Spec.Containers {
+				for _, e := range c.Env {
+					env[e.Name] = e.Value
+				}
+			}
+		}
+	}
+	if len(env) == 0 {
+		t.Fatal("deploy/k8s/server.yaml: no server environment found")
+	}
+	return env
+}
+
+// Telemetry is on by default on every install Canyon ships (the owner's decision, 2026-11-12): the environment each
+// gives its server sets none of the variables that turn it off, reads as a sender that runs, and says how it was
+// installed. The chart's own render is deploy/helm/check-rendered.py's.
+func TestEveryShippedInstallSendsByDefault(t *testing.T) {
+	demo, team := composeServerEnv(t, "../../docker-compose.yml"), composeServerEnv(t, "../../deploy/docker/team.yml")
+	merged := maps.Clone(demo)
+	maps.Copy(merged, team) // as compose merges the two, each entry by its name
+	for install, s := range map[string]struct {
+		env  map[string]string
+		mode string
+	}{
+		"docker-compose.yml":     {demo, "laptop"},
+		"deploy/docker/team.yml": {merged, "one_server"},
+		"deploy/k8s/server.yaml": {manifestServerEnv(t), ""}, // the operator's Secret says it: the manifest's own env would win over it
+	} {
+		for _, name := range telemetryOffVars {
+			if v, set := s.env[name]; set {
+				t.Errorf("%s sets %s=%q on the server: telemetry is on by default", install, name, v)
+			}
+		}
+		c, err := telemetryConfigOf(func(k string) string { return s.env[k] })
+		if err != nil || c.envOff || c.url != telemetryEndpoint || c.every != telemetryEvery {
+			t.Errorf("%s: telemetry off %v, url %q, every %v, %v", install, c.envOff, c.url, c.every, err)
+		}
+		if c.mode != s.mode {
+			t.Errorf("%s says it was installed by %q, want %q", install, c.mode, s.mode)
+		}
+	}
+	var values struct {
+		Telemetry struct {
+			Enabled any `yaml:"enabled"`
+		} `yaml:"telemetry"`
+	}
+	if shippedEnv(t, "../../deploy/helm/canyon/values.yaml", &values); values.Telemetry.Enabled != true {
+		t.Errorf("the chart's telemetry.enabled is %v, want true", values.Telemetry.Enabled)
+	}
+	raw, err := os.ReadFile("../../Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(string(raw)) {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, word := range strings.FieldsFunc(line, func(r rune) bool { return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+			if slices.Contains(telemetryOffVars, word) {
+				t.Errorf("the image's Dockerfile names %s: %s", word, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
+// A server whose environment sets nothing sends its first report as it starts: serve runs the sender, at the interval
+// telemetryConfigOf gives it.
+func TestAServerSendsItsFirstReportAsItStarts(t *testing.T) {
+	got := &collector{}
+	srv := httptest.NewServer(got)
+	defer srv.Close()
+	c, err := telemetryConfigOf(func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.url = srv.URL
+	testTelemetry = c
+	t.Cleanup(func() { testTelemetry = telemetryConfig{} })
+	pool, _ := migrated(t)
+	start(t, pool, time.Hour)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		got.mu.Lock()
+		posts, body := got.posts, got.body
+		got.mu.Unlock()
+		if posts > 0 {
+			if err := contractSchema(t, "telemetry.schema.json").Validate(anyOf(t, body)); err != nil {
+				t.Errorf("the first report is not the schema's: %v\n%s", err, body)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("10 seconds after it started, the server has sent no report")
+		}
+	}
+}
+
+// anyOf is a JSON document, decoded.
+func anyOf(t *testing.T, raw []byte) (v any) {
+	t.Helper()
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
 
 // A built-in rule is counted by its own id, a rule that extends it by the built-in's, and every other rule, a custom

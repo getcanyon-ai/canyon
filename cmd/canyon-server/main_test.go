@@ -64,6 +64,7 @@ var (
 	testNow       func() time.Time                        // the test server's limiters' clock, set before start; nil is time.Now
 	testShipped   bool                                    // the test server boots the fixture as it ships, the default tools on
 	testDiscovery http.RoundTripper                       // the test server's discovery fetches, set by withDiscovery before start; nil is idpAt(nil)
+	testTelemetry telemetryConfig                         // the test server's telemetry, set before start; the zero value runs no sender
 )
 
 // withDiscovery has the next test server's discovery fetches answered by rt until the test ends.
@@ -263,7 +264,7 @@ func start(t *testing.T, pool *pgxpool.Pool, probeEvery time.Duration) (string, 
 		discovery = idpAt(nil)
 	}
 	m, mode, lists, idp, kube, public, now, behind, hooks := testModel, testAuth, testOIDC, testProvider, testKube, testPublic, testNow, testBehind, testEE(keys) // read here, not in the goroutine: this server's model and mode are the ones set when it was started
-	a := &app{pool: pool, repos: repos, snap: snap, boot: testPolicy(), vault: keys, durable: durable, pipe: pipe, model: m, reviews: m != nil || testReviews, translator: testTranslate, modelID: "test-model", github: testGitHubAPI, ghWeb: testGitHubAPI, public: public, auth: mode, oidc: lists, idp: idp, kube: kube, behind: behind, now: now, ee: hooks, discovery: discovery, ready: func(l *log.Logger) *readiness { return newReadiness(ctx, pool, durable, probeEvery, l, nil) }}
+	a := &app{pool: pool, repos: repos, snap: snap, boot: testPolicy(), vault: keys, telemetry: testTelemetry, durable: durable, pipe: pipe, model: m, reviews: m != nil || testReviews, translator: testTranslate, modelID: "test-model", github: testGitHubAPI, ghWeb: testGitHubAPI, public: public, auth: mode, oidc: lists, idp: idp, kube: kube, behind: behind, now: now, ee: hooks, discovery: discovery, ready: func(l *log.Logger) *readiness { return newReadiness(ctx, pool, durable, probeEvery, l, nil) }}
 	appByBase.Store(ln.Addr().String(), a)
 	t.Cleanup(func() { appByBase.Delete(ln.Addr().String()) })
 	pipe.Access = nil // as main wires it: a Kubernetes host's /run carries the access file and the front door

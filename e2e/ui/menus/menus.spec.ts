@@ -85,11 +85,18 @@ for (const [width, height] of WINDOWS) {
         expect(at.x + at.width, "the ⋯'s right edge").toBeLessThanOrEqual(width);
       });
     }
-    // the fleet's list and the audit's App filter name every app
-    for (const at of ["fleet", "audit"]) {
-      test(`an app's name of 48 unbroken letters leaves the ${at} its width`, async ({ page }) => {
+    // The fleet names every app in its list, in Needs you and in Recent activity; the audit in its rows and its App filter.
+    for (const [at, role] of [["fleet", "admin"], ["fleet", "responder"], ["fleet", "member"], ["audit", "admin"]] as const) {
+      test(`an app's name of 48 unbroken letters leaves the ${at} its width, as ${role}`, async ({ page }) => {
+        await answered(page, role);
         await page.goto(`/#/${at}`);
         await expect(page.getByText(unbroken(48)).first()).toBeAttached();
+        if (at === "fleet") {
+          await expect(page.getByRole("region", { name: "Recent activity" }).getByText(unbroken(48)).first()).toBeVisible();
+          const needs = page.getByRole("region", { name: role === "admin" ? "Needs attention" : "Needs you" });
+          await needs.getByRole("button", { name: /^Show \d+ more/ }).click();
+          await expect(needs.getByText(unbroken(48)).first()).toBeVisible();
+        }
         expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(width);
       });
     }

@@ -111,13 +111,15 @@ describe("a held production on the app page", () => {
       "GET /api/v1/gate-runs/gr_8f2a": { run },
     });
     render(<App id="claims-portal" auth="oidc" />);
-    expect(await screen.findByText(S.responderAccess)).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "Production is held" })).toBeDefined();
     const preview = within(screen.getByRole("region", { name: "Preview" }));
     expect(preview.queryByText("Nothing running")).toBeNull();
     expect(preview.queryByText(/Nothing is in preview/)).toBeNull();
     expect(preview.getByText("Not shown to you")).toBeDefined();
     expect(screen.queryByRole("heading", { name: "Not running" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Not running in production" })).toBeDefined();
+    // held, the hold is the one headline: never a second one saying production isn't running (#102)
+    expect(screen.queryByRole("heading", { name: "Not running in production" })).toBeNull();
+    expect(screen.queryByText(S.responderAccess)).toBeNull();
     const prod = within(screen.getByRole("region", { name: "Production" }));
     expect(prod.getByText(S.heldSince.replace("<date>", held.hold!.at.slice(0, 10)))).toBeDefined();
     expect(prod.queryByText(SENTENCE)).toBeNull();
@@ -134,7 +136,6 @@ describe("a held production on the app page", () => {
     });
     render(<App id="claims-portal" auth="oidc" />);
     expect(await screen.findAllByText(SENTENCE)).toHaveLength(1); // the banner alone: production's card says since when
-    expect(screen.getByText(S.responderAccess)).toBeDefined();
     expect(screen.queryByRole("button", { name: /^Promote/ })).toBeNull();
     expect(window.location.hash).toBe("#/apps/claims-portal");
   });
@@ -148,8 +149,8 @@ describe("a held production on the app page", () => {
     fireEvent.click(band().getByRole("button", { name: "Lift the hold on claims-portal" }));
     const ask = within(screen.getByRole("dialog", { name: "Lift the hold on claims-portal?" }));
     expect(ask.getByText(SENTENCE)).toBeDefined();
-    expect(ask.getByRole("button", { name: "Start v1.3 again" })).toBeDefined();
-    fireEvent.click(ask.getByRole("button", { name: "Leave production stopped" }));
+    expect(ask.getByRole("button", { name: "Lift the hold and start v1.3" })).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Lift the hold, keep it stopped" }));
     await waitFor(() => expect(sent()).toEqual([`DELETE /api/v1/projects/claims-portal/envs/prod/hold?held_at=${encodeURIComponent(held.hold!.at)}`]));
   });
 
@@ -170,12 +171,12 @@ describe("a held production on the app page", () => {
       render(as("admin"));
       fireEvent.click(await screen.findByRole("button", { name: "Lift the hold on claims-portal" }));
       const ask = within(screen.getByRole("dialog", { name: "Lift the hold on claims-portal?" }));
-      expect(ask.getByRole("button", { name: "Leave production stopped" })).toBeDefined();
+      expect(ask.getByRole("button", { name: "Lift the hold, keep it stopped" })).toBeDefined();
       const { hold: _hold, ...lifted } = held;
       routes["GET /api/v1/projects/claims-portal/status"] = { ...lifted, receipt: { org: "Meridian", blocked_by: [], rules: [] } };
       await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
       await waitFor(() => expect(ask.getByRole("alert").textContent).toBe(S.holdChanged));
-      expect(ask.queryByRole("button", { name: "Leave production stopped" })).toBeNull();
+      expect(ask.queryByRole("button", { name: "Lift the hold, keep it stopped" })).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -221,4 +222,57 @@ describe("a held production on the app page", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/no-access/claims-portal"));
     expect(screen.queryByText(SENTENCE)).toBeNull();
   });
+
+  // Stopping production is a responder's or an admin's, from the app page as from the fleet (#102): the headline's step,
+  // and the ⋯ menu's, through the same question, over the page; a responder is never offered to ask for access.
+  describe("stopping production from the app page", () => {
+    const { hold: _hold, ...running } = held;
+    const live = { ...running, envs: { ...held.envs, prod: { ...held.envs.preview!, url: "https://claims-portal.prod.meridian.example" } } };
+    const HOLD = "POST /api/v1/projects/claims-portal/envs/prod/hold";
+
+    it("a responder with no grant stops production from the headline, and isn't offered to ask for access", async () => {
+      const sent = server({
+        "GET /api/v1/projects/claims-portal": { project: { ...reducedRow("none"), envs: { prod: live.envs.prod } } },
+        "GET /api/v1/preferences": { viewer: { email: "rhea@meridian.example", role: "responder" } },
+        "GET /api/v1/projects/claims-portal/status": live,
+        "GET /api/v1/gate-runs/gr_8f2a": { run },
+        [HOLD]: {},
+      });
+      render(as("responder"));
+      const stop = await screen.findByRole("button", { name: "Stop production of claims-portal" });
+      expect(band().getByRole("button", { name: "Stop production of claims-portal" })).toBe(stop); // the headline's step
+      expect(screen.getByRole("region", { name: "Where it stands" }).querySelector(".bg-ok")).not.toBeNull(); // running: the green dot (#102)
+      expect(band().queryByRole("button", { name: S.askForAccess })).toBeNull();
+      fireEvent.click(stop);
+      const ask = screen.getByRole("dialog", { name: "Stop and hold claims-portal in production?" });
+      expect(ask.getAttribute("aria-modal")).toBe("true");
+      expect(document.activeElement).toBe(within(ask).getByRole("textbox"));
+      expect(within(ask).queryByText(S.stopOrOffline)).toBeNull(); // a responder can't take production offline
+      fireEvent.change(within(ask).getByRole("textbox"), { target: { value: "INC-2240" } });
+      fireEvent.click(within(ask).getByRole("button", { name: "Stop production" }));
+      await waitFor(() => expect(sent()).toEqual([HOLD]));
+    });
+
+    it("an admin holds production that runs nothing from the ⋯ menu, and Escape closes the question", async () => {
+      server({ ...team("none"), "GET /api/v1/projects/claims-portal/status": running });
+      render(as("admin"));
+      fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Hold production…" }));
+      const ask = screen.getByRole("dialog", { name: "Hold claims-portal's production?" });
+      expect(within(ask).queryByText(S.stopOrOffline)).toBeNull(); // nothing runs to take offline
+      fireEvent.keyDown(ask, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "More actions" })); // back where it was opened from
+    });
+
+    it("an owner neither stops nor holds production", async () => {
+      server({ ...team("owner"), "GET /api/v1/projects/claims-portal/status": live });
+      render(as("member"));
+      await screen.findByRole("region", { name: "Where it stands" });
+      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+      expect(screen.queryByRole("menuitem", { name: /production…$/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Stop production|^Hold production/ })).toBeNull();
+    });
+  });
 });
+

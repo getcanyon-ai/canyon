@@ -135,10 +135,10 @@ async function consentPage(page: Page, who: string, request: string, scope: "rea
 const READ_SCOPE = "See your org's rules, and the apps you can see: their status, and logs where you're a contributor";
 const ACT_SCOPE = "Check, deploy and promote the apps you contribute to";
 
-// Settings › People & sign-in: the Connect an agent panel, the same for everyone, then Sessions with the person's own
+// Settings › Agents: the Connect an agent panel, the same for everyone, then Sessions with the person's own
 // agent listed and Disconnect, which ends it. Only an admin sees everyone's sessions, and the rail's Guardrails (#52).
 async function sessions(page: Page, who: string) {
-  await page.goto("/#/settings/people");
+  await page.goto("/#/settings/agents");
   const connect = page.getByRole("region", { name: "Connect an agent" });
   await expect(connect.getByRole("region", { name: "On your laptop" }).getByText(`canyon login ${env("E2E_CANYON_URL")}`, { exact: true })).toBeVisible();
   await expect(connect.getByRole("textbox", { name: "Canyon's address for agents", exact: true })).toHaveValue(`${env("E2E_CANYON_URL")}/mcp`);

@@ -23,7 +23,8 @@ journey("open an app's versions, runs, secrets, owners and audit", {
       name: "read the secrets section",
       do: async (page) => { await page.getByRole("region", { name: "Secrets" }).scrollIntoViewIfNeeded(); },
       see: async (page) => {
-        await expect(page.getByRole("region", { name: "Secrets" }).getByRole("cell", { name: "API_TOKEN", exact: true })).toBeVisible();
+        // by its name as a person reads it, a table's cell or, on a phone, a card's first line (#102)
+        await expect(page.getByRole("region", { name: "Secrets" }).getByText("API_TOKEN", { exact: true })).toBeVisible();
         await expect(page.locator("body")).not.toContainText(value); // names only, never a value
       },
     },

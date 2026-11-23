@@ -18,7 +18,11 @@ const theme = {
   muted: "var(--ds-color-text-dim)",
   surface: "var(--ds-color-surface)",
   border: "var(--ds-color-border-strong)",
-  font: "IBM Plex Sans", // the page's own face (tokens.css); the renderer would otherwise fetch Inter
+  // IBM Plex Sans, the dashboard's face (tokens.css), not the body's Space Grotesk: the renderer sizes each box for
+  // its text with Inter-like widths, which Plex fits and Space Grotesk, about a tenth wider, overflows. It would
+  // otherwise fetch Inter.
+  font: "IBM Plex Sans",
+  padding: 12, // the figure frames it; the renderer's own 40 shrinks a wide diagram's text further
   transparent: true,
 };
 
@@ -34,6 +38,10 @@ export const mermaid = {
     const title = /title="([^"]*)"/.exec(node.meta ?? "")?.[1];
     if (!title) throw new Error(`a mermaid block needs title="…", its caption and its text for screen readers:\n${node.value}`);
     const svg = noFontImports(renderMermaidSVG(node.value + classes, theme)).replace("<svg ", `<svg role="img" aria-label="${escape(title)}" `);
-    ctx.replaceNode(node, { type: "html", value: `<figure class="diagram">${svg}<figcaption>${escape(title)}</figcaption></figure>` });
+    // Drawn at its own size, never shrunk: a wider one scrolls sideways in its frame, which fades at an edge with more
+    // to see, and says so under it while it scrolls (src/scripts/diagram-scroll.js).
+    const frame = `<div class="diagram-frame" tabindex="0" role="region" aria-label="${escape(title)}, scrolls sideways">${svg}</div>`;
+    const hint = `<p class="diagram-hint" aria-hidden="true">Scroll sideways to see all of it.</p>`;
+    ctx.replaceNode(node, { type: "html", value: `<figure class="diagram">${frame}${hint}<figcaption>${escape(title)}</figcaption></figure>` });
   },
 };

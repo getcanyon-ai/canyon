@@ -17,6 +17,7 @@
   --ds-color-surface-2: #f4f2f8;
   --ds-color-border: #eae8f0;
   --ds-color-border-strong: #dad7e4;
+  --ds-color-scrim: #17151f66;
   --ds-color-text: #17151f;
   --ds-color-text-dim: #4a4756;
   --ds-color-text-faint: #686574;
@@ -88,6 +89,7 @@
   --ds-color-surface-2: #1c1a26;
   --ds-color-border: #26232f;
   --ds-color-border-strong: #383443;
+  --ds-color-scrim: #000000a6;
   --ds-color-text: #ecebf2;
   --ds-color-text-dim: #aeaabb;
   --ds-color-text-faint: #8e8a9c;

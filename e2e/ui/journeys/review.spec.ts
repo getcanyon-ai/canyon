@@ -24,7 +24,7 @@ journey("run the first review of an uploaded app", {
         // 180 s: when this journey runs first on a fresh stack, it is trivy's first cold run there, which downloads its
         // database while the other scanners wait their turn (seed.ts's review allows ten minutes for the same reason)
         await expect(page.getByRole("main")).toContainText("Blocked", { timeout: 180_000 });
-        await expect(page.getByRole("article", { name: /Stripe Access Token/ })).toBeVisible();
+        await expect(page.getByRole("article", { name: /^A secret is in / })).toBeVisible();
       },
       changes: {
         runs: { added: 1 },

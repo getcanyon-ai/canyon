@@ -1,17 +1,11 @@
+import { useState } from "react";
 import { GO_LIVE, type Manifest, type ManifestPolicy, type RuleId } from "../api";
-import { Pill } from "../ui/Pill";
+import { S } from "../strings";
+import { Button } from "../ui/Button";
 
-// Copied from Guardrails rather than extracted: CARD and FIELD sit beside them there and have no
-// business here, so the three are a coincidence of two files and not yet one thing.
-const H2 = "text-base font-semibold";
-const SUB = "mt-1 text-md text-text-dim";
-const LABEL = "mb-1 block text-md font-semibold text-text-dim";
-const MONO = "font-mono text-sm text-text-faint";
-const ROW = "flex flex-wrap items-baseline gap-x-2 py-1 text-base";
+// The lines shown before Show all.
+const SHOWN = 14;
 
-// What GET /skill/manifest answered, field by field, in the server's own key order. Nothing here is
-// derived, sorted or filtered, and nothing on it acts: an admin reads exactly what an agent is
-// handed, and every word of it is the server's.
 // The recommendation's threshold, in lines. A recommendation and nothing more: nothing is refused
 // above it, and the number is Cursor's published guidance for a rules file.
 const LONG = 500;
@@ -102,59 +96,37 @@ export function handed(m: Manifest & { app_additions?: Held[] }, outbound = fals
   return sections.map((one) => one.join("\n")).join("\n\n");
 }
 
+// What agents are told (#99; design/specs/mcp.md §12): the text an agent is handed, exactly, so an admin reads what an
+// agent reads. Its first SHOWN lines, then all of it on request; Copy takes all of it whichever is on screen.
 export function SkillSection({ manifest, org, outbound }: { manifest: Manifest; org: string; outbound: boolean }) {
-  const ds = manifest.design_system;
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState<boolean | null>(null);
   const text = handed(manifest, outbound);
-  const lines = text.split("\n").length;
+  const lines = text.split("\n");
   const tokens = Math.ceil(text.length / 4); // four characters a token, the published rule of thumb: "about"
+  const folds = lines.length > SHOWN;
+  // navigator.clipboard is absent outside a secure context: that is a failure too, said in place.
+  const copy = () => void Promise.resolve().then(() => navigator.clipboard.writeText(text)).then(() => setCopied(true), () => setCopied(false));
   return (
-    <section aria-label="What agents are told" className="mt-6 rounded-xl border border-border bg-surface px-4 py-3.5">
-      <h2 className={H2}>What agents are told</h2>
-      <p className={SUB}>{`Every coding agent in ${org} reads this at the start of each session. It's built from the settings above.`}</p>
-      <p className="mt-1 text-sm text-text-faint">{`${lines} lines · ~${tokens} tokens`}</p>
-      {lines > LONG && <p role="status" className="mt-1 text-base">Over {LONG} lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.</p>}
-      <p className={`${LABEL} mt-3`}>Canyon host</p>
-      {/* Text, never an anchor. This string is server configuration written into a builder's agent
-          config; making it a navigation target on an admin's screen buys nothing. */}
-      <p className={MONO}>{manifest.host}</p>
-      <p className={`${LABEL} mt-3`}>Policies</p>
-      {/* Every rule the server sent, in its order. The client filters nothing: an `off` rule is
-          dropped server-side and cannot arrive, so a filter here could only hide a rule the agent
-          really is handed. The tone is a ternary and not a lookup table, so a state outside the
-          union still prints its word in the neutral face instead of composing an undefined class. */}
-      {manifest.policies.map((one) => (
-        <p key={one.id} className={ROW}>
-          <span className="font-medium">{one.name}</span>
-          <Pill tone={one.state === "blocking" ? "critical" : "amber"}>{one.state}</Pill>
-          <span className={`${MONO} max-[860px]:basis-full`}>{one.id}</span>
-        </p>
-      ))}
-      <p className={`${LABEL} mt-3`}>Component types</p>
-      {/* Mono text and not pills: a pill's tones are statuses, and a tinted `postgres` says
-          something false. */}
-      <p className={MONO}>{manifest.component_types.join(" · ")}</p>
-      <p className={`${LABEL} mt-3`}>Approved stacks</p>
-      {manifest.stacks.length === 0 && <p className="text-base text-text-dim">No approved stacks yet.</p>}
-      {manifest.stacks.map((one) => (
-        <p key={one.language} className={ROW}>
-          <span className="font-semibold">{one.language}</span>
-          <span className={MONO}>{one.frameworks.join(" · ")}</span>
-        </p>
-      ))}
-      <p className={`${LABEL} mt-3`}>Design system</p>
-      {ds === null ? <p className="text-base text-text-dim">No design system yet.</p> : (
-        <>
-          <p className={ROW}>
-            <span className="font-semibold">{ds.name}</span>
-            <span className={MONO}>{ds.namespace}</span>
-          </p>
-          <p className={MONO}>{ds.registry_url}</p>
-          {/* Only when the key is present: an absent tokens URL is unset, never an empty line. */}
-          {ds.tokens_url !== undefined && <p className={MONO}>{ds.tokens_url}</p>}
-        </>
-      )}
-      <p className={`${LABEL} mt-3`}>Production</p>
-      <p className="text-base">{manifest.prod_approval ? "Approved by a person in the dashboard" : "Promoted from the CLI or the dashboard"}</p>
+    <section aria-label="What agents are told" className="mt-5 grid gap-2">
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-semibold">What agents are told</h2>
+        <span className="flex items-center gap-2">
+          <span aria-live="polite" className="text-md text-ok">{copied === true ? "Copied" : ""}</span>
+          <Button size="sm" onClick={copy}>Copy</Button>
+        </span>
+      </span>
+      <p className="text-md text-text-dim">{`Every coding agent in ${org} reads this at the start of each session. It's built from the settings below.`}</p>
+      <p className="text-sm text-text-faint">{`${lines.length} lines · ~${tokens} tokens`}</p>
+      {lines.length > LONG && <p role="status" className="text-base">Over {LONG} lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.</p>}
+      {copied === false && <p role="alert" className="text-md text-critical">{S.copyFailed}</p>}
+      <pre data-testid="told" className="overflow-x-auto rounded-[10px] border border-border bg-surface px-4 py-3 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words text-text">
+        {open || !folds ? text : lines.slice(0, SHOWN).join("\n")}
+      </pre>
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        {folds ? <button type="button" className="text-md text-link hover:underline" onClick={() => setOpen(!open)}>{open ? "Show fewer" : `Show all ${lines.length} lines`}</button> : <span />}
+        <span className="text-md text-text-dim"><a className="text-link no-underline hover:underline" href="#/guardrails/policies">Policies</a> and <a className="text-link no-underline hover:underline" href="#/guardrails/playbooks">playbooks</a>: change them on their tabs.</span>
+      </span>
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Finding as FindingRead } from "../api";
 import { actorName } from "./Actor";
 import { Button } from "./Button";
+import { S } from "../strings";
 import { Chip } from "./Chip";
 import { AFTER, Advisory, ApproveForm, capital, fileOf, highest, plainName, upgrade, useCopy, where, type ApproveBody, type Group } from "./Finding";
 import { shortDate } from "./Verdict";
@@ -36,9 +37,9 @@ function cardForAgent(findings: FindingRead[], head: string, severity: string, b
 // those nobody has approved together. approve is the single approval of a finding a person may approve;
 // approveAll is given for two to the route's 200 of them. An advisory entry says so, and so does one whose rule
 // blocks before production (atProduction), as a finding's card does.
-export function DependencyCard({ findings, app, approve, approveAll, atProduction = false }: {
+export function DependencyCard({ findings, app, approve, approveAll, atProduction = false, copies = true }: {
   findings: FindingRead[]; app: string; approve: (one: FindingRead) => { org: string; send: (body: ApproveBody) => Promise<void> } | undefined;
-  approveAll?: { org: string; group: Group; send: (body: ApproveBody) => Promise<void> }; atProduction?: boolean;
+  approveAll?: { org: string; group: Group; send: (body: ApproveBody) => Promise<void> }; atProduction?: boolean; copies?: boolean;
 }) {
   const [first] = findings as [FindingRead];
   const { name, version } = first.dependency!;
@@ -53,13 +54,14 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
   const action = approving === "all" ? approveAll : single;
   const open = findings.some((other) => other.approval === undefined);
   return (
-    <article aria-label={head} className="mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3">
+    <article aria-label={head} className="mt-2.5 min-w-0 rounded-xl border border-border bg-surface px-3.5 py-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? "advisory before preview · blocks before production" : "advisory · does not block"}</Chip>
+        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.stopsProduction : S.doesntBlock}</Chip>
           : open ? <Chip tone="blocks">blocks</Chip> : <Chip tone="approved">approved</Chip>}
         <Chip tone={severity}>{capital(severity)}</Chip>
         <span className="text-lg font-semibold">{head}</span>
       </div>
+      {!blocks && atProduction && <p className="mt-1.5 text-md text-text-dim">{S.blocksAtProduction}</p>}
       {first.tool !== undefined && <p className="mt-1.5 text-base text-text-dim">{`Found by ${plainName(first.tool)}`}</p>}
       {[...new Set(findings.map(fileOf))].map((file) => <p key={file} className="mt-1.5 font-mono text-sm text-text-faint">{where(findings.find((other) => fileOf(other) === file)!)}</p>)}
       <ul className="mt-2.5 grid gap-2">
@@ -79,7 +81,7 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
         <dt className="text-text-faint">Fix</dt><dd className="text-text-dim">{upgrade(findings)}</dd>
       </dl>
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-        <Button size="sm" onClick={copy}>Copy for your agent</Button>
+        {copies && <Button size="sm" onClick={copy}>Copy for your agent</Button>}
         {approveAll !== undefined && action === undefined && (
           <Button variant="ghost" size="sm" onClick={() => setApproving("all")}>{`Approve all ${approveAll.group.titles.length} for ${name} ${version}`}</Button>
         )}

@@ -30,7 +30,7 @@ jobs:
 
   site:
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       CANYON_PUBLIC_CHECK_NAMES: ${{ secrets.CANYON_PUBLIC_CHECK_NAMES }} # the names public-check refuses, hashed: never in the tree
       CANYON_PUBLIC_CHECK_FORK: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') }} # a fork's pull request, and one Dependabot opened, get no secrets: their names are main's build's to check (#2895; Dependabot changes no page text)
@@ -50,6 +50,10 @@ jobs:
           name: docs-site
           path: docs/dist
           retention-days: 7
+      - name: every wide mermaid diagram says it scrolls sideways exactly when it does, at 390px and 1280px
+        run: |
+          (cd e2e/ui && npm ci && npx playwright install --with-deps chromium)
+          node docs/scripts/diagram-hints.mjs
       - name: the site names the Canyon version it documents, main's unless a release tag sets it, and publish-docs.sh refuses a HEAD with no release tag
         run: |
           set -eu

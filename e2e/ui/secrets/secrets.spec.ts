@@ -19,22 +19,27 @@ test.beforeEach(async ({ context }) => {
 const open = async (page: Page) => { await page.goto(`/#/apps/${env("SECRETS_APP")}`); };
 const section = (page: Page) => page.getByRole("region", { name: "Secrets" });
 const form = (page: Page) => page.getByRole("form", { name: "Set a secret" });
+// The form opens from its button (#102).
+const opened = (page: Page) => section(page).getByRole("button", { name: "Set a secret" }).click();
 const walked = (page: Page, who: string) => page.screenshot({ path: `.work/walk/secrets-${who}.png`, fullPage: true });
 
 test("the Secrets section as owner", async ({ page }) => {
   await open(page);
   await expect(section(page).getByText("No secrets set.")).toBeVisible();
+  await expect(form(page)).toHaveCount(0); // closed until asked for
+  await opened(page);
   await expect(form(page).getByLabel("Value")).toHaveAttribute("type", "password");
   await walked(page, "owner");
 });
 
 test("the Secrets section as contributor", async ({ page }) => {
   await open(page);
+  await opened(page);
   await form(page).getByLabel("Name").fill("JOURNEY_TOKEN");
   await form(page).getByLabel("Value").fill(VALUE);
   await form(page).getByRole("button", { name: "Set secret" }).click();
-  await expect(form(page).getByRole("status")).toHaveText("Set JOURNEY_TOKEN for preview. It takes effect at the next deploy.");
-  await expect(form(page).getByLabel("Value")).toHaveValue("");
+  await expect(section(page).getByRole("status")).toHaveText("Set JOURNEY_TOKEN for preview. It takes effect at the next deploy.");
+  await expect(form(page)).toHaveCount(0); // done: the form closes, the value with it
   await expect(section(page).getByRole("cell", { name: "JOURNEY_TOKEN", exact: true })).toBeVisible();
   expect(await page.content()).not.toContain(VALUE);
   await walked(page, "contributor");
@@ -62,7 +67,7 @@ test("the Secrets section as admin", async ({ page }) => {
   await expect(section(page).getByText("Remove JOURNEY_TOKEN from preview?", { exact: true })).toBeVisible();
   await walked(page, "admin-asking");
   await row.getByRole("button", { name: "Remove JOURNEY_TOKEN from Preview" }).click();
-  await expect(form(page).getByRole("status")).toHaveText("Removed JOURNEY_TOKEN from preview. It takes effect at the next deploy.");
+  await expect(section(page).getByRole("status")).toHaveText("Removed JOURNEY_TOKEN from preview. It takes effect at the next deploy.");
   await expect(section(page).getByText("No secrets set.")).toBeVisible();
   await walked(page, "admin");
 });

@@ -59,7 +59,7 @@ describe("Settings' pages", () => {
     expect(await screen.findByLabelText("Organisation name")).toBeDefined();
     const pages = within(screen.getByRole("navigation", { name: "Settings" })).getAllByRole("link");
     expect(pages.map((one) => [one.firstChild?.textContent, one.getAttribute("href")])).toEqual([
-      ["Organisation", "#/settings/organisation"], ["People & sign-in", "#/settings/people"], ["App hosting", "#/settings/hosting"], ["AI review", "#/settings/ai"],
+      ["Organisation", "#/settings/organisation"], ["People & sign-in", "#/settings/people"], ["Agents", "#/settings/agents"], ["App hosting", "#/settings/hosting"], ["AI review", "#/settings/ai"],
       ["GitHub", "#/settings/github"], ["Outbound", "#/settings/outbound"], ["Integrations", "#/settings/integrations"], ["Telemetry", "#/settings/telemetry"],
       ["Licence", "#/settings/licence"], ["Databases", "#/settings/databases"],
     ]);
@@ -87,8 +87,10 @@ describe("Settings' pages", () => {
       render(<Settings />);
       expect(await screen.findByRole("region", { name: "AI review" })).toBeDefined(); // the reads have landed, and Settings drew again
       const shown = screen.getByRole("link", { name: "AI review", current: "page" });
-      expect(scrolled.mock.contexts).toEqual([shown]); // once: a re-render as the reads land never scrolls again
-      expect(scrolled).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" });
+      // on the tab shown alone, centred, once the strip holds its tabs: again only as the reads land an admin's tabs into it
+      expect(scrolled.mock.contexts.length).toBeGreaterThan(0);
+      expect(scrolled.mock.contexts.every((one) => one === shown)).toBe(true);
+      expect(scrolled.mock.calls.every(([how]) => JSON.stringify(how) === JSON.stringify({ inline: "center", block: "nearest" }))).toBe(true);
     } finally {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     }
@@ -103,17 +105,25 @@ describe("Settings' pages", () => {
     expect(screen.getByRole("button", { name: "Save people and sign-in" })).toBeDefined();
   });
 
-  // Connect an agent stands directly above Sessions, so an agent is connected and disconnected in one place
-  // (design/specs/screens.md, Connect an agent; the v0.11.0 role walk found it below).
-  it("People & sign-in puts Connect an agent directly above Sessions", async () => {
+  // Agents is every member's tab (#100's review): Connect an agent, then Sessions, found by name; People & sign-in keeps
+  // the admin's forms alone.
+  it("Agents holds Connect an agent and Sessions, and People & sign-in neither", async () => {
+    window.location.hash = "#/settings/agents";
+    server(golden.get, { status: 404 }, prefs.preferences_member);
+    render(<Settings />);
+    const connect = await screen.findByRole("region", { name: "Connect an agent" });
+    expect(connect.nextElementSibling).toBe(await screen.findByRole("region", { name: "Sessions" }));
+    expect(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("link", { name: "Agents", current: "page" }).getAttribute("href")).toBe("#/settings/agents");
+    cleanup();
     window.location.hash = "#/settings/people";
     server(golden.get);
     render(<Settings />);
-    const connect = await screen.findByRole("region", { name: "Connect an agent" });
-    const sessions = await screen.findByRole("region", { name: "Sessions" });
-    expect(connect.compareDocumentPosition(sessions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(connect.nextElementSibling).toBe(sessions);
+    await screen.findByRole("region", { name: "Who may sign in" });
+    expect(screen.queryByRole("region", { name: "Connect an agent" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Sessions" })).toBeNull();
   });
+
+
 
   // With sign-in off there is nobody to admit and every caller is an admin: forms would do nothing.
   it("People & sign-in on a host with sign-in off says so, and draws no form", async () => {

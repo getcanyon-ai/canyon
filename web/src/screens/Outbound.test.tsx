@@ -51,8 +51,8 @@ describe("the Outbound card", () => {
     render(<Outbound id="claims-portal" envs={envs} />);
     await settle();
     // every env's table keeps the Allow column, so stacked tables line up; production's allowlist allows both: no Allow
-    expect(rows("Preview")).toEqual([["invalid:443", "", "1", "refused", ""], ["registry.npmjs.org:80", "", "1", "3xx", ""]]);
-    expect(rows("Production")).toEqual([["api.stripe.com:443", "", "1,840", "2xx", ""], ["hooks.slack.com:443", "", "12", "tunnel failed: UF,URX", ""]]);
+    expect(rows("Preview")).toEqual([["a call with no valid host name, port 443", "", "1", "refused", ""], ["registry.npmjs.org:80", "", "1", "redirected (3xx)", ""]]);
+    expect(rows("Production")).toEqual([["api.stripe.com:443", "", "1,840", "answered (2xx)", ""], ["hooks.slack.com:443", "", "12", "tunnel failed: UF,URX", ""]]);
     expect(screen.queryByText(FLOOR)).toBeNull();
     expect(screen.queryByText(AGAIN)).toBeNull();
   });
@@ -80,7 +80,7 @@ describe("the Outbound card", () => {
     ]));
     render(<Outbound id="claims-portal" envs={envs} />);
     await settle();
-    expect(rows("Production").map((one) => one[3])).toEqual(["refused", "5xx", "no answer", "2xx", "tunnel failed: UF", "3xx"]);
+    expect(rows("Production").map((one) => one[3])).toEqual(["refused", "failed at the destination (5xx)", "no answer", "answered (2xx)", "tunnel failed: UF", "redirected (3xx)"]);
   });
 
   // A call no allowlist can let through says why beside its row (#2723): an IP address, or a port other than 80 or 443,
@@ -409,8 +409,8 @@ describe("the Outbound card's mode and Allow", () => {
     host(() => egress);
     render(<Outbound id="claims-portal" envs={envs} level="contributor" />);
     await settle();
-    expect(env("Preview").getByText("Observe, the org's")).toBeDefined();
-    expect(env("Production").getByText("Allowlist, this app's own")).toBeDefined();
+    expect(env("Preview").getByText("Observe, as the org sets it")).toBeDefined();
+    expect(env("Production").getByText("Allowlist, set for this app")).toBeDefined();
     expect(env("Production").getByText(/^Allowlist:/).textContent).toBe("Allowlist: *.slack.com Remove, api.stripe.com Remove");
     expect(env("Preview").queryByText(/^Allowlist:/)).toBeNull();
   });
@@ -435,7 +435,7 @@ describe("the Outbound card's mode and Allow", () => {
     } });
     render(<Outbound id="claims-portal" envs={envs} level="owner" />);
     await settle();
-    expect(radios("Preview")).toEqual([["The org's (Observe)", true], ["Allowlist", false]]);
+    expect(radios("Preview")).toEqual([["Same as the org: Observe", true], ["Allowlist", false]]);
     fireEvent.click(env("Preview").getByRole("radio", { name: "Allowlist" }));
     expect(env("Preview").getByText(S.modeNow)).toBeDefined();
     expect(env("Preview").getByRole("button", { name: "Allow registry.npmjs.org" })).toBeDefined();
@@ -448,8 +448,8 @@ describe("the Outbound card's mode and Allow", () => {
     await settle();
     expect(sent()).toEqual(['PUT /api/v1/projects/claims-portal/egress/preview/mode {"mode":"allowlist"}']);
     // the card reads again once it is saved: the env's own mode, chosen, and nothing left to save
-    expect(env("Preview").getByText("Allowlist, this app's own")).toBeDefined();
-    expect(radios("Preview")).toEqual([["The org's (Observe)", false], ["Allowlist", true]]);
+    expect(env("Preview").getByText("Allowlist, set for this app")).toBeDefined();
+    expect(radios("Preview")).toEqual([["Same as the org: Observe", false], ["Allowlist", true]]);
     expect(env("Preview").queryByRole("button", { name: "Save Preview's mode" })).toBeNull();
     expect(env("Preview").queryByRole("button", { name: S.modeYes })).toBeNull();
   });
@@ -470,8 +470,8 @@ describe("the Outbound card's mode and Allow", () => {
     const sent = host(() => egress);
     render(<Outbound id="claims-portal" envs={envs} level="owner" />);
     await settle();
-    expect(radios("Production")).toEqual([["The org's (Observe)", false], ["Allowlist", true]]);
-    fireEvent.click(env("Production").getByRole("radio", { name: "The org's (Observe)" }));
+    expect(radios("Production")).toEqual([["Same as the org: Observe", false], ["Allowlist", true]]);
+    fireEvent.click(env("Production").getByRole("radio", { name: "Same as the org: Observe" }));
     fireEvent.click(env("Production").getByRole("button", { name: "Save Production's mode" }));
     await settle();
     expect(sent()).toEqual(['PUT /api/v1/projects/claims-portal/egress/prod/mode {"mode":null}']);
@@ -483,7 +483,7 @@ describe("the Outbound card's mode and Allow", () => {
     host(() => egress, { "/api/v1/projects/claims-portal/egress/prod/mode": () => new Promise<Route>((resolve) => { answer = resolve; }) });
     render(<Outbound id="claims-portal" envs={envs} level="owner" />);
     await settle();
-    fireEvent.click(env("Production").getByRole("radio", { name: "The org's (Observe)" }));
+    fireEvent.click(env("Production").getByRole("radio", { name: "Same as the org: Observe" }));
     fireEvent.click(env("Production").getByRole("button", { name: "Save Production's mode" }));
     await settle();
     expect((env("Production").getByRole("button", { name: "Save Production's mode" }) as HTMLButtonElement).disabled).toBe(true);
@@ -499,8 +499,8 @@ describe("the Outbound card's mode and Allow", () => {
     const sent = host(() => own, {}, "allowlist");
     render(<Outbound id="claims-portal" envs={envs} level="admin" />);
     await settle();
-    expect(radios("Preview")).toEqual([["The org's (Allowlist)", false], ["Allowlist", false], ["Observe", true]]);
-    fireEvent.click(env("Preview").getByRole("radio", { name: "The org's (Allowlist)" }));
+    expect(radios("Preview")).toEqual([["Same as the org: Allowlist", false], ["Allowlist", false], ["Observe", true]]);
+    fireEvent.click(env("Preview").getByRole("radio", { name: "Same as the org: Allowlist" }));
     fireEvent.click(env("Preview").getByRole("button", { name: "Save Preview's mode" }));
     expect(sent()).toEqual([]);
     fireEvent.click(env("Preview").getByRole("button", { name: S.modeYes }));
@@ -514,7 +514,7 @@ describe("the Outbound card's mode and Allow", () => {
     host(() => own);
     render(<Outbound id="claims-portal" envs={envs} level="owner" />);
     await settle();
-    expect(radios("Preview")).toEqual([["The org's (Observe)", false], ["Allowlist", false], ["Observe", true]]);
+    expect(radios("Preview")).toEqual([["Same as the org: Observe", false], ["Allowlist", false], ["Observe", true]]);
     expect((env("Preview").getByRole("radio", { name: "Observe" }) as HTMLInputElement).disabled).toBe(true);
     expect((env("Preview").getByRole("radio", { name: "Allowlist" }) as HTMLInputElement).disabled).toBe(false);
   });
@@ -524,11 +524,11 @@ describe("the Outbound card's mode and Allow", () => {
     host(() => egress, { "/api/v1/projects/claims-portal/egress/prod/mode": { status: 409, body: { error: "held", message } } });
     render(<Outbound id="claims-portal" envs={envs} level="owner" />);
     await settle();
-    fireEvent.click(env("Production").getByRole("radio", { name: "The org's (Observe)" }));
+    fireEvent.click(env("Production").getByRole("radio", { name: "Same as the org: Observe" }));
     fireEvent.click(env("Production").getByRole("button", { name: "Save Production's mode" }));
     await settle();
     expect(env("Production").getByRole("alert").textContent).toBe(message);
-    expect(radios("Production")).toEqual([["The org's (Observe)", false], ["Allowlist", true]]);
+    expect(radios("Production")).toEqual([["Same as the org: Observe", false], ["Allowlist", true]]);
   });
 
   // The mode decides only calls through Canyon: no choice for an env whose network doesn't send them through it.

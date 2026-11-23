@@ -13,3 +13,8 @@ export function useMedia(media: string) {
   }, [media]);
   return matches;
 }
+
+// shownIntoView centres the tab shown in a strip of tabs, which on a phone scrolls sideways (#100's review). Called after
+// the strip is drawn with every tab it will hold, so the last one comes fully in: Guardrails' and Settings' strips.
+export const shownIntoView = (strip: string) =>
+  document.querySelector(`nav[aria-label="${strip}"] [aria-current=page]`)?.scrollIntoView?.({ inline: "center", block: "nearest" });

@@ -4,7 +4,7 @@ import { S } from "../strings";
 import { actorName } from "./Actor";
 import { down } from "./EnvLink";
 import { Icon, type IconName } from "./Icon";
-import { approved, cleared, failureWords, tryAgain } from "./Verdict";
+import { approved, buildKinds, cleared, failureWords, tryAgain } from "./Verdict";
 import { oddAnswer } from "./answered";
 
 // The app page's one sentence about the newest version and the one thing to do next (the app-page
@@ -16,7 +16,7 @@ export type Act = "review" | "approve" | "cancel" | "promote" | "open" | "copy" 
 // covers: the needs that say what this band says (contracts/routes.md, *What needs a person*), so the two are never drawn
 // together (D15; leads, below). repeats: the needs whose own lines say what this band says without its steps, so it isn't
 // drawn while they are. tail: the environment that keeps restarting, whose last log lines the app page shows under it (#2744).
-export interface Band { tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; unshown?: string }
+export interface Band { running?: true; tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; unshown?: string }
 
 export interface Facts {
   latest: Latest; // the newest version
@@ -32,6 +32,7 @@ export interface Facts {
   broke?: { cause: string | null; reason: string | null }; // a failed build's or start's own lines, once read
   progress?: string | null; // a review going: how many of its checks are done, and which waits its turn
   refused?: string[]; // production's egress requests pending, the destinations Canyon refused that wait on a person (#2723)
+  secret?: boolean; // the status read needs the newest version's secret rotated: the blocked band says it, in that need's place
 }
 
 // After a review that let the build go ahead, what broke: the review is said as it ended (approved is never passed).
@@ -125,7 +126,7 @@ export function headline(f: Facts): Band {
     }
     if (run.failure_reason === "detect") {
       const builds = run.builds ?? [];
-      return { tone: "red", title: `${v} couldn't be built on this host`, text: `${builds.length > 0 ? S.undetectedBuilds.replace("<buildpacks>", () => builds.join(", ")) : S.undetectedNone} ${run.errored ? S.undetectedErrored : "Nothing was compiled, so there is nothing in the code to fix."}${keeps}`, review: true };
+      return { tone: "red", title: `${v} couldn't be built on this host`, text: `${builds.length > 0 ? S.undetectedBuilds.replace("<kinds>", () => buildKinds(builds)) : S.undetectedNone} ${run.errored ? S.undetectedErrored : "Nothing was compiled, so there is nothing in the code to fix."}${keeps}`, review: true };
     }
     const words = failureWords(run.failure_reason, run.failed_in);
     return { tone: "red", title: `${v}'s review didn't finish`, text: `${words[0]!.toUpperCase()}${words.slice(1)}. ${tryAgain(run) ?? "Review it again."}${keeps}`, primary: "review" };
@@ -140,7 +141,9 @@ export function headline(f: Facts): Band {
       if (host !== undefined) return { tone: "red", title, text: `A check that didn't run can't vouch for the code, so it blocks. Nothing found in the code blocks it. ${host}${keeps}`, secondary: "approve", review: true, covers: ["unchecked"] };
       return { tone: "red", title, text: `A check that didn't run can't vouch for the code, so it blocks. Nothing found in the code blocks it. Review it again: the checks wait their turn instead of failing.${keeps}`, primary: "review", secondary: "approve", covers: ["unchecked"] };
     }
-    return { tone: "red", title: `${v} is blocked: ${findings(n)}`, text: `${n === 1 ? S.needBlockedFixOne : S.needBlockedFixMany} ${S.nothingBuilt}${keeps}`, secondary: "approve", review: true, covers: ["blocked"] };
+    // A secret the review found is the same problem the needs' secret line names: said here once, with its step (#102).
+    const fix = f.secret === true ? S.needSecretFix : n === 1 ? S.needBlockedFixOne : S.needBlockedFixMany;
+    return { tone: "red", title: `${v} is blocked: ${findings(n)}`, text: `${fix} ${S.nothingBuilt}${keeps}`, secondary: "approve", review: true, covers: f.secret === true ? ["blocked", "secret"] : ["blocked"] };
   }
   // Only a running environment is live: one Canyon couldn't check is never called live (routes.md, envs.<env>.state).
   if (f.prod !== null && f.prod.package === f.latest.package && f.prod.state === "unknown") {
@@ -223,7 +226,7 @@ export function viewerBand(envs: { preview?: { state?: Env["state"] }; prod?: { 
   const any = (state: Env["state"]) => (preview ? [envs?.prod, envs?.preview] : [envs?.prod]).some((env) => env?.state === state);
   const title = runs(envs?.prod) ? "Running in production" : preview && runs(envs?.preview) ? "Running in preview"
     : any("unknown") ? "Canyon couldn't check whether it runs" : any("restarting") ? "Keeps restarting" : preview ? "Not running" : "Not running in production";
-  return { tone: "neutral", title, text: readOnly };
+  return { tone: "neutral", title, text: readOnly, ...(runs(envs?.prod) || (preview && runs(envs?.preview)) ? { running: true as const } : {}) };
 }
 
 const TONE: Record<Band["tone"], { box: string; icon: IconName; ink: string }> = {
@@ -292,7 +295,9 @@ export function Headline({ band, app, children }: { band: Band; app?: string; ch
   const text = band.text + (app !== undefined && band.tail !== undefined ? "" : band.unshown ?? ""); // the lines say why where they're shown
   return (
     <section aria-label="Where it stands" className={`grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-x-3.5 gap-y-1 rounded-[10px] border border-border border-l-4 px-[18px] py-4 max-[620px]:grid-cols-[22px_minmax(0,1fr)] ${tone.box}`}>
-      <span className={`mt-0.5 ${tone.ink}`}><Icon name={band.going ? "working" : tone.icon} size={20} /></span>
+      {/* running, the environment cards' green dot: the empty circle said nothing ran (#102) */}
+      {band.running ? <span className="mt-1.5 grid size-5 place-items-center"><span aria-hidden="true" className="size-2.5 rounded-full bg-ok" /></span>
+        : <span className={`mt-0.5 ${tone.ink}`}><Icon name={band.going ? "working" : tone.icon} size={20} /></span>}
       <div role="status" className="grid gap-1">
         <h2 className="text-[17px] font-semibold tracking-tight">{band.title}</h2>
         {text !== "" && <p className="max-w-[720px] text-base text-text-dim">{text}</p>}

@@ -731,7 +731,7 @@ finding and no other, and opens an inline field under the card, not a modal (ame
 `canyonv2-5r11.10`; the checklist's `Approve these 2 problems with a reason →` link is gone, so
 there is one way to approve). A blocking finding is one that blocks before preview, or before
 production — the run read's `blocks_production`, the server's answer, never worked out from the rules
-on the page (#2206) — and that one reads `advisory before preview · blocks before production` and
+on the page (#2206) — and that one reads `Doesn't stop preview. Stops production until fixed or approved.` (**amended 2026-11-23**, #102) and
 carries the button too. The button shows only where the run read is `approvable` for the reader: an
 admin, or a responder, who did not start the run (amended 2026-10-12, #2204; design/PERMISSIONS.md) —
 the run shown, the newest or one pinned by `?run=` alike, an older run's or a rollback review's, and
@@ -996,8 +996,10 @@ responder with no grant never read it, nor see the card (the reduced page reads 
 
 ### Connect an agent (design/specs/mcp.md §12)
 
-On Settings › People & sign-in, directly above the sessions list, so an agent is connected and disconnected in one
-place. Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
+On Settings › Agents (`#/settings/agents`), directly above the sessions list, so an agent is connected and
+disconnected in one place, on a tab every member finds by name; People & sign-in keeps the forms that set who signs
+in (amended 2026-11-23, getcanyon-ai/canyon#99 and its review). The laptop part and the cloud part are each a card, the laptop's first, and
+every line to run has its own `Copy` (`Copied`). Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
 connects it, and each one you connect is listed under Sessions, where you can disconnect it.`
 
 Two parts, the same for every member (amended 2026-11-21: the laptop is the CLI, the cloud the address, and the address
@@ -1036,11 +1038,11 @@ it*: secrets): the app's secrets by name, from `GET …/secrets`, and the one fo
 person whose agent has no CLI sets what the app needs (mcp.md §10.1). Titled `Secrets`, then `Values the app reads by
 name. Canyon keeps each in its vault and never shows one back.`
 
-- **The list**, one row per environment and name: the name, `Preview` or `Production`, `Runtime` or `Build`, its
+- **The list**, one row per environment and name, each a card of its own on a phone, where the table would overflow (#102): the name, `Preview` or `Production`, `Runtime` or `Build`, its
   version, who set it and when. A row the PUT wrote (`origin: user`) has `Replace` and `Remove`; one a deploy wrote
   from a declared resource (`provisioned`) says `Canyon sets this one for the app`, with neither, as the routes refuse it (`409
   provisioned`). With none: `No secrets set.`
-- **`Set a secret`**: `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
+- **`Set a secret`**, a form that opens from its button, from `Replace` and from a link that names a secret (closed otherwise, with `Cancel` to close it; **amended 2026-11-23**, #102): `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
   the default, or `Build`), then `Set secret` (until a name and a value are typed, it says `Name the secret first.` or
   `Type the value first.`), and under it `Setting a name that's already set replaces its value.`
   `Value` is a password field: never filled from anything, sent once in the PUT, emptied when the PUT lands, and held
@@ -1392,7 +1394,7 @@ That tightening sentence — *policies gate promotion, never running apps* — i
 
 **Exceptions have expiry dates, always.** `2 exceptions · 1 expires in 12 days`. An exception without an expiry is a permanent hole with good intentions, so the UI has no field for "never expires."
 
-**What agents are told.** Guardrails' last tab closes with the manifest, rendered exactly as `canyon manifest` prints it and as nothing else — the panel reads, it does not edit. Under the heading, `Every coding agent in <org> reads this at the start of each session. It's built from the settings above.`, then a line that counts it the way an agent is handed it — `canyon manifest` as its session hook prints it, written for an agent (cli.md §7.4; amended 2026-10-07) — `847 lines · ~1220 tokens`. Past 500 lines — Cursor's own published guidance for a rules file, a recommendation and not a refusal — the panel adds a second line: `Over 500 lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.`
+**What agents are told** (amended 2026-11-23, getcanyon-ai/canyon#99, to follow design/specs/mcp.md §12). Guardrails' last tab opens with the text every agent is handed, exactly as `canyon manifest` prints it for an agent's session (cli.md §7.4) — the policies, how to pass each one that blocks, the org's own rules and playbooks, the stacks, the design system, outbound, secrets and production — so an admin reads what an agent reads; never the person's rendering, which names rule ids an agent never sees. Under the heading, `Every coding agent in <org> reads this at the start of each session. It's built from the settings below.`, then `847 lines · ~1220 tokens`, counted the same way. The text shows its first 14 lines, then `Show all <n> lines` (`Show fewer`); `Copy` (`Copied`) copies all of it. Past 500 lines — Cursor's own published guidance for a rules file, a recommendation and not a refusal — the panel adds a second line: `Over 500 lines. Agents read all of it every session: consider retiring policies or stacks that no longer apply.` Then `Policies and playbooks: change them on their tabs.`, each a link. Below it, what this tab sets: `Stacks agents are told to use`, one row per language with its frameworks, and the default design system; `Set up with Canyon` opens the setup chat beside them. A change brings up the bar `Unsaved changes` `Discard` `Save`, which a Save takes away, leaving `Saved.`. The buildpacks `Approved stacks only` accepts are set on that rule's row in Policies: `Buildpacks this rule accepts. Canyon lists the ones it has seen apps build with.`, one checkbox each, saved as it is ticked.
 
 **Playbooks** (**added 2026-11-20**, design/specs/mcp.md §3.2). Guardrails' fourth tab, before *What agents are told*, at `#/guardrails/playbooks`: the org's own skills and notes on how it builds, which every coding agent is handed by name and reads by slug, and which Canyon never checks. Under the heading, `How your org builds, in its own words. Every coding agent is told each playbook's name and when to read it, and reads the ones that fit its task. Canyon never checks a playbook: a rule does that.`, then one card per playbook that stands: its name, `Skill` or `Note`, its `when` line, then `<slug> · version <n> · <who> · <date>`, and `Edit`, `History` and `Remove`; none reads `No playbooks yet.` Below them `New playbook` and `Import a SKILL.md`.
 - **The editor:** a name (its slug shown under it as `its slug: <slug>`, made from the name and fixed once the playbook exists), `Skill` or `Note` with what each means, `When to read it`, and the body with `Write` and `Preview` — the preview reads the Markdown with a parser and shows it as text and elements alone: raw HTML in a body is its own text, an image its alt text with nothing fetched, and a link only `http`, `https` or `mailto`. Save writes the next version; a refusal is the server's `message`, verbatim (the secret, the 50, the field rules).

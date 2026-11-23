@@ -19,25 +19,28 @@ Canyon checks an app at three stages: when a coding agent deploys, on every pull
 production. The tour's three chapters show three kinds of rule: your company's standards, security,
 and what production needs.
 
-```mermaid title="The tour: you set a rule, Canyon blocks the agent twice, the agent fixes both, and the app goes to production"
-flowchart TD
-  rule["Chapter 1: you make the design system mandatory"]:::person
-  quick["The agent deploys a page of its own making"]
-  review["Canyon reviews the deploy"]:::canyon
-  blocked["Blocked: nothing is built<br>the agent gets the file, the line and the fix"]:::blocked
-  preview["Passed: live in preview"]:::passed
-  search["Chapter 2: the agent adds a search<br>that builds its SQL from the request"]
-  you["Chapter 3: you ask for production"]:::person
-  prod["Live in production"]:::passed
-  rule --> quick
-  quick --> review
-  review -->|"a rule is broken"| blocked
-  blocked -->|"the agent fixes it<br>and deploys again"| review
-  review -->|"nothing blocks"| preview
-  preview --> search
-  search --> review
-  preview --> you
-  you --> prod
+```diagram kind=compare title="The tour: you set a rule, Canyon blocks the agent twice, the agent fixes both, and the app goes to production"
+columns:
+  - label: "Chapter 1: Standards"
+    sub: Your agent ignores the design system.
+    steps:
+      - {who: You, icon: person, tone: person, what: Make the design system mandatory, more: In the dashboard. Only a person changes a policy.}
+      - {who: Your coding agent, icon: agent, what: Deploys a page of its own making}
+      - {who: Canyon, icon: blocked, tone: blocked, what: "Blocked: nothing is built", more: "The agent gets the file, the line and the fix."}
+      - {who: Your coding agent, icon: passed, tone: passed, what: Rebuilds it in the design system, more: "Passed, and live in preview."}
+  - label: "Chapter 2: Security"
+    sub: Your agent writes a flaw.
+    steps:
+      - {who: You, icon: person, tone: person, what: Ask for a search by policy number}
+      - {who: Your coding agent, icon: agent, what: Builds the SQL from the request}
+      - {who: Canyon, icon: blocked, tone: blocked, what: "Blocked: nothing is built", more: "The finding names the line."}
+      - {who: Your coding agent, icon: passed, tone: passed, what: Changes one line, more: "Passed, and live in preview."}
+  - label: "Chapter 3: Production"
+    sub: The company's rules decide.
+    steps:
+      - {who: You, icon: person, tone: person, what: Ask for production}
+      - {who: Canyon, icon: canyon, tone: canyon, what: Shows what production needs}
+      - {who: Your coding agent, icon: passed, tone: passed, what: Promotes the version that passed, more: "The same image as preview, with production's own secrets."}
 ```
 
 ## The prompt

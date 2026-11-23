@@ -16,10 +16,53 @@ How an agent connects depends on where it runs:
 | You set up | The `canyon` CLI: `canyon login`, then `canyon skill install` | Your Canyon's address, `https://<canyon>/mcp`, allowed once in your browser |
 | The code it reviews and deploys | The folder you're in, including what you haven't pushed | A pushed branch of a GitHub repository linked to the app |
 
+```diagram kind=compare title="Two ways an agent connects: canyon mcp on your laptop, or your Canyon's address from the cloud"
+columns:
+  - label: On a laptop
+    icon: laptop
+    sub: Claude Code, Codex, Cursor and others on your machine
+    steps:
+      - who: You, once
+        what: "`canyon login`, then `canyon skill install`"
+        more: Writes Canyon's skill, its session hook and its MCP server into each agent it finds.
+      - via: the agent starts it, over stdio
+      - who: On your machine
+        icon: canyon
+        tone: canyon
+        what: "`canyon mcp`, inside the CLI"
+        more: Signed in as the CLI is.
+      - via: Canyon's API, as you
+      - who: It reviews and deploys
+        icon: passed
+        tone: passed
+        what: The folder you're in
+        more: Including what you haven't pushed.
+  - label: In the cloud
+    icon: cloud
+    sub: Claude Code on the web, Cursor's cloud agents
+    steps:
+      - who: You, once
+        what: "Add `https://<canyon>/mcp` as a connector"
+        more: "For Claude Code on the web, a custom connector in claude.ai; for Cursor, a team MCP server."
+      - via: the agent's first call
+      - who: You, in your browser
+        icon: person
+        tone: person
+        what: Allow \<agent\> to use Canyon as you?
+        more: To see, or to check, deploy and promote. It lasts 7 days.
+      - via: Canyon's API, as you
+      - who: It reviews and deploys
+        icon: passed
+        tone: passed
+        what: A pushed branch on GitHub
+        more: Of the app's linked repository, when your GitHub account can read it.
+note: "**Either way, the agent can do only what you can.** Each tool does what the `canyon` command of the same name does. It can't approve findings, change settings or sharing, or see secret values."
+```
+
 Connect each agent one way, not both: one `canyon` server per agent.
 
-In the dashboard, **Settings › People & sign-in › Connect an agent** shows both, with your Canyon's
-address filled in, right above the **Sessions** list where you disconnect an agent.
+In the dashboard, **Settings › Agents** shows both, with your Canyon's address filled in, right above
+the **Sessions** list where you disconnect an agent.
 
 ## On a laptop
 
@@ -102,7 +145,7 @@ pushed to GitHub.
    values.
 4. Choose **Allow**. Only allow a connection you started yourself.
 
-The connection lasts 7 days, as a CLI sign-in does; then you allow it again. Under **Settings › People & sign-in**, **Sessions** lists each one as
+The connection lasts 7 days, as a CLI sign-in does; then you allow it again. Under **Settings › Agents**, **Sessions** lists each one as
 `<agent> (MCP)`; **Disconnect** ends it at once.
 
 ### What the agent can do

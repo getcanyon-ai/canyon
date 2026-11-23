@@ -55,17 +55,24 @@ Every saved change is in the [audit trail](/org/audit-trail/), with who made it.
 Pipeline draws the path every version takes: Upload, then Preview ("agents deploy"), then
 Production ("people promote"). A rule is checked in one of two places, or both:
 
-```mermaid title="Where a rule is checked: before preview, before production, or both"
-flowchart TD
-  upload["Upload<br>canyon deploy or a GitHub push"]
-  before1["Before preview<br>every check and deploy"]:::canyon
-  preview["Preview"]:::passed
-  before2["Before production<br>when a person promotes"]:::canyon
-  prod["Production"]:::person
-  upload --> before1
-  before1 --> preview
-  preview --> before2
-  before2 --> prod
+```diagram kind=flow title="Where a rule is checked: before preview, before production, or both, and who may let a blocked version through"
+steps:
+  - {who: Upload, icon: agent, what: "`canyon deploy`, or a GitHub push"}
+  - {who: Canyon, icon: canyon, tone: canyon, step: 1, what: Before preview, more: "Runs on every check and deploy. A Blocking check keeps the version out of preview."}
+  - paths:
+      - label: A Blocking check finds something
+        tone: blocked
+        steps:
+          - {who: Canyon, tone: blocked, what: Nothing is built, more: "The version that was running keeps running."}
+          - {who: An admin or a security responder, icon: person, tone: person, what: Approves the finding, more: "With a reason and an expiry, never on a deploy they started. Or the agent fixes the code."}
+        loop: Deploy again, back to step 1.
+      - label: Nothing blocks
+        tone: passed
+        steps:
+          - {who: Preview, icon: passed, tone: passed, step: 2, what: Running in preview, more: Agents deploy here.}
+          - {who: Canyon, icon: canyon, tone: canyon, step: 3, what: Before production, more: "Checked when a person clicks Promote. A Blocking check keeps the button disabled."}
+          - {who: A person, icon: person, tone: person, step: 4, what: Promotes it, more: "Where the org turns on production approval, a promotion an agent asks for waits for a person to approve it in the dashboard."}
+          - {who: Production, icon: canyon, tone: canyon, step: 5, what: "The same image, production's secrets", more: "Rules never stop an app that is already in production."}
 ```
 
 

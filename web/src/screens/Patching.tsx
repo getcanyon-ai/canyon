@@ -56,13 +56,12 @@ export function PatchingSettings({ record, adopt }: { record: Preferences; adopt
   const shown = (identity: Identity) => identity.run_image === identities?.run_image?.image || left(identity) > 0
     || identity.paused !== undefined || identity.stalled !== undefined;
   const folded = identities?.identities.filter((identity) => !shown(identity)) ?? [];
-  // The newest of a kind (#118): system libraries are the ones Canyon uses now, else the last planned; build tools the last
-  // planned. Every other card is an earlier one.
+  // The newest of a kind, exactly one (#118): the system libraries Canyon uses now, else whichever was planned last; build
+  // tools, whichever was planned last. Every other card is an earlier one, told apart by when it was planned.
   const newest = (identity: Identity) => {
     const kin = identities?.identities.filter((one) => (one.kind === "rebuild") === (identity.kind === "rebuild")) ?? [];
-    const now = identity.kind === "rebuild" ? undefined : identities?.run_image?.image;
-    if (now !== undefined && kin.some((one) => one.run_image === now)) return identity.run_image === now;
-    return kin.every((one) => one.planned_at <= identity.planned_at);
+    const now = identity.kind === "rebuild" ? undefined : kin.find((one) => one.run_image === identities?.run_image?.image);
+    return identity.id === (now ?? kin.reduce((last, one) => (one.planned_at > last.planned_at ? one : last))).id;
   };
   // What Canyon's last check said goes in the card of the identity it checked against, else under the image Canyon uses
   // now: a check of no app, or one onto an identity no card shows (#2588).
@@ -158,6 +157,9 @@ function LastCheck({ plan }: { plan: PlanSaid }) {
   );
 }
 
+// When a card's fix was planned, by the reader's clock: two can be planned on one date.
+const plannedAt = (at: string) => new Date(at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
 // One platform identity: its system libraries image by 12 hex, its wave while it has work left, and its apps by patch state; Resume
 // while its breaker paused or stalled it; Approve for every app while it has work left and no admin has, with a reason;
 // then who approved it, when and why; and what Canyon's last check said of its apps, when it checked against this one.
@@ -173,10 +175,11 @@ function IdentityCard({ identity, newest, plan, reload }: { identity: Identity; 
     call().then(() => { setAsking(false); reload(); }, (err: unknown) => setFailure(said(err))).finally(() => setSending(false));
   };
   const tools = identity.kind === "rebuild";
-  const title = tools ? (newest ? PATCHING.newestTools : PATCHING.earlierTools) : newest ? PATCHING.newestLibraries : PATCHING.earlierLibraries;
+  const name = tools ? (newest ? PATCHING.newestTools : PATCHING.earlierTools) : newest ? PATCHING.newestLibraries : PATCHING.earlierLibraries;
+  const title = name.replace("<date>", () => plannedAt(identity.planned_at)); // and after the word on every button of the card
   const image = tools ? PATCHING.theseTools : PATCHING.theseLibraries; // as a sentence in the card names them
   const counts = (Object.keys(PATCHING.counts) as (keyof typeof PATCHING.counts)[])
-    .filter((key) => identity.apps[key] > 0).map((key) => `${identity.apps[key]} ${PATCHING.counts[key]}`);
+    .filter((key) => identity.apps[key] > 0).map((key) => key === "asked" && identity.apps.asked === 1 ? PATCHING.askedOne : `${identity.apps[key]} ${PATCHING.counts[key]}`);
   const reverted = identity.paused?.projects.length ?? 0;
   // A wave is said only while the identity has work left (#2582): one with no app ran none, and one whose apps all
   // ended is past its waves.
@@ -198,9 +201,9 @@ function IdentityCard({ identity, newest, plan, reload }: { identity: Identity; 
       {plan !== null && <LastCheck plan={plan} />}
       <span className="mt-2 flex flex-wrap items-start gap-2">
         {(identity.paused !== undefined || identity.stalled !== undefined) && (
-          <Button variant="secondary" size="sm" label={`${PATCHING.resume} patching with ${image}`} onClick={() => send(() => resumeIdentity(identity.id))}>{PATCHING.resume}</Button>
+          <Button variant="secondary" size="sm" label={`${PATCHING.resume}: ${title}`} onClick={() => send(() => resumeIdentity(identity.id))}>{PATCHING.resume}</Button>
         )}
-        {identity.kind !== "rebuild" && identity.approved === undefined && left(identity) > 0 && !asking && <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>{PATCHING.approveAll}</Button>}
+        {identity.kind !== "rebuild" && identity.approved === undefined && left(identity) > 0 && !asking && <Button variant="secondary" size="sm" label={`${PATCHING.approveAll}: ${title}`} onClick={() => setAsking(true)}>{PATCHING.approveAll}</Button>}
       </span>
       {asking && (
         <div className="mt-2 grid max-w-[520px] gap-2">
@@ -210,8 +213,8 @@ function IdentityCard({ identity, newest, plan, reload }: { identity: Identity; 
             <textarea maxLength={1024} rows={3} readOnly={sending} className="rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-base text-text" value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
           <span className="flex flex-wrap items-start gap-2">
-            {reason.trim() === "" ? <Button disabled reason={PATCHING.reasonFirst}>{PATCHING.approveAll}</Button>
-              : <Button variant="primary" onClick={() => send(() => approveIdentity(identity.id, reason))}>{PATCHING.approveAll}</Button>}
+            {reason.trim() === "" ? <Button disabled label={`${PATCHING.approveAll}: ${title}`} reason={PATCHING.reasonFirst}>{PATCHING.approveAll}</Button>
+              : <Button variant="primary" label={`${PATCHING.approveAll}: ${title}`} onClick={() => send(() => approveIdentity(identity.id, reason))}>{PATCHING.approveAll}</Button>}
             {!sending && <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>}
           </span>
         </div>

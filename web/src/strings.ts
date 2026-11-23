@@ -950,12 +950,12 @@ export const PATCHING = {
   behindOne: "1 app waits for newer system libraries: <apps>",
   current: "No app waits for newer system libraries",
   unknown: "Canyon can't tell which system libraries it uses now, or whether apps wait for newer ones.",
-  // A card's name in plain words (#118): the system libraries or build tools in use are the newest, older ones earlier;
+  // A card's name in plain words (#118): the system libraries or build tools in use are the newest, older ones earlier, each with when it was planned;
   // a sentence in the card names them these, and the 12 hex sits folded in the card as its image.
   newestLibraries: "Newest system libraries",
-  earlierLibraries: "Earlier system libraries",
+  earlierLibraries: "Earlier system libraries, planned <date>",
   newestTools: "Newest build tools",
-  earlierTools: "Earlier build tools",
+  earlierTools: "Earlier build tools, planned <date>",
   theseLibraries: "these system libraries",
   theseTools: "these build tools",
   imageHex: "Image <hex>",
@@ -966,12 +966,13 @@ export const PATCHING = {
   approveAll: "Approve for every app",
   approveAllAsk: "Approve <image> for production on every app?",
   approved: "Approved for every app by <name>, <date>: <reason>",
-  wave: ["first app", "next 5 apps", "next 25 apps", "the rest"],
+  wave: ["Step 1 of 4: the first app", "Step 2 of 4: the next 5 apps", "Step 3 of 4: the next 25 apps", "Step 4 of 4: the rest"],
+  askedOne: "1 app waits for a person's approval",
   noApps: "No app to patch with these system libraries",
   noRebuildApps: "No app to rebuild with these build tools",
   earlier: "<n> earlier fixes, nothing left to do",
   earlierOne: "1 earlier fix, nothing left to do",
-  counts: { planned: "planned", patched_preview: "patched in preview", asked: "waiting for approval", patched: "patched in production", reverted: "reverted", held: "held", denied: "turned down for production" },
+  counts: { planned: "planned", patched_preview: "patched in preview", asked: "apps wait for a person's approval", patched: "patched in production", reverted: "reverted", held: "held", denied: "turned down for production" },
   // What Canyon's last check said (#2588; contracts/routes.md, the identities row's plan), beside the system libraries
   // it checked against: why it checked no app, or each app it checked under its one cause, in this order. A cause the
   // page does not know reads `unknown`, never nothing to do.

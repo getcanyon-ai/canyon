@@ -409,7 +409,7 @@ asked. It is not yet in `TestSuite`, so run it by hand. *Given*:
   code and the same dependencies with <newer>. A rebuild is a new program, not a copy of what production runs, so
   a person on your team decides.` (`<newer>` is `a newer Node.js` only when every fix is in node-engine's layers,
   else `newer build tools`). `GET /api/v1/patching/identities` reads the identity with `kind: "rebuild"`, and
-  Settings › App hosting names it `build tools <12 hex>` with no **Approve for every app**.
+  Settings › App hosting names it `Newest build tools` with no **Approve for every app**.
 - **A person approves.** bob, a contributor, approves it in the browser at `/#/approve?code=<code>`, which
   answers `202 {run}`. Production then reads `patched`, and its image read's `image_digest` equals preview's.
 

@@ -396,8 +396,9 @@ to its page (the read's `projects`; an admin sees every app), or `No app waits f
 can't tell which system libraries it uses now, or whether apps wait for newer ones.` when the read can't tell; then each
 platform identity, its system libraries image, wave and apps — paused, `Canyon paused patching with <image>: <n> apps
 reverted after the patch.` with **Resume** (also offered on a stalled one), and **Approve for every app**, which
-asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Every such image
-reads `system libraries image <12 hex>`, the only place Canyon names it (#2605), its whole reference folded under it (#2582). Its apps by
+asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Each card is
+`Newest system libraries` (exactly one) or `Earlier system libraries, planned <date>`, the same for build tools, and every button on
+it ends its accessible name with that; its image sits folded inside it as `Image <12 hex>` (#2582; getcanyon-ai/canyon#118). Its apps by
 state include `turned down for production`, those whose team denied the patch, production still unpatched (#2601). An
 identity's work left is its apps `planned`, `patched_preview` and `asked`: its wave is said, and **Approve for every
 app** offered, only while it has some, since the fleet approval decides only patch approvals, filed once a

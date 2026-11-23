@@ -141,38 +141,6 @@ func TestResponderReadsOnlyTheFleetRow(t *testing.T) {
 	}
 }
 
-// A responder's fleet counts every production in the org by state (contracts/routes.md, stats.production_states; the
-// UX review): their team-only stats are mostly 0. Running, then down once its container exits, then held, which a down
-// one is not counted twice as; nobody else's read carries the counts.
-func TestAResponderCountsEveryProductionByState(t *testing.T) {
-	pool, ctx, base, olive := responderHost(t)
-	rhea := signedIn(t, ctx, pool, base, "sub-rhea", responderEmail, false)
-	states := func(c *http.Client) string {
-		t.Helper()
-		_, page, _ := do(t, c, http.MethodGet, base+"/api/v1/fleet?q=nothing-matches", "") // no filter narrows them
-		stats, _ := page["stats"].(map[string]any)
-		return string(mustJSON(stats["production_states"]))
-	}
-	if got := states(rhea); got != `{"down":0,"held":0,"running":1}` {
-		t.Fatalf("running: %s", got)
-	}
-	fake.Exit("claims-portal", "prod")
-	if got := states(rhea); got != `{"down":1,"held":0,"running":0}` {
-		t.Fatalf("exited: %s", got)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO prod_holds (project_id, reason, held_by_kind, held_by_subject, held_by_display) VALUES ('claims-portal', 'INC-2231', 'person', 'sub-rhea', 'Rhea Okafor')`); err != nil {
-		t.Fatal(err)
-	}
-	if got := states(rhea); got != `{"down":0,"held":1,"running":0}` {
-		t.Fatalf("held: %s", got)
-	}
-	for who, c := range map[string]*http.Client{"the owner": olive, "the admin": signedIn(t, ctx, pool, base, "sub-dana", "dana@meridian.example", false)} {
-		if got := states(c); got != "null" {
-			t.Errorf("%s reads production_states %s; a responder's read alone carries them", who, got)
-		}
-	}
-}
-
 // The responder claim is matched at sign-in, as the admin claim is, whether the operator pins it or the
 // row holds it, and kept on the session: a person the claim names is a responder for that session, one it
 // does not is a member. The pair is both or neither at boot.

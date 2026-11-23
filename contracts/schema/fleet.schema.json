@@ -32,14 +32,7 @@
         "apps": { "$ref": "#/definitions/count" }, "owners": { "$ref": "#/definitions/count" },
         "production": { "$ref": "#/definitions/count" }, "preview": { "$ref": "#/definitions/count" },
         "passed": { "$ref": "#/definitions/count" },
-        "deploys_7d": { "$ref": "#/definitions/count" }, "production_7d": { "$ref": "#/definitions/count" },
-        "production_states": {
-          "description": "A responder's read alone: every app's production in the org, which a responder reads on every row, by state (routes.md, the fleet read). held: production is held; down: not held, and production's state is stopped or restarting; running: deployed there, neither, and not one Canyon couldn't check.",
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["running", "held", "down"],
-          "properties": { "running": { "$ref": "#/definitions/count" }, "held": { "$ref": "#/definitions/count" }, "down": { "$ref": "#/definitions/count" } }
-        }
+        "deploys_7d": { "$ref": "#/definitions/count" }, "production_7d": { "$ref": "#/definitions/count" }
       }
     },
     "apps": { "description": "A responder's rows are read as responderApp, everyone else's as app (routes.md, *The hold*).", "type": "array" },

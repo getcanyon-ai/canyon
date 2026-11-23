@@ -146,16 +146,15 @@ describe("the fleet screen", () => {
   });
 
   // A member's counts are their own apps while the table lists the whole org: the line under the title says both.
-  // A responder off every team (the UX review: their fleet was mostly "—"): the tiles count every production in the org
-  // by state, and the table is what they read and act on — the app, its production with its hold, its owner.
-  it("gives a responder off every team the org's productions by state and only the columns they read", async () => {
+  // A responder off every team (the UX review: their fleet was mostly "—"): no tiles, which would all be 0, and the table
+  // is what they read and act on — the app, its production with its hold, its owner.
+  it("gives a responder off every team no tiles and only the columns they read", async () => {
     const responder = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/fleet/responder.json"), "utf8")) as FleetPage;
     server(() => responder);
     render(<Fleet org="Meridian Insurance" />);
     await screen.findByText("claims-archive");
-    const tiles = [...document.querySelectorAll("dl > div")].map((tile) => [...tile.children].map((one) => one.textContent));
-    expect(tiles).toEqual([[FLEET.prodRunning, "1", FLEET.prodRunningMore], [FLEET.prodHeld, "1", FLEET.prodHeldMore], [FLEET.prodDown, "0", FLEET.prodDownMore]]);
-    expect(screen.getByText("Every app in the org")).toBeDefined(); // the tiles are the org's, not their apps'
+    expect(document.querySelector("dl")).toBeNull(); // no team, so no counts: zeros help no one
+    expect(screen.getByText("Every app in the org")).toBeDefined();
     expect(screen.getAllByRole("columnheader").map((head) => head.textContent)).toEqual(["App", "Production", "Owner"]);
     expect(within(rows().find((row) => named(row) === "claims-archive")!).getByRole("button", { name: "Stop production of claims-archive" })).toBeDefined();
     expect(within(rows().find((row) => named(row) === "claims-portal")!).getByRole("button", { name: "Lift the hold on claims-portal" })).toBeDefined();

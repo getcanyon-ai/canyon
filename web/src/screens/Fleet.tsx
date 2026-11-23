@@ -138,19 +138,14 @@ function DemoStrip({ page }: { page: FleetPage }) {
 const count = (n: number) => n.toLocaleString("en-US");
 const plural = (n: number, one: string, many = `${one}s`) => `${count(n)} ${n === 1 ? one : many}`;
 function Stats({ stats, admin }: { stats: FleetStats; admin: boolean }) {
-  const states = stats.production_states; // a responder's: their team-only counts are mostly 0 (the UX review)
-  const cells = states !== undefined ? [
-    { label: FLEET.prodRunning, value: count(states.running), more: FLEET.prodRunningMore, of: undefined },
-    { label: FLEET.prodHeld, value: count(states.held), more: FLEET.prodHeldMore, of: undefined },
-    { label: FLEET.prodDown, value: count(states.down), more: FLEET.prodDownMore, of: undefined },
-  ] : [
+  const cells = [
     { label: admin ? "Apps" : "Your apps", value: count(stats.apps), more: plural(stats.owners, "owner") },
     { label: "Deployed to production", value: count(stats.production), more: `${count(stats.preview)} deployed to preview` }, // a stopped one too: what was deployed
     { label: "Deploys, last 7 days", value: count(stats.deploys_7d), more: `${count(stats.production_7d)} to production` },
     { label: "Passed their latest review", value: count(stats.passed), of: count(stats.apps), more: "the newest upload of each app" },
   ];
   return (
-    <dl className={`grid ${cells.length === 3 ? "grid-cols-3" : "grid-cols-4"} rounded-[10px] border border-border bg-surface max-[860px]:grid-cols-2`}>
+    <dl className="grid grid-cols-4 rounded-[10px] border border-border bg-surface max-[860px]:grid-cols-2">
       {cells.map((cell) => (
         <div key={cell.label} className="grid content-start gap-0.5 border-l border-border px-4 py-3 first:border-l-0 max-[860px]:nth-[3]:border-l-0 max-[860px]:nth-[n+3]:border-t">
           <dt className="text-md font-medium text-text-dim">{cell.label}</dt>
@@ -375,7 +370,7 @@ export function Fleet({ org }: { org: string | null }) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-1">
             <h1 ref={heading} tabIndex={-1} className="text-title font-semibold tracking-tight outline-none">{owner === null ? org : ownerName(page?.apps ?? [], owner)}</h1>
-            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && page.stats.production_states === undefined ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
+            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && !offTeams ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
           </div>
           {owner === null && <FleetFilters query={query} signedIn={signedIn} />}
         </div>
@@ -384,7 +379,7 @@ export function Fleet({ org }: { org: string | null }) {
             person's over their three apps, so one person's view leaves it out. */}
         {owner !== null ? (page !== null && <OwnerApps apps={page.apps} />) : (
           <>
-            {top !== null && <Stats stats={top.stats} admin={top.viewer.role === "admin"} />}
+            {top !== null && !offTeams && <Stats stats={top.stats} admin={top.viewer.role === "admin"} />}{/* a responder off every team has no team counts: zeros help no one */}
             {page !== null && <DemoStrip page={page} />}
             {top !== null && <NeedsAttention page={top} query={query} signedIn={signedIn} lift={(app) => act({ app, kind: "lift" })} />}
             {page !== null && unfiltered && page.apps.length === 0 && <EmptyFleet admin={page.viewer.role === "admin"} />}

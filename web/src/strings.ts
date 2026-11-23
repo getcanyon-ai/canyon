@@ -765,13 +765,6 @@ export const FLEET = {
   askToJoin: "Ask to join",
   asked: "Asked",
   allScopeMember: "Every app in the org. Counts are for your apps.",
-  // A responder's tiles: every app's production in the org, which a responder reads on every row.
-  prodRunning: "Running in production",
-  prodRunningMore: "across the org",
-  prodHeld: "Production held",
-  prodHeldMore: "until a responder or an admin lifts it",
-  prodDown: "Production down",
-  prodDownMore: "stopped or restarting",
 } as const;
 
 export const AUTH = {

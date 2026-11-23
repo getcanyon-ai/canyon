@@ -11,7 +11,7 @@ const ROW = "text-xs tracking-caps text-text-faint uppercase";
 // The four questions, in the order design/ONBOARDING.md §3 asks them. The step heading is the
 // question; the fields under it are the settings page's own sections, composed rather than copied,
 // so the form somebody meets a year later is the form they filled in on day one.
-const STEPS = ["What is this organisation called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
+const STEPS = ["What is this organization called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
 const NOBODY = "At least one person or one domain has to be allowed to sign in.";
 
 // A list read as prose: "dana@meridian.example, and anyone at meridian.example". Blank rows are the

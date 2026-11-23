@@ -149,32 +149,23 @@ flowchart TD
 Under hand-off, Canyon keeps the review, the build and who may open each app. Your side runs the
 app, signs people in and holds the secrets:
 
-```mermaid title="Hand-off: Canyon reviews, builds and keeps the access list; your platform runs the app, and the sidecar pulls the list from Canyon"
-flowchart TD
-  server["canyon-server<br>review, approvals,<br>who may open each app"]:::canyon
-  executor["canyon-executor<br>scans and builds"]:::canyon
-  registry[("Your registry")]
-  platform["Your platform<br>Argo CD, Flux or your CI"]
-  store[("Your secret store")]
-  users["People using the app"]
-  gw["Your gateway<br>signs people in"]
-  subgraph pod["The app's pod, which your platform runs"]
-    sidecar["canyon-identity<br>port 4180"]:::canyon
-    app["Your app, port 3000"]
-  end
-  net["Your outbound"]
-  server -->|"builds"| executor
-  executor -->|"pushes the image, by digest"| registry
-  server -->|"the release, signed,<br>to your webhook"| platform
-  platform -.->|"fetch the access token,<br>report, with the host token"| server
-  store -->|"secret values and<br>CANYON_ACCESS_TOKEN"| platform
-  registry -->|"pulled by digest"| platform
-  platform -->|"runs"| sidecar
-  users --> gw
-  gw -->|"the person's token"| sidecar
-  sidecar -.->|"pulls the access list, https,<br>at start and every minute"| server
-  sidecar -->|"Canyon's identity token"| app
-  app --> net
+```diagram kind=flow title="Hand-off: Canyon reviews, builds and keeps the access list; your platform runs the app, and the sidecar pulls the list from Canyon"
+steps:
+  - paths:
+      - label: At each release
+        steps:
+          - {who: "`canyon-server`", icon: canyon, tone: canyon, what: "Keeps the review, approvals and who may open each app", more: "`canyon-executor` scans and builds."}
+          - via: the image, by digest, to your registry
+          - {who: "`canyon-server`", icon: canyon, tone: canyon, what: "Sends the release, signed, to your webhook"}
+          - via: "your platform fetches the access token and reports back, with the host token"
+          - {who: "Your platform: Argo CD, Flux or your CI", what: "Runs the app's pod", more: "The image pulled by digest; secret values and `CANYON_ACCESS_TOKEN` from your secret store."}
+      - label: When a person opens the app
+        steps:
+          - {who: People, icon: people, what: People using the app}
+          - {who: Yours, icon: key, what: Your gateway signs them in, more: "And passes the person's token on."}
+          - {who: In the app's pod, icon: canyon, tone: canyon, what: "`canyon-identity`, on 4180", more: "Checks the access list it pulls from Canyon over https, at start and every minute."}
+          - via: Canyon's identity token
+          - {who: Yours, what: "Your app, on 3000", more: "Its calls out go through your own outbound."}
 ```
 
 At runtime your cluster reaches Canyon for one thing: each sidecar pulls its app's access list from
@@ -191,19 +182,21 @@ See [Your platform runs the apps](/self-host/hand-off/).
 Outbound decides how apps call out to the internet. Through Canyon, every call goes through Canyon's
 **egress gateway**, and the **egress check** beside it decides whether each call may go.
 
-```mermaid title="Outbound through Canyon: the egress gateway asks the egress check before each call, and records it"
-flowchart TD
-  app["Your app<br>HTTPS_PROXY set to the gateway"]
-  envoy["Canyon's egress gateway<br>Envoy, port 3128"]:::canyon
-  check["Egress check<br>observe or allowlist,<br>from the server's policy"]:::canyon
-  server["canyon-server<br>records each call"]:::canyon
-  net["Public addresses<br>ports 80 and 443 only"]
-  refused["403<br>Canyon-Egress: not_allowed"]
-  app --> envoy
-  envoy -->|"may this call go?"| check
-  envoy -->|"allowed"| net
-  envoy -->|"refused, under allowlist"| refused
-  envoy -.-> server
+```diagram kind=flow title="Outbound through Canyon: the egress gateway asks the egress check before each call, and records it"
+steps:
+  - {who: Yours, what: Your app calls out, more: "`HTTPS_PROXY` set to the gateway."}
+  - {who: Canyon, icon: canyon, tone: canyon, what: "Canyon's egress gateway, Envoy on port 3128", more: "Records each call to `canyon-server`."}
+  - via: may this call go?
+  - {who: Canyon, icon: canyon, tone: canyon, what: The egress check, more: "Under `observe` or `allowlist`, from the server's policy."}
+  - paths:
+      - label: Allowed
+        tone: passed
+        steps:
+          - {who: Out, icon: passed, tone: passed, what: "Public addresses", more: "On ports 80 and 443 only."}
+      - label: Refused, under allowlist
+        tone: blocked
+        steps:
+          - {who: Refused, tone: blocked, what: "`403`", more: "With the header `Canyon-Egress: not_allowed`."}
 ```
 
 | How apps call out | What it does |

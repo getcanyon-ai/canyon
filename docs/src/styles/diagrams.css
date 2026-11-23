@@ -52,7 +52,7 @@
   gap: 0.35rem;
   margin-bottom: 0.3rem;
   color: var(--tone);
-  font: 600 0.68rem/1.25 var(--ds-font-mono);
+  font: 600 0.75rem/1.25 var(--ds-font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -83,7 +83,7 @@
   color: var(--ds-color-text-faint);
 }
 .cd-link span, .cd-gap span {
-  font: 500 0.72rem/1.35 var(--ds-font-mono);
+  font: 500 0.75rem/1.35 var(--ds-font-mono);
   text-align: center;
   max-width: 32rem;
 }
@@ -98,7 +98,7 @@
   align-items: center;
   gap: 0.4rem;
   margin-bottom: 0.9rem !important;
-  font: 600 0.68rem/1.25 var(--ds-font-mono);
+  font: 600 0.75rem/1.25 var(--ds-font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ds-color-text-dim);
@@ -119,7 +119,7 @@
   gap: 0.45rem;
   margin-top: 0.65rem !important;
   color: var(--ds-color-critical);
-  font: 500 0.72rem/1.4 var(--ds-font-mono);
+  font: 500 0.75rem/1.4 var(--ds-font-mono);
 }
 .cd-loop .cd-icon { width: 15px; height: 15px; }
 @container (min-width: 32rem) {

@@ -45,7 +45,7 @@ layers:
       - {who: Canyon, icon: canyon, tone: canyon, what: Sign-in, more: "checks the person and the app's access list"}
       - {who: Yours, what: Your app, more: "told who is calling, in a token Canyon signs"}
       - {who: If it asks for one, what: Its own Postgres, more: "and, in beta, calls out through Canyon's egress gateway"}
-    wall: An app can't reach the server, its database or another app directly.
+    wall: "An app can't reach Canyon's API, its database or another app."
 ```
 
 **Every app sits behind your company's sign-in.** On Kubernetes a Canyon sidecar,

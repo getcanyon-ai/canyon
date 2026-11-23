@@ -38,7 +38,7 @@ layers:
   - band: You bring
     tiles:
       - {what: "Postgres for Canyon"}
-      - {what: "Postgres for apps", more: "port 5433"}
+      - {who: Optional, what: "Postgres for apps", more: "port 5433, for apps that declare a database"}
       - {what: kpack, more: runs the builds}
       - {what: Your OCI registry}
 ```

@@ -2,6 +2,7 @@
 // script and GitHub still draws the same block from the .md source. Colours are Canyon's own tokens
 // (tokens.css), so a diagram follows the light and dark theme. A block's title="…" is its caption.
 import { renderMermaidSVG } from "beautiful-mermaid";
+import { parseFragment } from "parse5";
 
 // The four colours a diagram may use beside its neutral boxes: each means one thing everywhere.
 const classes = `
@@ -38,6 +39,12 @@ export const mermaid = {
     const title = /title="([^"]*)"/.exec(node.meta ?? "")?.[1];
     if (!title) throw new Error(`a mermaid block needs title="…", its caption and its text for screen readers:\n${node.value}`);
     const svg = noFontImports(renderMermaidSVG(node.value + classes, theme)).replace("<svg ", `<svg role="img" aria-label="${escape(title)}" `);
-    ctx.replaceNode(node, { type: "html", value: `<figure class="diagram">${svg}<figcaption>${escape(title)}</figcaption></figure>` });
+    // Drawn at its own size, never shrunk: a wider one scrolls sideways in its frame, which fades at an edge with more
+    // to see, and says so under it while it is wider than the column (src/styles/canyon.css, --w).
+    const width = Number(parseFragment(svg).childNodes[0].attrs.find((a) => a.name === "width")?.value);
+    if (!(width > 0)) throw new Error(`a mermaid diagram came out with no width:\n${node.value}`);
+    const frame = `<div class="diagram-frame" tabindex="0" role="region" aria-label="${escape(title)}, scrolls sideways">${svg}</div>`;
+    const hint = `<p class="diagram-hint" aria-hidden="true">Scroll sideways to see all of it.</p>`;
+    ctx.replaceNode(node, { type: "html", value: `<figure class="diagram" style="--w: ${Math.ceil(width)}px">${frame}${hint}<figcaption>${escape(title)}</figcaption></figure>` });
   },
 };

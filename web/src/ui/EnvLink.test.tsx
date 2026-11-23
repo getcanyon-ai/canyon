@@ -20,9 +20,9 @@ describe("EnvLink", () => {
     const sentAt = "2026-09-27T10:00:00Z";
     const clock = new Date(sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const lines: [Pending, string][] = [
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "sent" }, `waiting on your platform since ${clock}`],
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "accepted" }, `waiting on your platform since ${clock}`],
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "remove", sent_at: sentAt, state: "accepted" }, "removing · waiting on your platform"],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "sent" }, `Sent to your platform at ${clock}, not running yet`],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "accepted" }, `Sent to your platform at ${clock}, not running yet`],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "remove", sent_at: sentAt, state: "accepted" }, "Being removed by your platform"],
       [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "undelivered" }, "Your platform did not accept the release"],
       [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "refused" }, "Your platform refused the release"],
     ];
@@ -40,7 +40,7 @@ describe("EnvLink", () => {
     const pending: Pending = { via: "webhook" as const, release: "rel_7a15", event: "remove", sent_at: "2026-09-02T11:30:00Z", state: "accepted" };
     const { container } = render(<EnvCell env={{ url: "http://claims-archive.prod.localhost:7777", package: "pkg_8b21", label: "v3.1", image_digest: "sha256:767d", deployed_at: "2026-08-24T13:55:02Z", gate_run: "gr_2e88", deployed_by: null, run_by: "org", pending }} />);
     expect(screen.getByRole("link").getAttribute("href")).toBe("http://claims-archive.prod.localhost:7777");
-    expect(container.textContent).toContain("removing · waiting on your platform");
+    expect(container.textContent).toContain("Being removed by your platform");
   });
 
   // A version that keeps restarting opens nothing, up or not at this instant, and says so in red; its
@@ -70,8 +70,8 @@ describe("EnvLink", () => {
     const org = { url: "https://ledger.prod.meridian.example", package: "pkg_1a", label: "v2", image_digest: "sha256:1a", deployed_at: minutes(120), gate_run: "gr_1", deployed_by: null, run_by: "org" as const };
     const stale = minutes(20);
     const cases: [string, Parameters<typeof EnvVersion>[0]["env"], string | null][] = [
-      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `No pod has checked in since ${clock(stale)}`],
-      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "Reported deployed, but no pod has checked in"],
+      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `Your platform hasn't reported v2 running since ${clock(stale)}`],
+      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "Your platform reported v2 deployed, but not running"],
       ["a check-in a minute ago", { ...org, seen_at: minutes(1) }, null],
       ["a report 2 minutes ago, no check-in yet", { ...org, deployed_at: minutes(2) }, null],
       ["a pod still pulling while it is removed", { ...org, seen_at: minutes(1), pending: { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: minutes(2), state: "accepted" } }, null],
@@ -86,7 +86,7 @@ describe("EnvLink", () => {
     }
     // A read-only member's row: an environment with a url and when its pods last checked in, no deploy time.
     const { container } = render(<EnvOpen env={{ url: org.url, seen_at: stale }} name="production" />);
-    expect(container.querySelector("time")?.textContent).toBe(`No pod has checked in since ${clock(stale)}`);
+    expect(container.querySelector("time")?.textContent).toBe(`Your platform hasn't reported it running since ${clock(stale)}`); // its read carries no version
     cleanup();
     expect(render(<EnvOpen env={{ url: org.url }} name="production" />).container.querySelector("time")).toBeNull();
   });

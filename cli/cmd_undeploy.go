@@ -106,7 +106,7 @@ func runUndeploy(ctx context.Context, a *app, args []string) int {
 		return exitOK
 	}
 	if pending { // the org's platform runs it: a remove release went out, and the env waits on its report (design/HAND-OFF.md §7)
-		a.printf("\n  %s %s in %s: removing · waiting on your platform. Its data and secrets are kept.\n", a.render.glyph(statePending), cell(app), where)
+		a.printf("\n  %s %s in %s: being removed by your platform. Its data and secrets are kept.\n", a.render.glyph(statePending), cell(app), where)
 		return exitOK
 	}
 	a.printf("\n  %s Took %s offline in %s. Its data and secrets are kept.\n",
@@ -144,7 +144,7 @@ func (a *app) holdProd(ctx context.Context, client *Client, app, reason string, 
 	case pending && answer.Stopping != nil:
 		held = "  " + a.render.glyph(statePending) + " Held    prod " + a.dot() + " stopping\n  " + stopping["prod"]
 	case pending:
-		held = "  " + a.render.glyph(statePending) + " Held    prod " + a.dot() + " removing " + a.dot() + " waiting on your platform"
+		held = "  " + a.render.glyph(statePending) + " Held    prod " + a.dot() + " being removed by your platform"
 	}
 	a.printf("\n%s\n\n  %s\n", held, a.faint("Lift it in Canyon's dashboard when it may run again."))
 	return exitOK

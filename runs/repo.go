@@ -398,7 +398,7 @@ func (p *Pipeline) awaitCheckIn(ctx dbos.Context, in Input, id, version string, 
 }
 
 // mergeWait is how long a remove's pull request is asked after, once a minute: after it the environment reads
-// removing · waiting on your merge, and an undeploy or a delete asked again asks again (RecheckRemove).
+// being removed once you merge, and an undeploy or a delete asked again asks again (RecheckRemove).
 var (
 	mergeWait  = 30 * time.Minute
 	mergeEvery = time.Minute

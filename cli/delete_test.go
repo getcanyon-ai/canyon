@@ -96,7 +96,7 @@ func TestDeleteRefusalsAreALine(t *testing.T) {
 // A delete still under way is exit 0 and says what it waits on (design/HAND-OFF.md §7): a database a
 // driver is deleting, an environment the org's platform is removing, or both.
 func TestDeletePendingSaysWhatItWaitsOn(t *testing.T) {
-	const databases, platform = "\n  · Canyon is still deleting claims-portal's databases. Run this again to finish.\n", "\n  · claims-portal: removing · waiting on your platform. Run this again to finish.\n"
+	const databases, platform = "\n  · Canyon is still deleting claims-portal's databases. Run this again to finish.\n", "\n  · claims-portal: being removed by your platform. Run this again to finish.\n"
 	db, rel := `{"name":"db","type":"postgres","env":"preview","state":"deleting"}`, `{"release":"rel_9b31","env":"preview"}`
 	for body, want := range map[string]string{`{"pending":[` + db + `]}`: databases, `{"pending":[` + rel + `]}`: platform, `{"pending":[` + db + `,` + rel + `]}`: databases + platform} {
 		out, errs, code, _ := deleting(t, http.StatusAccepted, body, "", false, "--confirm", "claims-portal")

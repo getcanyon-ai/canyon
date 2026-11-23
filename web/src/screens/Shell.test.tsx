@@ -317,16 +317,17 @@ describe("the shell", () => {
     expect(await screen.findByRole("button", { name: AUTH.signOut })).toBeDefined(); // the rail's foot, beside the name
   });
 
-  // The CLI's approval page, reachable from the dashboard (#2564): the rail's foot leads to it with an empty
-  // code field, and nothing on the way lists or asks for a pending request (design/AUTH.md, device-code phishing).
-  it("leads a signed-in person from the rail to the CLI approval page, its code field empty, asking for no request", async () => {
+  // The CLI's approval page, opened at #/device as the CLI's link names it (the rail no longer offers it: the UX
+  // review), with an empty code field, and nothing on the way lists or asks for a pending request (design/AUTH.md,
+  // device-code phishing).
+  it("opens the CLI approval page at its address, its code field empty, asking for no request", async () => {
     window.location.hash = "#/audit";
     const sent = server(prefs, () => answer(200, signedIn));
     render(<Shell />);
-    const entry = await screen.findByRole("link", { name: AUTH.approveCli });
-    expect(entry.getAttribute("href")).toBe("#/device");
-    fireEvent.click(entry);
-    await waitFor(() => expect(window.location.hash).toBe("#/device"));
+    await screen.findByRole("navigation", { name: "Canyon" });
+    expect(screen.queryByRole("link", { name: "Approve a CLI sign-in" })).toBeNull();
+    window.location.hash = "#/device";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(await screen.findByRole("textbox", { name: AUTH.deviceCode })).toHaveProperty("value", "");
     expect(screen.getByText(AUTH.deviceEnter)).toBeDefined();
     expect(sent().filter((one) => one.includes("device"))).toEqual([]);

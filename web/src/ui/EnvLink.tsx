@@ -43,16 +43,16 @@ export function pendingLine(p: PendingRelease): string {
   if (p.via === "repo") return repoLine(p);
   if (p.state === "undelivered") return "Your platform did not accept the release";
   if (p.state === "refused") return "Your platform refused the release";
-  if (p.event === "remove") return "removing · waiting on your platform";
+  if (p.event === "remove") return S.removingPlatform;
   if (p.missing !== undefined && p.missing.length > 0) return `Your platform's report left out where ${p.missing.join(", ")} ${p.missing.length === 1 ? "is" : "are"}`;
-  return `waiting on your platform since ${clock(p.sent_at)}`;
+  return S.pendingPlatform.replace("<time>", clock(p.sent_at));
 }
 
 // A delivery: repo release's line (design/EXPERIENCE.md, the environment's pending line under delivery: repo; #2470).
 function repoLine(p: PendingRelease): string {
   if (p.state === "undelivered") return S.repoUndelivered;
   if (p.state === "refused") return S.repoRefused;
-  if (p.event === "remove") return p.pull_request === undefined ? "removing · waiting on your platform" : S.removingMerge;
+  if (p.event === "remove") return p.pull_request === undefined ? S.removingPlatform : S.removingMerge;
   return (p.pull_request === undefined ? S.pendingPod : S.pendingMerge).replace("<time>", clock(p.sent_at));
 }
 
@@ -181,12 +181,12 @@ export function checkIn(env: ViewerEnv | Env, now = Date.now()): { line: string;
     const seen = new Date(env.seen_at);
     if (Number.isNaN(seen.getTime())) return null;
     const still = full?.pending?.event === "remove";
-    const checked = still ? "A pod still checked in" : "A pod checked in";
-    if (now - seen.getTime() < 60_000) return { line: `${checked} just now`, warn: still, silent: false }; // as canyon status says the first minute
-    if (now - seen.getTime() <= STALE_MS) return { line: `${checked} ${age(env.seen_at)} ago`, warn: still, silent: false };
-    return { line: `No pod has checked in since ${since(seen, new Date(now))}`, warn: true, silent: true };
+    const said = (ago: string) => (still ? S.reportedStill : S.reported).replace("<ago>", ago);
+    if (now - seen.getTime() < 60_000) return { line: said("just now"), warn: still, silent: false }; // as canyon status says the first minute
+    if (now - seen.getTime() <= STALE_MS) return { line: said(`${age(env.seen_at)} ago`), warn: still, silent: false };
+    return { line: S.notReportedSince.replace("<version>", full === null ? "it" : version(full.package, full.label)).replace("<time>", since(seen, new Date(now))), warn: true, silent: true };
   }
-  if (full !== null && now - new Date(full.deployed_at).getTime() > NEVER_MS) return { line: "Reported deployed, but no pod has checked in", warn: true, silent: true };
+  if (full !== null && now - new Date(full.deployed_at).getTime() > NEVER_MS) return { line: S.reportedNotRunning.replace("<version>", version(full.package, full.label)), warn: true, silent: true };
   return null;
 }
 

@@ -757,7 +757,8 @@ reason in Canyon's words, never quoting the template:
 A type an app declares with no template, or no `route.yaml`, is "`<file>` is missing: Canyon needs it
 to render this app. Ask your platform team." Canyon checks what a template says, not what your
 cluster does with it: a resource template that never makes `<app>-<env>-res-<name>` leaves the pod
-waiting for its Secret, and the environment shows that no pod has checked in, never live.
+waiting for its Secret, and the environment shows "Your platform reported v1.4 deployed, but not
+running", never live.
 
 The reference templates, in `deploy/gitops/templates/.canyon/` in Canyon's source: a Gateway API
 HTTPRoute on your gateway, and a CloudNativePG cluster whose password External Secrets generates once.
@@ -972,8 +973,8 @@ While it waits, the deploy says:
 - after 30 minutes, "No pod has checked in on v1.4 in 30 minutes. The release stays open: when a pod
   checks in, the environment goes live."
 
-The dashboard, the fleet and `canyon status` show the environment as "waiting for a pod to check in
-since 10:00", "waiting on your merge since 10:00", "removing · waiting on your merge", "Canyon couldn't
+The dashboard, the fleet and `canyon status` show the environment as "Your platform hasn't reported it
+running since 10:00", "waiting on your merge since 10:00", "Being removed once you merge", "Canyon couldn't
 commit the release" or "Your deploy repo refused the release". `canyon status` prints the pull
 request's address under it.
 
@@ -995,7 +996,7 @@ your platform does next ([When an environment is stopped](#when-an-environment-i
 
 A pushed remove is done once it is pushed. A remove of production that goes through a pull request is
 done once the pull request is merged, unedited, and refused when it is closed without merging. Canyon
-asks once a minute for 30 minutes; after that the environment reads "removing · waiting on your merge",
+asks once a minute for 30 minutes; after that the environment reads "Being removed once you merge",
 and undeploying or deleting again asks again.
 
 ### Rolling back
@@ -1714,8 +1715,8 @@ minutes the deploy ends with "Your platform has not reported on v1.4 in 30 minut
 stays open: when it reports, the environment goes live." A report that comes later still makes the
 environment live.
 
-The dashboard and `canyon status` show an environment that waits on your platform as "waiting on
-your platform since 10:00", "removing · waiting on your platform", "Your platform refused the
+The dashboard and `canyon status` show an environment that waits on your platform as "Sent to
+your platform at 10:00, not running yet", "Being removed by your platform", "Your platform refused the
 release" or "Your platform did not accept the release", or, after a report that left a resource out,
 "Your platform's report left out where db is". A live environment shows the address your
 platform reported. The app's team sees each resource your platform reported under the environment,
@@ -1837,7 +1838,7 @@ undeploying a vulnerable version never lets the vulnerable pods back in, even if
 took them down.
 
 A pod that still pulls the empty list still checks in. While the environment waits on its removal, the
-dashboard and `canyon status` say so in amber, for example "A pod still checked in 1m ago": your platform
+dashboard and `canyon status` say so in amber, for example "Still running: your platform last reported it 1m ago": your platform
 hasn't taken that environment's pods down yet.
 
 ### Whether a pod checks in
@@ -1847,16 +1848,17 @@ pipeline reported. Under the deploy repo, the first check-in of a pod whose app 
 a release live ([Deployed by check-in](#deployed-by-check-in)). Under a live environment your platform
 runs, the dashboard and `canyon status` say:
 
-- "A pod checked in 2m ago", while a pod pulled in the last 5 minutes;
-- "No pod has checked in since 15:04", in amber, once 5 minutes pass without one;
-- "Reported deployed, but no pod has checked in", in amber, when none has 10 minutes after your
-  report. Before that nothing more is said, while the pods start;
-- "A pod still checked in 1m ago", in amber, while the environment waits on a `remove`: your platform
+- "Your platform reported it running 2m ago", while a pod pulled in the last 5 minutes;
+- "Your platform hasn't reported v1.4 running since 15:04", in amber, once 5 minutes pass without one;
+- "Your platform reported v1.4 deployed, but not running", in amber, when none has 10 minutes after
+  your report. Before that nothing more is said, while the pods start;
+- "Still running: your platform last reported it 1m ago", in amber, while the environment waits on a `remove`: your platform
   hasn't taken its pods down yet (see [When an environment is stopped](#when-an-environment-is-stopped)).
 
 It is the sidecar checking in: a pod whose app crashes while its sidecar runs still checks in. Under a
 webhook it never blocks a deploy or a promotion. An app with no pods, scaled to zero, or
-one deployed without the sidecar shows "no pod has checked in", as it should. After Canyon has been
+one deployed without the sidecar shows "Your platform reported v1.4 deployed, but not running", as it
+should. After Canyon has been
 unreachable for more than 5 minutes every environment you run shows it too, and each clears within
 a minute of Canyon coming back, at the sidecar's next pull. Whoever holds a release's access token
 can pull, so treat the token as you treat the host token. Under the deploy repo, that is why only the

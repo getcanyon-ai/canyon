@@ -589,10 +589,17 @@ export const S = {
   teamCopied: "<file> copied",
   teamChart: "Into your platform repo, under <path>",
   // The environment's pending line under delivery: repo (design/EXPERIENCE.md).
-  pendingPod: "waiting for a pod to check in since <time>",
+  pendingPod: "Your platform hasn't reported it running since <time>",
   pendingMerge: "waiting on your merge since <time>",
   pendingPR: "Pull request #<n>",
-  removingMerge: "removing · waiting on your merge",
+  removingMerge: "Being removed once you merge",
+  removingPlatform: "Being removed by your platform",
+  pendingPlatform: "Sent to your platform at <time>, not running yet",
+  // What the platform says of an environment the org runs (EXPERIENCE.md D5): <version> is "it" where the reader has none.
+  reported: "Your platform reported it running <ago>",
+  reportedStill: "Still running: your platform last reported it <ago>",
+  notReportedSince: "Your platform hasn't reported <version> running since <time>",
+  reportedNotRunning: "Your platform reported <version> deployed, but not running",
   repoUndelivered: "Canyon couldn't commit the release",
   repoRefused: "Your deploy repo refused the release",
   // The two gates' lines on Guardrails › Pipeline (D14).
@@ -734,6 +741,39 @@ export const S = {
 // The sign-in screen's and the header's copy (design/specs/screens.md §A0, design/AUTH.md §8):
 // not D5's, so not in S and not held to EXPERIENCE.md. The button never names the provider.
 // A box's title and its line are two keys, `<key>` and `<key>Line`.
+// The fleet and first run (the dashboard UX review, 2026-11-23): the empty fleet's two ways in, setup's intro, the
+// Access column's one line, a row the reader can't open whole, and the counts' scope.
+export const FLEET = {
+  emptyTitle: "No apps yet",
+  emptyLead: "Add your first app in one of two ways:",
+  emptyCli: "From your machine: install the CLI and run `canyon deploy` in the app's folder, or have your coding agent do it.",
+  emptyCliLink: "Connect an agent →",
+  emptyGitHubAdmin: "From GitHub: connect your organization's repositories, then make an app from one.",
+  emptyGitHubLink: "Connect GitHub →",
+  emptyGitHubMember: "From GitHub: an admin connects your organization's repositories in Settings.",
+  emptyRules: "Every app is checked against your org's rules.",
+  emptyRulesLink: "See them in Guardrails →",
+  setupIntro: "Canyon reviews every deploy your coding agents make and runs the apps that pass. Four steps: name your organization, choose who can sign in, choose its admins, then check and finish.",
+  owner: "Owner",
+  contributor: "Contributor",
+  private: "private",
+  sharedEveryone: "shared with everyone",
+  sharedWith: "shared with <n>",
+  sharedWithAdmin: "Shared with <n>",
+  readOnly: "Read-only",
+  noAccess: "No access",
+  askToJoin: "Ask to join",
+  asked: "Asked",
+  allScopeMember: "Every app in the org. Counts are for your apps.",
+  // A responder's tiles: every app's production in the org, which a responder reads on every row.
+  prodRunning: "Running in production",
+  prodRunningMore: "across the org",
+  prodHeld: "Production held",
+  prodHeldMore: "until a responder or an admin lifts it",
+  prodDown: "Production down",
+  prodDownMore: "stopped or restarting",
+} as const;
+
 export const AUTH = {
   signIn: "Sign in to Canyon",
   signInLine: "Use your <org> company account. You'll come straight back here.",
@@ -755,7 +795,6 @@ export const AUTH = {
   githubLinked: "GitHub: <logins>",
   githubLink: "Link GitHub account",
   // The rail's way to the device approval page, its code field empty (#2564): never a pending request.
-  approveCli: "Approve a CLI sign-in",
   // The device approval screen (design/specs/screens.md, "The device approval screen").
   deviceTitle: "Sign in to the Canyon CLI",
   deviceEnter: "Enter the code shown in your terminal.",

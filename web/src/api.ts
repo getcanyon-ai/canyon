@@ -59,7 +59,7 @@ export interface Viewer { display: string; role: "member" | "responder" | "admin
 // banner is none on an authenticated host, where the rail shows the viewer instead of a D5 line.
 // total counts every row the query selects across its pages; page is the page served, null on a read by cursor.
 // stats count what the tiles count, every app for an admin and the caller's team apps otherwise; no filter narrows them.
-export interface FleetStats { apps: number; owners: number; production: number; preview: number; passed: number; deploys_7d: number; production_7d: number }
+export interface FleetStats { apps: number; owners: number; production: number; preview: number; passed: number; deploys_7d: number; production_7d: number; production_states?: { running: number; held: number; down: number } } // production_states: a responder's, every app's
 export interface FleetPage { tiles: Record<TileKey, number> & { needs_you?: number }; stats: FleetStats; apps: (FleetRow | Reduced)[]; total: number; page: number | null; next: string | null; banner: "none" | "loopback" | "exposed"; viewer: Viewer; unchecked?: number; org_needs?: Need[] }
 export type RuleId = "prod.clean-gate" | "prod.human-approval" | "stack.blessed" | "owner.required" | "platform.known-vuln" | "prod.egress-allowed";
 // The go-live rules: never placed before preview, their `state` is their state before production (contracts/snapshot.md, *Two gates*).

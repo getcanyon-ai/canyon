@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { putPreferences, said, type Overridable, type Preferences, type PreferencesEdit } from "../api";
+import { FLEET } from "../strings";
 import { Button } from "../ui/Button";
 import { AdminFields, domainOf, OrganisationFields, SignInFields, useOrgDraft } from "./OrgSettings";
 
@@ -81,6 +82,8 @@ export function Onboarding({ record, done }: { record: Preferences; done: () => 
         <h1 className="text-4xl font-semibold tracking-tight">Set up Canyon</h1>
         <span className="text-md text-text-dim">{`${step} of ${STEPS.length}`}</span>
       </div>
+      {/* a first admin meets this knowing nothing of Canyon: what it is, and the four steps (the UX review) */}
+      <p className="mt-2 text-base text-text-dim">{FLEET.setupIntro}</p>
       <section aria-label={STEPS[step - 1]}>
         <h2 className={H2}>{STEPS[step - 1]}</h2>
         {step === 1 && <OrganisationFields {...fields} />}

@@ -119,12 +119,12 @@ func TestEveryRefusalIsALineAndAnExitCode(t *testing.T) {
 }
 
 // Undeploying an environment the org's platform runs sends a remove release and answers 202 at once:
-// exit 0, and the environment is said as the screens say it, removing · waiting on your platform
+// exit 0, and the environment is said as the screens say it, being removed by your platform
 // (design/HAND-OFF.md §7).
 func TestUndeployingWhatTheOrgRunsWaitsOnItsPlatform(t *testing.T) {
 	h := &undeployHost{code: http.StatusAccepted, body: `{"release":"rel_9b31"}`}
 	out, errs, code := undeploying(t, h, "", false, "--env", "preview")
-	if want := "\n  · claims-portal in preview: removing · waiting on your platform. " + kept; code != exitOK || errs != "" || out != want {
+	if want := "\n  · claims-portal in preview: being removed by your platform. " + kept; code != exitOK || errs != "" || out != want {
 		t.Errorf("a 202 exited %d, stdout %q, stderr %q; want %q", code, out, errs, want)
 	}
 }
@@ -218,7 +218,7 @@ func TestHeldAfterAskingWithTheReason(t *testing.T) {
 func TestHeldStillUnderWaySaysWhatItWaitsOn(t *testing.T) {
 	for body, row := range map[string]string{
 		`{"stopping":{"run":{"id":"gr_9a1c","state":"running"}}}`: "· Held    prod · stopping\n  Production is stopping: a promotion was already switching it, and Canyon stops it the moment it lands.\n",
-		`{"release":"rel_9b31"}`:                                  "· Held    prod · removing · waiting on your platform\n",
+		`{"release":"rel_9b31"}`:                                  "· Held    prod · being removed by your platform\n",
 	} {
 		h := &undeployHost{code: http.StatusAccepted, body: body}
 		if out, errs, code := holding(t, h, "", false, "--yes"); code != exitOK || errs != "" || !strings.Contains(out, "\n  "+row+"\n  Lift it in Canyon's dashboard when it may run again.\n") {

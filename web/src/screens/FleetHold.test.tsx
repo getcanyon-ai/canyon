@@ -37,6 +37,7 @@ function server(fleet: FleetPage | ((query: URLSearchParams) => FleetPage), answ
       const { status, body } = typeof answer === "function" ? await answer() : answer;
       return { ok: status < 300, status, json: async () => body } as unknown as Response;
     }
+    if (at.pathname.startsWith("/api/v1/projects/") || at.pathname.startsWith("/api/v1/gate-runs/")) return { ok: false, status: 503, json: async () => ({ error: "unavailable", message: "not this test's" }) } as unknown as Response; // a peek's own reads, which these tests don't read
     return { ok: true, status: 200, json: async () => ({ events: [], total: 0, page: 1, next: null }) } as unknown as Response;
   });
   vi.stubGlobal("fetch", fetch);
@@ -55,6 +56,12 @@ const show = async () => {
   await screen.findAllByRole("link", { name: "claims-portal" });
 };
 const narrow = () => vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }));
+// A team row's peek, where stopping, holding and lifting are offered (the UX review: never on every row); a reduced
+// row, which has no peek, keeps them on the row.
+const peek = (name: string) => {
+  fireEvent.click(within(row(name)).getByRole("button", { name: `Details for ${name}` }));
+  return within(screen.getByRole("complementary", { name: `Details for ${name}` }));
+};
 const stopDialog = async (app: string) => {
   fireEvent.click(screen.getByRole("button", stopOf(app)));
   return within(screen.getByRole("dialog", { name: `Stop and hold ${app} in production?` }));
@@ -104,15 +111,18 @@ describe("the fleet's held rows, by who reads them", () => {
     await show();
     expect(within(row("claims-portal")).getByText("Held")).toBeDefined();
     expect(within(row("claims-portal")).queryByRole("button", liftOf("claims-portal"))).toBeNull();
-    expect(within(row("claims-archive")).getByRole("button", stopOf("claims-archive"))).toBeDefined();
+    expect(within(row("claims-archive")).queryByRole("button", stopOf("claims-archive"))).toBeNull(); // a team row's peek offers it
+    expect(peek("claims-archive").getByRole("button", stopOf("claims-archive"))).toBeDefined();
   });
 
-  it("an admin may stop any row and lift any hold, their own team's too", async () => {
+  it("an admin may stop any row and lift any hold, their own team's too, from the row's peek", async () => {
     const fleet = as("admin", [teamRow("owner", true), other]);
     server(fleet);
     await show();
-    expect(within(row("claims-portal")).getByRole("button", liftOf("claims-portal"))).toBeDefined();
-    expect(within(row("claims-archive")).getByRole("button", stopOf("claims-archive"))).toBeDefined();
+    expect(within(row("claims-portal")).getByText("Held")).toBeDefined();
+    expect(within(row("claims-portal")).queryByRole("button", liftOf("claims-portal"))).toBeNull();
+    expect(peek("claims-portal").getByRole("button", liftOf("claims-portal"))).toBeDefined();
+    expect(peek("claims-archive").getByRole("button", stopOf("claims-archive"))).toBeDefined();
   });
 
   // Nothing runs in production, so nothing stops (#2696): the row still offers the hold, which stops every promotion,
@@ -121,11 +131,13 @@ describe("the fleet's held rows, by who reads them", () => {
     server(as("admin", [other, empty]));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findAllByRole("link", { name: "commission-calc" });
-    expect(within(row("claims-archive")).getByRole("button", stopOf("claims-archive"))).toBeDefined();
-    expect(within(row("commission-calc")).getByRole("button", holdOf("commission-calc")).textContent).toBe("Hold production");
-    expect(within(row("commission-calc")).queryByRole("button", stopOf("commission-calc"))).toBeNull();
+    expect(peek("claims-archive").getByRole("button", stopOf("claims-archive"))).toBeDefined();
+    const nothing = peek("commission-calc");
+    expect(nothing.getByRole("button", holdOf("commission-calc")).textContent).toBe("Hold production");
+    expect(nothing.queryByRole("button", stopOf("commission-calc"))).toBeNull();
   });
 
+  // A phone's card has no side pane, so it keeps them until the app's ⋯ menu offers them.
   it("offers Hold production on a phone's card of an app with nothing in production", async () => {
     narrow();
     server(as("responder", [other, empty]));
@@ -162,7 +174,7 @@ describe("stopping and lifting from the fleet", () => {
     const sent = server(as("admin", [other, empty]));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findAllByRole("link", { name: "commission-calc" });
-    fireEvent.click(screen.getByRole("button", holdOf("commission-calc")));
+    fireEvent.click(peek("commission-calc").getByRole("button", holdOf("commission-calc")));
     const dialog = within(screen.getByRole("dialog", { name: "Hold commission-calc's production?" }));
     expect(dialog.getByText("Nothing runs in production. A hold stops every promotion until a responder or an admin lifts it.")).toBeDefined();
     expect(dialog.getByText("Its team can still deploy to preview.")).toBeDefined();
@@ -179,7 +191,7 @@ describe("stopping and lifting from the fleet", () => {
     server(as("admin", [{ ...empty, hold: { ...hold, version: null } }]));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findAllByRole("link", { name: "commission-calc" });
-    fireEvent.click(screen.getByRole("button", liftOf("commission-calc")));
+    fireEvent.click(peek("commission-calc").getByRole("button", liftOf("commission-calc")));
     const dialog = within(screen.getByRole("dialog", { name: "Lift the hold on commission-calc?" }));
     expect(dialog.getByText(`Production was held by Rhea Okafor on 2026-10-11: ${hold.reason}. It stays held until a responder or an admin lifts it.`)).toBeDefined();
   });

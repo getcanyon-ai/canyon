@@ -872,6 +872,19 @@ def stats_problems(label, doc):
         out.append(f"{label}: stats.production_7d {s['production_7d']} is more than deploys_7d {s['deploys_7d']}, which counts it")
     if doc["next"] is None and doc["total"] != len(doc["apps"]):
         out.append(f"{label}: total is {doc['total']} on a last page holding all {len(doc['apps'])} rows")
+    # A responder's production_states count every app's production, which a responder reads on every row: on a whole
+    # page they are its rows' own (routes.md, stats.production_states); nobody else's read carries them.
+    states = s.get("production_states")
+    if (states is None) != (doc["viewer"]["role"] != "responder"):
+        out.append(f"{label}: production_states on a {doc['viewer']['role']}'s read; a responder's read alone carries them")
+    elif states is not None and doc["next"] is None and doc["page"] == 1:
+        prod = lambda a: (a.get("envs") or {}).get("prod") or {}
+        down = lambda a: prod(a).get("state") in ("stopped", "restarting")
+        want = {"held": sum("hold" in a for a in doc["apps"]), "down": sum("hold" not in a and down(a) for a in doc["apps"]),
+                "running": sum("hold" not in a and not down(a) and "url" in prod(a) and prod(a).get("state") != "unknown" for a in doc["apps"])}
+        for key, n in want.items():
+            if states[key] != n:
+                out.append(f"{label}: production_states.{key} is {states[key]}, but {n} of the rows qualify")
     if doc["page"] != 1:
         out.append(f"{label}: page is {doc['page']} on a read with neither page nor cursor; that is page 1")
     return out
@@ -1138,6 +1151,13 @@ def seam3_hold():
         errors.append("fleet: responder.json must carry, at none, a held row and a row running in production, or it proves neither")
         return
     errors.extend(stats_problems("fleet: responder.json", page))
+    states = page["stats"]["production_states"]
+    for name, probe in (("a responder's read with no production_states", {**page, "stats": {k: v for k, v in page["stats"].items() if k != "production_states"}}),
+                        ("a responder's held count that is not its held rows", {**page, "stats": {**page["stats"], "production_states": {**states, "held": states["held"] + 1}}}),
+                        ("a responder's running count that is not its running rows", {**page, "stats": {**page["stats"], "production_states": {**states, "running": states["running"] + 1}}}),
+                        ("a member's read with production_states", {**member, "stats": {**member["stats"], "production_states": states}})):
+        if not stats_problems("probe", probe):
+            errors.append(f"selftest: {name} was accepted")
     nobody = next(a for a in member["apps"] if a["access"]["level"] == "none")
     for name, probe, ok in (("a responder's row at none carrying preview", {**page, "apps": [{**live, "envs": {**live["envs"], "preview": live["envs"]["prod"]}}]}, False),
                             ("a responder's row at none carrying what production runs", {**page, "apps": [{**live, "envs": {"prod": {**live["envs"]["prod"], "package": "pkg_8b21"}}}]}, False),

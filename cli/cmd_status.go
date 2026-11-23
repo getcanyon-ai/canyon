@@ -298,7 +298,7 @@ func (p *pending) line() string {
 	case p.State == "refused":
 		return "Your platform refused the release"
 	case p.Event == "remove":
-		return "removing · waiting on your platform"
+		return "being removed by your platform"
 	case len(p.Missing) > 0: // its report left resources out: what the platform has to send (#2452)
 		verb := " is"
 		if len(p.Missing) > 1 {
@@ -306,7 +306,7 @@ func (p *pending) line() string {
 		}
 		return "Your platform's report left out where " + cell(strings.Join(p.Missing, ", ")) + verb
 	}
-	return "waiting on your platform since " + p.since()
+	return "sent to your platform at " + p.since() + ", not running yet"
 }
 
 // since is when the release was sent, as a person's clock says it.
@@ -325,13 +325,13 @@ func (p *pending) repoLine() string {
 	case p.State == "refused":
 		return "Your deploy repo refused the release"
 	case p.Event == "remove" && p.PullRequest != nil:
-		return "removing · waiting on your merge"
+		return "being removed once you merge"
 	case p.Event == "remove":
-		return "removing · waiting on your platform"
+		return "being removed by your platform"
 	case p.PullRequest != nil:
 		return "waiting on your merge since " + p.since()
 	}
-	return "waiting for a pod to check in since " + p.since()
+	return "your platform hasn't reported it running since " + p.since()
 }
 
 // pulled is the pull request line under a pending line, "" when it waits on none.
@@ -677,22 +677,26 @@ func (a *app) checkIn(e *env, now time.Time) (string, bool) {
 	if e == nil || e.RunBy != "org" || e.URL == "" {
 		return "", false
 	}
+	it := "it" // a read-only reader's environment carries no version
+	if e.Label != "" || e.Package != "" {
+		it = a.version(e)
+	}
 	if seen, err := time.Parse(time.RFC3339, e.SeenAt); err == nil {
 		if !e.silent(now) {
 			if e.Pending != nil && e.Pending.Event == "remove" { // its pods pull a list that admits nobody: one still pulling is one the platform has not taken down (#2450)
-				return "a pod still checked in " + a.ago(e.SeenAt, now), true
+				return "still running: your platform last reported it " + a.ago(e.SeenAt, now), true
 			}
-			return "a pod checked in " + a.ago(e.SeenAt, now), false
+			return "your platform reported it running " + a.ago(e.SeenAt, now), false
 		}
 		at := seen.Local()
 		since := at.Format("15:04")
 		if y, m, d := at.Date(); y != now.Local().Year() || m != now.Local().Month() || d != now.Local().Day() { // past midnight, the day too
 			since = at.Format("2 Jan 15:04")
 		}
-		return "no pod has checked in since " + since, true
+		return "your platform hasn't reported " + it + " running since " + since, true
 	}
 	if e.silent(now) {
-		return "reported deployed, but no pod has checked in", true
+		return "your platform reported " + it + " deployed, but not running", true
 	}
 	return "", false
 }

@@ -13,6 +13,7 @@ import { useBroke } from "./BuildFailure";
 import { Claim } from "./Claim";
 import { ACTIVITY_ACTIONS, activity, Row } from "./FleetActivity";
 import { prodPending } from "./Outbound";
+import { HoldCell, type Acting } from "./FleetHold";
 import { ownerHref } from "./Owner";
 
 const H3 = "text-sm font-semibold tracking-wide text-text-faint uppercase";
@@ -28,8 +29,9 @@ const LINK = "inline-flex h-[34px] items-center gap-1.5 rounded-[7px] px-3 text-
 // its last few changes, without leaving the query that got you here. The app page is the workbench: the
 // name and every step open it. `display` is the viewer's name, which a claim of an ownerless app is made under.
 // viewer, signedIn and lift are the fleet's, for the needs' lines, which act here as they do in its Needs you.
-export function FleetPanel({ app, display, org, close, viewer, signedIn, lift }: {
+export function FleetPanel({ app, display, org, close, viewer, signedIn, lift, act }: {
   app: FleetRow; display: string; org: string; close: () => void; viewer: Viewer; signedIn: boolean; lift: (app: FleetRow | Reduced) => void;
+  act: (acting: Omit<Acting, "asked">) => void; // stopping, holding or lifting production, which the row no longer offers (the UX review)
 }) {
   const [run, setRun] = useState<RunRead | Error | null>(null);
   const [status, setStatus] = useState<Status | Error | null>(null);
@@ -131,6 +133,8 @@ export function FleetPanel({ app, display, org, close, viewer, signedIn, lift }:
             ))}
         </p>
         {app.owners.length === 0 && !needs.some((need) => need.kind === "unowned") && <Claim app={app} display={display} />}{/* else its need's line carries it */}
+        {/* Stop production, Hold production or Lift the hold, where the reader may: the row's peek holds them, never every row */}
+        <span className="w-full"><HoldCell app={app} role={viewer.role} act={act}>{null}</HoldCell></span>
       </div>
       {status instanceof Error && <p className="text-base text-critical">{status.message}</p>}
       {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}

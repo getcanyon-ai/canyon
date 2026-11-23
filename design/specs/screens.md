@@ -1686,7 +1686,7 @@ Every one is a fact plus one action. No illustrations, no mascot, no exclamation
 
 | Screen | Copy |
 |---|---|
-| No apps yet | `No apps yet. Run canyon deploy in any app directory.` |
+| No apps yet | `No apps yet`, then the two ways in: from your machine with the CLI or a coding agent (`Connect an agent →`), and from GitHub (`Connect GitHub →` to an admin, the admin's job to anyone else); to an admin, `See them in Guardrails →` for the rules every app is checked against. The strings are EXPERIENCE.md D5's (amended 2026-11-23, the UX review). |
 | Never reviewed | `Canyon can't tell you whether this app is safe. It has never been through a gate.` `[ Run review ]` |
 | Review queue clear | `Nothing needs you.` `4 apps shipped overnight, all clean. 0 blocked.` |
 | Audit, no events | `Nothing happened in the last 24 hours. Try a wider range.` |

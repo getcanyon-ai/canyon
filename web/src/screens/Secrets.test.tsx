@@ -29,7 +29,10 @@ function server(routes: Record<string, Answer | (() => Answer)>) {
 const section = () => within(screen.getByRole("region", { name: T.title }));
 const form = () => within(screen.getByRole("form", { name: T.form }));
 const value = () => form().getByLabelText(T.value) as HTMLInputElement;
+// The form opens from its button (#102).
+const openForm = () => { if (screen.queryByRole("form", { name: T.form }) === null) fireEvent.click(section().getByRole("button", { name: T.form })); };
 const fill = (name: string, typed: string) => {
+  openForm();
   fireEvent.change(form().getByLabelText(T.name), { target: { value: name } });
   fireEvent.change(value(), { target: { value: typed } }); // the field holds what is typed in it, and nothing else does
 };
@@ -88,8 +91,10 @@ describe("the app page's Secrets section", () => {
     fill("STRIPE_WEBHOOK_SECRET", VALUE);
     fireEvent.change(form().getByLabelText(T.env), { target: { value: "prod" } });
     fireEvent.click(form().getByRole("button", { name: T.set }));
-    expect(await form().findByRole("status")).toHaveProperty("textContent", "Set STRIPE_WEBHOOK_SECRET for production. It takes effect at the next promotion.");
+    expect(await section().findByRole("status")).toHaveProperty("textContent", "Set STRIPE_WEBHOOK_SECRET for production. It takes effect at the next promotion.");
     expect(sent().filter((line) => line.includes(VALUE))).toEqual([`${PUT} {"value":"${VALUE}","env":"prod","where":"runtime"}`]);
+    expect(screen.queryByRole("form", { name: T.form })).toBeNull(); // done: the form closes
+    openForm();
     expect(value().value).toBe("");
     expect(form().getByLabelText<HTMLInputElement>(T.name).value).toBe(""); // a name left there would invite the next value to overwrite it
     await section().findByText("STRIPE_WEBHOOK_SECRET"); // the list is read again
@@ -104,8 +109,8 @@ describe("the app page's Secrets section", () => {
     await section().findByText(T.none);
     fill("PORT", "8080");
     fireEvent.click(form().getByRole("button", { name: T.set }));
-    expect(await form().findByRole("alert")).toHaveProperty("textContent", "PORT is set by Canyon: choose another name");
-    expect(form().queryByRole("status")).toBeNull();
+    expect(await section().findByRole("alert")).toHaveProperty("textContent", "PORT is set by Canyon: choose another name");
+    expect(section().queryByRole("status")).toBeNull();
     expect((form().getByLabelText(T.name) as HTMLInputElement).value).toBe("PORT");
     expect(sent().filter((line) => line.startsWith("PUT"))).toHaveLength(1);
   });
@@ -114,6 +119,7 @@ describe("the app page's Secrets section", () => {
     server({ [LIST]: { body: { secrets: [] } } });
     render(<Secrets id="claims-portal" />);
     await section().findByText(T.none);
+    openForm();
     const button = () => form().getByRole("button", { name: T.set });
     expect(button()).toHaveProperty("disabled", true);
     expect(form().getByText(T.nameFirst)).toBeDefined();
@@ -144,7 +150,7 @@ describe("the app page's Secrets section", () => {
     expect(section().getByText("Remove DATABASE_URL from production?")).toBeDefined();
     expect(sent().filter((line) => line.startsWith("DELETE"))).toEqual([]); // asking sends nothing
     fireEvent.click(section().getByRole("button", { name: "Remove DATABASE_URL from Production" }));
-    expect(await form().findByRole("status")).toHaveProperty("textContent", "Removed DATABASE_URL from production. It takes effect at the next promotion.");
+    expect(await section().findByRole("status")).toHaveProperty("textContent", "Removed DATABASE_URL from production. It takes effect at the next promotion.");
     expect(sent()).toContain(DELETE);
     await waitFor(() => expect(section().queryByText("DATABASE_URL")).toBeNull());
   });
@@ -175,8 +181,8 @@ describe("the Secrets section, at each level", () => {
   for (const [who, level, admin] of [["an owner", "owner", false], ["a contributor", "contributor", false], ["an admin", "none", true]] as const) {
     it(`gives ${who} the list and the form`, async () => {
       read({ ...app, access: { ...app.access, level } }, admin);
-      expect(await screen.findByRole("form", { name: T.form })).toBeDefined();
-      expect(await section().findByText("API_KEY")).toBeDefined();
+      expect(await within(await screen.findByRole("region", { name: T.title })).findByText("API_KEY")).toBeDefined();
+      expect(section().getByRole("button", { name: T.form })).toBeDefined();
     });
   }
   for (const [who, level] of [["a read-only member", "viewer"], ["a person with no access", "none"]] as const) {
@@ -189,4 +195,27 @@ describe("the Secrets section, at each level", () => {
       expect(sent().filter((line) => line.includes("/secrets"))).toEqual([]);
     });
   }
+
+  it("keeps the form closed until its button opens it, and Cancel closes it again", async () => {
+    server({ [LIST]: { body: listed } });
+    render(<Secrets id="claims-portal" />);
+    await section().findByText("API_KEY");
+    expect(screen.queryByRole("form", { name: T.form })).toBeNull();
+    fireEvent.click(section().getByRole("button", { name: T.form }));
+    expect(document.activeElement).toBe(value());
+    fireEvent.click(form().getByRole("button", { name: T.cancel }));
+    expect(screen.queryByRole("form", { name: T.form })).toBeNull();
+    fireEvent.click(section().getByRole("button", { name: `${T.replace} API_KEY in Preview` }));
+    expect((form().getByLabelText(T.name) as HTMLInputElement).value).toBe("API_KEY");
+  });
+
+  it("on a phone, reads each secret as a card of its own rather than a table wider than the screen", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 619px)", addEventListener: () => {}, removeEventListener: () => {} }));
+    server({ [LIST]: { body: listed } });
+    render(<Secrets id="claims-portal" />);
+    const card = within(await section().findByRole("listitem", { name: "API_KEY · Preview" }));
+    expect(section().queryByRole("table")).toBeNull();
+    expect(card.getByText("Build")).toBeDefined();
+    expect(card.getByRole("button", { name: `${T.replace} API_KEY in Preview` })).toBeDefined();
+  });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Finding as FindingRead } from "../api";
 import { actorName } from "./Actor";
 import { Button } from "./Button";
+import { S } from "../strings";
 import { Chip } from "./Chip";
 import { AFTER, Advisory, ApproveForm, capital, fileOf, highest, plainName, upgrade, useCopy, where, type ApproveBody, type Group } from "./Finding";
 import { shortDate } from "./Verdict";
@@ -55,7 +56,7 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
   return (
     <article aria-label={head} className="mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? "advisory before preview · blocks before production" : "advisory · does not block"}</Chip>
+        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.blocksAtProduction : "advisory · does not block"}</Chip>
           : open ? <Chip tone="blocks">blocks</Chip> : <Chip tone="approved">approved</Chip>}
         <Chip tone={severity}>{capital(severity)}</Chip>
         <span className="text-lg font-semibold">{head}</span>

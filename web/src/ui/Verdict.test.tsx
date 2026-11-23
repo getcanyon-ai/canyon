@@ -59,10 +59,13 @@ describe("the verdict", () => {
   // build this kind of app and names what it builds, never that the review couldn't finish.
   it("says what the host builds when no buildpack detected the package", () => {
     const undetected = run({ state: "failed", failure_reason: "detect", builds: ["Paketo Buildpack for Ruby", "Paketo Buildpack for Node.js"] });
-    expect(verdict(undetected)).toBe("✕ This host can't build this kind of app. It builds: Paketo Buildpack for Ruby, Paketo Buildpack for Node.js.");
+    expect(verdict(undetected)).toBe("✕ This host can't build this kind of app. Canyon builds Ruby and Node.js apps.");
     expect(verdict({ ...undetected, builds: [] })).toBe("✕ This host can't build this kind of app. Its builder doesn't say what it builds.");
+    // a buildpack named by its id, as a builder without names gives it, is the same kind; one the table lacks keeps its own name
+    expect(verdict({ ...undetected, builds: ["paketo-buildpacks/web-servers", "paketo-buildpacks/go", "Paketo Buildpack for Procfile", "acme/elixir"] }))
+      .toBe("✕ This host can't build this kind of app. Canyon builds Go apps, static sites, apps with a Procfile and acme/elixir.");
     // a buildpack that errored while detecting may mean a malformed manifest: the code is never called fine
-    expect(verdict({ ...undetected, errored: true })).toBe("✕ This host can't build this kind of app. It builds: Paketo Buildpack for Ruby, Paketo Buildpack for Node.js. " +
+    expect(verdict({ ...undetected, errored: true })).toBe("✕ This host can't build this kind of app. Canyon builds Ruby and Node.js apps. " +
       "A buildpack also errored while checking. If this app is meant to be one of those stacks, check that its manifest is valid (for example package.json).");
   });
 });

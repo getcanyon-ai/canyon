@@ -55,7 +55,11 @@ export const S = {
   licenceNeedOpen: "Open Settings › Licence",
   // The rail's last line: Canyon's source, the offer AGPL-3.0 section 13 asks a modified Canyon to make (#2878).
   sourceCode: "Source code",
-  undetectedBuilds: "It builds: <buildpacks>.",
+  undetectedBuilds: "Canyon builds <kinds>.",
+  // The kinds of app a host's builder makes, by its buildpacks' own names (#102): the languages, then the rest.
+  buildsApps: "<languages> apps",
+  buildsStatic: "static sites",
+  buildsProcfile: "apps with a Procfile",
   undetectedNone: "Its builder doesn't say what it builds.",
   undetectedErrored: "A buildpack also errored while checking. If this app is meant to be one of those stacks, check that its manifest is valid (for example package.json).",
   neverReviewed: "Never reviewed. Canyon can't tell you whether this app is safe.",
@@ -169,6 +173,14 @@ export const S = {
   sharedAskGroup: "Shared with … · Ask a member of the <group> group or an admin to change it.",
   roles: "Roles are what this app lets a person do: its canyon.toml declares them, and the app is told a person's roles when they open it.",
   noAccess: "You don't have access to <app>.",
+  // An app this Canyon has none of, and the way back from it or from an app the reader can't open (#102).
+  noApp: "There's no app called <app> on this Canyon.",
+  backToFleet: "Back to the fleet",
+  // Sharing an app: what the box takes, and a group's grant by its name, never a prefix (#102).
+  shareWithHint: "An email address, a group or Everyone at <org>",
+  shareWithHintNoGroups: "An email address or Everyone at <org>",
+  group: "group",
+  groupNamed: "the group <group>",
   noAccessOwner: "<owner> owns <app>. Ask them or a Canyon admin for access.",
   noAccessNoOwner: "Ask a Canyon admin.",
   noAccessGroup: "Members of the <group> group own <app>. Ask one of them or a Canyon admin for access.",
@@ -195,10 +207,16 @@ export const S = {
   stopAsk: "Stop and hold <app> in production?",
   stopping: "Stopping <app> in production and holding it: nobody can promote it until you or an admin let it run again.",
   stopPreview: "Its team can still deploy to preview.",
+  // Each of the two ways to take production down names the other (#102).
+  stopOrOffline: "To take it offline until the next promotion, use Take production offline.",
+  offlineOrStop: "To stop it and block every promotion during an incident, use Stop production.",
   liftHold: "Lift the hold",
   liftAsk: "Lift the hold on <app>?",
   leaveStopped: "Leave production stopped",
+  // The lift's two answers as the app page's question says them (#102); the fleet's says the two above until it uses it.
+  liftKeepStopped: "Lift the hold, keep it stopped",
   startAgain: "Start <version> again",
+  liftAndStart: "Lift the hold and start <version>",
   holdChanged: "production's hold changed since you read it: read it again",
   // The same hold where production runs nothing (#2696): nothing stops, so the row, its question and its
   // confirm say a hold, and a hold of a production that ran nothing says held, never stopped.
@@ -359,9 +377,9 @@ export const S = {
   gatewaysUnread: "Saved, but Canyon couldn't confirm every gateway has taken it. Until they all do, one may still let calls through or refuse them as before this change.",
   modeHeld: "Not saved. A held production can't be given more than it may call now: lift its hold, or give that app's production a mode of its own, then save again.",
   viaHeld: "Not saved. A held production can't start calling out directly: lift its hold, then save again.",
-  modeOrgs: "<mode>, the org's",
-  modeOwn: "<mode>, this app's own",
-  modeFollow: "The org's (<mode>)",
+  modeOrgs: "<mode>, as the org sets it",
+  modeOwn: "<mode>, set for this app",
+  modeFollow: "Same as the org: <mode>",
   modeOwner: "Only an owner or an admin can change this environment's mode.",
   envModeAsk: "Refuse <n> destinations in <env> now? Its calls to them get a 403 from Canyon until they're allowed.",
   envModeAskOne: "Refuse 1 destination in <env> now? Its calls to it get a 403 from Canyon until it's allowed.",
@@ -400,6 +418,13 @@ export const S = {
   // A row's last result where no allowlist can let the call through, which every mode refuses (#2723).
   refusedAddress: "refused: an IP address",
   refusedPort: "refused: port <port>",
+  // A call whose host name Canyon couldn't read (egress.schema.json's invalid), and how the destination answered, by
+  // its status class (#102).
+  noHostName: "a call with no valid host name, port <port>",
+  answered2xx: "answered (2xx)",
+  answered3xx: "redirected (3xx)",
+  answered4xx: "refused by the destination (4xx)",
+  answered5xx: "failed at the destination (5xx)",
   // Under an env's table holding one of those rows: prod.egress-allowed's how-to-fix (gate/policy/canonical.go), byte for byte.
   egressHowToFix: "A person allows each host name in Canyon's dashboard; anything else has to change in the code.",
   // The Outbound card's own line under its heading while the app's calls may go around Canyon, by the host's runtime (#2723).
@@ -631,6 +656,18 @@ export const S = {
   needCodePort: "It's on port <port>, so the code has to use port 80 or 443.",
   needSecret: "<app> has a secret in its code.",
   needSecretFix: "Rotate the key, then upload a fix.",
+  // The blocked headline's step for whoever fixes the code (#102).
+  copyFix: "Copy the fix for your agent",
+  // A finding's chip where it lets preview go ahead and stops production (the run read's blocks_production; #102).
+  blocksAtProduction: "Doesn't stop preview. Stops production until fixed or approved.",
+  // A secret's finding by where it is: its scanner's own sentence is its Why (#102).
+  secretIn: "A secret is in <file>:<line>",
+  // Approving a secret's finding, said above its Approve (#102).
+  approveSecret: "Approving lets this version run with the key in its code. Rotate the key anyway.",
+  // A runtime secret preview has and production lacks, said in the promotion's question with the way to set it (#102).
+  prodLacks: "<name> is set for preview but not production.",
+  prodLacksSet: "Set it for production",
+  prodLacksWhy: "Without it, <version> may fail to start in production.",
   needApproval: "<who> asked to put <app> <version> in production.",
   needApprovalWhy: "Asked <age>. A person approves production here, in the dashboard.",
   reviewAndApprove: "Review and approve",
@@ -1105,6 +1142,11 @@ export const TEARDOWN = {
   stillDeleting: "Still deleting: <resources>.",
   // one the org's platform provided (#2432): the delete asks the platform to delete it
   provided: "<resource> (your platform deletes it)",
+  // A resource by the environment it serves and its kind, its name after it (#102): "the production Postgres database (db)".
+  resource: "the <env> <kind> (<name>)",
+  postgres: "Postgres database",
+  // Production goes with the app: said where it runs, in the CLI's words (cli/cmd_delete.go; #102).
+  prodLive: "Production is live at <url>, and goes offline with it.",
 } as const;
 
 // What the org's platform provided for the app (design/HAND-OFF.md §7, #2432): each row is

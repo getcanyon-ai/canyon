@@ -23,7 +23,7 @@ export type Group = { name: string; version: string; tool: string; titles: strin
 // The approval of one blocking finding, or of one dependency's together, under its card, or of a package only the built
 // app holds under its go-live check (design/specs/screens.md, The approval): a reason, an expiry that starts 30 days out,
 // and who will see it. id names its fields apart from every other form's: a finding's fingerprint, or the package's.
-export function ApproveForm({ id: of, group, org, send, close }: { id: string; group?: Group; org: string; send: (body: ApproveBody) => Promise<void>; close: () => void }) {
+export function ApproveForm({ id: of, group, org, secret = false, send, close }: { id: string; group?: Group; org: string; secret?: boolean; send: (body: ApproveBody) => Promise<void>; close: () => void }) {
   const [reason, setReason] = useState("");
   const [expires, setExpires] = useState(day(30));
   const [failure, setFailure] = useState<string | null>(null);
@@ -55,6 +55,7 @@ export function ApproveForm({ id: of, group, org, send, close }: { id: string; g
       <p className="text-md text-text-dim">{`After that date the ${group === undefined ? "problem comes" : "problems come"} back in the checklist.`}</p>
       <p className="text-md text-text-dim">{`Attributed to you · in the audit, visible to every ${org} admin`}</p>
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
+      {secret && <p className="text-md text-amber">{S.approveSecret}</p>}
       <span className="mt-1 flex flex-wrap items-start gap-2">
         {reason.trim() === "" ? <Button disabled reason="Needs a reason">{approve}</Button>
           : expires === "" ? <Button disabled reason="Needs an expiry date">{approve}</Button>
@@ -169,19 +170,26 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
   // A masked or windowed snippet carries its own caret column (contracts/finding.md, canyon.shown).
   const start = finding.properties.canyon.shown?.startColumn ?? region.startColumn;
   const caret = Math.max(0, Math.min(start - 1, line.length));
+  // A caret under the whole line points at nothing, a masked secret's ···· among them: it is drawn only under part of a line (#102).
+  const end = finding.properties.canyon.shown?.endColumn ?? (region.endLine === undefined || region.endLine === region.startLine ? region.endColumn ?? line.length + 1 : line.length + 1);
+  const pointed = !(caret === 0 && end - 1 >= line.length);
+  // A secret's finding is named by where it is, and its scanner's sentence, its title, is its Why: the tool's own words
+  // after it repeat what the card already says (#102). The block an agent copies keeps them all.
+  const secret = finding.properties.canyon.secret_name !== undefined;
+  const heading = secret ? S.secretIn.replace("<file>", () => artifactLocation.uri.split("/").pop() ?? artifactLocation.uri).replace("<line>", () => String(region.startLine)) : title;
   // A check that couldn't finish is no finding in the code (contracts/finding.md, gate.unreadable): it has
   // no severity to weigh and no line to point at, so it is a short row, its digest behind Details.
   const unread = finding.ruleId === "gate.unreadable";
   return (
-    <article aria-label={title} className={`mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 ${unread ? "border-l-[3px] border-l-critical" : ""}`}>
+    <article aria-label={heading} className={`mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 ${unread ? "border-l-[3px] border-l-critical" : ""}`}>
       <div className="flex flex-wrap items-baseline gap-2">
         {approval !== undefined
           ? <Chip tone="approved">{`approved by ${actorName(approval.approved_by)} until ${shortDate(approval.expires_at)}`}</Chip>
           : unread ? <Chip tone="blocks">couldn't finish</Chip>
-          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">advisory before preview · blocks before production</Chip> : <Chip tone="advisory">advisory · does not block</Chip>}
+          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.blocksAtProduction}</Chip> : <Chip tone="advisory">advisory · does not block</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
         {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
-        <span className="text-lg font-semibold">{title}</span>
+        <span className="text-lg font-semibold">{heading}</span>
       </div>
       {approval !== undefined && <p className="mt-1.5 text-base text-text-dim">{approval.reason}</p>}
       {also.length > 0 ? <p className="mt-1.5 text-base text-text-dim">{foundBy([finding, ...also])}</p>
@@ -191,13 +199,13 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         <>
           <p className="mt-1.5 font-mono text-sm text-text-faint">{artifactLocation.uri}:{region.startLine}</p>
           <pre className="mt-1.5 overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm">
-            {[line, `${" ".repeat(caret)}^`, ...rest].join("\n")}
+            {(pointed ? [line, `${" ".repeat(caret)}^`, ...rest] : [line, ...rest]).join("\n")}
           </pre>
         </>
       )}
       <dl className="mt-2.5 grid grid-cols-[48px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-base">
         <dt className="text-text-faint">Why</dt>
-        <dd className="text-text-dim">{problem}{carried_from !== undefined && <span className="mt-1 block">{CARRIED_WHY}</span>}</dd>
+        <dd className="text-text-dim">{secret ? title : problem}{carried_from !== undefined && <span className="mt-1 block">{CARRIED_WHY}</span>}</dd>
         <dt className="text-text-faint">Fix</dt><dd className="text-text-dim">{fix}</dd>
         {finding.properties.canyon.playbook !== undefined && <><dt className="text-text-faint">Then</dt><dd className="text-text-dim">{playbookStep(finding.properties.canyon.playbook)}</dd></>}
       </dl>
@@ -209,14 +217,22 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
       )}
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
         <Button size="sm" onClick={copy}>Copy for your agent</Button>
-        {approve !== undefined && (blocks || atProduction) && approval === undefined && !approving && <Button variant="ghost" size="sm" onClick={() => setApproving(true)}>Approve with a reason</Button>}
+        {approve !== undefined && (blocks || atProduction) && approval === undefined && !approving && <Button variant="secondary" size="sm" onClick={() => setApproving(true)}>Approve with a reason</Button>}
         {copied}
       </div>
       {approve !== undefined && approving && approval === undefined && (
-        <ApproveForm id={finding.partialFingerprints["canyon/v1"]} org={approve.org} send={async (body) => { await approve.send(body); setApproving(false); }} close={() => setApproving(false)} />
+        <ApproveForm id={finding.partialFingerprints["canyon/v1"]} org={approve.org} secret={secret} send={async (body) => { await approve.send(body); setApproving(false); }} close={() => setApproving(false)} />
       )}
     </article>
   );
+}
+
+// The blocked headline's step for whoever fixes it (#102): every open blocking finding's block for their coding agent, one
+// after the other, as each card's Copy for your agent gives it.
+export function CopyFix({ app, findings }: { app: string; findings: FindingRead[] }) {
+  const { copy, copied } = useCopy(() => findings.map((one) => forAgent(one, app)).join("\n---\n\n"));
+  if (findings.length === 0) return null;
+  return <span className="inline-flex flex-wrap items-center gap-2"><Button variant="primary" onClick={copy}>{S.copyFix}</Button>{copied}</span>;
 }
 
 // useCopy copies what text gives to the clipboard on copy, and copied says how that went for two

@@ -45,11 +45,13 @@ const useAsked = (asked: Asked, box?: React.RefObject<HTMLInputElement | null>) 
 };
 
 // The add box takes what `canyon share` takes: an address, group:<name>, or everyone at the org.
-function grantOf(typed: string, org: string): { kind: GrantKind; grantee: string } {
+function grantOf(typed: string, org: string, groups: boolean): { kind: GrantKind; grantee: string } {
   const text = typed.trim();
   if (["everyone", `everyone at ${org}`.toLowerCase()].includes(text.toLowerCase())) return { kind: "everyone", grantee: "everyone" };
   if (text.startsWith("group:")) return { kind: "group", grantee: text.slice("group:".length) };
-  return { kind: "email", grantee: text };
+  // An email address has an @ and a group's name never does, so where groups may be shared a name without one is a group's
+  // (#102): nobody types a prefix. Where they may not, it is an address still being typed.
+  return groups && !text.includes("@") ? { kind: "group", grantee: text } : { kind: "email", grantee: text };
 }
 
 // The app's Access card (design/PERMISSIONS.md). Its owners and admins manage the team here; a
@@ -125,7 +127,7 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
 
   // Nothing until the read answers: a host with no sign-in answers 404, and a card drawn before that would flash.
   if (unrouted || (read === null && failure === null)) return null;
-  const typed = grantOf(who, org);
+  const typed = grantOf(who, org, groupsUnlocked);
   // The one text box submits on Enter as the button does.
   const add = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -155,10 +157,10 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
         <>
           <TableWrap minWidth={640}>
             <Table columns={COLUMNS} rows={rows} renderRow={(row) => {
-              const name = row.kind === "group" ? `group:${row.grantee}` : row.display;
+              const name = row.kind === "group" ? S.groupNamed.replace("<group>", () => row.grantee) : row.display;
               return (
                 <tr key={`${row.kind}/${row.grantee}`}>
-                  <td className={CELL}>{name}{row.kind === "email" && row.display !== row.grantee && <span className="ml-2 font-mono text-sm text-text-faint">{row.grantee}</span>}</td>
+                  <td className={CELL}>{row.kind === "group" ? <span>{row.grantee}</span> : name}{row.kind === "group" && <span className="ml-2 text-sm text-text-faint">{S.group}</span>}{row.kind === "email" && row.display !== row.grantee && <span className="ml-2 font-mono text-sm text-text-faint">{row.grantee}</span>}</td>
                   <td className={CELL}>
                     {row.kind === "everyone" ? WORD[row.level] : (
                       <select aria-label={`Access for ${name}`} className={FIELD} value={row.level}
@@ -175,10 +177,12 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
               );
             }} />
           </TableWrap>
-          <form onSubmit={(event) => void add(event)} className="mt-3 flex flex-wrap items-start gap-2">
-            <input ref={box} aria-label="Share with" list="share-with" className={`${FIELD} min-w-0 grow basis-[260px]`} value={who}
-              placeholder={`name@example.com, group:name or Everyone at ${org}`} onChange={(event) => setWho(event.target.value)} />
+          {/* the box on its own line, and the access and Share under it, so the button's reason sits under it and never floats (#102) */}
+          <form onSubmit={(event) => void add(event)} className="mt-3 grid max-w-[640px] gap-2">
+            <input ref={box} aria-label="Share with" list="share-with" className={`${FIELD} min-w-0`} value={who}
+              placeholder={(groupsUnlocked ? S.shareWithHint : S.shareWithHintNoGroups).replace("<org>", () => org)} onChange={(event) => setWho(event.target.value)} />
             <datalist id="share-with"><option value={`Everyone at ${org}`} /></datalist>
+            <span className="flex flex-wrap items-start gap-2">
             {typed.kind === "everyone" ? <span className="px-2.5 py-1.5 text-base">{WORD.viewer}</span> : (
               <select aria-label="Access" className={FIELD} value={level} onChange={(event) => setLevel(event.target.value as Level)}>
                 {LEVELS.map(([key, word]) => <option key={key} value={key}>{word}</option>)}
@@ -186,6 +190,7 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
             )}
             {typed.kind === "group" && !groupsUnlocked ? null
               : who.trim() === "" ? <Button disabled reason="Needs someone to share with">Share</Button> : <Button variant="primary" onClick={() => void add()}>Share</Button>}
+            </span>
           </form>
           {typed.kind === "group" && !groupsUnlocked && licence !== null && <div className="mt-2"><EnterpriseLine feature="group_sync" /></div>}
           {read.roles.length > 0 && (

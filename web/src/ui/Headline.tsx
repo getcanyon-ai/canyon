@@ -4,7 +4,7 @@ import { S } from "../strings";
 import { actorName } from "./Actor";
 import { down } from "./EnvLink";
 import { Icon, type IconName } from "./Icon";
-import { approved, cleared, failureWords, tryAgain } from "./Verdict";
+import { approved, buildKinds, cleared, failureWords, tryAgain } from "./Verdict";
 import { oddAnswer } from "./answered";
 
 // The app page's one sentence about the newest version and the one thing to do next (the app-page
@@ -32,6 +32,7 @@ export interface Facts {
   broke?: { cause: string | null; reason: string | null }; // a failed build's or start's own lines, once read
   progress?: string | null; // a review going: how many of its checks are done, and which waits its turn
   refused?: string[]; // production's egress requests pending, the destinations Canyon refused that wait on a person (#2723)
+  secret?: boolean; // the status read needs the newest version's secret rotated: the blocked band says it, in that need's place
 }
 
 // After a review that let the build go ahead, what broke: the review is said as it ended (approved is never passed).
@@ -125,7 +126,7 @@ export function headline(f: Facts): Band {
     }
     if (run.failure_reason === "detect") {
       const builds = run.builds ?? [];
-      return { tone: "red", title: `${v} couldn't be built on this host`, text: `${builds.length > 0 ? S.undetectedBuilds.replace("<buildpacks>", () => builds.join(", ")) : S.undetectedNone} ${run.errored ? S.undetectedErrored : "Nothing was compiled, so there is nothing in the code to fix."}${keeps}`, review: true };
+      return { tone: "red", title: `${v} couldn't be built on this host`, text: `${builds.length > 0 ? S.undetectedBuilds.replace("<kinds>", () => buildKinds(builds)) : S.undetectedNone} ${run.errored ? S.undetectedErrored : "Nothing was compiled, so there is nothing in the code to fix."}${keeps}`, review: true };
     }
     const words = failureWords(run.failure_reason, run.failed_in);
     return { tone: "red", title: `${v}'s review didn't finish`, text: `${words[0]!.toUpperCase()}${words.slice(1)}. ${tryAgain(run) ?? "Review it again."}${keeps}`, primary: "review" };
@@ -140,7 +141,9 @@ export function headline(f: Facts): Band {
       if (host !== undefined) return { tone: "red", title, text: `A check that didn't run can't vouch for the code, so it blocks. Nothing found in the code blocks it. ${host}${keeps}`, secondary: "approve", review: true, covers: ["unchecked"] };
       return { tone: "red", title, text: `A check that didn't run can't vouch for the code, so it blocks. Nothing found in the code blocks it. Review it again: the checks wait their turn instead of failing.${keeps}`, primary: "review", secondary: "approve", covers: ["unchecked"] };
     }
-    return { tone: "red", title: `${v} is blocked: ${findings(n)}`, text: `${n === 1 ? S.needBlockedFixOne : S.needBlockedFixMany} ${S.nothingBuilt}${keeps}`, secondary: "approve", review: true, covers: ["blocked"] };
+    // A secret the review found is the same problem the needs' secret line names: said here once, with its step (#102).
+    const fix = f.secret === true ? S.needSecretFix : n === 1 ? S.needBlockedFixOne : S.needBlockedFixMany;
+    return { tone: "red", title: `${v} is blocked: ${findings(n)}`, text: `${fix} ${S.nothingBuilt}${keeps}`, secondary: "approve", review: true, covers: f.secret === true ? ["blocked", "secret"] : ["blocked"] };
   }
   // Only a running environment is live: one Canyon couldn't check is never called live (routes.md, envs.<env>.state).
   if (f.prod !== null && f.prod.package === f.latest.package && f.prod.state === "unknown") {

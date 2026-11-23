@@ -9,7 +9,8 @@ import { Button } from "../ui/Button";
 import { EnvCard } from "../ui/EnvCards";
 import { down } from "../ui/EnvLink";
 import { DependencyCard } from "../ui/DependencyCard";
-import { Finding, type ApproveBody } from "../ui/Finding";
+import { CopyFix, Finding, type ApproveBody } from "../ui/Finding";
+import { Modal } from "../ui/Modal";
 import { goLive, Headline, headline, heldBand, LastLines, leads, viewerBand, type Act } from "../ui/Headline";
 import { NeedsBand } from "../ui/Need";
 import { Icon } from "../ui/Icon";
@@ -19,7 +20,7 @@ import { Receipt } from "../ui/Receipt";
 import { reviewOf } from "../ui/Stage";
 import { approved, blockingEntries, failedAfterReview, TONE, verdict } from "../ui/Verdict";
 import { Access, sharedLine, type Asked } from "./Access";
-import { HoldDialog, lifts, type Acting } from "./FleetHold";
+import { empty, HoldDialog, lifts, stops, type Acting } from "./HoldDialog";
 import { Outbound, prodPending } from "./Outbound";
 import { Provided } from "./Provided";
 import { SystemLibraries } from "./SystemLibraries";
@@ -117,6 +118,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // An app with no current package has no review of its own; its newest check's run is shown, read-only, as a check.
   const [checked, setChecked] = useState<RunRow | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [gone, setGone] = useState(false); // no app has this id: the page says so, with the way back (#102)
   const [run, setRun] = useState<RunRead | Error | null>(null);
   const [seen, setSeen] = useState<RunRead | null>(null);
   // The runs that cleared what preview and production run, read once each: a deployed version's
@@ -159,12 +161,13 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
         // Below contributor every other read of the app is refused (contracts/routes.md, App teams), so none is made.
         const s = reduced(p) && !reviewer ? null : await getStatus(id);
         const c = reduced(p) || p.latest.package !== null ? null : (await listRuns(id, null)).runs.find((row) => row.check === true) ?? null;
-        if (live) { setProject(p); setStatus(s); setChecked(c); setFailure(null); }
+        if (live) { setProject(p); setStatus(s); setChecked(c); setFailure(null); setGone(false); }
       } catch (err) {
         if (!live) return;
         const gone = err instanceof ApiError && err.status === 404;
         if (gone) { clearInterval(timer); setProject(null); setStatus(null); }
-        setFailure(gone ? `No app ${id}` : (err as Error).message);
+        setGone(gone);
+        setFailure(gone ? null : (err as Error).message);
       }
     };
     const timer = setInterval(() => void tick.current(), POLL_MS);
@@ -476,6 +479,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     preview, prod, previewName: preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label), prodName: prod === null ? null : version(prod.package, prod.label), receipt: status.receipt, hold: status.hold,
     broke: broke === null || broke instanceof Error ? undefined : broke,
     progress: progressWords(steps), refused,
+    secret: (status.needs ?? []).some((need) => need.kind === "secret" && (need.version === undefined || need.version === newest)),
   });
   // What an empty preview says: where the newest version stopped, else how something gets there.
   const newestRun = reading !== null && project !== null && !reduced(project) && reading.package === project.latest.package ? reading : null;
@@ -503,7 +507,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     const again = band?.primary === "review" && project.latest.stage !== "awaiting_review" && project.gate_state !== "never_reviewed" ? project.latest.package : null;
     switch (one) {
       case "review": return <Button key={one} variant={primary ? "primary" : "secondary"} onClick={() => void review(again)}>{`Review ${newest ?? "it"}${again === null ? "" : " again"}`}</Button>;
-      case "approve": return reading?.approvable !== true ? null : <Button key={one} variant="ghost" label="Approve with a reason: go to the findings" onClick={toApprove}>Approve with a reason</Button>;
+      case "approve": return reading?.approvable !== true ? null : <Button key={one} variant="secondary" label="Approve with a reason: go to the findings" onClick={toApprove}>Approve with a reason</Button>;
       case "cancel": return <Button key={one} variant="ghost" onClick={() => { if (reading !== null) void cancelRun(reading.id).then(() => tick.current(), (err) => setReviewFailure(said(err))); }}>Cancel review</Button>;
       case "open": return prod === null ? null : <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={prod.url} target="_blank" rel="noreferrer">Open production<Icon name="external" size={14} /></a>;
       case "copy": return broke === null || broke instanceof Error || band === null ? null : <CopyForAgent key={one} app={id} title={band.title} text={band.text} broke={broke} />;
@@ -516,6 +520,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const held = project === null || status?.hold === undefined ? null : { ...project, hold: status.hold };
   // The reader's role as the rail knows it: on a host with sign-in off no viewer is read, and its one caller is an admin.
   const role = viewer?.role ?? (admin ? "admin" : null);
+  // Stop production, or hold it where nothing runs there: a responder's or an admin's, as the fleet offers it (#102). The
+  // headline carries it, and the ⋯ menu too.
+  const unheld = project === null || status === null && !reduced(project) ? null : { ...project, hold: status?.hold };
+  const stopWord = unheld !== null && empty(unheld) ? S.holdProduction : S.stopProduction;
+  const stopping = unheld !== null && role !== null && stops(role, unheld) ? () => setLifting({ app: unheld, kind: "stop", asked: Date.now() }) : null;
+  const stop = stopping === null || unheld === null ? null : <Button key="stop" variant="secondary" label={`${stopWord} of ${unheld.name}`} onClick={stopping}>{stopWord}</Button>;
   const lift = held !== null && role !== null && lifts(role, held)
     ? <Button variant="secondary" label={`${S.liftHold} on ${held.name}`} onClick={() => setLifting({ app: held, kind: "lift", asked: Date.now() })}>{S.liftHold}</Button> : null;
   // What waits on a person leads the page (D15): the server's needs, most urgent first, with the headline where Headline's
@@ -525,6 +535,10 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const ownerless = status?.receipt.rules.some((rule) => rule.id === "owner.required" && rule.unset === true) === true;
   const needs: Need[] = (status?.needs ?? []).filter((need) => !(ownerless && need.kind === "unowned"));
   const top = leads(band, needs);
+  // A blocked version's step for whoever fixes it, the headline's one filled button (#102): every open blocking finding,
+  // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
+  const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
+    ? <CopyFix app={id} findings={reading.findings.filter((one) => one.properties.canyon.blocks && one.approval === undefined)} /> : null;
   // A restarting environment the band doesn't show the lines of shows them on its card, to whoever may read its logs
   // (#2744), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
@@ -595,25 +609,31 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
               )}
               {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} team={project.access.level === "owner" || project.access.level === "contributor"} changed={() => tick.current()} />}
             </div>
+            {project !== null && reduced(project) && stopping !== null && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={{ word: stopWord, act: stopping }} done={() => tick.current()} />}
             {project !== null && !reduced(project) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 {preview !== null && !down(preview) && <a className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium text-text no-underline hover:bg-surface-2" href={preview.url} target="_blank" rel="noreferrer">Open preview<Icon name="external" size={14} /></a>}
                 {/* Delete is managing the app, its owners' and admins' (PERMISSIONS.md): the read answers
                     `requests` to them alone, so its presence is what says the reader may. */}
-                <More id={id} name={project.name} preview={preview !== null} prod={prod !== null} manage={project.access.requests !== undefined} done={() => tick.current()} />
+                <More id={id} name={project.name} preview={preview !== null} prod={prod !== null} manage={project.access.requests !== undefined} stop={stopping === null ? undefined : { word: stopWord, act: stopping }} live={prod !== null && !down(prod) ? prod.url : undefined} done={() => tick.current()} />
               </div>
             )}
           </div>
         </header>
         {failure !== null && <p className="text-base text-critical">{failure}</p>}
+        {gone && (
+          <p className="text-base text-text-dim">{S.noApp.replace("<app>", () => id)}{" "}
+            <a className="text-link no-underline hover:underline" href="#/fleet">{S.backToFleet}</a></p>
+        )}
         {/* The question names the hold it read; the page's newest read, held or not, says when someone else changed it (#2723). */}
         {lifting !== null && <HoldDialog acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); void tick.current(); }} />}
         {/* The body waits on the app's row and its status read, one after the other: until they answer, it says so (#2561). */}
-        {project === null && failure === null && <p role="status" className="text-base text-text-dim">{S.appReading}</p>}
+        {project === null && failure === null && !gone && <p role="status" className="text-base text-text-dim">{S.appReading}</p>}
         {project !== null && reduced(project) && (
           <>
             <Headline band={viewerBand(project.envs, status === null ? `${S.readOnly} ${S.readOnlyUse}` : S.responderAccess, project.access.level !== "none")}>
-              {asked === null ? <Button variant="secondary" onClick={() => void askForAccess(id).then(() => setAsked(true), (err: unknown) => setAsked(said(err)))}>{project.access.level === "viewer" ? S.askToJoin : S.askForAccess}</Button>
+              {role === "responder" ? stop ?? undefined
+                : asked === null ? <Button variant="secondary" onClick={() => void askForAccess(id).then(() => setAsked(true), (err: unknown) => setAsked(said(err)))}>{project.access.level === "viewer" ? S.askToJoin : S.askForAccess}</Button>
                 : asked === true ? <p role="status" className="text-md text-ok">{project.owners[0] !== undefined ? S.asked.replace("<owner>", () => actorName(project.owners[0]!))
                   : project.owner_groups[0] !== undefined ? S.askedGroup.replace("<group>", () => project.owner_groups[0]!) : S.askedNoOwner}</p>
                 : <p className="text-md text-critical">{asked}</p>}
@@ -643,7 +663,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                   <h2 className={H2}>Review</h2>
                   {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}
                   {lastRun !== null && reading === null && seen === null && !(run instanceof Error) && <p role="status" className="text-md text-text-dim">{S.reviewReading}</p>}
-                  {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 font-normal text-text-faint">{shown(fix).length}</span></h3>}
+                  {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(fix).length}</span></h3>}
                   {whoApproves}
                   {shown(fix).map(card)}
                   {shown(rest).map(card)}
@@ -663,8 +683,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {(() => {
               const headed = top.band === null ? null : (
                 <Headline key="headline" band={top.band} app={admin || project.access.level === "owner" || project.access.level === "contributor" ? id : undefined}>
-                  {top.band.primary === undefined && top.band.secondary === undefined && (lift === null || status.receipt.held === undefined) ? undefined
-                    : <>{status.receipt.held !== undefined && lift}{act(top.band.secondary, false)}{act(top.band.primary, true)}</>}
+                  {top.band.primary === undefined && top.band.secondary === undefined && stop === null && (lift === null || status.receipt.held === undefined) ? undefined
+                    : <>{status.receipt.held !== undefined && lift}{stop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
                 </Headline>
               );
               const listed = top.needs.length === 0 ? null : (
@@ -704,7 +724,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     const advisories = `${others} ${others === 1 ? "advisory" : "advisories"}`;
                     // Beside what blocks production, "no advisories" is no news: it's said only with nothing blocking.
                     const blocks = S.blocksProduction.replace("<n>", () => String(atProd));
-                    return <span className="ml-2 text-md font-normal text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
+                    return <span className="mt-0.5 block text-md font-normal text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
                   })()}
                 </h2>
               )}
@@ -740,7 +760,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 </>
               )}
               <div className={`grid grid-cols-[minmax(0,1fr)] gap-3 transition-opacity duration-(--ds-motion-duration-fast) ${dimmed ? "opacity-45" : ""}`}>
-                {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 font-normal text-text-faint">{shown(fix).length}</span></h3>}
+                {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(fix).length}</span></h3>}
                 {whoApproves}
                 {shown(fix).map(card)}
                 {/* Beside what blocks, what doesn't waits behind a click, its count on the summary; alone, it is the review's content. */}
@@ -774,7 +794,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     {status.hold !== undefined && status.hold.version === version(preview.package, preview.label)
                       ? <p className="text-md text-text-dim">{S.heldVersion.replace("<version>", () => status.hold!.version!)}</p>
                       : (preview.package !== project.latest.package || status.receipt.held !== undefined) && (
-                      <Promote id={id} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />
+                      <Promote id={id} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
+                        quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)} />
                     )}
                   </aside>
                 )}
@@ -803,13 +824,13 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
 // The ⋯ in the header: taking an environment offline is rare and risky, so it is not in the reading
 // flow (the redesign: "Take offline and Delete live in the ⋯ menu"). Each item asks before it acts.
 // Renaming and deleting are managing the app, its owners' and admins' (manage).
-function More({ id, name, preview, prod, manage, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; done: () => Promise<void> }) {
+function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: () => void }; live?: string; done: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
-  if (!preview && !prod && !manage) return null;
+  if (!preview && !prod && !manage && stop === undefined) return null;
   const close = () => { setOpen(false); setEnv(null); button.current?.focus(); };
   return (
     <div className="relative" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
@@ -821,15 +842,17 @@ function More({ id, name, preview, prod, manage, done }: { id: string; name: str
         <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] max-[520px]:right-auto max-[520px]:left-0 rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
           {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
-          {(preview || prod) && manage && <div role="separator" className="my-1 h-px bg-border" />}
+          {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(); }}>{`${stop.word}…`}</button>}
+          {(preview || prod || stop !== undefined) && manage && <div role="separator" className="my-1 h-px bg-border" />}
           {manage && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("rename"); setOpen(false); }}>{RENAME.title}</button>}
           {manage && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setEnv("delete"); setOpen(false); }}>{TEARDOWN.deleteTitle}</button>}
         </div>
       )}
-      {env !== null && (
+      {/* Deleting is over the page, the page dimmed and the keyboard kept in it (#102) */}
+      {env === "delete" && <Modal label={TEARDOWN.deleteButton.replace("<app>", () => id)} close={close}><DeleteApp id={id} live={live} cancel={close} /></Modal>}
+      {env !== null && env !== "delete" && (
         <div className="absolute right-0 z-10 mt-1.5 w-[360px] rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:fixed max-[520px]:inset-x-4 max-[520px]:w-auto">
-          {env === "delete" ? <DeleteApp id={id} cancel={close} />
-            : env === "rename" ? <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
+          {env === "rename" ? <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
             : <TakeOffline key={env} id={id} env={env} done={async () => { await done(); setEnv(null); }} cancel={close} />}
         </div>
       )}

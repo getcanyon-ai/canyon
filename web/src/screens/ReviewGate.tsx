@@ -114,7 +114,7 @@ export function ReviewGate({ run, findings }: { run: string; findings: Finding[]
   const nothing = [...new Set(read.rows.flatMap((row) => row.notes.filter(noUI)))];
   // A group of coverage lines, each by its policy's name and its reason when the line carries them (#1668).
   const group = (name: string, lines: string[], icon: IconName) => lines.length === 0 ? null : (
-    <section aria-label={name} className="grid gap-1 border-t border-border pt-2">
+    <section aria-label={name} className="mt-2 grid gap-1 border-t border-border pt-2">
       <p className="text-xs font-semibold tracking-caps text-text-faint uppercase">{`${name} · ${lines.length}`}</p>
       <ul className="grid gap-1 text-md text-text-dim">
         {lines.map((text, at) => {
@@ -131,9 +131,14 @@ export function ReviewGate({ run, findings }: { run: string; findings: Finding[]
   );
   const tools = read.rows.filter((row) => row.producer !== "canyon/scanners");
   return (
-    <section aria-label="What Canyon checked" className="grid gap-2 rounded-[10px] border border-border bg-surface px-4 py-3">
-      <h3 className="text-md font-semibold">What Canyon checked</h3>
-      <ul aria-label="Review gate" className="grid gap-1.5 text-md">
+    <section aria-label="What Canyon checked" className="rounded-[10px] border border-border bg-surface px-4 py-3">
+      {/* it opens and closes, and says so with its chevron (#102) */}
+      <details open className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+        <span className="text-text-faint transition-transform group-open:rotate-90"><Icon name="chevron" size={14} /></span>
+        <h3 className="text-md font-semibold">What Canyon checked</h3>
+      </summary>
+      <ul aria-label="Review gate" className="mt-2 grid gap-1.5 text-md">
         {tools.map((row) => {
           const { word, icon, tone } = outcome(row, findings);
           // What a tool said of its own run, under its line, unless it is the reason already in its word.
@@ -161,6 +166,7 @@ export function ReviewGate({ run, findings }: { run: string; findings: Finding[]
       {group("Checked by the AI review", byAI, "passed")}
       {group("Didn't apply", nothing, "passed")}
       {group("Not checked", unread, "never")}
+      </details>
     </section>
   );
 }

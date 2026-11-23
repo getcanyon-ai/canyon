@@ -76,11 +76,30 @@ export function verdict(run: RunRead, shown?: string): string {
       if (run.failure_reason === "detect" && run.fix !== undefined) return `✕ ${shown ?? "This version"} is missing a ${run.fix.file}`; // the host builds it once the file is there
       if (run.failure_reason === "detect") { // nothing was compiled: the host does not build this kind of app
         const builds = run.builds ?? [];
-        const said = `✕ ${S.undetected} ${builds.length > 0 ? S.undetectedBuilds.replace("<buildpacks>", () => builds.join(", ")) : S.undetectedNone}`;
+        const said = `✕ ${S.undetected} ${builds.length > 0 ? S.undetectedBuilds.replace("<kinds>", () => buildKinds(builds)) : S.undetectedNone}`;
         return run.errored ? `${said} ${S.undetectedErrored}` : said; // a buildpack erroring may mean a malformed manifest: never call the code fine
       }
       if (failedAfterReview(run)) return `✕ ${shown ?? "This version"} ${cleared(run)}, then ${AFTER_REVIEW[run.failure_reason!]}`;
       return `✕ The review couldn't finish: ${failureWords(run.failure_reason, run.failed_in)}`;
     case "pending": case "running": return "Reviewing…";
   }
+}
+
+// The buildpacks a host's builder names, as the kinds of app it makes (#102). The run read names each by its name, else
+// its id (executor.BuildsOf), so both are here, exactly, as Paketo ships them; a buildpack not here is said as it is
+// named, never dropped.
+const PAKETO: [string, string, string][] = [
+  ["nodejs", "Node.js", "Node.js"], ["python", "Python", "Python"], ["go", "Go", "Go"], ["java", "Java", "Java"],
+  ["java-native-image", "Java Native Image", "Java"], ["ruby", "Ruby", "Ruby"], ["php", "PHP", "PHP"], ["dotnet-core", ".NET Core", ".NET"],
+];
+const LANGUAGE: Record<string, string> = Object.fromEntries(PAKETO.flatMap(([id, name, language]) => [[`paketo-buildpacks/${id}`, language], [`Paketo Buildpack for ${name}`, language]]));
+const OTHER: Record<string, string> = {
+  "paketo-buildpacks/web-servers": S.buildsStatic, "Paketo Buildpack for Web Servers": S.buildsStatic,
+  "paketo-buildpacks/procfile": S.buildsProcfile, "Paketo Buildpack for Procfile": S.buildsProcfile,
+};
+const and = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
+export function buildKinds(builds: string[]): string {
+  const languages = [...new Set(builds.flatMap((one) => LANGUAGE[one] ?? []))];
+  const rest = [...new Set(builds.filter((one) => LANGUAGE[one] === undefined).map((one) => OTHER[one] ?? one))];
+  return and([...(languages.length > 0 ? [S.buildsApps.replace("<languages>", () => and(languages))] : []), ...rest]);
 }

@@ -731,7 +731,7 @@ finding and no other, and opens an inline field under the card, not a modal (ame
 `canyonv2-5r11.10`; the checklist's `Approve these 2 problems with a reason →` link is gone, so
 there is one way to approve). A blocking finding is one that blocks before preview, or before
 production — the run read's `blocks_production`, the server's answer, never worked out from the rules
-on the page (#2206) — and that one reads `advisory before preview · blocks before production` and
+on the page (#2206) — and that one reads `Doesn't stop preview. Stops production until fixed or approved.` (**amended 2026-11-23**, #102) and
 carries the button too. The button shows only where the run read is `approvable` for the reader: an
 admin, or a responder, who did not start the run (amended 2026-10-12, #2204; design/PERMISSIONS.md) —
 the run shown, the newest or one pinned by `?run=` alike, an older run's or a rollback review's, and
@@ -1038,11 +1038,11 @@ it*: secrets): the app's secrets by name, from `GET …/secrets`, and the one fo
 person whose agent has no CLI sets what the app needs (mcp.md §10.1). Titled `Secrets`, then `Values the app reads by
 name. Canyon keeps each in its vault and never shows one back.`
 
-- **The list**, one row per environment and name: the name, `Preview` or `Production`, `Runtime` or `Build`, its
+- **The list**, one row per environment and name, each a card of its own on a phone, where the table would overflow (#102): the name, `Preview` or `Production`, `Runtime` or `Build`, its
   version, who set it and when. A row the PUT wrote (`origin: user`) has `Replace` and `Remove`; one a deploy wrote
   from a declared resource (`provisioned`) says `Canyon sets this one for the app`, with neither, as the routes refuse it (`409
   provisioned`). With none: `No secrets set.`
-- **`Set a secret`**: `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
+- **`Set a secret`**, a form that opens from its button, from `Replace` and from a link that names a secret (closed otherwise, with `Cancel` to close it; **amended 2026-11-23**, #102): `Name`, `Value`, `Environment` (`Preview`, the default, or `Production`) and `Where` (`Runtime`,
   the default, or `Build`), then `Set secret` (until a name and a value are typed, it says `Name the secret first.` or
   `Type the value first.`), and under it `Setting a name that's already set replaces its value.`
   `Value` is a password field: never filled from anything, sent once in the PUT, emptied when the PUT lands, and held

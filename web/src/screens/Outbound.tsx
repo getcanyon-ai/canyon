@@ -26,7 +26,10 @@ const forGood = (row: EgressDestination) => row.last_outcome !== "refused" ? nul
 const result = (row: EgressDestination) =>
   row.last_outcome === "refused" ? forGood(row) ?? "refused"
     : row.last_protocol === "connect" && failed(row).length > 0 ? `tunnel failed: ${failed(row).join(",")}`
-      : row.last_status_class === "none" ? "no answer" : row.last_status_class;
+      : row.last_status_class === "none" ? "no answer" : ANSWERED[row.last_status_class] ?? row.last_status_class;
+const ANSWERED: Record<string, string> = { "2xx": S.answered2xx, "3xx": S.answered3xx, "4xx": S.answered4xx, "5xx": S.answered5xx };
+// A destination by its name and port; one whose name Canyon couldn't read, in words (#102).
+const place = (row: EgressDestination) => (row.destination === "invalid" ? S.noHostName.replace("<port>", () => String(row.port)) : `${row.destination}:${row.port}`);
 
 // What allowlist decides (contracts/routes.md, The check): an entry allows its name, `*.` and a name every
 // name any depth below it and never the name itself; a platform destination is allowed for every app. A row
@@ -142,7 +145,7 @@ function Destinations({ rows, last = false, allowFor, allow, empty }: {
       <ul className="mt-2.5 divide-y divide-border rounded-xl border border-border bg-surface">
         {rows.length === 0 ? <li className="px-3 py-4 text-text-faint">{empty ?? "No rows"}</li> : rows.map((row) => (
           <li key={`${row.destination}:${row.port}`} className="grid gap-1 px-3 py-2.5">
-            <span className="font-mono text-md break-all">{`${row.destination}:${row.port}`}</span>
+            <span className={`${row.destination === "invalid" ? "" : "font-mono"} text-md break-all`}>{place(row)}</span>
             <span className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-text-dim">
                 <Age at={row.last_seen_at} long />
@@ -165,7 +168,7 @@ function Destinations({ rows, last = false, allowFor, allow, empty }: {
         rows={rows} empty={empty}
         renderRow={(row) => (
           <tr key={`${row.destination}:${row.port}`}>
-            <td className={`${CELL} font-mono text-md`}>{`${row.destination}:${row.port}`}</td>
+            <td className={`${CELL} ${row.destination === "invalid" ? "" : "font-mono"} text-md`}>{place(row)}</td>
             <td className={CELL}><Age at={row.last_seen_at} long /></td>
             <td className={`${CELL} tnum text-right`}>{count(row.calls)}</td>
             {last && <td className={CELL}>{result(row)}</td>}

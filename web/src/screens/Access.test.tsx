@@ -74,7 +74,7 @@ describe("the Access card", () => {
     expect(row("Everyone at Meridian").getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Everyone at Meridian", "read-only", "—", "—", "—", "Remove"]);
     expect((row("Dana Whitfield").getByRole("combobox", { name: "Access for Dana Whitfield" }) as HTMLSelectElement).value).toBe("owner");
     expect(row("Dana Whitfield").getByText("approver")).toBeDefined();
-    expect((row("group:claims-engineering").getByRole("combobox") as HTMLSelectElement).value).toBe("contributor");
+    expect((row("claims-engineering").getByRole("combobox") as HTMLSelectElement).value).toBe("contributor");
     expect(screen.getByRole("combobox", { name: "Share with" })).toBeDefined();
     expect(screen.getByText(S.roles)).toBeDefined();
     expect(screen.getByText("Reads every claim and changes none")).toBeDefined();
@@ -159,7 +159,7 @@ describe("the Access card", () => {
   // Each control that takes its row away hands the keyboard to the add box, never to the page.
   // A second click while the first is in flight sends nothing: the second DELETE would answer 404.
   for (const [control, request] of [
-    ["Remove group:claims-engineering", `DELETE ${ACCESS}/group/claims-engineering`],
+    ["Remove the group claims-engineering", `DELETE ${ACCESS}/group/claims-engineering`],
     ["Dismiss sam@meridian.example", `DELETE ${REQUEST}`],
     ["Add sam@meridian.example as read-only", `PUT ${ACCESS}/email/sam%40meridian.example {"level":"viewer","roles":[]}`],
   ] as const) {
@@ -204,7 +204,7 @@ describe("the Access card", () => {
       [`PUT ${ACCESS}/group/claims-engineering`]: { body: golden.read } }, LAPSED);
     show(owner);
     await screen.findByText("Dana Whitfield");
-    const level = () => row("group:claims-engineering").getByRole("combobox", { name: "Access for group:claims-engineering" }) as HTMLSelectElement;
+    const level = () => row("claims-engineering").getByRole("combobox", { name: "Access for the group claims-engineering" }) as HTMLSelectElement;
     await waitFor(() => expect([...level().options].map((option) => option.value)).toEqual(["contributor", "viewer"]));
     expect(level().value).toBe("contributor");
     expect((row("Dana Whitfield").getByRole("combobox", { name: "Access for Dana Whitfield" }) as HTMLSelectElement).value).toBe("owner");
@@ -216,8 +216,29 @@ describe("the Access card", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Share with" }), { target: { value: "sam@meridian.example" } });
     expect(screen.getByRole("button", { name: "Share" })).toBeDefined();
     expect(screen.queryByText(S.licenceRequiredGroups)).toBeNull();
-    fireEvent.click(row("group:claims-engineering").getByRole("button", { name: "Remove group:claims-engineering" }));
+    fireEvent.click(row("claims-engineering").getByRole("button", { name: "Remove the group claims-engineering" }));
     await waitFor(() => expect(sent()).toContain(`DELETE ${ACCESS}/group/claims-engineering`));
+  });
+
+  // A group is shared by its name: an email address has an @ and a group's name never does, so nobody types a prefix (#102).
+  // Without the licence a name with no @ is an address still being typed, never a group to upsell.
+  it("shares with a group by its name alone where groups may be shared, and takes a name with no @ as an address where not", async () => {
+    const sent = server({ [`GET ${ACCESS}`]: { body: golden.read }, [`PUT ${ACCESS}/group/ops`]: { body: golden.read } });
+    show(owner);
+    await screen.findByText("Dana Whitfield");
+    const box = screen.getByRole("combobox", { name: "Share with" });
+    expect(box.getAttribute("placeholder")).toBe("An email address, a group or Everyone at Meridian");
+    fireEvent.change(box, { target: { value: "ops" } });
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await waitFor(() => expect(sent().some((call) => call.startsWith(`PUT ${ACCESS}/group/ops`))).toBe(true));
+    cleanup();
+    server({ [`GET ${ACCESS}`]: { body: golden.read } }, LAPSED);
+    show(owner);
+    await screen.findByText("Dana Whitfield");
+    expect(screen.getByRole("combobox", { name: "Share with" }).getAttribute("placeholder")).toBe("An email address or Everyone at Meridian");
+    fireEvent.change(screen.getByRole("combobox", { name: "Share with" }), { target: { value: "sam" } });
+    expect(screen.queryByText(S.licenceRequiredGroups)).toBeNull();
+    expect(screen.getByRole("button", { name: "Share" })).toBeDefined();
   });
 
   // A host with no sign-in routes none of the Access group (contracts/routes.md, Access): the card

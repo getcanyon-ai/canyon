@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Finding as FindingRead } from "../api";
 import type { RunRead } from "../api";
+import { S } from "../strings";
 import { Finding, forAgent } from "./Finding";
 import { verdict } from "./Verdict";
 
@@ -23,6 +24,29 @@ afterEach(() => {
 });
 
 describe("Finding", () => {
+  // Approving a secret's finding lets the version run with the key in its code: said above its Approve, never on another (#102).
+  it("says above a secret's Approve that the key is still to be rotated", () => {
+    const approve = { org: "Meridian", send: async () => {} };
+    render(<Finding finding={golden[2].results[0]} app="claims-portal" approve={approve} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve with a reason" }));
+    expect(screen.getByText(S.approveSecret)).toBeDefined();
+    cleanup();
+    render(<Finding finding={blocking} app="claims-portal" approve={approve} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve with a reason" }));
+    expect(screen.queryByText(S.approveSecret)).toBeNull();
+  });
+
+  // A caret under the whole line points at nothing: a secret's masked snippet, ····, has none, and a finding that
+  // points into its line keeps its caret (#102).
+  it("draws a caret only under part of a line, never under a masked secret alone", () => {
+    const key = golden[2].results[0];
+    const { container } = render(<Finding finding={key} app="claims-portal" />);
+    expect(container.querySelector("pre")?.textContent).toBe("\u2022\u2022\u2022\u2022");
+    cleanup();
+    const { container: pointed } = render(<Finding finding={imported} app="claims-portal" />);
+    expect(pointed.querySelector("pre")?.textContent).toMatch(/\n *\^/);
+  });
+
   // A custom rule's finding whose rule points at a playbook (contracts/finding.md, canyon.playbook): one more step after
   // the fix, on the card and in the block an agent gets, in canyon check --ai's words and place. One with none says none.
   it("names the playbook its rule points at, after the fix", () => {

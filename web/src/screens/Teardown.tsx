@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, deleteProject, said, takeOffline, type Resource } from "../api";
-import { TEARDOWN as T } from "../strings";
+import { S, TEARDOWN as T } from "../strings";
 import { Button } from "../ui/Button";
 
 const WORD = { preview: "preview", prod: "production" } as const;
 // One the org's platform provided is the platform's to delete, and says so (#2432).
+const KIND: Record<string, string> = { postgres: T.postgres }; // a resource type Canyon provides, in words; any other by its type
 const named = (resources: Resource[]) => resources.map((one) => {
-  const it = `${one.type} ${one.name} in ${WORD[one.env]}`;
+  const it = T.resource.replace("<env>", () => WORD[one.env]).replace("<kind>", () => KIND[one.type] ?? one.type).replace("<name>", () => one.name);
   return one.state === "provided" ? T.provided.replace("<resource>", () => it) : it;
 }).join(", ");
 const FIELD = "w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-base";
@@ -17,9 +18,9 @@ const FIELD = "w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 f
 // page, polling, shows the environment leaving when it has.
 export function TakeOffline({ id, env, done, cancel }: { id: string; env: "preview" | "prod"; done: () => Promise<void>; cancel: () => void }) {
   const [failure, setFailure] = useState<string | null>(null);
-  const confirming = useRef<HTMLButtonElement>(null);
+  const cancelling = useRef<HTMLButtonElement>(null);
   const sending = useRef(false);
-  useEffect(() => { confirming.current?.focus(); }, []);
+  useEffect(() => { cancelling.current?.focus(); }, []); // the safe answer first, never the red one (#102)
 
   const send = async () => {
     if (sending.current) return;
@@ -36,9 +37,10 @@ export function TakeOffline({ id, env, done, cancel }: { id: string; env: "previ
   return (
     <div className="flex flex-col items-start gap-2">
       <p className="text-md text-text-dim">{T.offlineConfirm.replace("<app>", () => id).replace("<env>", WORD[env]).replace("<back>", env === "prod" ? "Promote" : "Deploy")}</p>
+      {env === "prod" && <p className="text-md text-text-dim">{S.offlineOrStop}</p>}
       <span className="flex flex-wrap gap-2">
-        <Button ref={confirming} variant="danger" onClick={() => void send()}>{T.takeOffline.replace("<env>", WORD[env])}</Button>
-        <Button variant="ghost" onClick={cancel}>Cancel</Button>
+        <Button variant="danger" onClick={() => void send()}>{T.takeOffline.replace("<env>", WORD[env])}</Button>
+        <Button ref={cancelling} variant="ghost" onClick={cancel}>Cancel</Button>
       </span>
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
     </div>
@@ -48,7 +50,7 @@ export function TakeOffline({ id, env, done, cancel }: { id: string; env: "previ
 // Deleting the app, from the header's ⋯ (the redesign: risky actions are not in the reading flow).
 // Opening it sends the call without confirm, so the server lists what would go and changes nothing;
 // the typed name enables the confirmed call, which a 202 or a 502 sends again. Cancel sends nothing.
-export function DeleteApp({ id, cancel }: { id: string; cancel: () => void }) {
+export function DeleteApp({ id, live, cancel }: { id: string; live?: string; cancel: () => void }) {
   const [resources, setResources] = useState<Resource[] | null>(null);
   const [typed, setTyped] = useState("");
   const [pending, setPending] = useState<Resource[] | null>(null);
@@ -83,12 +85,13 @@ export function DeleteApp({ id, cancel }: { id: string; cancel: () => void }) {
 
   const name = T.deleteButton.replace("<app>", () => id);
   return (
-    <section aria-label="Delete this app" className="flex flex-col items-start gap-2">
+    <section aria-label="Delete this app" className="grid gap-2">
       <h3 className="text-base font-semibold text-critical">{name}?</h3>
       {resources === null && failure === null && <p className="text-md text-text-faint">Checking what this deletes…</p>}
       {resources !== null && (
         <>
           <p className="text-md text-text-dim">{resources.length === 0 ? T.destroysNothing.replace("<app>", () => id) : T.destroys.replace("<app>", () => id).replace("<resources>", () => named(resources))}</p>
+          {live !== undefined && <p className="text-md text-amber">{T.prodLive.replace("<url>", () => live)}</p>}
           <label className="w-full text-md text-text-dim">
             {T.typeName.replace("<app>", () => id)}
             <input ref={field} className={`${FIELD} mt-1`} autoComplete="off" value={typed} onChange={(event) => setTyped(event.target.value)} />

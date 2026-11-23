@@ -48,6 +48,7 @@ export function NoAccess({ id, auth }: { id: string; auth: "oidc" | "off" | null
         </>
       )}
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
+      <a className="text-md text-link no-underline hover:underline" href="#/fleet">{S.backToFleet}</a>
     </main>
   );
 }

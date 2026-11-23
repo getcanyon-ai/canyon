@@ -4,6 +4,7 @@ import { SECRETS as T } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age } from "../ui/Age";
 import { Button } from "../ui/Button";
+import { useMedia } from "../ui/media";
 import { CELL, Table, TableWrap } from "../ui/Table";
 
 const H2 = "text-base font-semibold";
@@ -27,7 +28,9 @@ const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 // asked is what a link to the section names (#/apps/<app>/secrets?name=&env=, design/specs/mcp.md §2.3, canyon_secret_link):
 // the form opens on that secret, scrolled to with its value's field ready. Only a name a secret may have and an
 // environment there is are taken; a value never comes from a link.
-export function Secrets({ id, asked }: { id: string; asked?: { name: string | null; env: string | null } }) {
+// back is the way back to what sent the reader here, offered once the secret is set (#102: promote's missing secret);
+// saved is told each time one is set.
+export function Secrets({ id, asked, back, saved }: { id: string; asked?: { name: string | null; env: string | null }; back?: { label: string; go: () => void }; saved?: () => void }) {
   const [rows, setRows] = useState<Secret[] | null>(null);
   const [unread, setUnread] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
@@ -53,6 +56,10 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
   const [said_, setSaid] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [asking, setAsking] = useState<Secret | null>(null);
+  // The form opens from its button, from Replace, or from a link that names a secret to set (#102).
+  const [open, setOpen] = useState(asked !== undefined);
+  // A phone reads each secret as a card: the table's seven columns overflow it (#102).
+  const phone = useMedia("(max-width: 619px)");
 
   const set = async () => {
     if (busy) return;
@@ -65,6 +72,8 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
       setTyped(false);
       setName(""); // a name left in the field would invite the next value to overwrite the same secret
       setSaid(named(env === "prod" ? T.setProd : T.setPreview, name));
+      setOpen(false);
+      saved?.();
       setReads((n) => n + 1);
     } catch (err) {
       setRefusal(said(err));
@@ -88,9 +97,15 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
   };
   useEffect(() => {
     if (asked === undefined) return;
+    if (asked.name != null && SECRET_NAME.test(asked.name)) setName(asked.name);
+    if (asked.env === "prod" || asked.env === "preview") setEnv(asked.env);
+    setSaid(null);
+    setOpen(true);
+    value.current?.focus(); // already open, the open effect doesn't run again
     here.current?.scrollIntoView?.({ block: "start" });
-    value.current?.focus();
   }, [asked]);
+  // The value is the person's to type: focus goes there each time the form opens.
+  useEffect(() => { if (open) value.current?.focus(); }, [open]);
 
   // Replace fills the form from its row, and the value is the person's to type: focus goes there.
   const replace = (row: Secret) => {
@@ -99,6 +114,7 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
     setWhere(row.where);
     setSaid(null);
     setRefusal(null);
+    setOpen(true);
     value.current?.focus();
   };
 
@@ -126,7 +142,25 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
       <h2 className={H2}>{T.title}</h2>
       <p className={NOTE}>{T.about}</p>
       {unread !== null && <p role="alert" className="text-base text-critical">{unread}</p>}
-      {rows !== null && (
+      {rows !== null && phone && (rows.length === 0 ? <p className={NOTE}>{T.none}</p> : (
+        <ul className="grid gap-2.5">
+          {rows.map((row) => (
+            // a list item read whole: its name as text first, then its fields and its actions, each button named for its row
+            <li key={`${row.env}/${row.name}`} className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
+              <span className="font-mono text-md break-all">{row.name}</span>
+              <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-md">
+                <dt className="text-text-faint">{T.env}</dt><dd>{ENV[row.env]}</dd>
+                <dt className="text-text-faint">{T.where}</dt><dd>{WHERE[row.where]}</dd>
+                <dt className="text-text-faint">Version</dt><dd>{row.version}</dd>
+                <dt className="text-text-faint">Set by</dt><dd><Actor actor={row.set_by} /></dd>
+                <dt className="text-text-faint">Set</dt><dd><Age at={row.set_at} long /></dd>
+              </dl>
+              {actions(row)}
+            </li>
+          ))}
+        </ul>
+      ))}
+      {rows !== null && !phone && (
         <TableWrap minWidth={620}>
           <Table columns={[T.name, T.env, T.where, "Version", "Set by", "Set", ""].map((label, at) => ({ key: String(at), label }))} rows={rows} empty={T.none}
             renderRow={(row) => (
@@ -142,7 +176,8 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
             )} />
         </TableWrap>
       )}
-      <form aria-label={T.form} className="grid max-w-[560px] gap-2 rounded-xl border border-border bg-surface px-3.5 py-3" onSubmit={(event) => { event.preventDefault(); void set(); }}>
+      {!open && <span><Button onClick={() => { setOpen(true); setSaid(null); setRefusal(null); }}>{T.form}</Button></span>}
+      {open && <form aria-label={T.form} className="grid max-w-[560px] gap-2 rounded-xl border border-border bg-surface px-3.5 py-3" onSubmit={(event) => { event.preventDefault(); void set(); }}>
         <h3 className="text-md font-semibold">{T.form}</h3>
         <fieldset disabled={busy} className="contents">
           <label htmlFor="secret-name" className={LABEL}>{T.name}</label>
@@ -166,16 +201,18 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
             </span>
           </span>
         </fieldset>
-        <span className="mt-1">
+        <span className="mt-1 flex flex-wrap items-start gap-2">
           {busy ? <Button disabled reason="Saving…">{T.set}</Button>
             : name === "" ? <Button disabled reason={T.nameFirst}>{T.set}</Button>
             : !typed ? <Button disabled reason={T.valueFirst}>{T.set}</Button>
             : <Button variant="primary" onClick={() => void set()}>{T.set}</Button>}
+          <Button variant="ghost" onClick={() => { setOpen(false); setRefusal(null); }}>{T.cancel}</Button>
         </span>
         <p className={NOTE}>{T.replaces}</p>
-        {refusal !== null && <p role="alert" className="text-md text-critical">{refusal}</p>}
-        {said_ !== null && <p role="status" className="text-md text-ok">{said_}</p>}
-      </form>
+      </form>}
+      {refusal !== null && <p role="alert" className="text-md text-critical">{refusal}</p>}
+      {said_ !== null && <p role="status" className="text-md text-ok">{said_}</p>}
+      {said_ !== null && back !== undefined && <span><Button variant="secondary" onClick={back.go}>{back.label}</Button></span>}
     </section>
   );
 }

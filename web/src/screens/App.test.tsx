@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccessRead, App as AppRead, AuditPage, Earlier, Env, Finding, FleetPage, ImageRead, Need, Package, ProjectEgress, Receipt, RunRead, Secret, Status, TimelineRow } from "../api";
 import { AUTH, LIBRARIES, S } from "../strings";
 import { RailContext } from "../ui/Rail";
+import { forAgent } from "../ui/Finding";
 import { App } from "./App";
 import { CANCEL, UNLOCK_MS } from "./Promote";
 
@@ -41,7 +42,10 @@ const override = (reason: string, expires: string) => {
 };
 const why = (receipt: Receipt, id: string) => receipt.rules.find((rule) => rule.id === id)?.why ?? "";
 // The one way to approve: the button on the finding's own card (design/specs/screens.md, The approval).
-const approveOn = async (one: Finding) => within(await screen.findByRole("article", { name: one.properties.canyon.title })).getByRole("button", { name: "Approve with a reason" });
+// A finding's card by its name: a secret's is where it is (#102), any other's its title.
+const cardName = (one: Finding) => one.properties.canyon.secret_name === undefined ? one.properties.canyon.title
+  : `A secret is in ${one.locations[0].physicalLocation.artifactLocation.uri.split("/").pop()}:${one.locations[0].physicalLocation.region.startLine}`;
+const approveOn = async (one: Finding) => within(await screen.findByRole("article", { name: cardName(one) })).getByRole("button", { name: "Approve with a reason" });
 const open: Status = { ...page.status, receipt: { ...page.status.receipt, blocked_by: [] } };
 // The status read with preview's own run blocked: the refusal's clean-gate row in place of preview's
 // passing one. The golden's preview is clean, because the gate stopped v1.4 before it got there.
@@ -187,14 +191,14 @@ describe("the app page", () => {
     expect(screen.queryByRole("link", { name: "Open v1.3 in production" })).toBeNull();
   });
 
-  // What Canyon checked sits beside the review, unfolded: a host with no model says so there.
+  // What Canyon checked sits beside the review, unfolded, its chevron saying it folds (#102): a host with no model says so there.
   it("shows each tool's line in what Canyon checked, the skipped review among them", async () => {
     server(reads(() => page.status));
     render(<App id="claims-portal" auth="oidc" />);
     await screen.findByText(BLOCKED);
     const said = await within(await screen.findByRole("region", { name: "What Canyon checked" })).findByText("skipped, no AI model set up"); // said once, on its row
     expect(region("What Canyon checked").getByText("AI review")).toBeDefined(); // a tool in plain words, never canyon-review
-    expect(said.closest("details")).toBeNull();
+    expect(said.closest("details")?.open).toBe(true);
   });
 
   // The custom-rules agent's row reads in plain words too, its notes as it said them.
@@ -255,7 +259,7 @@ describe("the app page", () => {
     server({ ...reads(() => page.status), "GET /api/v1/gate-runs/gr_6c12": { body: { run: { ...at, id: "gr_6c12", package: "pkg_7a1c" } } } });
     render(<App id="claims-portal" run="gr_6c12" auth="oidc" />);
     expect(await within(await screen.findByRole("region", { name: "Review" })).findByText(S.approvers)).toBeDefined();
-    expect(within(await screen.findByRole("article", { name: first.properties.canyon.title })).queryByRole("button", { name: "Approve with a reason" })).toBeNull();
+    expect(within(await screen.findByRole("article", { name: cardName(first) })).queryByRole("button", { name: "Approve with a reason" })).toBeNull();
   });
 
   // A push's, where the org asks approvers to link GitHub and the reader linked none: why, and the link to link (#2342).
@@ -577,7 +581,7 @@ describe("the app page", () => {
     const review = await screen.findByRole("region", { name: "Review" });
     await waitFor(() => expect(review.textContent).toContain("From a check — not deployed yet"));
     expect(region("Where it stands").getByRole("heading").textContent).toBe("Nothing uploaded yet");
-    expect(await within(review).findByRole("article", { name: first.properties.canyon.title })).toBeDefined();
+    expect(await within(review).findByRole("article", { name: cardName(first) })).toBeDefined();
     expect(within(review).queryByRole("button", { name: "Approve with a reason" })).toBeNull();
   });
 
@@ -591,7 +595,7 @@ describe("the app page", () => {
     server({ ...reads(() => ({ ...page.status, envs: {}, last_run: last, promote_run: null })), "GET /api/v1/projects/claims-portal": () => ({ body: { project: app } }),
       "GET /api/v1/projects/claims-portal/gate-runs": { body: { runs: [row], next: null } } });
     render(<App id="claims-portal" auth="oidc" />);
-    await vi.waitFor(() => expect(region("Review").getByRole("article", { name: first.properties.canyon.title })).toBeDefined());
+    await vi.waitFor(() => expect(region("Review").getByRole("article", { name: cardName(first) })).toBeDefined());
     app = { ...unshipped, latest: { package: "pkg_7a1c", stage: "awaiting_review", since: "2026-09-02T09:40:00Z" } };
     await vi.advanceTimersByTimeAsync(2000);
     await act(async () => {});
@@ -600,7 +604,7 @@ describe("the app page", () => {
     app = { ...project, latest: { ...project.latest, package: run.package } };
     last = run.id;
     await vi.advanceTimersByTimeAsync(2000);
-    await vi.waitFor(() => expect(within(region("Review").getByRole("article", { name: first.properties.canyon.title })).getByRole("button", { name: "Approve with a reason" })).toBeDefined());
+    await vi.waitFor(() => expect(within(region("Review").getByRole("article", { name: cardName(first) })).getByRole("button", { name: "Approve with a reason" })).toBeDefined());
     expect(screen.getByRole("region", { name: "Review" }).textContent).not.toContain("From a check");
   });
 
@@ -765,6 +769,36 @@ describe("the app page", () => {
     expect(window.location.hash).toBe("#/apps/claims-portal");
     expect(sent().some((request) => request.includes("/timeline") || request.includes("/packages"))).toBe(false);
     window.location.hash = "";
+  });
+
+  // A responder reads the newest version by its label, as everyone else does, from the need the status read names it in;
+  // and, never deploying, is given no block to copy for an agent (#102).
+  it("names the newest version to a responder by its label, and gives them nothing to copy for an agent", async () => {
+    const row = { id: "claims-portal", name: "claims-portal", owners: [], owner_groups: [], summary: "x", claimable: false, access: { level: "none" } };
+    const need: Need = { kind: "blocked", env: null, rank: 6, since: null, you: true, ask: [], version: "v1.4", count: 1 };
+    server({ ...reads(() => ({ ...page.status, needs: [need] })), "GET /api/v1/projects/claims-portal": { body: { project: row } },
+      "GET /api/v1/preferences": { body: { viewer: { email: "rhea@meridian.example", role: "responder" } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await screen.findByRole("heading", { name: /^What blocks v1\.4/ })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Copy for your agent" })).toBeNull();
+    cleanup();
+    // with no need to name it, it is the newest version: never its package's id
+    server({ ...reads(() => ({ ...page.status, needs: [] })), "GET /api/v1/projects/claims-portal": { body: { project: row } },
+      "GET /api/v1/preferences": { body: { viewer: { email: "rhea@meridian.example", role: "responder" } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await screen.findByRole("heading", { name: /^What blocks the newest version/ })).toBeDefined();
+  });
+
+  // Approving is one click from the headline: it opens the first finding's form, the keyboard on its reason, whose label is
+  // in sentence case as every form's is (#102).
+  it("opens the first finding's approval from the headline's Approve with a reason", async () => {
+    server(reads(() => page.status));
+    render(<App id="claims-portal" auth="oidc" />);
+    const headed = await screen.findByRole("region", { name: "Where it stands" });
+    fireEvent.click(await within(headed).findByRole("button", { name: "Approve with a reason: go to the findings" }));
+    const reason = await screen.findByLabelText("Reason");
+    await waitFor(() => expect(document.activeElement).toBe(reason));
+    expect(screen.getByText("Reason").className).not.toContain("uppercase");
   });
 
   // A package only the built app holds is approved from deps.known-vuln's go-live check (#2610), on the review the
@@ -945,6 +979,32 @@ describe("the app page", () => {
     expect(sent().filter((request) => request.startsWith(PROMOTE))).toHaveLength(0);
   });
 
+  // A secret production lacks is set from the question on this page, which stays open (#102): Set it for production opens
+  // the Secrets form on that name for production, the keyboard on its value; once set, the question reads what production
+  // lacks again, and the way back to it is offered.
+  it("sets a secret production lacks without leaving the promotion's question", async () => {
+    let prodHas = false;
+    const row = (name: string, env: "preview" | "prod") => ({ name, env, where: "runtime", origin: "user", version: 1, set_by: { kind: "person", subject: "dana", display: "Dana" }, set_at: "2026-10-01T00:00:00Z" });
+    const PUT = "PUT /api/v1/projects/claims-portal/secrets/STRIPE_KEY";
+    const sent = server({ ...reads(() => open), "GET /api/v1/projects/claims-portal/secrets": () => ({ body: { secrets: [row("STRIPE_KEY", "preview"), ...(prodHas ? [row("STRIPE_KEY", "prod")] : [])] } }),
+      [PUT]: () => { prodHas = true; return { status: 204, body: null }; } });
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set it for production" }));
+    const form = within(screen.getByRole("form", { name: "Set a secret" }));
+    expect((form.getByLabelText("Name") as HTMLInputElement).value).toBe("STRIPE_KEY");
+    expect((form.getByLabelText("Environment") as HTMLSelectElement).value).toBe("prod");
+    expect(document.activeElement).toBe(form.getByLabelText("Value"));
+    fireEvent.change(form.getByLabelText("Value"), { target: { value: "x" } });
+    fireEvent.click(form.getByRole("button", { name: "Set secret" }));
+    const back = await screen.findByRole("button", { name: "Back to promote v1.3" });
+    expect(sent()).toContain(`${PUT} {"value":"x","env":"prod","where":"runtime"}`);
+    await waitFor(() => expect(screen.queryByText(/is set for preview but not production/)).toBeNull()); // read again
+    fireEvent.click(back);
+    expect(screen.getByText(S.promoteConfirm)).toBeDefined(); // the question, still open
+    expect(within(screen.getByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Promote v1.3" })).toBe(document.activeElement);
+  });
+
   // Production runs preview's image with its own secrets (#1698): the question names each runtime value set
   // for preview and not for production, with the line that sets it; a resource's value, a build value and
   // one set for both say nothing, and none of it stops the promotion.
@@ -955,7 +1015,8 @@ describe("the app page", () => {
       row("BOTH", "preview", "runtime", "user"), row("BOTH", "prod", "runtime", "user")] } } });
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
-    expect(await screen.findByText("STRIPE_KEY is set for preview but not production. Set it with: canyon secret set STRIPE_KEY --env prod")).toBeDefined();
+    expect(await screen.findByText("STRIPE_KEY is set for preview but not production. Without it, v1.3 may fail to start in production.", { exact: false })).toBeDefined();
+    expect(within(screen.getByRole("complementary", { name: "Promote" })).queryByText(/canyon secret set/)).toBeNull(); // the dashboard sets it, never the CLI's line (#102)
     expect(screen.getAllByText(/is set for preview but not production/)).toHaveLength(1);
     await confirmPromote();
     await waitFor(() => expect(sent().some((request) => request.startsWith(PROMOTE))).toBe(true));
@@ -1148,7 +1209,8 @@ describe("the app page", () => {
   it("an unknown app says so", async () => {
     server({});
     render(<App id="nope" auth="oidc" />);
-    expect(await screen.findByText("No app nope")).toBeDefined();
+    expect(await screen.findByText("There's no app called nope on this Canyon.", { exact: false })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Back to the fleet" }).getAttribute("href")).toBe("#/fleet");
     expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("link", { name: "Fleet" }).getAttribute("href")).toBe("#/fleet");
     expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull(); // the rail's menu button is not the page's
   });
@@ -1205,7 +1267,7 @@ describe("the app page", () => {
   // that approves both findings.
   it("one rule on one line found by two rules is one card, one count and one approval", async () => {
     const sqli = (ruleId: string, fingerprint: string): Finding => ({ ...first, ruleId, tool: "sarif/opengrep", entry: 0, partialFingerprints: { "canyon/v1": fingerprint },
-      properties: { canyon: { ...first.properties.canyon, title: "SQL injection in the claims search" } } });
+      properties: { canyon: { ...first.properties.canyon, secret_name: undefined, title: "SQL injection in the claims search" } } });
     const [one, two] = [sqli("sql.injection.opengrep.tainted-sql", `f_${"a".repeat(64)}`), sqli("sql.injection.opengrep.express-sqli", `f_${"b".repeat(64)}`)];
     const sent = server({ ...reads(() => blocked), [RUN]: { body: { run: { ...run, blocking: 1, warnings: 0, findings: [one, two] } } }, [APPROVE(one)]: { body: page.approved }, [APPROVE(two)]: { body: page.approved } });
     render(<App id="claims-portal" auth="oidc" />);
@@ -1231,7 +1293,7 @@ describe("the app page", () => {
     server({ ...reads(() => page.status), [RUN]: { body: { run: { ...lodash.run.run, approvable: true, id: run.id, package: run.package } } } });
     render(<App id="claims-portal" auth="oidc" />);
     const card = within(await screen.findByRole("article", { name: HEAD }));
-    for (const one of lodashBlocking) expect(screen.queryByRole("article", { name: one.properties.canyon.title })).toBeNull(); // no card of its own
+    for (const one of lodashBlocking) expect(screen.queryByRole("article", { name: cardName(one) })).toBeNull(); // no card of its own
     expect(card.getByText("Critical")).toBeDefined(); // the highest severity among them
     expect(card.getByText("package-lock.json:17 · lodash 4.17.4")).toBeDefined();
     expect(card.queryByText(/••••/)).toBeNull();
@@ -1307,9 +1369,9 @@ describe("the app page", () => {
     const card = within(await screen.findByRole("article", { name: "lodash 4.17.4: 2 known vulnerabilities" }));
     expect(card.getByText("Upgrade lodash to 4.18.0 (fixes 1 of 2; 1 with no fixed version yet) and commit package-lock.json.")).toBeDefined();
     expect(card.getAllByRole("listitem")[1]!.textContent).toContain("· no fixed version yet");
-    fireEvent.click(screen.getByText("Doesn't block", { exact: false }));
+    fireEvent.click(screen.getByRole("heading", { name: /^Doesn't block/ }));
     const own = within(screen.getByRole("article", { name: "lodash 4.17.4: 1 known vulnerability" })); // its entry: advisory CVEs never join blocking ones
-    expect(own.getByText("advisory · does not block")).toBeDefined();
+    expect(own.getByText("Doesn't block")).toBeDefined();
     expect(own.getByText("package-lock.json:17 · lodash 4.17.4")).toBeDefined();
     expect(own.getByText(`· ${advisory.properties.canyon.severity[0]!.toUpperCase()}${advisory.properties.canyon.severity.slice(1)} · fixed in ${advisory.dependency!.fixed}`, { exact: false })).toBeDefined();
     expect(own.queryByText(/Installed Version/)).toBeNull();
@@ -1323,7 +1385,7 @@ describe("the app page", () => {
     render(<App id="claims-portal" auth="oidc" />);
     const card = within(await screen.findByRole("article", { name: "lodash 4.17.4: 1 known vulnerability" }));
     expect(card.getByText("Upgrade lodash to 4.18.0 and commit package-lock.json.")).toBeDefined();
-    expect(screen.getByRole("article", { name: misconfig.properties.canyon.title })).toBeDefined();
+    expect(screen.getByRole("article", { name: cardName(misconfig) })).toBeDefined();
     expect(screen.getAllByRole("button", { name: "Approve with a reason" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /^Approve all/ })).toBeNull();
   });
@@ -1349,7 +1411,7 @@ describe("the app page", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Approve" })); fireEvent.click(screen.getByRole("button", { name: "Approve" })); });
     expect(sent().filter((request) => request.includes("/approve"))).toEqual([`${APPROVE(first)} ${JSON.stringify(page.approve)}`]);
     // Read the card each time: the run read after the approval draws it anew, and the one found before it is gone.
-    const card = () => within(screen.getByRole("article", { name: first.properties.canyon.title }));
+    const card = () => within(screen.getByRole("article", { name: cardName(first) }));
     await waitFor(() => expect(card().getByText(/^approved by /)).toBeDefined());
     expect(card().queryByRole("button", { name: "Approve with a reason" })).toBeNull();
   });
@@ -1372,7 +1434,7 @@ describe("the app page", () => {
     start();
     await vi.advanceTimersByTimeAsync(2000);
     await vi.waitFor(() => expect(region("Where it stands").getByRole("heading").textContent).toBe("Reviewing v1.4"));
-    expect(region("Review").getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(shown.map((one) => one.properties.canyon.title));
+    expect(region("Review").getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(shown.map(cardName));
     expect(screen.getByRole("region", { name: "Review" }).getAttribute("aria-busy")).toBe("true");
     expect(screen.getByRole("region", { name: "Where it stands" }).closest(".opacity-45")).toBeNull();
   });
@@ -1494,7 +1556,7 @@ describe("the app page", () => {
     const wide = { ...run, findings: [{ ...first, locations: [{ physicalLocation: { ...first.locations[0].physicalLocation, region: { ...first.locations[0].physicalLocation.region, startColumn: 999_999_999 } } }] }] };
     server({ ...reads(() => page.status), [RUN]: { body: { run: wide } } });
     render(<App id="claims-portal" auth="oidc" />);
-    expect(await screen.findByRole("article", { name: first.properties.canyon.title })).toBeDefined();
+    expect(await screen.findByRole("article", { name: cardName(first) })).toBeDefined();
   });
 
   it("findings render from the run read", async () => {
@@ -1506,13 +1568,13 @@ describe("the app page", () => {
     expect(region("Review").queryByText(S.verdictBlocked)).toBeNull();
     expect(region("Review").getByText("apps/web/src/lib/payments.ts:14")).toBeDefined();
     // What blocks first, under its own heading, then the rest: the run's order within each (the test cluster audit's sqli-blocked case).
-    expect(region("Review").getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(shown.map((one) => one.properties.canyon.title));
+    expect(region("Review").getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(shown.map(cardName));
     expect([/^What blocks v1\.4/, /^Doesn't block/].map((name) => region("Review").getByRole("heading", { name }).tagName)).toEqual(["H3", "H3"]);
     expect(region("Review").getByRole("heading", { name: /^Doesn't block/ }).closest("details")?.hasAttribute("open")).toBe(false); // beside what blocks, behind a click
     // What doesn't block, by policy with its count, so many advisories of one kind read as one group.
     expect(region("Review").getAllByRole("heading", { level: 4 }).map((one) => one.textContent)).toEqual(["Every route needs sign-in · 2", "No unbounded refetch on user input · 1"]);
     for (const one of findings) {
-      const card = within(screen.getByRole("article", { name: one.properties.canyon.title }));
+      const card = within(screen.getByRole("article", { name: cardName(one) }));
       expect(card.queryByText("blocks") !== null).toBe(blocks(one));
     }
   });
@@ -1585,7 +1647,7 @@ describe("the app page", () => {
     server({ ...reads(() => page.status), [RUN]: { body: { run: { ...run, state: "failed", failure_reason: "detect", builds: ["paketo-buildpacks/nodejs"], blocking: 0, findings: [] } } } });
     render(<App id="claims-portal" auth="oidc" />);
     await screen.findByRole("heading", { name: "v1.4 couldn't be built on this host" });
-    expect(region("Where it stands").getByText(/It builds: paketo-buildpacks\/nodejs\./)).toBeDefined();
+    expect(region("Where it stands").getByText(/Canyon builds Node\.js apps\./)).toBeDefined();
     const row = within(screen.getByRole("table", { name: "Versions" })).getByRole("rowheader", { name: /^v1\.4/ }).closest("[role=row]") as HTMLElement;
     expect([within(row).getByRole("cell", { name: "Review" }).textContent, within(row).getByRole("cell", { name: "Preview" }).textContent]).toEqual(["Passed", "Can't build this kind of app"]);
     expect(screen.queryByRole("region", { name: /Why the/ })).toBeNull();
@@ -1882,7 +1944,7 @@ describe("the app page", () => {
       "POST /api/v1/projects/claims-portal/deploys": { status: 202, body: { run: { id: "gr_again" } } } });
     render(<App id="claims-portal" auth="oidc" />);
     await screen.findByRole("heading", { name: "v1.4 is blocked: 1 of Canyon's checks couldn't finish" });
-    expect(within(screen.getByRole("region", { name: "Where it stands" })).getAllByRole("button").map((one) => one.textContent)).toEqual(["Approve with a reason", "Review v1.4 again"]);
+    expect(within(screen.getByRole("region", { name: "Where it stands" })).getAllByRole("button").map((one) => one.textContent)).toEqual(["Approve with a reason", "Review v1.4 again"]); // an admin's Hold waits in ⋯ while the headline isn't about production (#102)
     fireEvent.click(screen.getByRole("button", { name: "Review v1.4 again" }));
     await waitFor(() => expect(sent()).toContain(`POST /api/v1/projects/claims-portal/deploys {"package":"pkg_9e40"}`));
   });
@@ -1939,11 +2001,11 @@ describe("the app page", () => {
     server({ ...reads(() => approved.status_approved), [RUN]: { body: { run: at } } });
     render(<App id="claims-portal" auth="oidc" />);
     const approval = signed.approval as NonNullable<Finding["approval"]>;
-    const one = await card(signed.properties.canyon.title);
+    const one = await card(cardName(signed));
     expect(one.getByText(`approved by ${approval.approved_by.display} until ${new Date(approval.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`)).toBeTruthy();
     expect(one.getByText(approval.reason)).toBeTruthy();
     expect(one.queryByText("blocks")).toBeNull();
-    expect((await card(other.properties.canyon.title)).getByText("advisory · does not block")).toBeTruthy();
+    expect((await card(other.properties.canyon.title)).getByText("Doesn't block")).toBeTruthy();
   });
 
   // A finding advisory before preview that the run read says blocks before production: its card says both, never
@@ -1952,9 +2014,27 @@ describe("the app page", () => {
     server({ ...reads(() => approved.status_approved), [RUN]: { body: approved.run_placed } });
     render(<App id="claims-portal" auth="oidc" />);
     const one = await card(other.properties.canyon.title);
-    expect(one.getByText("advisory before preview · blocks before production")).toBeTruthy();
-    expect(one.queryByText("advisory · does not block")).toBeNull();
+    expect(one.getByText("Doesn't stop preview. Stops production until fixed or approved.")).toBeTruthy();
+    expect(one.queryByText("Doesn't block")).toBeNull();
     expect(one.getByRole("button", { name: "Approve with a reason" })).toBeTruthy();
+  });
+
+  // An admin's headline offers Stop where it speaks of production itself, down here, and leaves it to ⋯ otherwise (#102).
+  it("offers an admin Stop production in the headline where production is down", async () => {
+    server(reads(() => ({ ...promoted, envs: { ...promoted.envs, prod: { ...(promoted.envs.prod as Env), state: "stopped" } } })));
+    render(<App id="claims-portal" auth="oidc" />);
+    const headed = await screen.findByRole("region", { name: "Where it stands" });
+    expect(await within(headed).findByRole("button", { name: "Stop production of claims-portal" })).toBeDefined();
+  });
+
+  // What stops production alone is never listed under "Doesn't block": it has a heading of its own (#102).
+  it("lists what stops production alone under its own heading, never under Doesn't block", async () => {
+    server({ ...reads(() => approved.status_approved), [RUN]: { body: approved.run_placed } });
+    render(<App id="claims-portal" auth="oidc" />);
+    const stops = within(await screen.findByRole("region", { name: "Stops production" }));
+    expect(stops.getByRole("article", { name: other.properties.canyon.title })).toBeDefined();
+    const doesnt = screen.queryByRole("heading", { name: /^Doesn't block/ })?.closest("details");
+    expect(doesnt === null || doesnt === undefined || !doesnt.textContent?.includes(other.properties.canyon.title)).toBe(true);
   });
 
   // The chip is the run read's answer, never the receipt's rule names: a finding of a rule placed blocking
@@ -1966,7 +2046,7 @@ describe("the app page", () => {
     server({ ...reads(() => status), [RUN]: { body: { run: at } } });
     render(<App id="claims-portal" auth="oidc" />);
     const one = await card(other.properties.canyon.title);
-    expect(one.getByText("advisory · does not block")).toBeTruthy();
+    expect(one.getByText("Doesn't block")).toBeTruthy();
     expect(one.queryByRole("button", { name: "Approve with a reason" })).toBeNull();
   });
 
@@ -1977,7 +2057,7 @@ describe("the app page", () => {
     const lodash = golden<{ run: { run: RunRead } }>("app-page/birthday-list-dependency-approval.json").run.run.findings.filter(blocks);
     server({ ...reads(() => page.status), [RUN]: { body: { run: { ...at, findings: [...at.findings, ...lodash.map((one, i) => ({ ...one, entry: at.findings.length + i }))] } } } });
     render(<App id="claims-portal" auth="oidc" />);
-    await card(first.properties.canyon.title);
+    await card(cardName(first));
     expect(screen.getAllByText(S.approvers)).toHaveLength(1); // once, above the findings: never on each card, a dependency's included
     expect(screen.queryByRole("button", { name: "Approve with a reason" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Approve with a reason: go to the findings" })).toBeNull();
@@ -1989,10 +2069,10 @@ describe("the app page", () => {
     const status: Status = { ...approved.status_approved, receipt: { ...approved.status_approved.receipt, rules: approved.status_approved.receipt.rules.map((rule) => (rule.id === "prod.clean-gate" ? { ...rule, why: "gr_8f2a ended blocked: 1 blocking finding(s), no approval" } : rule)) } };
     server({ ...reads(() => status), [RUN]: { body: { run: at } } });
     render(<App id="claims-portal" auth="oidc" />);
-    const one = await card(signed.properties.canyon.title);
+    const one = await card(cardName(signed));
     expect(one.getByText(/^approved by /)).toBeTruthy();
     expect(one.queryByText("blocks")).toBeNull();
-    const two = await card(both.properties.canyon.title);
+    const two = await card(cardName(both));
     expect(two.getByText("blocks")).toBeTruthy();
     expect(two.queryByText(/approved/)).toBeNull();
   });
@@ -2501,11 +2581,29 @@ describe("taking an environment offline and deleting the app", () => {
     expect(screen.queryByText("the list could not be read")).toBeNull();
   });
 
+  // Deleting is a question over the page (#102), which says where production is live, in the CLI's words, when it is;
+  // and taking production offline names the other way down, stopping it.
+  it("asks to delete over the page, saying production goes offline with it, and offline names Stop production", async () => {
+    server({ ...reads(() => promoted), [DELETE]: { status: 409, body: { error: "confirm_required", resources } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    await askDelete();
+    const ask = screen.getByRole("dialog", { name: "Delete claims-portal" });
+    expect(ask.getAttribute("aria-modal")).toBe("true");
+    expect(within(ask).getByText("Production is live at http://claims-portal.prod.localhost:7777, and goes offline with it.")).toBeDefined();
+    expect(document.activeElement).toBe(within(ask).getByLabelText("Type claims-portal to enable this button."));
+    fireEvent.keyDown(ask, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await askOffline();
+    const offline = screen.getByRole("dialog", { name: "Take production offline" }); // over the page, as Delete is
+    expect(within(offline).getByText(S.offlineOrStop)).toBeDefined();
+    expect(document.activeElement).toBe(within(offline).getByRole("button", { name: "Cancel" })); // the safe answer first
+  });
+
   it("lists what the delete destroys and enables it only on the exact name", async () => {
     const sent = server({ ...reads(() => page.status), [DELETE]: { status: 409, body: { error: "confirm_required", resources } } });
     render(<App id="claims-portal" auth="oidc" />);
     await askDelete();
-    expect(screen.getByText("This permanently deletes claims-portal: postgres db in production, postgres reports in preview, its preview and production, every version, its review history and its secrets. It can't be undone.")).toBeDefined();
+    expect(screen.getByText("This permanently deletes claims-portal: the production Postgres database (db), the preview Postgres database (reports), its preview and production, every version, its review history and its secrets. It can't be undone.")).toBeDefined();
     const button = () => screen.getByRole("button", { name: "Delete claims-portal" }) as HTMLButtonElement;
     for (const near of ["", "claims", "Claims-portal", "claims-portal "]) {
       type(near);
@@ -2521,7 +2619,7 @@ describe("taking an environment offline and deleting the app", () => {
     server({ ...reads(() => page.status), [DELETE]: { status: 409, body: { error: "confirm_required", resources: [resources[1], { name: "files", type: "s3", env: "preview", state: "provided" }] } } });
     render(<App id="claims-portal" auth="oidc" />);
     await askDelete();
-    expect(screen.getByText("This permanently deletes claims-portal: postgres reports in preview, s3 files in preview (your platform deletes it), its preview and production, every version, its review history and its secrets. It can't be undone.")).toBeDefined();
+    expect(screen.getByText("This permanently deletes claims-portal: the preview Postgres database (reports), the preview s3 (files) (your platform deletes it), its preview and production, every version, its review history and its secrets. It can't be undone.")).toBeDefined();
   });
 
   it("sends the confirmed delete and goes to the fleet when it is done", async () => {
@@ -2542,7 +2640,7 @@ describe("taking an environment offline and deleting the app", () => {
     await askDelete();
     type("claims-portal");
     fireEvent.click(screen.getByRole("button", { name: "Delete claims-portal" }));
-    expect(await screen.findByText("Still deleting: postgres db in production.")).toBeDefined();
+    expect(await screen.findByText("Still deleting: the production Postgres database (db).")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(sent().filter((request) => request === CONFIRMED)).toHaveLength(2));
   });
@@ -2751,14 +2849,39 @@ describe("what needs a person, on the app page", () => {
     expect(screen.queryByText(/No owner needed/)).toBeNull();
   });
 
-  // A secret is never the headline's to say: its line keeps "Rotate the key", the headline under the needs (#2754's review).
-  it("lists a secret with its own fix, the blocked headline under it", async () => {
+  // A secret in the blocked version is the blocked headline's own problem: said once, there, with "Rotate the key" and its
+  // one filled button, the fix copied for the reader's agent (#102; it was a second red box above it).
+  it("folds the blocked version's secret into the headline, which leads with the fix to copy for an agent", async () => {
     server(reads(() => ({ ...page.status, needs: [secret] })));
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    render(<App id="claims-portal" auth="oidc" />);
+    const headed = await screen.findByRole("region", { name: "Where it stands" });
+    expect(await within(headed).findByRole("heading", { name: BLOCKED })).toBeDefined();
+    expect(within(headed).getByText(/^Rotate the key, then upload a fix\. Nothing was built/)).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Needs you" })).toBeNull();
+    const copy = await within(headed).findByRole("button", { name: "Copy the fix for your agent" });
+    expect(copy.className).toContain("bg-accent");
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]![0]).toBe(findings.filter(blocks).map((one) => forAgent(one, "claims-portal")).join("\n---\n\n"));
+  });
+
+  // While a newer version is blocked, promoting what preview runs is no longer the page's main step: its button is plain (#102).
+  it("draws Promote for what preview runs as a plain button while a newer version is blocked", async () => {
+    server(reads(() => ({ ...page.status, needs: [] })));
+    render(<App id="claims-portal" auth="oidc" />);
+    const box = await screen.findByRole("complementary", { name: "Promote" });
+    const promote = await within(box).findByRole("button", { name: /^Promote v1\.3/ });
+    expect(promote.className).not.toContain("bg-accent");
+  });
+
+  // A secret of another version is no part of this headline: its line stays in the needs.
+  it("keeps a secret of another version in the needs", async () => {
+    server(reads(() => ({ ...page.status, needs: [{ ...secret, version: "v1.2" }] })));
     render(<App id="claims-portal" auth="oidc" />);
     const listed = await screen.findByRole("region", { name: "Needs you" });
     expect(within(listed).getByText(/Rotate the key, then upload a fix\./)).toBeDefined();
-    const headed = await screen.findByRole("region", { name: "Where it stands" });
-    expect(listed.compareDocumentPosition(headed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   // The status read's two kinds, which the fleet never shows: what blocks production alone, and what production won't allow.

@@ -97,7 +97,7 @@ export function PromotionProgress({ run, ended }: { run: string; ended: () => vo
 
 const PROGRESS_MS = 1000; // clients poll about once a second while a run is going (contracts/events.md)
 
-export function Promote({ id, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses }: {
+export function Promote({ id, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses, quiet = false, setSecret, secretsSet = 0 }: {
   id: string;
   // The page's own read of a hold (the status read's), which says whether production ran anything when it was held.
   hold?: Hold;
@@ -113,6 +113,10 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
   ended: () => void;
   pullRequest?: boolean; // preview runs a pull request's version, which is never promoted (#1947)
   refuses?: Need; // the status read's will_refuse: what production doesn't allow of what preview calls
+  quiet?: boolean; // a newer version is blocked: fixing it is the page's step, so this one isn't drawn as the main one (#102)
+  // Sets a runtime secret production lacks, on this page, the question kept open; secretsSet moves when one was set (#102).
+  setSecret?: (name: string) => void;
+  secretsSet?: number;
 }) {
   const blocked = promoteReason(receipt, hold, refuses, pullRequest);
   const [was, setWas] = useState(blocked);
@@ -126,6 +130,17 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
   const [lacks, setLacks] = useState<string[] | Error | null>(null);
   const goLive = useRef<HTMLButtonElement>(null);
   const confirming = useRef<HTMLButtonElement>(null);
+  // What production lacks, read when the question is asked and again whenever a secret is set beside it.
+  const readLacks = () => {
+    setLacks(null);
+    listSecrets(id).then(({ secrets }) => {
+      const prod = new Set(secrets.filter((one) => one.env === "prod" && one.where === "runtime").map((one) => one.name));
+      setLacks(secrets.filter((one) => one.env === "preview" && one.where === "runtime" && one.origin === "user" && !prod.has(one.name)).map((one) => one.name));
+    }, (err: Error) => setLacks(err));
+  };
+  const askingNow = useRef(false);
+  askingNow.current = asking;
+  useEffect(() => { if (askingNow.current && secretsSet > 0) readLacks(); }, [secretsSet]); // a set secret, read again while the question is open
 
   // Adjusted during render, never in an effect: StrictMode's double invoke would spend the hold
   // before the browser painted the disabled button, and the tests would still pass.
@@ -173,7 +188,14 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
               {odd !== null && <p className="text-md text-amber">{`${shown ?? "This version"} ${odd} on preview. Check the app before promoting it.`}</p>}
               {refusing(refuses, S.willRefuse.replace("<version>", () => shown ?? "this version")).map((line) => <p key={line} className="text-md text-amber">{line}</p>)}
               {lacks instanceof Error ? <p className="text-md text-amber">{`Couldn't check production's secrets: ${lacks.message}`}</p>
-                : (lacks ?? []).map((name) => <p key={name} className="text-md text-amber">{`${name} is set for preview but not production. Set it with: canyon secret set ${name} --env prod`}</p>)}
+                : (lacks ?? []).map((name) => (
+                  <p key={name} className="text-md text-amber">
+                    {`${S.prodLacks.replace("<name>", () => name)} ${S.prodLacksWhy.replace("<version>", () => shown ?? "this version")} `}
+                    {setSecret === undefined
+                      ? <a className="text-link no-underline hover:underline" href={`#/apps/${encodeURIComponent(id)}/secrets?name=${encodeURIComponent(name)}&env=prod`}>{S.prodLacksSet}</a>
+                      : <button type="button" className="text-link hover:underline" onClick={() => setSecret(name)}>{S.prodLacksSet}</button>}
+                  </p>
+                ))}
               <span className="flex flex-wrap gap-2">
                 {lacks === null ? <span className="text-md text-text-dim">Checking production's secrets…</span>
                   : <Button ref={confirming} variant={odd !== null ? "secondary" : "primary"} onClick={() => void ask()}>{odd !== null ? "Promote anyway" : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
@@ -181,13 +203,9 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
               </span>
             </div>
           )
-          : <Button ref={goLive} variant="primary" onClick={() => {
+          : <Button ref={goLive} variant={quiet ? "secondary" : "primary"} onClick={() => {
             setAsking(true);
-            setLacks(null);
-            listSecrets(id).then(({ secrets }) => {
-              const prod = new Set(secrets.filter((one) => one.env === "prod" && one.where === "runtime").map((one) => one.name));
-              setLacks(secrets.filter((one) => one.env === "preview" && one.where === "runtime" && one.origin === "user" && !prod.has(one.name)).map((one) => one.name));
-            }, (err: Error) => setLacks(err));
+            readLacks();
           }}>{label}</Button>}
       {following !== null && <PromotionProgress key={following} run={following} ended={ended} />}
       {landed && (

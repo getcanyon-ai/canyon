@@ -103,6 +103,24 @@ describe("Settings' pages", () => {
     expect(screen.getByRole("button", { name: "Save people and sign-in" })).toBeDefined();
   });
 
+  // Agents is every member's tab (#100's review): Connect an agent, then Sessions, found by name; People & sign-in keeps
+  // the admin's forms alone.
+  it("Agents holds Connect an agent and Sessions, and People & sign-in neither", async () => {
+    window.location.hash = "#/settings/agents";
+    server(golden.get, { status: 404 }, prefs.preferences_member);
+    render(<Settings />);
+    const connect = await screen.findByRole("region", { name: "Connect an agent" });
+    expect(connect.nextElementSibling).toBe(await screen.findByRole("region", { name: "Sessions" }));
+    expect(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("link", { name: "Agents", current: "page" }).getAttribute("href")).toBe("#/settings/agents");
+    cleanup();
+    window.location.hash = "#/settings/people";
+    server(golden.get);
+    render(<Settings />);
+    await screen.findByRole("region", { name: "Who may sign in" });
+    expect(screen.queryByRole("region", { name: "Connect an agent" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Sessions" })).toBeNull();
+  });
+
   // Connect an agent stands directly above Sessions, so an agent is connected and disconnected in one place
   // (design/specs/screens.md, Connect an agent; the v0.11.0 role walk found it below).
   it("People & sign-in puts Connect an agent directly above Sessions", async () => {

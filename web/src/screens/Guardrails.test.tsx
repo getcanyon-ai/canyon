@@ -677,6 +677,44 @@ describe("what agents are told, first", () => {
     expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, design_system_id: null })}`);
   });
 
+  // On a phone the tabs scroll sideways: the tab shown is brought into view (#100's review), as Settings does.
+  it("scrolls the tab shown into view", async () => {
+    const scrolled = vi.fn(); // jsdom has no scrollIntoView; the stub is removed below
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      server(reads);
+      await ready();
+      expect(scrolled.mock.contexts).toContain(screen.getByRole("link", { name: "What agents are told", current: "page" }));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("shows what to say in the chat, and links Policies from the design system", async () => {
+    server(reads);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
+    expect(screen.getByLabelText("Your message").getAttribute("placeholder")).toBe("Our teams build React with Vite and Python with FastAPI, using our design system.");
+    expect(region("Design system").getByRole("link", { name: "Policies" }).getAttribute("href")).toBe("#/guardrails?rule=design.org-system");
+  });
+
+  // A new stack takes the typing at once, scrolled clear of the save bar its change brings up (#100's review).
+  it("Add a stack puts the cursor in the new row's language", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      server(reads);
+      await ready();
+      fireEvent.click(screen.getByRole("button", { name: "Add a stack" }));
+      const added = region(`Stack ${golden.preferences.stacks.length + 1}`).getByLabelText("Language");
+      await waitFor(() => expect(document.activeElement).toBe(added));
+      expect(scrolled.mock.contexts).toContain(added);
+      expect(scrolled).toHaveBeenCalledWith({ block: "center" });
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
   it("says type something first only after an empty Send", async () => {
     const sent = server({ ...reads, [`POST ${SETUP}`]: { body: golden.setup.response } });
     await ready();

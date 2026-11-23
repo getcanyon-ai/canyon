@@ -80,6 +80,7 @@ describe("Policies", () => {
     fireEvent.click(blessed.getByRole("checkbox", { name: "paketo-buildpacks/pip" }));
     await waitFor(() => expect((blessed.getByRole("checkbox", { name: "paketo-buildpacks/pip" }) as HTMLInputElement).checked).toBe(true));
     expect(sent()).toContain(`PUT /api/v1/preferences ${JSON.stringify({ approved_buildpacks: ["paketo-buildpacks/node-engine", "paketo-buildpacks/pip"] })}`);
+    expect(await blessed.findByText("Saved")).toBeDefined(); // a tick is saved at once, and says so (#100's review)
   });
 
   it("the design-system row says it checks nothing until a default is picked, and links the picker", async () => {

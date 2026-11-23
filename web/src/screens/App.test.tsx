@@ -982,7 +982,7 @@ describe("the app page", () => {
     server({ ...reads(() => open), [PROMOTE]: { body: page.promotion } });
     const { unmount } = render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
-    expect(screen.getByText("Promotes claims-portal v1.3. Nothing runs in production yet.")).toBeDefined();
+    expect(screen.getByText("Promotes claims-portal v1.3. Nothing runs in production.")).toBeDefined();
     unmount();
     const live = { ...open, envs: { ...open.envs, prod: { ...open.envs.preview!, package: "pkg_9e40", label: "v1.2", url: "http://claims-portal.prod.localhost:7777" } } } as Status;
     server({ ...reads(() => live), [PROMOTE]: { body: page.promotion } });

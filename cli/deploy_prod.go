@@ -97,7 +97,7 @@ func deployProd(ctx context.Context, a *app, yes, wait bool, version, reason str
 		v := a.version(preview)
 		return a.refusedAnswer(p.App, client.page(), v, *w.Answered, w.Answered.answer().Refused(v))
 	}
-	replaces, replaced := "Nothing runs in production yet.", "nothing, production ran nothing yet"
+	replaces, replaced := "Nothing runs in production.", "nothing, production ran nothing yet"
 	if prod := read.Envs["prod"].running(); prod != nil { // a prod waiting on its first release replaces nothing
 		replaces, replaced = "It replaces "+a.version(prod)+".", a.version(prod)
 	}

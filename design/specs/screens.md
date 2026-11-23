@@ -1137,7 +1137,7 @@ Click → a small confirm inline in the same panel, not a modal:
 > `[ Promote v1.4 ]`  `Cancel`
 
 With nothing in production the first line reads `Promotes claims-portal v1.4. Nothing runs in
-production yet.` The keyboard lands on `Cancel`, so the Enter that asked can't also answer (amended
+production.` The keyboard lands on `Cancel`, so the Enter that asked can't also answer (amended
 2026-11-23, #145). Where the question warns, of what preview answered, what production will refuse,
 or a secret production lacks or that couldn't be read, the button reads `Promote v1.4 anyway`, secondary.
 
@@ -1222,7 +1222,7 @@ promoted by Dana W.`, a patched one `v1.4 · patched 4 Oct · promoted by Dana W
   starts over with that row.
 - **When the review passes**, its receipt (`GET /status?run=`) carries `ships`, and the card shows the
   confirm's three lines and `Promote v1.3`, as the CLI's (design/specs/cli.md §6.3): with nothing
-  running in production the first ends `Nothing runs in production yet.` and the third reads `Canyon
+  running in production the first ends `Nothing runs in production.` and the third reads `Canyon
   puts back the code, not the data, the secrets or the outbound rules.` The click promotes that run
   directly, as a browser session does today; the button reads `Promoting v1.3…` while it asks. The
   promotion's lines follow under it, the keyboard with them, and stay to its end; then the review's

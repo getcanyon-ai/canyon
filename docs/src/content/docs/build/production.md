@@ -66,7 +66,7 @@ answer a prompt, as in a coding agent or CI, it refuses until you add `--yes`:
 ```text
   canyon · amber-gecko-w4g preview → prod · localhost:7777
 
-  Promoting e87c28 (passed review) from preview to production. Nothing runs in production yet.
+  Promoting e87c28 (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
   ! GREETING is set for preview but not production. Set it with: canyon secret set GREETING --env prod
 
@@ -83,7 +83,7 @@ canyon deploy --env prod --yes
 ```text
   canyon · amber-gecko-w4g preview → prod · localhost:7777
 
-  Promoting e87c28 (passed review) from preview to production. Nothing runs in production yet.
+  Promoting e87c28 (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
 
   Promote

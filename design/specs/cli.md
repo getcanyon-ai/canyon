@@ -2565,7 +2565,7 @@ end produced it. `cli/testdata/deploy-prod-blocked.txt` and `deploy-prod-409.txt
 
 **Clean, with confirmation.** The first line says what ships: the version preview runs, that its
 review cleared it — never the run's id (amended 2026-10-01, `canyonv2-5r11.12`) — and what it replaces — `It replaces v1.3.`, or
-`Nothing runs in production yet.` when prod runs nothing — the cue a person confirming production
+`Nothing runs in production.` when prod runs nothing — the cue a person confirming production
 wants. It takes the place of promote's version line (`Promoting v1.4 to prod, replacing v1.3.`).
 
 ```

@@ -244,6 +244,10 @@ describe("the audit screen", () => {
     expect([...actions].sort()).toEqual([...PRODUCTION, ...PLATFORM].sort());
     expect(actions.length).toBeLessThanOrEqual(64); // what the read takes (contracts/routes.md)
   });
+  it("says an environment taken offline as a sentence", () => {
+    const { verb, rest } = what({ ...pages[0]!.events[0]!, action: "DELETE /api/v1/projects/{id}/envs/{env}", detail: { env: "preview" } });
+    expect([verb, rest]).toEqual(["Took", "preview offline, keeping its data"]);
+  });
   it("each of them that can be preview's names its environment", () => {
     const either = ["DELETE /api/v1/projects/{id}/envs/{env}", "request undeploy", "send remove again", ...PLATFORM];
     for (const action of either) for (const [env, word] of [["prod", "production"], ["preview", "preview"]] as const) {

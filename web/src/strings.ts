@@ -140,7 +140,7 @@ export const S = {
   promoteConfirm: "Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.",
   // What the promotion's question says first: the app, its version, and what that replaces (#145).
   promoteReplaces: "Promotes <app> <version>, replacing <old>.",
-  promoteFirst: "Promotes <app> <version>. Nothing runs in production yet.",
+  promoteFirst: "Promotes <app> <version>. Nothing runs in production.",
   promoteAnyway: "Promote <version> anyway",
   inProduction: "<version> is in production.",
   promoted: "Promotion of <app> started. Production shows the new version here once it is live.",
@@ -149,7 +149,7 @@ export const S = {
   putBackReviewing: "Reviewing <version> again under today's rules. Preview is not touched.",
   putBack: "Putting <version> back in production.",
   putBackReplaces: "It replaces <version>.",
-  putBackNothing: "Nothing runs in production yet.",
+  putBackNothing: "Nothing runs in production.",
   putBackNotThat: "<version>'s review doesn't name the image production ran, so nothing was promoted",
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",

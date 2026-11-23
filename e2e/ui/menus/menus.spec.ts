@@ -3,7 +3,7 @@ import { answered } from "./host";
 
 // Every menu and dialog opens inside the window, or scrolls to its end inside itself (#126): on a phone, on a phone held
 // sideways and on a laptop. A box off the left edge widens no page, so each is measured, never the page's scrollWidth.
-const WINDOWS = [[390, 844], [390, 560], [667, 375], [1280, 900]] as const;
+const WINDOWS = [[360, 740], [390, 844], [390, 560], [667, 375], [1280, 900]] as const;
 
 // The box on screen, and each of the controls in it reachable: on screen once the box has scrolled to it.
 async function opensOnScreen(page: Page, box: Locator) {

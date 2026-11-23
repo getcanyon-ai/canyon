@@ -190,7 +190,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
           : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.stopsProduction}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
         {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
-        <span className="text-lg font-semibold">{heading}</span>
+        <span className="text-lg font-semibold wrap-anywhere">{heading}</span>
       </div>
       {/* the short chip, the sentence under it: a chip that can't wrap stretched a phone's page (#102) */}
       {approval === undefined && !unread && !blocks && atProduction && <p className="mt-1.5 text-md text-text-dim">{S.blocksAtProduction}</p>}

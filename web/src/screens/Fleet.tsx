@@ -207,8 +207,8 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
             {app.envs?.prod !== undefined && <EnvOpen env={app.envs.prod} name="production" />}
           </span>
         )}
-        {page.banner === "none" && <span className="text-sm text-text-dim"><Asking app={app} /></span>}{/* the reader's level, as the table's Access column says it, where people sign in */}
-        {app.hold !== undefined && <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>}{/* held: the mark and its lift; stopping is the app page's (#102) */}
+        {page.banner === "none" && page.viewer.role !== "responder" && <span className="text-sm text-text-dim"><Asking app={app} /></span>}{/* the reader's level, as the table's Access column says it, where people sign in */}
+        <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>{/* a responder's Stop, Hold or Lift, as their table's Production cell; nothing to a member */}
         {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
       </li>
     );
@@ -379,7 +379,7 @@ export function Fleet({ org }: { org: string | null }) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-1">
             <h1 ref={heading} tabIndex={-1} className="text-title font-semibold tracking-tight outline-none">{owner === null ? org : ownerName(page?.apps ?? [], owner)}</h1>
-            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && !offTeams ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
+            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && !offTeams && !none ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
           </div>
           {owner === null && !none && <FleetFilters query={query} signedIn={signedIn} scoped={signedIn && !offTeams} />}
         </div>

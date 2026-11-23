@@ -85,16 +85,49 @@ describe("the fleet's held rows, by who reads them", () => {
     expect(within(row("claims-portal")).getByRole("link", { name: "claims-portal" }).getAttribute("href")).toBe("#/apps/claims-portal");
   });
 
-  // On a phone each row is a card: the held one is lifted there, and stopping is the app page's (#102), whose ⋯ menu and
-  // headline a responder reads too.
-  it("a responder's cards on a phone offer Lift on the held one, and no Stop or Hold on any", async () => {
+  // On a phone each row is a card, and a responder off the team's is their table's Production cell: Stop, Hold or Lift, and
+  // no Ask to join, which their table has no column for and their app page doesn't offer (design/PERMISSIONS.md).
+  it("a responder's cards on a phone offer Stop, Hold or Lift, and never Ask to join", async () => {
     narrow();
     server(responder);
     await show();
     expect(within(card("claims-portal")).getByText("Held")).toBeDefined();
     expect(within(card("claims-portal")).getByRole("button", liftOf("claims-portal"))).toBeDefined();
-    expect(screen.queryByRole("button", { name: /^(Stop|Hold) production of/ })).toBeNull();
+    expect(within(card("claims-portal")).queryByRole("button", stopOf("claims-portal"))).toBeNull();
+    expect(within(card("claims-archive")).getByRole("button", stopOf("claims-archive"))).toBeDefined();
     expect(within(card("claims-archive")).queryByRole("button", liftOf("claims-archive"))).toBeNull();
+    expect(within(card("quote-engine")).getByRole("button", holdOf("quote-engine"))).toBeDefined(); // nothing runs there
+    expect(screen.queryByRole("button", { name: /Ask to join/ })).toBeNull();
+    expect(screen.queryByText("No access")).toBeNull();
+  });
+
+  it.each([["stops", "claims-archive"], ["holds", "quote-engine"]] as const)("a responder %s production from a card", async (_does, app) => {
+    narrow();
+    const sent = server(responder);
+    await show();
+    fireEvent.click(within(card(app)).getByRole("button", { name: /^(Stop|Hold) production of/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Reason"), { target: { value: hold.reason } });
+    fireEvent.click(dialog.getByRole("button", { name: /^(Stop|Hold) production$/ }));
+    await waitFor(() => expect(sent()).toEqual([`POST /api/v1/projects/${app}/envs/prod/hold ${JSON.stringify({ reason: hold.reason })}`]));
+  });
+
+  it("a responder lifts a hold from a card", async () => {
+    narrow();
+    const sent = server(responder);
+    await show();
+    fireEvent.click(within(card("claims-portal")).getByRole("button", liftOf("claims-portal")));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Lift the hold, keep it stopped" }));
+    await waitFor(() => expect(sent()).toEqual([LIFT]));
+  });
+
+  // The refused side: a member reading the same apps reduced is offered none of the three, and may ask to join.
+  it("a member's cards offer no Stop, Hold or Lift", async () => {
+    narrow();
+    server({ ...responder, viewer: { ...responder.viewer, role: "member" }, apps: responder.apps.map((one) => ({ ...one, hold: undefined, needs: undefined })) });
+    await show();
+    expect(screen.queryByRole("button", { name: /^(Stop|Hold) production of|^Lift the hold/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ask to join claims-archive" })).toBeDefined();
   });
 
   // A viewer grant puts nobody on the team: the responder's row is reduced, and the lift is offered.

@@ -613,6 +613,8 @@ describe("the fleet screen", () => {
     render(<Fleet org="Meridian Insurance" />);
     const theirs = within(await screen.findByRole("region", { name: FLEET.emptyTitle }));
     expect(theirs.getByText(FLEET.emptyGitHubMember)).toBeDefined();
+    expect(screen.queryByText(FLEET.allScopeMember)).toBeNull(); // no counts on the page
+    expect(screen.getByText("Every app in the org")).toBeDefined();
     expect(theirs.queryByRole("link", { name: FLEET.emptyGitHubLink })).toBeNull();
     expect(theirs.queryByRole("link", { name: FLEET.emptyRulesLink })).toBeNull();
   });

@@ -224,7 +224,7 @@ export function AuditTrail({ query }: { query: string }) {
               {apps.map((one) => <option key={one.id} value={one.id}>{one.name}</option>)}
             </select>}
             <select aria-label="Via" className={FIELD} value={via ?? ""} onChange={(event) => go({ via: event.target.value === "" ? null : event.target.value })}>
-              <option value="">Any way</option>
+              <option value="">From anywhere</option>
               {(Object.entries(VIA_FILTER) as [Via, string][]).map(([value, word]) => <option key={value} value={value}>{word}</option>)}
             </select>
             <select aria-label="Kind" className={FIELD} value={category ?? ""} onChange={(event) => go({ category: event.target.value === "" ? null : event.target.value })}>

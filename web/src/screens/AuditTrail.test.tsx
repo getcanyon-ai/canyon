@@ -150,6 +150,8 @@ describe("the audit screen", () => {
     await waitFor(() => expect(record.getByText("Session").nextElementSibling?.textContent).toBe("shown to admins"));
     expect((fetch as unknown as { mock: { calls: string[][] } }).mock.calls.map(([url]) => url!).find((url) => url.startsWith("/api/v1/audit"))).toContain("via=dashboard");
     expect((screen.getByRole("combobox", { name: "Via" }) as HTMLSelectElement).value).toBe("dashboard");
+    // the way of doing's empty choice says it (#118): from anywhere, never "Any way"
+    expect(within(screen.getByRole("combobox", { name: "Via" })).getByRole("option", { name: "From anywhere" }).getAttribute("value")).toBe("");
   });
 
   // A member's trail is their own work (design/specs/screens.md, A4a): the server answers it, and the

@@ -30,8 +30,8 @@ export const POLICY_MEANING: Record<string, string> = {
 // The rows this tab draws: the scanners are their own tab's, and custom rules their own section's.
 const shown = (rule: Policy) => !SCANNER_RULES.includes(rule.id) && !rule.id.startsWith("custom.");
 
-const COLUMNS = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] gap-x-6 max-[860px]:grid-cols-1";
-const ROW = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] items-start gap-x-6 gap-y-1.5 border-t border-border py-3.5 first:border-t-0 max-[860px]:grid-cols-1";
+const COLUMNS = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] gap-x-6 max-[1100px]:grid-cols-1";
+const ROW = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] items-start gap-x-6 gap-y-1.5 border-t border-border py-3.5 first:border-t-0 max-[1100px]:grid-cols-1";
 
 // The row a link names (?rule=): marked, so the reader sees which of the rows they were sent to.
 const LINKED = "-mx-3 rounded-[8px] bg-accent-dim px-3 shadow-[inset_3px_0_0_var(--color-accent)]"; // -mx-3 keeps its columns on the other rows
@@ -98,11 +98,19 @@ export function Policies() {
     if (ready && linked !== null) document.getElementById(`rule-${linked}`)?.scrollIntoView({ block: "center" });
   }, [ready]);
 
+  // "Affects today" is drawn once it has something to say (#118): a rule's preview names an app or failed, or a change
+  // is asked. A column of "No app is affected today." on every row is noise. Its track stays, so the dials hold their place.
+  // Row by row: a line on every row, for one row's change, moves the control just tapped.
+  const speaks = (rule: Policy) => {
+    const now = today[rule.id];
+    return flow.of(rule.id) !== undefined || typeof now === "string" || (Array.isArray(now) && now.length > 0);
+  };
+  const affects = rows?.some(speaks) ?? false;
   return (
     <section aria-label="Policies" className="grid gap-3">
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
-      <div className={`${COLUMNS} text-sm font-semibold text-text-faint max-[860px]:hidden`}>
-        <span>Policy</span><span>Mode</span><span>Affects today</span>
+      <div className={`${COLUMNS} text-sm font-semibold text-text-faint max-[1100px]:hidden`}>
+        <span>Policy</span><span>Mode</span>{affects && <span>Affects today</span>}
       </div>
       <div>
         {rows?.filter(shown).map((rule) => {
@@ -118,7 +126,7 @@ export function Policies() {
                 <Scheduled rule={rule} flow={flow} />
               </span>
               <Dial name={rule.name} value={flow.state(rule)} change={(state) => void flow.ask(rule, { state })} />
-              <Impact flow={flow} rule={rule} today={today[rule.id]} />
+              {speaks(rule) && <Impact flow={flow} rule={rule} today={today[rule.id]} />}
             </section>
           );
         })}

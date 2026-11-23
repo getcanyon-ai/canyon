@@ -18,7 +18,7 @@ function server(sessions: unknown[]) {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-// Settings › People & sign-in's sessions list (contracts/routes.md, Sessions): how each signed in, an MCP client by its
+// Settings › Agents' sessions list (contracts/routes.md, Sessions): how each signed in, an MCP client by its
 // name, and Disconnect on each but the reader's own browser session, which keeps Sign out; Person is an admin's column.
 describe("the sessions list", () => {
   it("names each session's way in, marks the reader's own, and disconnects one by its digest", async () => {

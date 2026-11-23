@@ -129,15 +129,36 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(admins.queryByRole("textbox", { name: "Claim" })).toBeNull();
   });
 
-  // What the environment sets, the bootstrap admins and the admin claim, is an admin's to read (#118): a member reads the
-  // admins by email alone, never a variable's name, nor a sign-in group they aren't answered.
-  it("a member reads no variable and no sign-in group", () => {
-    show(MEMBER);
+  // The people are everyone's to read, the environment's admins too; a variable's name is an admin's alone (#118). So a
+  // member reads every admin there is in one list, what each pinned key holds, and no CANYON_ name, nor a sign-in group.
+  it("a member reads every admin, what each pinned key holds, and no variable's name", () => {
+    const pinned: Preferences = { ...MEMBER, allowed_emails: [THEIRS], groups_claim: "teams", overridden: ["org_name", "allowed_emails", "allowed_domains", "admin_claim", "admin_value", "groups_claim"] };
+    show(pinned);
     const admins = region("Who administers Canyon");
-    expect(admins.queryByText(/CANYON_ADMINS|CANYON_ADMIN_CLAIM/)).toBeNull();
+    expect(admins.getByText("dana@meridian.example")).toBeTruthy();
+    expect(admins.getByText("founder@meridian.example")).toBeTruthy();
     expect(admins.queryByText("From the environment")).toBeNull();
     expect(admins.queryByText("By sign-in group (optional)")).toBeNull();
-    expect(admins.getByText(MEMBER.admin_emails[0]!)).toBeTruthy();
+    expect(region("Who may sign in").getByText(THEIRS)).toBeTruthy();
+    expect(region("Who may sign in").getByText(MEMBER.allowed_domains[0]!)).toBeTruthy();
+    expect(region("Groups").getByText("teams")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("CANYON_");
+    cleanup();
+    show(pinned, "organisation");
+    expect(screen.getByText(MEMBER.org_name)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("CANYON_");
+    cleanup();
+    // An admin by both is one person, named once.
+    show({ ...MEMBER, bootstrap_admins: MEMBER.admin_emails });
+    expect(region("Who administers Canyon").getAllByText("dana@meridian.example")).toHaveLength(1);
+  });
+
+  // Every admin by a sign-in group is not nobody (#118).
+  it("a member where no admin is listed is never told nobody administers Canyon", () => {
+    show({ ...MEMBER, admin_emails: [], bootstrap_admins: [] });
+    const admins = region("Who administers Canyon");
+    expect(admins.queryByText("Nobody.")).toBeNull();
+    expect(admins.getByText("No one by address; a sign-in group decides.")).toBeTruthy();
   });
 
   // No one by address while a domain lets people in is not nobody (#118): the line says who can sign in.

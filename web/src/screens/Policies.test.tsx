@@ -88,6 +88,17 @@ describe("Policies", () => {
     expect(await screen.findByText("Affects today")).toBeDefined();
   });
 
+  // Asking for one change moves no other row (#118): only a row with something to say, its own change, an app or a failed
+  // preview, draws its line. One "No app is affected today." on every row pushed the tapped control down a phone's screen.
+  it("says what a change affects on its own row alone", async () => {
+    const nothing = Object.fromEntries(golden.policies.policies.map((one) => [`PUT ${POLICIES}/${one.id}`, { body: { would_block: [] } }]));
+    server({ ...routes, ...nothing });
+    render(<Policies />);
+    await choose(rule.name, golden.preview.request.state);
+    expect(await row().findByText("No app is affected today.")).toBeDefined();
+    expect(screen.getAllByText("No app is affected today.")).toHaveLength(1);
+  });
+
   // The buildpacks "Approved stacks only" accepts are set on its own row (#99), each by its builder's name or else its
   // id, ticked when accepted, and saved as it is ticked, sorted by id.
   it("the Approved stacks only row sets the buildpacks it accepts", async () => {

@@ -380,6 +380,7 @@ describe("Settings › App hosting", () => {
     expect(note.textContent).toBe("Apps on this cluster can reach the server they run on. How your cluster admin closes this");
     expect(within(note).getByRole("link", { name: "How your cluster admin closes this" }).getAttribute("href")).toBe("https://www.getcanyon.ai/docs/self-host/kubernetes/#host-firewall");
     expect(note.textContent).not.toContain("deploy/k8s/README.md");
+    expect(within(note).getByRole("link").getAttribute("target")).toBe("_blank"); // the docs never take the admin's form away
     expect(note.className).toContain("text-amber");
   });
 
@@ -903,9 +904,36 @@ describe("Settings › Outbound's replicas", () => {
     expect(within(folded).getByRole("region", { name: S.capsHeading })).toBeDefined();
     expect(within(folded).getByText(S.replicasHeading)).toBeDefined();
     expect(within(folded).getByRole("region", { name: S.keysHeading })).toBeDefined();
+    // Judged once, as the read lands: ninety seconds on, a healthy replica hasn't grown old on this page.
+    const real = Date.now;
+    try {
+      Date.now = () => real() + 90_000;
+      fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "31" } });
+      expect(folded.open).toBe(false);
+      expect(within(folded).getByText(S.replicaCurrent)).toBeDefined();
+    } finally { Date.now = real; }
     cleanup();
     answering({ ...admin, replicas: [{ replica: "canyon-egress-b", have: "e:39", seen_at: at(0), current_at: at(47 * 60_000) }] });
     folded = await advanced();
+    expect(folded.open).toBe(true);
+  });
+
+  // It never closes for the admin (#118): a save whose answer needs nobody leaves Advanced as they had it, its confirmation shown.
+  it("keeps Advanced open over a save, with the confirmation in sight", async () => {
+    const now = Date.now();
+    const at = (ago: number) => new Date(now - ago).toISOString();
+    const stale = { ...admin, replicas: [{ replica: "canyon-egress-b", have: "e:39", seen_at: at(0), current_at: at(47 * 60_000) }] };
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const body = url === "/auth/config" ? { canyon: true, auth: "oidc" } : url === "/api/v1/preferences" ? prefs.preferences_admin
+        : url === "/api/v1/egress" ? (init?.method === "PUT" ? { ...admin, caps: { ...admin.caps, new_names: 60 }, replicas: [{ ...stale.replicas[0]!, current_at: at(0) }] } : stale) : unset;
+      return { ok: true, status: 200, json: async () => body } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    const folded = (await within(await open()).findByText("Advanced")).closest("details") as HTMLDetailsElement;
+    expect(folded.open).toBe(true);
+    fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "60" } });
+    fireEvent.click(within(folded).getByRole("button", { name: "Save limits" }));
+    expect(await within(folded).findByText(S.capsSaved)).toBeDefined();
     expect(folded.open).toBe(true);
   });
 });

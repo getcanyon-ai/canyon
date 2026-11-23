@@ -69,6 +69,7 @@ function bodyOf(draft: Draft, defaultDomain: string): FrontDoorEdit {
 const PAGES = [
   ["organisation", "Organisation"],
   ["people", "People & sign-in"],
+  ["agents", "Agents"], // every member's: connecting an agent, and the sessions to disconnect one (#100's review)
   ["hosting", "App hosting"],
   ["ai", "AI review"],
   ["github", "GitHub"], // admins' alone (#1914)
@@ -139,15 +140,17 @@ export function Settings() {
         {record !== null && page === "organisation" && <OrganisationSettings record={record} adopt={setRecord} />}
         {record !== null && page === "people" && (
           <section aria-label="People & sign-in">
-            {/* Connect an agent directly above Sessions, so an agent is connected and disconnected in one place, and both
-                first: they are what every member acts on here, the forms below an admin's (screens.md; #99). */}
-            {auth !== null && <ConnectAgents signIn={auth === "oidc"} />}
-            {auth !== "off" && <Sessions admin={admin} />}
             {/* With sign-in off there is nobody to admit and every caller is an admin: forms here
                 would do nothing (the audit's C9). */}
-            <div className="mt-8 border-t border-border pt-2">
-              {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
-            </div>
+            {auth === "off" ? <p className={NOTE}>{S.signInOff}</p> : <PeopleSettings record={record} adopt={setRecord} />}
+          </section>
+        )}
+        {/* Connect an agent directly above Sessions, so an agent is connected and disconnected in one place, on a tab
+            every member finds by name (screens.md; #100's review). */}
+        {page === "agents" && auth !== null && (
+          <section aria-label="Agents" className="grid gap-2">
+            <ConnectAgents signIn={auth === "oidc"} />
+            {auth !== "off" && <Sessions admin={admin} />}
           </section>
         )}
         {read !== null && record !== null && page === "hosting" && read.runtime === "kubernetes" && (

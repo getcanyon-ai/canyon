@@ -65,6 +65,9 @@ function Register({ done, close }: { done: (row: DesignSystemRow) => void; close
 // the scanners, and what coding agents are told. Each is #/guardrails/<page>; the bare route is the
 // first, Pipeline, and a link to a rule's row (?rule=) is the tab that rule's row is on.
 const PAGES = [["pipeline", "Pipeline"], ["policies", "Policies"], ["scanners", "Scanners"], ["playbooks", "Playbooks"], ["agents", "What agents are told"]] as const;
+// intoView brings the tab shown into view: a phone's tabs scroll sideways (Settings' own, #100's review). One function,
+// so React calls it as a tab becomes the one shown, never again on a re-render.
+const intoView = (shown: HTMLElement | null) => shown?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
 const pageOf = (hash: string) => {
   const rule = new URLSearchParams(hashQuery()).get("rule");
   if (rule !== null) return SCANNER_RULES.includes(rule) ? "scanners" : "policies";
@@ -86,6 +89,15 @@ export function Guardrails() {
   const [saved, setSaved] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [chatting, setChatting] = useState(false);
+  // The row Add a stack made, whose language takes the typing, scrolled clear of the save bar it brings up.
+  const [added, setAdded] = useState<number | null>(null);
+  useEffect(() => {
+    if (added === null) return;
+    const field = document.getElementById(`stack-${added}-language`);
+    field?.focus();
+    field?.scrollIntoView?.({ block: "center" });
+    setAdded(null);
+  }, [added]);
   const sending = useRef(false);
   // The panel's box, held here: the parent owns the button that moves focus to it.
   const box = useRef<HTMLTextAreaElement>(null);
@@ -188,7 +200,7 @@ export function Guardrails() {
         <p className={SUB}>What every app must pass before it reaches production, and what coding agents are told.</p>
         {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border max-[520px]:gap-4">
           {PAGES.map(([key, label]) => (
-            <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined}
+            <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined} ref={page === key ? intoView : undefined}
               className={`py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-dim hover:text-text"}`}>
               {label}
             </a>
@@ -240,12 +252,12 @@ export function Guardrails() {
                 ))}
               </div>
               <span className="mt-2.5 flex">
-                <Button size="sm" onClick={() => { setStacks((list) => [...list, { language: "", frameworks: [""] }]); setSaved(false); }}>Add a stack</Button>
+                <Button size="sm" onClick={() => { setAdded(stacks.length); setStacks((list) => [...list, { language: "", frameworks: [""] }]); setSaved(false); }}>Add a stack</Button>
               </span>
             </section>
             <section aria-label="Design system" className="mt-8 border-t border-border pt-5">
               <h2 className={H2}>Design system</h2>
-              <p className={SUB}>Components come from this registry. Each review checks that an app's package.json lists it (its components.json, for shadcn/ui and Canyon); an app that doesn't gets an advisory finding, unless Policies makes the rule blocking.</p>
+              <p className={SUB}>Components come from this registry. Each review checks that an app's package.json lists it (its components.json, for shadcn/ui and Canyon); an app that doesn't gets an advisory finding, unless <a className="text-link no-underline hover:underline" href="#/guardrails?rule=design.org-system">Policies</a> makes the rule blocking.</p>
               <span className="mt-3 flex flex-wrap items-center gap-3">
                 <label className="sr-only" htmlFor="org-default">Default design system</label>
                 <select id="org-default" className={FIELD} value={chosen} onChange={(event) => { setChosen(event.target.value); setSaved(false); }}>

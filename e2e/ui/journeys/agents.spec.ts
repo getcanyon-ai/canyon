@@ -11,8 +11,8 @@ journey("read what agents are told, then how to connect one", {
       see: async (page) => { await expect(page.getByRole("region", { name: "What agents are told" })).toBeVisible(); },
     },
     {
-      name: "open Settings › People & sign-in",
-      do: async (page) => { await page.goto("/#/settings/people"); },
+      name: "open Settings › Agents",
+      do: async (page) => { await page.goto("/#/settings/agents"); },
       see: async (page) => { await expect(page.getByRole("region", { name: "Connect an agent" })).toBeVisible(); },
     },
   ],

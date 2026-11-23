@@ -146,10 +146,16 @@ export function Policies() {
 // a refused save says the server's words and keeps the record as it was.
 function Buildpacks({ record, adopt }: { record: Preferences; adopt: (next: Preferences) => void }) {
   const [failure, setFailure] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false); // said for a moment after a tick lands (#100's review)
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(false), 2000);
+    return () => clearTimeout(t);
+  }, [saved]);
   const approved = record.approved_buildpacks ?? [];
   const named = new Map((record.buildpacks_seen ?? []).map((bp) => [bp.id, bp.name ?? bp.id]));
   const offered = [...new Set([...(record.buildpacks_seen ?? []).map((bp) => bp.id), ...approved])].sort();
-  const choose = (next: string[]) => putPreferences({ approved_buildpacks: next }).then((answer) => { adopt(answer); setFailure(null); }, (err: unknown) => setFailure(said(err)));
+  const choose = (next: string[]) => putPreferences({ approved_buildpacks: next }).then((answer) => { adopt(answer); setFailure(null); setSaved(true); }, (err: unknown) => { setSaved(false); setFailure(said(err)); });
   return (
     <span className="mt-2 grid gap-1">
       <span className="text-md text-text-dim">Buildpacks this rule accepts. Canyon lists the ones it has seen apps build with.</span>
@@ -160,6 +166,7 @@ function Buildpacks({ record, adopt }: { record: Preferences; adopt: (next: Pref
           {named.get(id) ?? id}
         </label>
       ))}
+      <span role="status" className="text-md text-ok">{saved ? "Saved" : ""}</span>
       {failure !== null && <span className="text-md text-critical">{failure}</span>}
     </span>
   );

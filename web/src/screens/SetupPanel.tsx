@@ -130,7 +130,7 @@ export function SetupPanel({ box, refresh }: { box: Ref<HTMLTextAreaElement>; re
       {refusal !== null && <p role="status" className="mt-2.5 text-base text-critical">{refusal}</p>}
       {/* A textarea, and no Enter-to-send: a newline is content the server counts. */}
       <label className={`${LABEL} mt-3`} htmlFor="setup-message">Your message</label>
-      <textarea id="setup-message" ref={box} rows={3} className={`${FIELD} block w-full max-w-[720px]`}
+      <textarea id="setup-message" ref={box} rows={3} placeholder="Our teams build React with Vite and Python with FastAPI, using our design system." className={`${FIELD} block w-full max-w-[720px]`}
         value={draft} onChange={(event) => { setDraft(event.target.value); setEmpty(false); }} />
       <span className="mt-2.5 flex flex-wrap items-start gap-2">
         {/* The only content this panel declines to send is no content — the conversation goes back

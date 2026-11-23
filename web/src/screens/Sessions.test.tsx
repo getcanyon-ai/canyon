@@ -42,7 +42,8 @@ describe("the sessions list", () => {
     render(<Sessions admin={false} />);
     const list = await screen.findByRole("region", { name: SESSIONS.title });
     const when = (at: string) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-    expect(within(list).getByText(`${SESSIONS.flow.browser} · ${SESSIONS.current.toLowerCase()}`)).toBeDefined();
+    const said = (text: string) => [...list.querySelectorAll("span")].some((one) => one.textContent === text);
+    expect(said(`${SESSIONS.flow.browser} · ${SESSIONS.current.toLowerCase()}`)).toBe(true);
     expect(within(list).getByText(`${SESSIONS.since} ${when("2026-11-20T09:00:00Z")} · ${SESSIONS.lastUsed.toLowerCase()} ${when("2026-11-20T10:00:00Z")} · ${SESSIONS.expires.toLowerCase()} ${when("2026-11-20T21:00:00Z")}`)).toBeDefined();
   });
 

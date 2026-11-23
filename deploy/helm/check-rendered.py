@@ -22,6 +22,7 @@ args = argparse.ArgumentParser()
 args.add_argument("--egress-token", help="canyon.egress.token, which the rendered Secret must hold")
 args.add_argument("--existing-egress-secret", action="store_true", help="canyon.egress.existingSecret: no Secret, no token sum")
 args.add_argument("--in-cluster-signin", action="store_true", help="canyon.egress.signin.inCluster: the canyon-apps-signin policy is rendered")
+args.add_argument("--telemetry-off", action="store_true", help="telemetry.enabled is not true: the server's env sets CANYON_TELEMETRY=0")
 args.add_argument("--ask-token", help="gateway.askToken, which both ask-token Secrets must hold, and whose sum rolls Caddy and the server")
 args = args.parse_args()
 docs = [d for d in yaml.safe_load_all(sys.stdin) if d]
@@ -290,6 +291,16 @@ for d in signins:
 server_env = {e["name"]: e.get("value") for e in (find("Deployment", "canyon-server", "canyon") or {"spec": {"template": {"spec": {"containers": [{}]}}}})["spec"]["template"]["spec"]["containers"][0].get("env", [])}
 if server_env.get("CANYON_AUTH") != "oidc":
     fail.append("the server's env must pin CANYON_AUTH to oidc: env wins over envFrom, so no Secret, existingSecret included, starts it without sign-in")
+# Telemetry is on by default, and its off switch is the server container's own env, as CANYON_AUTH is, so it holds with
+# canyon.existingSecret too. On sets nothing: a Secret's own CANYON_TELEMETRY=0 stands.
+off_vars = {k: v for k, v in server_env.items() if k in ("CANYON_TELEMETRY", "DO_NOT_TRACK", "CI")}
+if off_vars != ({"CANYON_TELEMETRY": "0"} if args.telemetry_off else {}):
+    fail.append(f"the server's env turns telemetry off by {off_vars}: want CANYON_TELEMETRY=0 exactly when telemetry.enabled is not true")
+for d in docs:
+    if d["kind"] == "Secret" and d["metadata"]["name"] == "canyon-server":
+        for k in ("CANYON_TELEMETRY", "DO_NOT_TRACK", "CI"):
+            if k in d.get("stringData", {}):
+                fail.append(f"Secret canyon-server sets {k}: the off switch is the server container's own env")
 k3s_caddy = any(d["kind"] == "NetworkPolicy" and d["metadata"]["name"] == "canyon-apps-gateway" for d in docs)
 pocket = any(d["kind"] == "Deployment" and d["metadata"]["name"] == "pocket-id" for d in docs)
 if (k3s_caddy and pocket) != ("CANYON_KUBE_GATEWAY_SIGNIN" in server_env):

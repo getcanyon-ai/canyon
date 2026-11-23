@@ -221,8 +221,8 @@ export function AuditTrail({ query }: { query: string }) {
               </a>
             ))}
           </nav>
-          <span className="ml-auto flex flex-wrap items-center gap-2.5 max-[520px]:ml-0">
-            {rule === null && <select aria-label="App" className={FIELD} value={app ?? ""} onChange={(event) => go({ project: event.target.value === "" ? null : event.target.value })}>
+          <span className="ml-auto flex max-w-full flex-wrap items-center gap-2.5 max-[520px]:ml-0">
+            {rule === null && <select aria-label="App" className={`${FIELD} max-w-full`} value={app ?? ""} onChange={(event) => go({ project: event.target.value === "" ? null : event.target.value })}>
               <option value="">All apps</option>
               {app !== null && !apps.some((one) => one.id === app) && <option value={app}>{app}</option>}
               {apps.map((one) => <option key={one.id} value={one.id}>{one.name}</option>)}

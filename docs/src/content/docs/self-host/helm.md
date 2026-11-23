@@ -94,7 +94,8 @@ The front door, its two ways of signing people in and the address form are defin
   values there.
 - **Or set them** in a `values.secret.yaml` you keep with mode 600.
 - **Or bring a Secret:**
-  - `canyon.existingSecret` replaces the server's whole environment.
+  - `canyon.existingSecret` replaces the Secret the chart writes for the server's environment. With it, sign-in
+    stays on, and `telemetry.enabled: false` still turns the daily report off.
   - `infra.*Postgres.existingSecret` holds key `password`.
   - `auth.pocketId.existingSecret` holds `ENCRYPTION_KEY` and `STATIC_API_KEY`.
   - `canyon.builder.registryCredential.existingSecret: true` means you made `canyon-builds/canyon-registry`.

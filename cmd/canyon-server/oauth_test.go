@@ -21,10 +21,17 @@ import (
 // oauthHost is a host with sign-in on (dana its admin): gina, a member, signed in in a browser, and the server's pool.
 func oauthHost(t *testing.T) (base string, pool *pgxpool.Pool, ctx context.Context, gina *http.Client) {
 	t.Helper()
+	base, pool, ctx, gina, _ = oauthHostLogged(t)
+	return base, pool, ctx, gina
+}
+
+// oauthHostLogged is oauthHost with the server's log.
+func oauthHostLogged(t *testing.T) (base string, pool *pgxpool.Pool, ctx context.Context, gina *http.Client, logs *syncBuffer) {
+	t.Helper()
 	withOIDC(t)
 	pool, ctx = migrated(t)
-	base, _ = start(t, pool, time.Hour)
-	return base, pool, ctx, signedIn(t, ctx, pool, base, "sub-gina", "gina@meridian.example", false)
+	base, logs = start(t, pool, time.Hour)
+	return base, pool, ctx, signedIn(t, ctx, pool, base, "sub-gina", "gina@meridian.example", false), logs
 }
 
 // justNow is an RFC 3339 time within the last minute.
@@ -259,19 +266,173 @@ func TestOAuthRevokingASessionEndsItsTokens(t *testing.T) {
 // A person no longer on the membership lists gets no new token: a code they allowed before, and a refresh, are
 // refused, and the refresh ends the session.
 func TestOAuthAPersonOffTheListsGetsNoToken(t *testing.T) {
-	base, pool, ctx, gina := oauthHost(t)
+	base, pool, ctx, gina, logs := oauthHostLogged(t)
 	const redirect = "https://claude.ai/cb"
 	id := register(t, base, redirect)
 	_, refresh := signedInOver(t, base, gina, id, redirect)
+	refreshed := func() (int, map[string]any) {
+		return tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {id}})
+	}
+	const ended = "SELECT count(*) FROM audit_events WHERE action = 'disconnect agent'"
+	status, tok := refreshed()
+	if n := countRows(t, ctx, pool, ended); status != 200 || n != 0 {
+		t.Fatalf("a member's refresh: %d %s, and %d rows of a session ended, want none", status, lastBody, n)
+	}
+	refresh = tok["refresh_token"].(string)
 	if _, err := pool.Exec(ctx, "UPDATE sessions SET email = 'gina@elsewhere.example' WHERE flow = 'oauth'"); err != nil { // as the lists changing under her would leave her
 		t.Fatal(err)
 	}
-	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, "no longer sign in") {
+	if status, _ := refreshed(); status != 400 || !strings.Contains(lastBody, "no longer sign in") {
 		t.Errorf("a refresh off the lists: %d %s", status, lastBody)
 	}
 	if n := countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL"); n != 0 {
 		t.Errorf("the session of a person off the lists is still live")
 	}
+	if n := countRows(t, ctx, pool, ended); n != 1 {
+		t.Errorf("a refresh off the lists wrote %d rows of the session ended, want 1", n)
+	}
+	if n := countRows(t, ctx, pool, ended+` AND actor_kind = 'canyon' AND detail = '{"reason": "no longer allowed to sign in", "subject": "sub-gina"}'
+		AND via = 'canyon' AND source = '127.0.0.1' AND session = (SELECT 'ses_' || left(encode(sha256(convert_to(id, 'UTF8')), 'hex'), 16) FROM sessions WHERE flow = 'oauth')`); n != 1 {
+		t.Errorf("the row isn't Canyon's, with the reason, the person, the session's digest and the caller's address")
+	}
+	var digest string
+	if err := pool.QueryRow(ctx, "SELECT session FROM audit_events WHERE action = 'disconnect agent'").Scan(&digest); err != nil {
+		t.Fatal(err)
+	}
+	if line := "canyon-server: oauth session " + digest + " ended: no longer allowed to sign in\n"; strings.Count(logs.String(), line) != 1 {
+		t.Errorf("the log is %q, want one %q", logs.String(), line)
+	}
+	if status, _ := refreshed(); status != 400 {
+		t.Errorf("a refresh of the session that ended: %d %s", status, lastBody)
+	}
+	if n := countRows(t, ctx, pool, ended); n != 1 {
+		t.Errorf("a refresh of the session that ended wrote a row: %d, want 1", n)
+	}
+}
+
+// A session whose end was not written whole is never answered or logged as ended: the refresh is 500, the session and
+// the trail are as they were, and the next refresh ends it.
+func TestOAuthASessionThatDidNotEndIsNotSaidToHave(t *testing.T) {
+	base, pool, ctx, gina, logs := oauthHostLogged(t)
+	const redirect = "https://claude.ai/cb"
+	id := register(t, base, redirect)
+	exec := func(q string) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`CREATE FUNCTION refuse_the_end() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'the end is refused'; END $$`)
+	refreshed := func(token string) (int, map[string]any) {
+		return tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}, "client_id": {id}})
+	}
+	const live, ended = "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL", "SELECT count(*) FROM audit_events WHERE action = 'disconnect agent'"
+	for _, c := range []struct{ name, ends string }{
+		{"a person off the lists", "UPDATE sessions SET email = 'gina@elsewhere.example' WHERE flow = 'oauth' AND revoked_at IS NULL"},
+		{"a refresh token reused", "UPDATE sessions SET refresh_prev_hash = refresh_hash, refresh_hash = sha256(refresh_hash) WHERE flow = 'oauth' AND revoked_at IS NULL"},
+	} {
+		for _, refused := range []struct{ name, on, trigger string }{
+			{"the commit", "sessions", "CREATE CONSTRAINT TRIGGER refuse_the_end AFTER UPDATE ON sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL) EXECUTE FUNCTION refuse_the_end()"},
+			{"the audit row", "audit_events", "CREATE TRIGGER refuse_the_end BEFORE INSERT ON audit_events FOR EACH ROW WHEN (NEW.action = 'disconnect agent') EXECUTE FUNCTION refuse_the_end()"},
+		} {
+			_, refresh := signedInOver(t, base, gina, id, redirect)
+			exec(c.ends)
+			rows, said := countRows(t, ctx, pool, ended), strings.Count(logs.String(), " ended: ")
+			exec(refused.trigger)
+			if status, _ := refreshed(refresh); status != 500 || countRows(t, ctx, pool, live) != 1 || countRows(t, ctx, pool, ended) != rows || strings.Count(logs.String(), " ended: ") != said {
+				t.Errorf("%s, %s refused: %d %s; want 500, the session live, no row and no line saying it ended", c.name, refused.name, status, lastBody)
+			}
+			exec("DROP TRIGGER refuse_the_end ON " + refused.on)
+			if status, _ := refreshed(refresh); status != 400 || countRows(t, ctx, pool, live) != 0 || countRows(t, ctx, pool, ended) != rows+1 || strings.Count(logs.String(), " ended: ") != said+1 {
+				t.Errorf("%s, asked again: %d %s, want the session ended with one row and one line", c.name, status, lastBody)
+			}
+		}
+	}
+}
+
+// A refresh ends the session of whoever can no longer sign in, however it comes: a retry within the grace, and on a host
+// back in setup, where the admins alone sign in.
+func TestOAuthAnyRefreshEndsTheSessionOfWhoeverCannotSignIn(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect = "https://claude.ai/cb"
+	id := register(t, base, redirect)
+	refreshed := func(token string) (int, map[string]any) {
+		return tokenCall(t, base, neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}, "client_id": {id}})
+	}
+	endedOnce := func(what string, rows int) {
+		t.Helper()
+		if countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL") != 0 ||
+			countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND detail->>'reason' = 'no longer allowed to sign in'`) != rows {
+			t.Errorf("%s: %s; want the session ended, with its row", what, lastBody)
+		}
+	}
+	_, first := signedInOver(t, base, gina, id, redirect)
+	if status, _ := refreshed(first); status != 200 {
+		t.Fatalf("the rotation: %d %s", status, lastBody)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE sessions SET email = 'gina@elsewhere.example' WHERE flow = 'oauth'"); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := refreshed(first); status != 400 || !strings.Contains(lastBody, "no longer sign in") {
+		t.Errorf("a retry off the lists: %d %s", status, lastBody)
+	}
+	endedOnce("a retry within the grace", 1)
+	_, refresh := signedInOver(t, base, gina, id, redirect)
+	inSetup(t, ctx, pool)
+	if status, _ := refreshed(refresh); status != 400 || !strings.Contains(lastBody, "no longer sign in") {
+		t.Errorf("a member's refresh on a host in setup: %d %s", status, lastBody)
+	}
+	endedOnce("a host in setup", 2)
+}
+
+// A client that hangs up while its refresh is ending the session doesn't keep it: the end and its row are written.
+func TestOAuthAClientThatHangsUpDoesNotKeepTheSession(t *testing.T) {
+	base, pool, ctx, gina := oauthHost(t)
+	const redirect, key = "https://claude.ai/cb", "912800128"
+	id := register(t, base, redirect)
+	_, refresh := signedInOver(t, base, gina, id, redirect)
+	for _, q := range []string{
+		"UPDATE sessions SET email = 'gina@elsewhere.example' WHERE flow = 'oauth'",
+		"CREATE FUNCTION wait_for_the_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(" + key + "); RETURN NEW; END $$",
+		"CREATE TRIGGER wait_for_the_test BEFORE UPDATE ON sessions FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL) EXECUTE FUNCTION wait_for_the_test()",
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Rollback(ctx) }()
+	if _, err := held.Exec(ctx, "SELECT pg_advisory_xact_lock("+key+")"); err != nil {
+		t.Fatal(err)
+	}
+	asking, hangUp := context.WithCancel(ctx)
+	defer hangUp()
+	req, _ := http.NewRequestWithContext(asking, http.MethodPost, base+"/oauth/token",
+		strings.NewReader(neturl.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {id}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	eventually(t, "the end waits", func() bool {
+		return countRows(t, ctx, pool, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objid = "+key+" AND NOT granted") == 1
+	})
+	hangUp()
+	<-gone
+	time.Sleep(500 * time.Millisecond) // time for the server to notice: an end that ignored no hang-up is gone by now
+	if err := held.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the session is ended, with its row", func() bool {
+		return countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NULL") == 0 &&
+			countRows(t, ctx, pool, "SELECT count(*) FROM audit_events WHERE action = 'disconnect agent'") == 1
+	})
 }
 
 // A code redeems only with what it was issued for: the client, the redirect, the verifier and the resource. A
@@ -787,5 +948,8 @@ func TestOAuthThePairARetryReplacedComingBackEndsTheSession(t *testing.T) {
 	}
 	if refresh(lost["refresh_token"].(string)) != 400 || countRows(t, ctx, pool, "SELECT count(*) FROM sessions WHERE flow = 'oauth' AND revoked_at IS NOT NULL") != 1 {
 		t.Errorf("the pair the retry replaced came back: %s, want the session ended", lastBody)
+	}
+	if n := countRows(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'disconnect agent' AND detail = '{"reason": "refresh token reused", "subject": "sub-gina"}'`); n != 1 {
+		t.Errorf("the pair the retry replaced came back: %d rows of the session ended, want 1", n)
 	}
 }

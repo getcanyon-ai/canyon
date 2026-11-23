@@ -527,7 +527,7 @@ else, an owner of every app included, who sees nothing of it. Reading the report
 CLI (`canyon telemetry show`, `canyon telemetry off`) or the dashboard alike. Turning it on starts the sends again,
 so it is a person's, in the dashboard, like every widening (decided 2026-11-12, #2807): on a host with
 sign-in, `403 dashboard_required` from any session but a browser's, and `403 person_required` to an agent. The
-server's environment (`CANYON_TELEMETRY=0`, `DO_NOT_TRACK=1`, `CI`) turns it off whatever an admin sets, and no
+server's environment (`CANYON_TELEMETRY`, `DO_NOT_TRACK`, `CI`; contracts/routes.md, *Telemetry*) turns it off whatever an admin sets, and no
 route turns it back on.
 
 ## MCP — what an agent's client may do

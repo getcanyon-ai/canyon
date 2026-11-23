@@ -22,6 +22,7 @@ services:
       - CANYON_OIDC_CLIENT_SECRET=${CANYON_OIDC_CLIENT_SECRET:-} # empty: a public client, with PKCE
       - CANYON_ADMINS=${CANYON_ADMINS:?set CANYON_ADMINS in .env}
       - CANYON_DEMO_SEED= # a company's Canyon starts with an empty fleet
+      - CANYON_INSTALL_MODE=one_server # how Canyon was installed, which the daily report says
       - CANYON_DATABASE_URL=postgres://canyon:${CANYON_POSTGRES_PASSWORD}@postgres:5432/canyon?sslmode=disable
       - CANYON_APP_DATABASE_URL=postgres://canyon:${CANYON_APP_POSTGRES_PASSWORD}@app-postgres:5432/canyon?sslmode=disable
       - CANYON_EGRESS_RECEIVER_TOKEN=${CANYON_EGRESS_RECEIVER_TOKEN:?set CANYON_EGRESS_RECEIVER_TOKEN in .env}

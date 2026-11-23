@@ -234,7 +234,7 @@ export function NeedLine({ app, need, viewer, signedIn, lift, done, here = false
   return (
     <li className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 border-b border-border px-4 py-3 last:border-b-0 max-[620px]:grid-cols-[18px_minmax(0,1fr)]">
       <span className={`mt-0.5 ${look.ink}`}><Icon name={look.icon} /></span>
-      <div className="grid gap-0.5 text-base text-text-dim">
+      <div className="grid min-w-0 gap-0.5 text-base wrap-anywhere text-text-dim">
         <p><b className="font-semibold text-text">{title}</b>{text.length > 0 && ` ${text.join(" ")}`}</p>
         {ask !== null && <p className="text-md">{ask}</p>}
         {failure !== null && <p role="alert" className="text-md text-critical">{failure}</p>}
@@ -287,7 +287,7 @@ export function DoneLine({ what, clear }: { what: Done; clear: () => void }) {
   return (
     <li role="status" className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-border bg-surface-2 px-4 py-3 last:border-b-0 max-[620px]:grid-cols-[18px_minmax(0,1fr)]">
       <span className="mt-0.5 text-ok"><Icon name="done" /></span>
-      <p className="text-base text-text">{pending ?? what.line}{failure !== null && <span className="block text-md text-critical">{failure}</span>}</p>
+      <p className="text-base wrap-anywhere text-text">{pending ?? what.line}{failure !== null && <span className="block text-md text-critical">{failure}</span>}</p>
       {what.again !== undefined && (
         <span className="max-[620px]:col-start-2">
           {undoing ? <Button size="sm" disabled reason="Saving…">{what.again.label}</Button>

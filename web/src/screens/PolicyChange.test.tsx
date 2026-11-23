@@ -16,9 +16,9 @@ const said = (rule: Partial<Policy>, change: PolicyChange | undefined, wouldBloc
 };
 const NONE = "No app is affected today.";
 const OFF = "Not known yet: reviews may not check a rule while it's Off.";
-const PROMOTED = "Not known yet: Canyon checks this rule when an app is promoted.";
+const PROMOTED = "Canyon checks this rule when an app is promoted, so it can't say which apps this affects.";
 const LOOSER = "Canyon doesn't check which apps this lets through.";
-const WARNS = "A warning blocks no app.";
+const WARNS = "Advisory blocks no app.";
 
 describe("a rule change's impact", () => {
   it("says no app is affected only where the preview read one that could be", () => {

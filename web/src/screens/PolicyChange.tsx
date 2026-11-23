@@ -122,8 +122,8 @@ const READ_NOW = ["platform.known-vuln", "prod.egress-allowed"];
 // before preview of a rule no review had on; before production it names an app whose review had the rule off.
 function nobody(rule: Policy, one: Change | undefined): string {
   const to = one?.change ?? { state: rule.state, production: rule.production };
-  if (!named(to).some((gate) => to[gate] === "blocking")) return one === undefined ? "No app is affected today." : loosens(one) ? "Canyon doesn't check which apps this lets through." : "A warning blocks no app.";
-  if (AT_PROMOTION.includes(rule.id)) return "Not known yet: Canyon checks this rule when an app is promoted.";
+  if (!named(to).some((gate) => to[gate] === "blocking")) return one === undefined ? "No app is affected today." : loosens(one) ? "Canyon doesn't check which apps this lets through." : "Advisory blocks no app.";
+  if (AT_PROMOTION.includes(rule.id)) return "Canyon checks this rule when an app is promoted, so it can't say which apps this affects.";
   if (!READ_NOW.includes(rule.id) && to.state === "blocking" && now(rule, "state") === "off" && now(rule, "production") === "off") return "Not known yet: reviews may not check a rule while it's Off.";
   return "No app is affected today.";
 }

@@ -93,6 +93,13 @@ for (const [width, height] of WINDOWS) {
       const box = (await page.getByRole("combobox", { name: /^New repositories in / }).boundingBox())!;
       expect(box.x, "its left edge").toBeGreaterThanOrEqual(0);
       expect(box.x + box.width, `its right edge, in a ${width}px window`).toBeLessThanOrEqual(width);
+      // each repository's buttons, and the form one opens
+      await page.getByRole("button", { name: "Add another folder" }).click();
+      for (const one of await page.getByRole("button", { name: /^(Make it an app|Link to an app|Unlink billing|Add another folder|Make the app|Cancel)$/ }).all()) {
+        const at = (await one.boundingBox())!;
+        expect(at.x, `${await one.textContent()}: its left edge`).toBeGreaterThanOrEqual(0);
+        expect(at.x + at.width, `${await one.textContent()}: its right edge, in a ${width}px window`).toBeLessThanOrEqual(width);
+      }
       const last = (await page.getByText("Receiving events").boundingBox())!;
       expect(last.x + last.width, `the row's end, in a ${width}px window`).toBeLessThanOrEqual(width);
     });

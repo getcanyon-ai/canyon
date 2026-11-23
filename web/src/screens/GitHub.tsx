@@ -127,63 +127,87 @@ function Repositories() {
   const [list, setList] = useState<{ repositories: GitHubRepository[]; unreachable: string[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [form, setForm] = useState<{ repo: number; kind: "import" | "folder" | "link" } | null>(null);
+  const phone = useMedia("(max-width: 719px)"); // the table's 640px and the page's gutters
   const load = () => getGitHubRepositories().then((answer) => { setList(answer); setFailure(null); }, (err: unknown) => setFailure(said(err)));
   useEffect(() => { void load(); }, []);
   const act = (work: Promise<unknown>) => work.then(() => { setForm(null); return load(); }, (err: unknown) => setFailure(said(err)));
   if (list === null) return failure === null ? null : <p className="text-base text-critical">{failure}</p>;
+  const row = (repo: GitHubRepository): RepositoryProps => ({ repo, open: form?.repo === repo.repo_id ? form.kind : null, ask: (kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind }), act });
   return (
     <div>
       <h2 className="text-base font-semibold">{S.githubRepositories}</h2>
       {list.unreachable.map((org) => <p key={org} className={NOTE}>{S.githubUnanswered.replace("<org>", () => org)}</p>)}
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}
-      <TableWrap minWidth={640}>
-        <Table columns={[{ key: "repo", label: "Repository" }, { key: "folder", label: "Folder" }, { key: "app", label: "Canyon app" }]} rows={list.repositories} empty="None of Canyon's Apps sees a repository yet"
-          renderRow={(repo) => <RepositoryRows key={repo.repo_id} repo={repo} open={form?.repo === repo.repo_id ? form.kind : null} ask={(kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind })} act={act} />} />
-      </TableWrap>
+      {/* on a phone each repository is a card: the table's buttons start past its edge (#126) */}
+      {phone && list.repositories.length > 0
+        ? <ul className="mt-2.5 grid gap-2.5">{list.repositories.map((repo) => <RepositoryCard key={repo.repo_id} {...row(repo)} />)}</ul>
+        : (
+          <TableWrap minWidth={phone ? 0 : 640}>
+            <Table columns={[{ key: "repo", label: "Repository" }, { key: "folder", label: "Folder" }, { key: "app", label: "Canyon app" }]} rows={list.repositories} empty={NO_REPOSITORIES}
+              renderRow={(repo) => <RepositoryRows key={repo.repo_id} {...row(repo)} />} />
+          </TableWrap>
+        )}
       <p className={NOTE}>{S.githubImportNote}</p>
     </div>
   );
 }
 
-function RepositoryRows({ repo, open, ask, act }: { repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void }) {
-  const name = <a className="font-medium text-text no-underline hover:underline" href={`https://github.com/${repo.full_name}`}>{repo.full_name}</a>;
-  const rows = repo.apps.length === 0
-    ? [
-      <tr key="none">
-        <td className={CELL}>{name}</td>
-        <td className={CELL} />
-        <td className={CELL}>
-          <span className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => ask("import")}>Make it an app</Button>
-            <Button size="sm" variant="ghost" onClick={() => ask("link")}>Link to an app</Button>
-          </span>
-        </td>
-      </tr>,
-    ]
-    : repo.apps.map((app, at) => (
-      <tr key={app.folder}>
-        <td className={CELL}>{at === 0 && name}</td>
-        <td className={`${CELL} font-mono`}>{app.folder === "" ? "/" : app.folder}</td>
-        <td className={CELL}>
-          <span className="flex flex-wrap items-center gap-2">
-            <a className="text-link no-underline hover:underline" href={`#/apps/${app.id}`}>{app.name}</a>
-            <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => act(unlinkRepository(app.id))}>Unlink</Button>
-            {at === repo.apps.length - 1 && <Button size="sm" variant="ghost" onClick={() => ask("folder")}>Add another folder</Button>}
-          </span>
-        </td>
-      </tr>
-    ));
+const NO_REPOSITORIES = "None of Canyon's Apps sees a repository yet";
+
+interface RepositoryProps { repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void }
+
+// A repository's parts, the same in the table and in a phone's card: its name, what an admin does with one no app is
+// linked to, each app linked to it, and the form open on it.
+function repositoryParts({ repo, open, ask, act }: RepositoryProps) {
+  return {
+    name: <a className="font-medium text-text no-underline hover:underline" href={`https://github.com/${repo.full_name}`}>{repo.full_name}</a>,
+    unlinked: (
+      <span className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" onClick={() => ask("import")}>Make it an app</Button>
+        <Button size="sm" variant="ghost" onClick={() => ask("link")}>Link to an app</Button>
+      </span>
+    ),
+    apps: repo.apps.map((app, at) => ({
+      folder: app.folder === "" ? "/" : app.folder,
+      app: (
+        <span className="flex flex-wrap items-center gap-2">
+          <a className="text-link no-underline hover:underline" href={`#/apps/${app.id}`}>{app.name}</a>
+          <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => act(unlinkRepository(app.id))}>Unlink</Button>
+          {at === repo.apps.length - 1 && <Button size="sm" variant="ghost" onClick={() => ask("folder")}>Add another folder</Button>}
+        </span>
+      ),
+    })),
+    form: open === null ? null : open === "link" ? <LinkForm repo={repo} cancel={() => ask(null)} act={act} /> : <ImportForm repo={repo} folder={open === "folder"} cancel={() => ask(null)} act={act} />,
+  };
+}
+
+function RepositoryRows(props: RepositoryProps) {
+  const { name, unlinked, apps, form } = repositoryParts(props);
   return (
     <>
-      {rows}
-      {open !== null && (
-        <tr>
-          <td className={CELL} colSpan={3}>
-            {open === "link" ? <LinkForm repo={repo} cancel={() => ask(null)} act={act} /> : <ImportForm repo={repo} folder={open === "folder"} cancel={() => ask(null)} act={act} />}
-          </td>
-        </tr>
-      )}
+      {apps.length === 0
+        ? <tr><td className={CELL}>{name}</td><td className={CELL} /><td className={CELL}>{unlinked}</td></tr>
+        : apps.map(({ folder, app }, at) => (
+          <tr key={folder}><td className={CELL}>{at === 0 && name}</td><td className={`${CELL} font-mono`}>{folder}</td><td className={CELL}>{app}</td></tr>
+        ))}
+      {form !== null && <tr><td className={CELL} colSpan={3}>{form}</td></tr>}
     </>
+  );
+}
+
+function RepositoryCard(props: RepositoryProps) {
+  const { name, unlinked, apps, form } = repositoryParts(props);
+  return (
+    <li className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
+      <span className="break-words">{name}</span>
+      {apps.length === 0 ? unlinked : apps.map(({ folder, app }) => (
+        <dl key={folder} className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-md">
+          <dt className="text-text-faint">Folder</dt><dd className="font-mono break-all">{folder}</dd>
+          <dt className="text-text-faint">Canyon app</dt><dd>{app}</dd>
+        </dl>
+      ))}
+      {form}
+    </li>
   );
 }
 

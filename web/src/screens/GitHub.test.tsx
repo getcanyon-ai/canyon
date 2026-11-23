@@ -80,6 +80,23 @@ describe("GitHubSettings", () => {
     expect(screen.queryByRole("columnheader", { name: "New repositories" })).toBeNull();
   });
 
+  // On a phone each repository is a card, its apps and what an admin does with it inside it (#126).
+  it("on a phone, reads each repository as a card, with its apps, its buttons and the form one opens", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 719px)", addEventListener: () => {}, removeEventListener: () => {} }));
+    const sent = server({ reachable: true, orgs: [acme] });
+    render(<GitHubSettings />);
+    const card = async (name: string) => within((await screen.findByRole("link", { name })).closest("li")!);
+    const platform = await card("acme/platform");
+    expect(platform.getByText("apps/billing")).toBeDefined();
+    expect(platform.getByRole("link", { name: "billing" })).toBeDefined();
+    fireEvent.click(platform.getByRole("button", { name: "Unlink billing" }));
+    await waitFor(() => expect(sent[0]).toBe("DELETE /api/v1/projects/funny-snake-4k2/repository"));
+    const portal = await card("acme/claims-portal");
+    fireEvent.click(portal.getByRole("button", { name: "Make it an app" }));
+    fireEvent.click((await card("acme/claims-portal")).getByRole("button", { name: "Make the app" }));
+    await waitFor(() => expect(sent[1]).toBe('POST /api/v1/github/repositories/555/import {"folder":""}'));
+  });
+
   // Repositories (#1917): what the Apps see, the apps linked to each, and the three things an admin does.
   it("lists the repositories, makes an app of one, links and unlinks", async () => {
     const sent = server({ reachable: true, orgs: [acme] });

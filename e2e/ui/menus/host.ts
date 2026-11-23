@@ -50,7 +50,10 @@ function answer(method: string, path: string): { status: number; body: unknown }
     case "/platform-webhook": return ok(webhook.webhook_get);
     case "/platform-repo": return ok(null);
     case "/github": return ok({ reachable: true, orgs: [{ account: "meridian-apps", app_slug: "canyon-meridian", keeps_code: true, imports_new: true, installed: true, last_event_at: "2026-09-02T08:00:00Z", links_accounts: true }] });
-    case "/github/repositories": return ok({ repositories: [], unreachable: [] });
+    case "/github/repositories": return ok({ unreachable: [], repositories: [
+      { repo_id: 555, full_name: "meridian-apps/claims-portal", org: "meridian-apps", default_branch: "main", apps: [] },
+      { repo_id: 81723, full_name: "meridian-apps/platform", org: "meridian-apps", default_branch: "main", apps: [{ folder: "apps/billing", id: "funny-snake-4k2", name: "billing", state: "linked" }] },
+    ] });
     case "/db-sessions": return ok(golden("db-session/meridian.json").list);
   }
   return { status: 404, body: { error: "not_found", message: "not found" } };

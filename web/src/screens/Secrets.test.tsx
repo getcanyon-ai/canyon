@@ -213,7 +213,8 @@ describe("the Secrets section, at each level", () => {
     vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 619px)", addEventListener: () => {}, removeEventListener: () => {} }));
     server({ [LIST]: { body: listed } });
     render(<Secrets id="claims-portal" />);
-    const card = within(await section().findByRole("listitem", { name: "API_KEY · Preview" }));
+    await section().findByText("API_KEY");
+    const card = within(section().getAllByRole("listitem").find((one) => one.textContent?.startsWith("API_KEY") && one.textContent.includes("Preview"))!);
     expect(section().queryByRole("table")).toBeNull();
     expect(card.getByText("Build")).toBeDefined();
     expect(card.getByRole("button", { name: `${T.replace} API_KEY in Preview` })).toBeDefined();

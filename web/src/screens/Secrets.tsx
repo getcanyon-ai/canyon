@@ -138,7 +138,8 @@ export function Secrets({ id, asked }: { id: string; asked?: { name: string | nu
       {rows !== null && phone && (rows.length === 0 ? <p className={NOTE}>{T.none}</p> : (
         <ul className="grid gap-2.5">
           {rows.map((row) => (
-            <li key={`${row.env}/${row.name}`} aria-label={`${row.name} · ${ENV[row.env]}`} className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
+            // a list item read whole: its name as text first, then its fields and its actions, each button named for its row
+            <li key={`${row.env}/${row.name}`} className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
               <span className="font-mono text-md break-all">{row.name}</span>
               <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-md">
                 <dt className="text-text-faint">{T.env}</dt><dd>{ENV[row.env]}</dd>

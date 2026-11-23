@@ -74,6 +74,14 @@ describe("Policies", () => {
     await new Promise((done) => setTimeout(done, 50)); // every preview answered
     expect(screen.queryByText("Affects today")).toBeNull();
     expect(screen.queryByText("No app is affected today.")).toBeNull();
+    // The header and every row keep one grid, so the dials hold their place and line up with the rows below them. Its class
+    // is written out in the source: Tailwind makes no rule for a class put together at run time (#118).
+    const grid = (one: Element) => [...one.classList].find((name) => name.startsWith("grid-cols-"));
+    const table = screen.getByText("Policy").parentElement!;
+    const rows = [table, ...document.querySelectorAll('section[id^="rule-"]'), screen.getByRole("region", { name: "Files Canyon can't read" })];
+    expect(rows.length).toBeGreaterThan(3);
+    expect(new Set(rows.map(grid)).size).toBe(1);
+    expect(readFileSync(join(import.meta.dirname, "Policies.tsx"), "utf8")).toContain(`${grid(table)} `);
     cleanup();
     server(routes);
     render(<Policies />);

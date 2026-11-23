@@ -153,12 +153,12 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(region("Who administers Canyon").getAllByText("dana@meridian.example")).toHaveLength(1);
   });
 
-  // Every admin by a sign-in group is not nobody (#118).
+  // A member is not sent the admin group, so a list with no address says only that (#118), never nobody.
   it("a member where no admin is listed is never told nobody administers Canyon", () => {
     show({ ...MEMBER, admin_emails: [], bootstrap_admins: [] });
     const admins = region("Who administers Canyon");
     expect(admins.queryByText("Nobody.")).toBeNull();
-    expect(admins.getByText("No one by address; a sign-in group decides.")).toBeTruthy();
+    expect(admins.getByText("No admin is listed by email address.")).toBeTruthy();
   });
 
   // No one by address while a domain lets people in is not nobody (#118): the line says who can sign in.

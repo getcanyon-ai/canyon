@@ -227,7 +227,7 @@ export function AdminFields({ record, draft, admin, mine = null }: Fields) {
       <p className={`${LABEL} mt-3`}>By email</p>
       {admin
         ? <List name="Admin" values={draft.admins} onChange={draft.setAdmins} add="Add an admin" mine={mine} />
-        : everyone.length === 0 ? <p className="text-base text-text-dim">No one by address; a sign-in group decides.</p> : <Values values={everyone} />}
+        : everyone.length === 0 ? <p className="text-base text-text-dim">No admin is listed by email address.</p> : <Values values={everyone} />}
       {/* The sign-in group is an admin's alone (#118): a member is answered neither the claim nor its value, and the
           variables that pin them are an admin's to read. */}
       {admin && (<>

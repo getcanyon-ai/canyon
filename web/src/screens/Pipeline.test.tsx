@@ -45,7 +45,8 @@ const reading = (policy: Policy) => ({ body: { policies: golden.policies.policie
 const queue = (...answers: Answer[]) => () => answers.shift()!;
 // A rule in both gates is named for the gate in its second.
 const there = (name: string) => `${name}, before production`;
-const button = (label: string, rule: string) => row("Before preview", rule).getByRole("button", { name: `${label}: ${rule}` });
+// "Also before production" is a checkbox (#118), ticked while the rule is there: a click places it or takes it out.
+const place = (rule: string) => row("Before preview", rule).getByRole("checkbox", { name: `Also before production: ${rule}` }) as HTMLInputElement;
 const gate = (name: "Before preview" | "Before production") => within(screen.getByRole("region", { name }));
 const row = (name: "Before preview" | "Before production", rule: string) => within(gate(name).getByRole("region", { name: rule }));
 const choose = (name: "Before preview" | "Before production", rule: string, state: PolicyState) =>
@@ -111,7 +112,7 @@ describe("Guardrails › Pipeline", () => {
   it("a tightening before production may wait 14 days, and the row says what it becomes and when", async () => {
     const sent = server({ ...routes, [`PUT ${DEPS}?apply=true`]: { body: golden.production_scheduled.response } });
     await drawn();
-    fireEvent.click(button("Also before production", deps.name));
+    fireEvent.click(place(deps.name));
     choose("Before production", there(deps.name), golden.production_scheduled.request.production!);
     fireEvent.click(await bar().findByRole("button", { name: "Save, tightening in 14 days" }));
     const when = new Date(golden.production_scheduled.response.policy.scheduled_production!.effective_at).toLocaleDateString();
@@ -124,13 +125,14 @@ describe("Guardrails › Pipeline", () => {
   it("the keyboard moves Dependencies to before production and takes it out again", async () => {
     const sent = server(routes);
     await drawn();
-    const place = button("Also before production", deps.name);
-    place.focus();
-    expect(document.activeElement).toBe(place);
-    fireEvent.click(place); // a native button: Enter and Space are its click
+    const box = place(deps.name);
+    box.focus();
+    expect(document.activeElement).toBe(box);
+    expect(box.checked).toBe(false);
+    fireEvent.click(box); // a native checkbox: Space is its click
     expect(shown("Before production", there(deps.name))).toBe(deps.state);
-    expect(document.activeElement).toBe(place);
-    expect(place.textContent).toBe("Take out of before production");
+    expect(document.activeElement).toBe(box);
+    expect(box.checked).toBe(true);
     expect(gate("Before preview").getByRole("region", { name: deps.name }).getAttribute("draggable")).toBe("false"); // no grip: it is there already
     choose("Before production", there(deps.name), "blocking");
     choose("Before preview", deps.name, "off");
@@ -145,9 +147,9 @@ describe("Guardrails › Pipeline", () => {
     cleanup();
     server(routes);
     await drawn();
-    fireEvent.click(button("Also before production", deps.name));
+    fireEvent.click(place(deps.name));
     await bar().findByText(sentences);
-    fireEvent.click(button("Take out of before production", deps.name));
+    fireEvent.click(place(deps.name));
     expect(gate("Before production").queryByRole("region", { name: there(deps.name) })).toBeNull();
     expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
   });
@@ -156,7 +158,7 @@ describe("Guardrails › Pipeline", () => {
     const rule = golden.policies.policies.find((one) => one.id === golden.production_no_model.rule)!;
     server({ ...routes, [`PUT ${POLICIES}/${rule.id}`]: { status: 409, body: golden.production_no_model.response } });
     await drawn();
-    fireEvent.click(button("Also before production", rule.name));
+    fireEvent.click(place(rule.name));
     await bar().findByText(`${rule.name}: ${golden.production_no_model.response.message}`);
     expect(gate("Before production").queryByRole("region", { name: there(rule.name) })).toBeNull();
   });
@@ -165,7 +167,7 @@ describe("Guardrails › Pipeline", () => {
     const refused = golden.production_no_model.response;
     server({ ...routes, [`PUT ${DEPS}`]: queue({ body: { would_block: impact } }, { status: 409, body: refused }) });
     await drawn();
-    fireEvent.click(button("Also before production", deps.name));
+    fireEvent.click(place(deps.name));
     await bar().findByText(sentences);
     choose("Before production", there(deps.name), "blocking");
     await bar().findByText(`${deps.name}: ${refused.message}`);
@@ -179,10 +181,10 @@ describe("Guardrails › Pipeline", () => {
     const sent = server({ ...routes, [`GET ${POLICIES}`]: reading(placed) });
     await drawn();
     expect(shown("Before production", there(placed.name))).toBe(placed.production);
-    fireEvent.click(button("Take out of before production", placed.name));
+    fireEvent.click(place(placed.name));
     await bar().findByText(`${placed.name} comes out of before production. It stays ${WORD[placed.state]} before preview.`, { exact: false });
     expect(shown("Before production", there(placed.name))).toBe("off");
-    fireEvent.click(button("Also before production", placed.name));
+    fireEvent.click(place(placed.name));
     expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
     expect(shown("Before production", there(placed.name))).toBe(placed.production);
     expect(sent().filter((one) => one.startsWith("PUT"))).toEqual([`PUT ${DEPS} ${JSON.stringify({ production: "off" })}`]);
@@ -194,7 +196,7 @@ describe("Guardrails › Pipeline", () => {
     const sent = server({ ...routes, [`GET ${POLICIES}`]: reading(scheduled), [`PUT ${DEPS}?apply=true`]: { body: { policy: { ...scheduled, scheduled_production: undefined }, would_block: [] } } });
     await drawn();
     expect(gate("Before preview").getByRole("region", { name: scheduled.name }).getAttribute("draggable")).toBe("false");
-    fireEvent.click(button("Take out of before production", scheduled.name));
+    fireEvent.click(place(scheduled.name));
     await bar().findByText(`${scheduled.name}, keep Off before production.`, { exact: false });
     fireEvent.click(await bar().findByRole("button", { name: "Save" }));
     await waitFor(() => expect(gate("Before production").queryByRole("region", { name: there(scheduled.name) })).toBeNull());

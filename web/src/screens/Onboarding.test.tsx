@@ -91,7 +91,7 @@ describe("setting a host up", () => {
     const sent = server({ body: { ...FRESH, onboarded_at: "2026-09-23T10:00:00Z" } });
     const done = vi.fn();
     show(FRESH, done);
-    fireEvent.change(screen.getByRole("textbox", { name: "Organisation name" }), { target: { value: "Meridian Insurance" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Organization name" }), { target: { value: "Meridian Insurance" } });
     next();
     next();
     next();

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Playbook, PlaybookEntry, PlaybookText, PlaybookVersion } from "../api";
+import { S } from "../strings";
 import { Markdown } from "../ui/Markdown";
 import { lineDiff } from "./lineDiff";
 import { Playbooks, playbookSlugOf } from "./Playbooks";
@@ -56,6 +57,22 @@ describe("Guardrails › Playbooks", () => {
     expect((await card(service.name)).getByText(`${service.reads} reads in 30 days · on ${service.machines} machines`)).toBeDefined();
     expect((await card(notes.name)).getByText(`${notes.reads} reads in 30 days`)).toBeDefined();
     expect(screen.getByText(/Canyon can't see an agent reading its local copy of a skill/)).toBeDefined();
+  });
+
+  // The tab says what a playbook is and what its two kinds are before anything about its counts (#118): the line on what
+  // machines can't see sits under the list, beside the counts it explains.
+  it("opens with what a playbook is and its two kinds, and explains the counts under the list", async () => {
+    server(routes);
+    render(<Playbooks />);
+    const last = await card(service.name);
+    const order = (text: string | RegExp) => screen.getByText(text);
+    const kinds = [order(`${S.playbookSkill}: ${S.playbookSkillMeans}`), order(`${S.playbookNote}: ${S.playbookNoteMeans}`)];
+    const intro = order(S.playbooksIntro);
+    const caveat = order(/Canyon can't see an agent reading its local copy of a skill/);
+    const follows = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(follows(intro, kinds[0]!) && follows(kinds[0]!, kinds[1]!)).toBe(true);
+    expect(follows(kinds[1]!, screen.getByRole("region", { name: notes.name }))).toBe(true);
+    expect(last.getByText(service.name) && follows(screen.getByRole("region", { name: service.name }), caveat)).toBe(true);
   });
 
   it("says when the org has none", async () => {

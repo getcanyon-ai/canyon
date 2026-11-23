@@ -129,14 +129,26 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(admins.queryByRole("textbox", { name: "Claim" })).toBeNull();
   });
 
-  // The member's read carries no claim and no value, but `overridden` still names the pair: the
-  // screen says the environment sets it rather than showing an empty list, which would read as no
-  // claim at all.
-  it("a member is told the claim is pinned without being shown it", () => {
+  // What the environment sets, the bootstrap admins and the admin claim, is an admin's to read (#118): a member reads the
+  // admins by email alone, never a variable's name, nor a sign-in group they aren't answered.
+  it("a member reads no variable and no sign-in group", () => {
     show(MEMBER);
     const admins = region("Who administers Canyon");
-    expect(admins.getByText(/Set on the server, by CANYON_ADMIN_CLAIM and CANYON_ADMIN_VALUE/)).toBeTruthy();
-    expect(admins.queryByText("Nobody.")).toBeNull();
+    expect(admins.queryByText(/CANYON_ADMINS|CANYON_ADMIN_CLAIM/)).toBeNull();
+    expect(admins.queryByText("From the environment")).toBeNull();
+    expect(admins.queryByText("By sign-in group (optional)")).toBeNull();
+    expect(admins.getByText(MEMBER.admin_emails[0]!)).toBeTruthy();
+  });
+
+  // No one by address while a domain lets people in is not nobody (#118): the line says who can sign in.
+  it("a member with no addresses and a domain reads who can sign in", () => {
+    show(MEMBER);
+    const who = region("Who may sign in");
+    expect(who.getByText(`No one by address; anyone at ${MEMBER.allowed_domains[0]} can sign in.`)).toBeTruthy();
+    expect(who.queryByText("Nobody.")).toBeNull();
+    cleanup();
+    show({ ...MEMBER, allowed_domains: ["meridian.example", "acme.example", "globex.example"] });
+    expect(region("Who may sign in").getByText("No one by address; anyone at meridian.example, acme.example or globex.example can sign in.")).toBeTruthy();
   });
 
   // Every rule is the server's. The screen sends what was typed, renders the sentence that comes
@@ -168,8 +180,8 @@ describe("Settings › Organisation and People & sign-in", () => {
   it("each page saves only its own keys, and never a pinned one", async () => {
     const sent = server({ body: ADMIN });
     show(ADMIN, "organisation");
-    fireEvent.change(screen.getByRole("textbox", { name: "Organisation name" }), { target: { value: "Meridian" } });
-    save("Organisation");
+    fireEvent.change(screen.getByRole("textbox", { name: "Organization name" }), { target: { value: "Meridian" } });
+    save("Organization");
     await waitFor(() => expect(sent()).toHaveLength(1));
     expect(Object.keys(sent()[0]!)).toEqual(["org_name"]);
     expect(sent()[0]!.org_name).toBe("Meridian");
@@ -238,7 +250,7 @@ describe("Settings › Organisation and People & sign-in", () => {
     server({ body: ADMIN });
     show(ADMIN, "organisation");
     expect(screen.queryByRole("status")).toBeNull();
-    save("Organisation");
+    save("Organization");
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Saved.");
   });
 });

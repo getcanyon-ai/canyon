@@ -63,6 +63,23 @@ const DESIGN = golden.policies.policies.find((one) => one.id === "design.org-sys
 const prefs = (designSystem: unknown) => ({ [`GET /api/v1/preferences`]: { body: { design_system: designSystem } } });
 
 describe("Policies", () => {
+  // "Affects today" is drawn once a rule's preview keeps an app out (#118): a column that says no app is affected on
+  // every row is noise; one rule that does brings it back, with its apps.
+  it("shows Affects today only once a rule keeps an app out", async () => {
+    const nothing = Object.fromEntries(golden.policies.policies.map((one) => [`PUT ${POLICIES}/${one.id}`, { body: { would_block: [] } }]));
+    const sent = server({ ...routes, ...nothing });
+    render(<Policies />);
+    await screen.findByRole("region", { name: rule.name });
+    await waitFor(() => expect(sent().filter((one) => one.startsWith("PUT")).length).toBeGreaterThan(0));
+    await new Promise((done) => setTimeout(done, 50)); // every preview answered
+    expect(screen.queryByText("Affects today")).toBeNull();
+    expect(screen.queryByText("No app is affected today.")).toBeNull();
+    cleanup();
+    server(routes);
+    render(<Policies />);
+    expect(await screen.findByText("Affects today")).toBeDefined();
+  });
+
   // The buildpacks "Approved stacks only" accepts are set on its own row (#99), each by its builder's name or else its
   // id, ticked when accepted, and saved as it is ticked, sorted by id.
   it("the Approved stacks only row sets the buildpacks it accepts", async () => {

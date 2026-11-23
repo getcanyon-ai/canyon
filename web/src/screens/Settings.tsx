@@ -757,7 +757,7 @@ function OutboundSettings() {
                 {read.replicas?.map((one) => {
                   const line = policyAge(one.current_at, landed);
                   return (
-                    <li key={one.replica} className="flex flex-wrap items-center gap-3">
+                    <li key={one.replica} className="flex flex-wrap items-baseline gap-x-3">
                       <span className="font-mono text-base break-all">{one.replica}</span>
                       <span className={line === S.replicaCurrent ? NOTE : "text-md text-amber"}>{line}</span>
                     </li>

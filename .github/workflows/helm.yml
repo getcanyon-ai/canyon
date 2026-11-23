@@ -76,6 +76,23 @@ jobs:
       - run: helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set canyon.egress.existingSecret=true | deploy/helm/check-rendered.py --existing-egress-secret
       - run: helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set gateway.askToken=synthetic.tls-ask.token.for.check-rendered.0000 | deploy/helm/check-rendered.py --ask-token synthetic.tls-ask.token.for.check-rendered.0000
       - run: helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set gateway.enabled=false | deploy/helm/check-rendered.py
+      - name: telemetry is off exactly when telemetry.enabled is not true, with canyon.existingSecret or not, and the notes say it's on exactly then
+        run: |
+          set -euo pipefail
+          for secret in "" my-env; do
+            render() { helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "canyon.existingSecret=$secret" "$@"; }
+            notes() { helm install canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --dry-run=client --set "canyon.existingSecret=$secret" "$@" | grep -c "^Turn it off with telemetry.enabled: false." || true; }
+            render | deploy/helm/check-rendered.py
+            [ "$(notes)" = 1 ] || { echo "existingSecret=$secret: the notes don't say telemetry is on"; exit 1; }
+            for off in --set=telemetry.enabled=false --set-string=telemetry.enabled=false --set=telemetry.enabled=null; do
+              render "$off" | deploy/helm/check-rendered.py --telemetry-off
+              [ "$(notes "$off")" = 0 ] || { echo "existingSecret=$secret $off: the notes say telemetry is on"; exit 1; }
+            done
+            if out=$(render --set=telemetry.enabled=false | grep -v 'name: CANYON_TELEMETRY' | deploy/helm/check-rendered.py --telemetry-off 2>&1); then
+              echo "existingSecret=$secret: an off switch that sets nothing passed check-rendered: it must fail"; exit 1
+            fi
+            grep -F "the server's env turns telemetry off by {}" <<<"$out" || { echo "the missing off switch failed for another reason: $out"; exit 1; }
+          done
       - name: a bundled part that breaks Pod Security restricted fails check-rendered, each on its own line (must-fail; issue 2772)
         run: |
           while IFS='|' read -r plant want; do

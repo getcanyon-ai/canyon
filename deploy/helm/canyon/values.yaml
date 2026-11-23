@@ -38,7 +38,7 @@ canyon:
   publicURL: ""           # default https://<global.domain>
   # Secret canyon/canyon-server holds the server's environment but CANYON_AUTH, which the chart pins to
   # oidc. Set existingSecret to bring your own instead (then everything below that becomes an env var is
-  # ignored, except publicURL; a CANYON_AUTH in it is overridden).
+  # ignored, except publicURL and telemetry.enabled: false; a CANYON_AUTH in it is overridden).
   existingSecret: ""
   auth:
     mode: oidc            # CANYON_AUTH: oidc only; the chart refuses to render off and demo
@@ -212,7 +212,7 @@ platform:
 
 # Canyon's one report of counts a day, never names (TELEMETRY.md). It's on by default.
 telemetry:
-  enabled: true               # false sets CANYON_TELEMETRY=0 on the server: nothing is ever sent
+  enabled: true               # false sets CANYON_TELEMETRY=0 on the server, with canyon.existingSecret too: nothing is ever sent
 
 bootstrap:
   enabled: true               # the post-install/upgrade Job: Pocket ID setup, front door, preferences

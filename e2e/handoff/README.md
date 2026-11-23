@@ -12,7 +12,7 @@ on. `journey_test.go` (build tag `handoff`) proves seven things; `repo_test.go`,
 1. `canyon deploy` ends `live at … · reported by your platform`.
 2. `canyon share` reaches the app within a minute of the share.
 2b. A pod of the release checks in (#2452): within three minutes the status read carries its
-   `seen_at`, `canyon status` says `a pod checked in`, and the app page says it too (H3 in `e2e/ui`'s
+   `seen_at`, `canyon status` says `your platform reported it running`, and the app page says it too (H3 in `e2e/ui`'s
    `handoff` project). The stale and never-seen lines take minutes of a pod's absence: the dashboard's
    and the CLI's own tests hold them.
 3. The app's database is the platform's (#2432): the app declares `db = { type = "postgres" }`, the

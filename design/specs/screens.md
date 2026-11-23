@@ -487,7 +487,8 @@ the drafts below:
   app's newest run says it — a deploy is never a pass, and a block is never hidden behind where a
   version runs); Preview and Production the version each runs, linking to it, or `—`;
   Owner the person, or `No owner` with `Assign` (admins, sign-in hosts) and `Claim` where the row says
-  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). A row click
+  `claimable` (amended 2026-10-12: never on an app the server would refuse the claim on). Updated gives
+  way below 1360px and while the details panel is open, which says it (amended 2026-11-23). A row click
   opens the details panel; so does the chevron at the row's end, for the keyboard.
 - `Recent activity` under the table, `Open audit` beside its title; empty, it reads `Nothing
   recorded yet. Deploys, reviews and promotions appear here.` A member's is what the audit read
@@ -1244,7 +1245,7 @@ responders*. While production is held, the read's `hold` (and the receipt's `hel
   row not held asks `Stop and hold <app> in production?` over the CLI's two lines and a reason (sent
   once one is typed). On a held row, `Lift the hold`, offered to an admin and to a responder whose row
   is reduced — off the app's team; one on it reads the team's row and is offered none — asks `Lift the
-  hold on <app>?` over the sentence, with `Leave production stopped` and `Start <version> again` (no
+  hold on <app>?` over the sentence, with `Lift the hold, keep it stopped` and `Lift the hold and start <version>` (no
   start when production ran nothing). The row's buttons are named with the app (`Stop production of
   <app>`, `Lift the hold on <app>`). A question sends once — while it sends, `Stopping production…` or
   `Lifting the hold…` stands in for its buttons and neither Cancel nor Escape closes it — and its answer
@@ -1688,7 +1689,7 @@ Every one is a fact plus one action. No illustrations, no mascot, no exclamation
 
 | Screen | Copy |
 |---|---|
-| No apps yet | `No apps yet. Run canyon deploy in any app directory.` |
+| No apps yet | `No apps yet`, then the two ways in: from your machine with the CLI or a coding agent (`Connect an agent →`), and from GitHub (`Connect GitHub →` to an admin, the admin's job to anyone else); to an admin, `See them in Guardrails →` for the rules every app is checked against. The strings are EXPERIENCE.md D5's (amended 2026-11-23, the UX review). |
 | Never reviewed | `Canyon can't tell you whether this app is safe. It has never been through a gate.` `[ Run review ]` |
 | Review queue clear | `Nothing needs you.` `4 apps shipped overnight, all clean. 0 blocked.` |
 | Audit, no events | `Nothing happened in the last 24 hours. Try a wider range.` |

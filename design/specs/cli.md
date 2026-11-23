@@ -55,8 +55,8 @@ has not landed yet, never that it was cut.
 | `canyon check` | The same gate, no deploy. The fix loop's inner call. | both |
 | `canyon status` | This app: what it runs, and the promote receipt | both |
 | `canyon logs` | Tail an environment | builder |
-| `canyon undeploy` | Take `--env preview` or `--env prod` offline; data and secrets are kept. Prod asks as `deploy --env prod` does, `--yes` answers for CI. An environment the org's platform runs (`run_by: org`) gets a remove release and the verb exits 0 at once: `· <app> in <env>: removing · waiting on your platform. Its data and secrets are kept.` It never waits on a run: one already switching the environment stops it once it lands, and the verb exits 0 at once: `· Production is stopping: a promotion was already switching it, and Canyon stops it the moment it lands.` (`· Preview is stopping: a deploy was already switching it, …` for preview; contracts/routes.md, *The brake*). `--app <app>` names the app where no `canyon.toml` does. `--hold --reason "…"` is a security responder's or an admin's: it stops production and holds it until one of them lets it run again, in the dashboard (§6.8) | both |
-| `canyon delete` | Delete this app: lists the databases it destroys, with their data, immediately, and deletes once you type the app's name; `--confirm <name>` for CI. Never a y/N. While the host is still deleting, it exits 0 and says what it waits on: `· Canyon is still deleting <app>'s databases. Run this again to finish.`, and for an environment the org's platform runs `· <app>: removing · waiting on your platform. Run this again to finish.` — both lines when both pend | both |
+| `canyon undeploy` | Take `--env preview` or `--env prod` offline; data and secrets are kept. Prod asks as `deploy --env prod` does, `--yes` answers for CI. An environment the org's platform runs (`run_by: org`) gets a remove release and the verb exits 0 at once: `· <app> in <env>: being removed by your platform. Its data and secrets are kept.` It never waits on a run: one already switching the environment stops it once it lands, and the verb exits 0 at once: `· Production is stopping: a promotion was already switching it, and Canyon stops it the moment it lands.` (`· Preview is stopping: a deploy was already switching it, …` for preview; contracts/routes.md, *The brake*). `--app <app>` names the app where no `canyon.toml` does. `--hold --reason "…"` is a security responder's or an admin's: it stops production and holds it until one of them lets it run again, in the dashboard (§6.8) | both |
+| `canyon delete` | Delete this app: lists the databases it destroys, with their data, immediately, and deletes once you type the app's name; `--confirm <name>` for CI. Never a y/N. While the host is still deleting, it exits 0 and says what it waits on: `· Canyon is still deleting <app>'s databases. Run this again to finish.`, and for an environment the org's platform runs `· <app>: being removed by your platform. Run this again to finish.` — both lines when both pend | both |
 | `canyon fleet` | Every app in the org and its health | platform eng |
 | `canyon secret` | Values apps read at runtime, never in the bundle | both |
 | `canyon share` | Who can open this app: list, add, change, remove (§6.7) | builder |
@@ -2118,23 +2118,24 @@ resources (technical detail, design/PERMISSIONS.md). `canyon delete`'s listing n
 platform's, `s3 files in preview, your platform's`: its `remove` asks the platform to delete them.
 **Amended 2026-10-23** (#2452, design/HAND-OFF.md §5): under an environment the org runs, status says
 whether its pods check in, from `envs.<env>.seen_at` by routes.md's one rule — a row of its own under the
-URL and above a release it waits on: `a pod checked in 2m ago`, faint, never `running` (it is the pod's
-sign-in sidecar, not the app); in amber, `! no pod has checked in since 15:04` once 5 minutes pass with
-none (`2 Sep 15:04` when it is not today), and `! reported deployed, but no pod has checked in` once 10
+URL and above a release it waits on: `your platform reported it running 2m ago`, faint, never green (it is
+the pod's sign-in sidecar, not the app); in amber, `! your platform hasn't reported v3.1 running since 15:04`
+once 5 minutes pass with none (`2 Sep 15:04` when it is not today), and `! your platform reported v3.1
+deployed, but not running` once 10
 minutes have passed since the report with none; within those 10 minutes nothing more is said. While the
 environment is stopped, its pending release a `remove` (an undeploy's, a hold's or a delete's), a check-in
-within the 5 minutes is amber, `! a pod still checked in 2m ago` (amended 2026-10-24, #2450): its pods
+within the 5 minutes is amber, `! still running: your platform last reported it 2m ago` (amended 2026-10-24, #2450): its pods
 pull an access list that admits nobody, and one still pulling is one the platform has not taken down. An
 environment Canyon runs says its state and never a check-in. `cli/testdata/status-handoff-seen.txt` and
-`status-handoff-unseen.txt` are the record:
+`status-handoff-unseen.txt` are the record (worded as the platform's report since the dashboard's UX review, 2026-11-23, as the dashboard says it):
 
       production   v3.1   http://claims-archive.prod.localhost:7777   8d ago
-                          ! a pod still checked in 2m ago
-                          removing · waiting on your platform
+                          ! still running: your platform last reported it 2m ago
+                          being removed by your platform
 
       production   v3.1   http://claims-archive.prod.localhost:7777   8d ago
-                          ! reported deployed, but no pod has checked in
-                          removing · waiting on your platform
+                          ! your platform reported v3.1 deployed, but not running
+                          being removed by your platform
 
 Under `--format ai` the line carries the same sentence, never the timestamp, and the amber ones end
 ` (your platform's pods: nothing to do in Canyon)`: the pods are the platform's, and an agent never
@@ -2487,8 +2488,8 @@ contracts/routes.md): `prod stopped` and `prod restarting` in red for an app who
 keeps restarting (#1722), `prod couldn't check` in amber when the host could not ask — status's words, cut to the column, and the name alone only while it runs.
 
 **Amended 2026-10-27** (#2455): where the org runs the environment, ENV is `prod no check-in` in amber
-once its pods have stopped checking in, or never began — `canyon status`'s `no pod has checked in since
-<time>` and `reported deployed, but no pod has checked in`, by the same rule (`envs.<env>.seen_at`,
+once its pods have stopped checking in, or never began — `canyon status`'s `your platform hasn't reported
+<version> running since <time>` and `your platform reported <version> deployed, but not running`, by the same rule (`envs.<env>.seen_at`,
 contracts/routes.md: past 5 minutes since the last check-in, or 10 since the report with none). A pod
 still checking in while the environment is removed is not said here, and the name stays alone while its
 pods check in.
@@ -3514,7 +3515,7 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
 - **Its answers, as the brake's** (§1's undeploy row): `204` is the row above; `202 {stopping}` is
   `· Held    prod · stopping` and then the line `Production is stopping: a promotion was already
   switching it, and Canyon stops it the moment it lands.`; `202 {release}`, production the org's
-  platform runs, is `· Held    prod · removing · waiting on your platform`. Each exits `0`, and each
+  platform runs, is `· Held    prod · being removed by your platform`. Each exits `0`, and each
   ends on the dashboard, where alone a hold is lifted (`403 dashboard_required` from any other
   session).
 - **Refusals.** `403 responder_required` — an owner or contributor who is neither a responder nor an

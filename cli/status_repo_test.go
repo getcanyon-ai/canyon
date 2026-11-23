@@ -18,10 +18,10 @@ func TestARepoReleaseIsSaidInTheDeployRepoWords(t *testing.T) {
 	}
 	const pr = "https://github.com/meridian/deploy/pull/42"
 	for _, c := range []struct{ event, state, pull, line string }{
-		{"deploy", "accepted", "", "waiting for a pod to check in since " + at.Local().Format("15:04")},
+		{"deploy", "accepted", "", "your platform hasn't reported it running since " + at.Local().Format("15:04")},
 		{"deploy", "accepted", pr, "waiting on your merge since " + at.Local().Format("15:04")},
-		{"remove", "accepted", pr, "removing · waiting on your merge"},
-		{"remove", "accepted", "", "removing · waiting on your platform"},
+		{"remove", "accepted", pr, "being removed once you merge"},
+		{"remove", "accepted", "", "being removed by your platform"},
 		{"deploy", "undelivered", "", "Canyon couldn't commit the release"},
 		{"deploy", "refused", "", "Your deploy repo refused the release"},
 	} {

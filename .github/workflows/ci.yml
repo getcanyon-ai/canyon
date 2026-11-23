@@ -216,7 +216,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - run: make test-shards SHARD_PKG=./runs SHARD=${{ matrix.shard }}/${{ strategy.job-total }} # runs embeds no dashboard: no make web
+      - run: go test -race -count=50 -run '^TestAPatchTestsWorkflowsHaveEndedBeforeItGoesOn$' ./runs # TEMPORARY (#113): the flaky test 50 times a shard, reverted before merge
 
   provisioners:
     # the built-in driver's tests on every Postgres it supports (design/DATABASE-SESSIONS.md §4): 15 to

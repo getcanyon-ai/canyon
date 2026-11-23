@@ -585,7 +585,7 @@ export const getScannerData = () => call<{ databases: ScanDB[] }>("GET", "/scann
 // `report` is the next send's body; `last_report` what the last send carried, null before one.
 // Each report is a string of the send's exact bytes, shown as it is and never parsed to be re-written: what is sent is
 // the promise (contracts/routes.md, Telemetry).
-export interface TelemetryState { enabled: boolean; off_because?: "env" | "admin" | "unreachable"; report: string; last_sent_at: string | null; last_report: string | null }
+export interface TelemetryState { enabled: boolean; off_because?: "env" | "admin" | "unreachable"; next_try_at?: string; gives_up_at?: string; report: string; last_sent_at: string | null; last_report: string | null }
 export const getTelemetry = () => call<TelemetryState>("GET", "/telemetry");
 export const putTelemetry = (enabled: boolean) => call<TelemetryState>("PUT", "/telemetry", { enabled });
 // The Enterprise licence (contracts/schema/licence.schema.json, state; contracts/routes.md, Licence; #2879): every member

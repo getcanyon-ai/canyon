@@ -3840,16 +3840,20 @@ Telemetry is on. Canyon sends this report once a day, exactly as it reads here:
 ```
 
 When it is off, the line says why, then `It would send:` and the report: `Telemetry is off: this server's environment
-turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).` · `Telemetry is off: an admin turned it off.` · `Telemetry
-is off: its first send couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings ›
+turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).` · `Telemetry is off: an admin turned it off.` · `Telemetry
+is off: it couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings ›
 Telemetry.` A reason this build doesn't know prints as `Telemetry is off (<reason>).`
+
+While no report has reached the collector (contracts/routes.md, Telemetry, Sending), the line is `Telemetry is on, but no
+report has reached Canyon's collector yet. Canyon tries again after 24 Nov 15:04 and gives up by 21 Feb. It would
+send:`, in this machine's time.
 
 **`canyon telemetry off`** prints `✓ Telemetry is off: Canyon sends nothing.`, and **`canyon telemetry on`** `✓
 Telemetry is on: Canyon sends one report a day.`, or, while the server's environment keeps it off, `! Telemetry is
-off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).` On a host with sign-in, turning
+off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).` On a host with sign-in, turning
 it on is a person's, in the dashboard: the host answers `on` `403 dashboard_required`, and it prints `! An admin turns
 telemetry on in Canyon's dashboard: Settings › Telemetry.` and exits `2` (**amended 2026-11-12**, #2807). `--format
-json` prints the host's answer as it came: `{enabled, off_because?, report, last_sent_at, last_report}`.
+json` prints the host's answer as it came: `{enabled, off_because?, next_try_at?, gives_up_at?, report, last_sent_at, last_report}`.
 
 ### 6.13 `canyon licence`
 

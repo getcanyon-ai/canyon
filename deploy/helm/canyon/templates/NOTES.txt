@@ -5,10 +5,10 @@ The bundled databases have no backups.
 Production installs use deploy/k8s, in each release's canyon-deploy.tar.gz: https://github.com/getcanyon-ai/canyon-releases/releases
 
 Canyon: {{ include "canyon.publicURL" . }}
-{{- if .Values.telemetry.enabled }}
+{{- if eq (toString .Values.telemetry.enabled) "true" }}
 
-Canyon sends one report of counts a day, never names: https://www.getcanyon.ai/docs/org/usage-reports/
-It's on by default. Turn it off with telemetry.enabled: false.
+By default, Canyon sends one report of counts a day, never names: https://www.getcanyon.ai/docs/org/usage-reports/
+Turn it off with telemetry.enabled: false.
 {{- end }}
 {{- if and .Values.bootstrap.enabled .Values.auth.pocketId.enabled }}
 Sign-in link for {{ (first .Values.auth.pocketId.users).username }} (register a passkey): kubectl -n canyon-auth logs job/canyon-bootstrap | grep /lc/

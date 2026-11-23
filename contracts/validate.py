@@ -5684,6 +5684,16 @@ def seam3_telemetry(snap):
     for probe, where in ((dict(report, app="claims-portal"), "the report"), (dict(report, checks=dict(report["checks"], host="x")), "checks")):
         if accepts(schema, probe):
             errors.append(f"telemetry: {where} took a field the schema doesn't name")
+    # Retrying (no report has reached the collector yet): both times, and only while it is on.
+    retrying = dict(golden["state_retrying"], report=sent)
+    if not takes(schema, "state", retrying):
+        errors.append("telemetry: the golden retrying state is not GET /api/v1/telemetry's shape")
+    for probe, where in (({k: v for k, v in retrying.items() if k != "gives_up_at"}, "next_try_at without gives_up_at"),
+                         ({k: v for k, v in retrying.items() if k != "next_try_at"}, "gives_up_at without next_try_at"),
+                         (dict(retrying, next_try_at=None, gives_up_at=None), "a null for the times, which are absent when it doesn't try"),
+                         (dict(retrying, enabled=False, off_because="unreachable"), "an off state that still tries")):
+        if takes(schema, "state", probe):
+            errors.append(f"telemetry: the state took {where}")
     if takes(schema, "state", dict(state, enabled=True)):
         errors.append("telemetry: a state that is on still says why it is off")
     # A count is at most 1,000,000: a crafted 3000000000 would overflow the collector's sums (#2808's review). JSON

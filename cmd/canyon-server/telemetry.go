@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,8 +29,23 @@ const telemetryEndpoint = "https://usage.myagentcontrol.ai/v1/report"
 const (
 	telemetrySend  = 2 * time.Second // the one try's whole budget: an air-gapped install never waits on it
 	telemetryEvery = time.Hour       // how often a replica looks for the day's send
-	telemetryWhen  = "23 hours"      // a day's claim, a little under a day so a slow tick never skips one
+	telemetryWhen  = 23 * time.Hour  // a day's claim, a little under a day so a slow tick never skips one
 )
+
+// Until a first report reaches the collector (contracts/routes.md, Telemetry, Sending).
+const (
+	telemetryRetry     = time.Hour           // the wait after the first try, doubling after each
+	telemetryRetryMost = 7 * 24 * time.Hour  // the longest wait
+	telemetryRetryFor  = 90 * 24 * time.Hour // how long it tries, from the first try: at most 20 tries
+	telemetryTick      = 30 * time.Second    // how far an hourly look may come short of a wait: a tick a moment early skips no hour
+)
+
+// telemetryNext is when the try after the one at last comes, the first having been at first, and when the tries end.
+// The waits double, 1 h, 2 h, 4 h, because each is an hour more than all before it together, to the hour, at most a week:
+// the two times are the whole schedule, which a restart reads back.
+func telemetryNext(first, last time.Time) (next, until time.Time) {
+	return last.Add(min(telemetryRetry+last.Sub(first).Round(time.Hour), telemetryRetryMost)), first.Add(telemetryRetryFor)
+}
 
 // telemetryNotice is printed once, the first time a server reads its telemetry row (contracts/routes.md, Telemetry): on
 // by default, said in the log, the docs and the release notes (the owner, 2026-11-12).
@@ -39,7 +55,7 @@ const telemetryNotice = "Canyon sends one report of counts a day to help improve
 
 // telemetryConfig is the server's environment's part: read once at boot.
 type telemetryConfig struct {
-	envOff   bool          // CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI: off, whatever an admin sets
+	envOff   bool          // CANYON_TELEMETRY, DO_NOT_TRACK or CI (envTurnsOff): off, whatever an admin sets
 	mode     string        // CANYON_INSTALL_MODE: "" leaves install_mode out
 	url      string        // where the report goes: "" sends nothing, as a test that drives a send itself
 	every    time.Duration // how often the sender looks; 0 runs no sender
@@ -48,10 +64,17 @@ type telemetryConfig struct {
 	gateway  bool          // CANYON_MODEL_URL is set: the model is reached through a gateway
 }
 
+// envTurnsOff reads the variables that turn telemetry off, any value that isn't plainly on being off: CANYON_TELEMETRY is
+// on empty, 1, true, on or yes, DO_NOT_TRACK off empty, 0 or false, in any case, and CI is any value at all.
+func envTurnsOff(getenv func(string) string) bool {
+	on, track := strings.ToLower(getenv("CANYON_TELEMETRY")), strings.ToLower(getenv("DO_NOT_TRACK"))
+	return !slices.Contains([]string{"", "1", "true", "on", "yes"}, on) || !slices.Contains([]string{"", "0", "false"}, track) || getenv("CI") != ""
+}
+
 // telemetryConfigOf reads the environment. An install mode the schema does not name refuses the boot, never a report
 // that carries one.
 func telemetryConfigOf(getenv func(string) string) (telemetryConfig, error) {
-	c := telemetryConfig{envOff: getenv("CANYON_TELEMETRY") == "0" || getenv("DO_NOT_TRACK") == "1" || getenv("CI") != "", url: telemetryEndpoint, every: telemetryEvery,
+	c := telemetryConfig{envOff: envTurnsOff(getenv), url: telemetryEndpoint, every: telemetryEvery,
 		demo: getenv("CANYON_DEMO_SEED") == "1", provider: getenv("CANYON_MODEL_PROVIDER"), gateway: getenv("CANYON_MODEL_URL") != ""}
 	switch c.mode = getenv("CANYON_INSTALL_MODE"); c.mode {
 	case "", "laptop", "one_server", "helm_one_node", "kubernetes":
@@ -265,12 +288,14 @@ func (a *app) telemetryReportOf(ctx context.Context, q querier, id string, previ
 type telemetryState struct {
 	Enabled    bool    `json:"enabled"`
 	OffBecause string  `json:"off_because,omitempty"`
+	NextTryAt  string  `json:"next_try_at,omitempty"` // with GivesUpAt, while no report has reached the collector since its tries began
+	GivesUpAt  string  `json:"gives_up_at,omitempty"`
 	Report     string  `json:"report"`
 	LastSentAt *string `json:"last_sent_at"`
 	LastReport *string `json:"last_report"` // nil marshals as null: none sent yet
 }
 
-// offBecause is the first reason the report is not sent: the environment, then an admin or an unreachable first send.
+// offBecause is the first reason the report is not sent: the environment, then an admin or 90 days of unreachable tries.
 func (a *app) offBecause(stored string) string {
 	if a.telemetry.envOff {
 		return "env"
@@ -285,17 +310,21 @@ func (a *app) telemetryStateOf(ctx context.Context, q querier) (telemetryState, 
 		return telemetryState{}, err
 	}
 	var last *string
-	var claimed *time.Time // the next send's period starts at the last claim
-	if err := q.QueryRow(ctx, "SELECT last_report, claimed_at FROM telemetry WHERE one").Scan(&last, &claimed); err != nil {
+	var claimed, tried *time.Time
+	if err := q.QueryRow(ctx, "SELECT last_report, claimed_at, CASE WHEN sent_at IS NULL THEN tried_since END FROM telemetry WHERE one").Scan(&last, &claimed, &tried); err != nil {
 		return telemetryState{}, err
 	}
-	report, err := a.telemetryReportOf(ctx, q, id, claimed)
+	report, err := a.telemetryReportOf(ctx, q, id, cmp.Or(tried, claimed))
 	if err != nil {
 		return telemetryState{}, err
 	}
 	body, err := json.Marshal(report)
 	s := telemetryState{OffBecause: a.offBecause(stored), Report: string(body), LastReport: last}
 	s.Enabled = s.OffBecause == ""
+	if s.Enabled && tried != nil {
+		next, until := telemetryNext(*tried, *claimed)
+		s.NextTryAt, s.GivesUpAt = next.UTC().Format(time.RFC3339), until.UTC().Format(time.RFC3339)
+	}
 	if sentAt != nil {
 		at := sentAt.UTC().Format(time.RFC3339)
 		s.LastSentAt = &at
@@ -303,9 +332,10 @@ func (a *app) telemetryStateOf(ctx context.Context, q querier) (telemetryState, 
 	return s, err
 }
 
-// sendTelemetry is the day's send, at most one across replicas: the replica that claims the day builds the report
-// and POSTs it once, in telemetrySend, with no retry and no log line. A first send that reaches nothing turns
-// telemetry off (an air-gapped install); a later one that fails is that day's alone. sent reports a POST was made.
+// sendTelemetry is the send that is due, at most one across replicas: the replica that claims it builds the report and
+// POSTs it once, in telemetrySend, with no log line. Once a report has reached the collector that is the day's, and one
+// that fails is that day's alone. Until then a failed try is tried again as telemetryNext says, then telemetry is off
+// (an air-gapped install). sent reports a POST was made.
 func (a *app) sendTelemetry(ctx context.Context) (sent bool, err error) {
 	if a.telemetry.envOff || a.telemetry.url == "" {
 		return false, nil
@@ -315,22 +345,43 @@ func (a *app) sendTelemetry(ctx context.Context) (sent bool, err error) {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	id, _, sentAt, _, err := telemetryRow(ctx, tx)
+	id, _, _, _, err := telemetryRow(ctx, tx)
 	if err != nil {
 		return false, err
 	}
-	var previous *time.Time // the claim before this one, where this report's period starts
-	if err := tx.QueryRow(ctx, `UPDATE telemetry t SET claimed_at = now() FROM (SELECT claimed_at FROM telemetry WHERE one) was WHERE t.one AND t.off_because IS NULL
-		AND (t.claimed_at IS NULL OR t.claimed_at < now() - interval '`+telemetryWhen+`') RETURNING was.claimed_at`).Scan(&previous); errors.Is(err, pgx.ErrNoRows) {
-		return false, nil // off, or this day already claimed
-	} else if err != nil {
+	var off bool
+	var claimed, tried *time.Time // the claim before this one, and the first try while none has reached the collector: a release before tried_since sends and leaves it
+	var now time.Time             // the database's, one clock across replicas
+	if err := tx.QueryRow(ctx, "SELECT off_because IS NOT NULL, claimed_at, CASE WHEN sent_at IS NULL THEN tried_since END, now() FROM telemetry WHERE one FOR UPDATE").Scan(&off, &claimed, &tried, &now); err != nil {
 		return false, err
 	}
-	report, err := a.telemetryReportOf(ctx, tx, id, previous)
+	switch {
+	case off:
+		return false, nil
+	case tried != nil:
+		next, until := telemetryNext(*tried, *claimed)
+		if next.After(until) || now.After(until) { // stopped past the end, or stopped as the last try failed
+			if _, err := tx.Exec(ctx, "UPDATE telemetry SET off_because = 'unreachable' WHERE one"); err != nil {
+				return false, err
+			}
+			return false, tx.Commit(ctx)
+		}
+		if now.Add(telemetryTick).Before(next) {
+			return false, nil
+		}
+	case claimed != nil && now.Sub(*claimed) <= telemetryWhen: // this day already claimed
+		return false, nil
+	}
+	report, err := a.telemetryReportOf(ctx, tx, id, cmp.Or(tried, claimed)) // the period starts at the first try, or the last claim
 	if err != nil {
 		return false, err
 	}
-	if err := tx.Commit(ctx); err != nil { // the day is claimed before the POST: a crash mid-send never sends twice
+	// Claimed before the POST, the wait with it: a crash mid-send never sends twice, nor sooner.
+	if err := tx.QueryRow(ctx, `UPDATE telemetry SET claimed_at = now(), tried_since = CASE WHEN sent_at IS NULL THEN coalesce(tried_since, now()) END WHERE one
+		RETURNING claimed_at, tried_since`).Scan(&claimed, &tried); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return false, err
 	}
 	body, err := json.Marshal(report)
@@ -341,13 +392,14 @@ func (a *app) sendTelemetry(ctx context.Context) (sent bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	switch {
-	case reached:
-		_, err = a.pool.Exec(ctx, "UPDATE telemetry SET sent_at = now(), last_report = $1 WHERE one", string(body))
-	case sentAt == nil: // the first send reached nothing: an air-gapped install, off until an admin turns it on
-		_, err = a.pool.Exec(ctx, "UPDATE telemetry SET off_because = 'unreachable' WHERE one AND sent_at IS NULL")
-	default:
-		err = nil // a later day's failure is that day's: no retry, no log
+	if reached { // whatever another replica gave up on as this was on its way
+		_, err = a.pool.Exec(ctx, "UPDATE telemetry SET sent_at = now(), last_report = $1, tried_since = NULL, off_because = nullif(off_because, 'unreachable') WHERE one", string(body))
+		return true, err
+	}
+	if tried != nil {
+		if next, until := telemetryNext(*tried, *claimed); next.After(until) { // the last try: off until an admin turns it on
+			_, err = a.pool.Exec(ctx, "UPDATE telemetry SET off_because = 'unreachable' WHERE one AND off_because IS NULL AND claimed_at = $1", *claimed)
+		}
 	}
 	return true, err
 }

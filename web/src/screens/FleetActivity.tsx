@@ -184,7 +184,7 @@ export function Row({ line }: { line: Line }) {
   return (
     <li className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-x-3 py-2.5">
       {line.red ? <span className="mt-1 text-critical"><Icon name="alert" /></span> : !lead || line.who!.kind === "canyon" || anonymous(line.who!) ? <span /> : <Avatar name={name} size="sm" />}
-      <div className="grid min-w-0 gap-0.5">
+      <div className="grid min-w-0 gap-0.5 wrap-anywhere">
         <p className="text-base text-text">{lead ? <><b className="font-semibold">{name}</b> {line.text}</> : line.red ? line.text : capital(line.text)}</p>
         {line.note !== undefined && <p className={`text-md ${line.red ? "text-critical" : "text-text-dim"}`}>{line.note}</p>}
         {line.versions !== undefined && (

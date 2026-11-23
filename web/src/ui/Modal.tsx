@@ -1,5 +1,9 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
+// A dialog's backdrop and its box, which every dialog over the page is drawn with.
+export const OVER = "fixed inset-0 z-30 grid grid-rows-[minmax(0,1fr)] items-start bg-scrim px-4 pt-24 pb-4 [@media(max-height:560px)]:pt-4";
+export const OVER_BOX = "mx-auto grid max-h-full w-full overflow-y-auto overscroll-contain rounded-[10px] border border-border-strong bg-surface p-4 shadow-overlay";
+
 // A question over the page (#102): the page dimmed behind it, the keyboard kept inside it, Escape closing it unless it is
 // busy, and the focus back where it was when it closes. label names it; first is what the keyboard lands on.
 export function Modal({ label, close, busy = false, children }: { label: string; close: () => void; busy?: boolean; children: ReactNode }) {
@@ -25,9 +29,11 @@ export function Modal({ label, close, busy = false, children }: { label: string;
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   };
   return (
-    <div className="fixed inset-0 z-30 grid place-items-start bg-scrim px-4 pt-24">
+    // Never taller than the window, where it scrolls inside itself and its buttons are always reached (#126): a short window,
+    // a phone held sideways, gives it the room above it too.
+    <div className={OVER}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={label} onKeyDown={keep}
-        className="mx-auto grid w-full max-w-[480px] gap-2.5 rounded-[10px] border border-border-strong bg-surface p-4 shadow-overlay">
+        className={`${OVER_BOX} max-w-[480px] gap-2.5`}>
         {children}
       </div>
     </div>

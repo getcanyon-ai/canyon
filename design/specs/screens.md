@@ -424,14 +424,14 @@ with **Connect a GitHub organization**:
 
 On a host GitHub can't reach (`reachable` false), the button and its line are replaced by `GitHub
 can't send events to localhost. Connect GitHub from a Canyon that has a public address.` Below the
-form, **Connected organizations** has one row per org: Organization (linked to its App on GitHub),
+form, **Connected organizations** has one row per org, a card of its own on a phone (#126): Organization (linked to its App on GitHub),
 New repositories (`Become apps` or `Picked by an admin`), `Keeps code` beside the one that does, Last
 event (its age, or `None yet`), and State (`Receiving events`, or `Not installed` with a link to
 install the App). With no org connected, the table isn't shown. Each row's New repositories cell is a switch between `Become apps` and `Picked by an
 admin` (#1923, `PUT /api/v1/github/orgs/:account`), saved as it is flipped, with the line `Every new
 repository in <org> becomes a Canyon app. Turn this on only if <org> holds Canyon apps alone.` under it.
 
-Under it, **Repositories** (#1917, `GET /api/v1/github/repositories`) has one row per repository the
+Under it, **Repositories** (#1917, `GET /api/v1/github/repositories`) has one row (on a phone, one card) per repository the
 Apps can see, and one more for each further folder linked in it. The columns are Repository (its
 full name, linked to GitHub), Folder (`/` for the root) and Canyon app (the app's name, linked to its
 page, with `Unlink`). A repository with no app has `Make it an app`, which asks for a folder (empty

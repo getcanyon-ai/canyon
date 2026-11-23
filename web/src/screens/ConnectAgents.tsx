@@ -13,7 +13,7 @@ const CODE = "block min-w-0 flex-1 overflow-x-auto rounded-lg border border-bord
 // The CLI's install line, as the README and the docs give it.
 const INSTALL = "curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh";
 
-// Connect an agent, on Settings › People & sign-in above the sessions list, every member's: on a laptop the CLI, for
+// Connect an agent, on Settings › Agents above the sessions list, every member's: on a laptop the CLI, for
 // this host; in the cloud Canyon's address, where the host serves one, and each cloud agent's way to it. The address is
 // never offered for a laptop, by a command, an install link or managed settings, all of which reach laptops: a laptop's
 // agents use the server canyon skill install sets up (design/specs/mcp.md §2.4, §12).

@@ -105,7 +105,7 @@ Taking the `[resources]` line out of `canyon.toml` deletes nothing.
 
 ## When your platform runs apps
 
-On a Canyon whose apps your organisation's own platform runs ([Your platform runs the
+On a Canyon whose apps your organization's own platform runs ([Your platform runs the
 apps](/self-host/hand-off/)), nothing changes in the app. It declares the same `[resources]` in
 `canyon.toml` and reads the same `DATABASE_URL` or `STORAGE_URL`. What changes is who makes them:
 
@@ -123,7 +123,7 @@ apps](/self-host/hand-off/)), nothing changes in the app. It declares the same `
   lists those resources as your platform's before you confirm, and waits until your platform reports
   each environment removed.
 
-If the organisation later switches back to Canyon running apps, a deploy of an app that declares a
+If the organization later switches back to Canyon running apps, a deploy of an app that declares a
 type this Canyon can't create fails at its resources step, with the reason.
 
 ## For platform teams: your own adapter

@@ -378,7 +378,7 @@ function Reveal({ values, done }: { values: Revealed; done: () => void }) {
     </div>
   );
   return (
-    <div className="fixed inset-0 z-30 grid place-items-start bg-black/40 px-4 pt-24">
+    <div className="fixed inset-0 z-30 grid place-items-start bg-scrim px-4 pt-24">
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="reveal-title" aria-describedby="reveal-ask" onKeyDown={keep}
         className="mx-auto grid w-full max-w-[560px] gap-2 rounded-[10px] border border-border-strong bg-surface p-4 shadow-overlay">
         <h2 id="reveal-title" className="text-base font-semibold">{S.revealTitle}</h2>

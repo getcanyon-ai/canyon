@@ -67,9 +67,9 @@ Someone without access to an app who opens its link sees "You don't have access 
 
 ## Settings
 
-Settings has a tab for each part of the organisation's set-up. A member doesn't see the tabs that are an admin's alone, such as **GitHub**.
+Settings has a tab for each part of the organization's set-up. A member doesn't see the tabs that are an admin's alone, such as **GitHub**.
 
-- **Organisation**: the organisation's name.
+- **Organization**: the organization's name.
 - **People & sign-in**: who may sign in, who administers Canyon, the groups claim, and the
   production approval switch. See [First boot and sign-in](/org/first-boot/).
 - **Agents**: how to connect a coding agent to Canyon, from a laptop or the cloud, and **Sessions**:

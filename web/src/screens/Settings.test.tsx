@@ -56,10 +56,10 @@ describe("Settings' pages", () => {
     window.location.hash = "#/settings";
     server(golden.get);
     const { unmount } = render(<Settings />);
-    expect(await screen.findByLabelText("Organisation name")).toBeDefined();
+    expect(await screen.findByLabelText("Organization name")).toBeDefined();
     const pages = within(screen.getByRole("navigation", { name: "Settings" })).getAllByRole("link");
     expect(pages.map((one) => [one.firstChild?.textContent, one.getAttribute("href")])).toEqual([
-      ["Organisation", "#/settings/organisation"], ["People & sign-in", "#/settings/people"], ["Agents", "#/settings/agents"], ["App hosting", "#/settings/hosting"], ["AI review", "#/settings/ai"],
+      ["Organization", "#/settings/organisation"], ["People & sign-in", "#/settings/people"], ["Agents", "#/settings/agents"], ["App hosting", "#/settings/hosting"], ["AI review", "#/settings/ai"],
       ["GitHub", "#/settings/github"], ["Outbound", "#/settings/outbound"], ["Integrations", "#/settings/integrations"], ["Telemetry", "#/settings/telemetry"],
       ["Licence", "#/settings/licence"], ["Databases", "#/settings/databases"],
     ]);
@@ -67,7 +67,7 @@ describe("Settings' pages", () => {
     unmount();
     server(golden.get, { status: 404 }, prefs.preferences_member);
     render(<Settings />);
-    await screen.findByText("Organisation name");
+    await screen.findByText("Organization name");
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "GitHub" })).toBeNull();
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "Integrations" })).toBeNull(); // an admin's alone (#2725)
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "Licence" })).toBeNull(); // an admin's alone (#2879)
@@ -159,7 +159,7 @@ describe("Settings' pages", () => {
       return { ok: true, status: 200, json: async () => body } as unknown as Response;
     }));
     render(<Settings />);
-    expect(await screen.findByLabelText("Organisation name")).toBeDefined();
+    expect(await screen.findByLabelText("Organization name")).toBeDefined();
     expect(screen.getByText("internal error")).toBeDefined();
   });
 
@@ -370,13 +370,17 @@ describe("Settings › App hosting", () => {
     expect(sent()).toEqual([]);
   });
 
-  // A pod that reaches its own node never refuses the save: the probe's warning
-  // shows beside the door as an amber line, saying where the host rule is, to admin and member alike.
-  it("a front door saved with a warning shows it as an amber line, with where the rule is", async () => {
+  // A pod that reaches its own node never refuses the save: the probe's warning shows beside the door as an amber line,
+  // to admin and member alike, in the dashboard's plain words with the docs' Host firewall a link away (#118). The
+  // server's whole warning, ports and all, is canyon status's.
+  it("a front door saved with a warning shows it as an amber line, with the docs a link away", async () => {
     server(golden.get, { status: 403, body: { error: "admin_required", message: "only an admin can do this: ask dana@meridian.example" } }, prefs.preferences_member);
     render(<Settings />);
     const note = await screen.findByRole("note");
-    expect(note.textContent).toBe(`${golden.get.warning} ${S.hostFirewall}`);
+    expect(note.textContent).toBe("Apps on this cluster can reach the server they run on. How your cluster admin closes this");
+    expect(within(note).getByRole("link", { name: "How your cluster admin closes this" }).getAttribute("href")).toBe("https://www.getcanyon.ai/docs/self-host/kubernetes/#host-firewall");
+    expect(note.textContent).not.toContain("deploy/k8s/README.md");
+    expect(within(note).getByRole("link").getAttribute("target")).toBe("_blank"); // the docs never take the admin's form away
     expect(note.className).toContain("text-amber");
   });
 
@@ -886,6 +890,52 @@ describe("Settings › Outbound's replicas", () => {
     await page.findByText(S.via);
     expect(page.queryByText(S.replicasHeading)).toBeNull();
   });
+
+  // The limits, the gateway replicas and the certificates are Advanced (#118): folded away, and open on their own while a
+  // replica holds an old policy, so a warning is never folded.
+  it("folds the limits, the replicas and the certificates under Advanced, open while a replica is behind", async () => {
+    const now = Date.now();
+    const at = (ago: number) => new Date(now - ago).toISOString();
+    answering({ ...admin, replicas: [{ replica: "canyon-egress-a", have: "e:42", seen_at: at(0), current_at: at(2_000) }] });
+    const advanced = async () => (await within(await open()).findByText("Advanced")).closest("details") as HTMLDetailsElement;
+    let folded = await advanced();
+    expect(folded.open).toBe(false);
+    expect(within(folded).getByText("Limits, gateway replicas and credential certificates")).toBeDefined();
+    expect(within(folded).getByRole("region", { name: S.capsHeading })).toBeDefined();
+    expect(within(folded).getByText(S.replicasHeading)).toBeDefined();
+    expect(within(folded).getByRole("region", { name: S.keysHeading })).toBeDefined();
+    // Judged once, as the read lands: ninety seconds on, a healthy replica hasn't grown old on this page.
+    const real = Date.now;
+    try {
+      Date.now = () => real() + 90_000;
+      fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "31" } });
+      expect(folded.open).toBe(false);
+      expect(within(folded).getByText(S.replicaCurrent)).toBeDefined();
+    } finally { Date.now = real; }
+    cleanup();
+    answering({ ...admin, replicas: [{ replica: "canyon-egress-b", have: "e:39", seen_at: at(0), current_at: at(47 * 60_000) }] });
+    folded = await advanced();
+    expect(folded.open).toBe(true);
+  });
+
+  // It never closes for the admin (#118): a save whose answer needs nobody leaves Advanced as they had it, its confirmation shown.
+  it("keeps Advanced open over a save, with the confirmation in sight", async () => {
+    const now = Date.now();
+    const at = (ago: number) => new Date(now - ago).toISOString();
+    const stale = { ...admin, replicas: [{ replica: "canyon-egress-b", have: "e:39", seen_at: at(0), current_at: at(47 * 60_000) }] };
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const body = url === "/auth/config" ? { canyon: true, auth: "oidc" } : url === "/api/v1/preferences" ? prefs.preferences_admin
+        : url === "/api/v1/egress" ? (init?.method === "PUT" ? { ...admin, caps: { ...admin.caps, new_names: 60 }, replicas: [{ ...stale.replicas[0]!, current_at: at(0) }] } : stale) : unset;
+      return { ok: true, status: 200, json: async () => body } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    const folded = (await within(await open()).findByText("Advanced")).closest("details") as HTMLDetailsElement;
+    expect(folded.open).toBe(true);
+    fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "60" } });
+    fireEvent.click(within(folded).getByRole("button", { name: "Save limits" }));
+    expect(await within(folded).findByText(S.capsSaved)).toBeDefined();
+    expect(folded.open).toBe(true);
+  });
 });
 
 describe("Settings › Outbound's mode", () => {
@@ -1224,7 +1274,12 @@ describe("Settings › App hosting › Patching", () => {
   const identity = patchGolden.identities.identities[0]!;
   const RUN = String(identity.run_image);
   const ID = String(identity.id);
-  const SHORT = `system libraries image ${ID.slice(7, 19)}`; // a person reads an image by 12 hex, only here (#2605)
+  // Patching is said in plain words (#118): the system libraries in use are the newest, older ones earlier, a sentence names
+  // a card's as these, and the 12 hex sits folded inside the card alone.
+  const NEWEST = "Newest system libraries";
+  const THESE = "these system libraries";
+  const planned = (at: string) => new Date(at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const earlierOf = (at: string, what = "system libraries") => `Earlier ${what}, planned ${planned(at)}`;
   const paused = { ...identity, paused: { at: "2026-10-19T10:00:00Z", projects: ["claims-portal", "quote-engine"] } };
 
   // The identities read answers `read`; resume, approve and the preferences PUT answer 200; the rest is the front door.
@@ -1275,8 +1330,10 @@ describe("Settings › App hosting › Patching", () => {
     const behind = (await section.findByText(/3 apps wait for newer system libraries/)).closest("p")!;
     expect(behind.textContent).toBe("3 apps wait for newer system libraries: claims-portal, ledger, quote-engine");
     expect(within(behind).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["#/apps/claims-portal", "#/apps/ledger", "#/apps/quote-engine"]);
-    expect(section.getByText(`Canyon paused patching with ${SHORT}: 2 apps reverted after the patch.`)).toBeDefined();
-    fireEvent.click(section.getByRole("button", { name: `Resume ${SHORT}` }));
+    expect(section.getByText(`Canyon paused patching with ${THESE}: 2 apps reverted after the patch.`)).toBeDefined();
+    expect(section.queryByText(/System libraries image/)).toBeNull(); // no hash in the summary
+    expect(section.getByRole("group", { name: NEWEST })).toBeDefined();
+    fireEvent.click(section.getByRole("button", { name: `Resume: ${NEWEST}` }));
     await waitFor(() => expect(sent("/api/v1/patching/identities/")).toEqual([`POST /api/v1/patching/identities/${encodeURIComponent(ID)}/resume`]));
   });
 
@@ -1293,8 +1350,9 @@ describe("Settings › App hosting › Patching", () => {
     const rebuild = (patchGolden as unknown as { rebuild: { identity: Record<string, unknown> } }).rebuild.identity;
     patching({ ...admin, rebuilds: "off" }, { status: 200, body: { identities: [rebuild], run_image: { image: RUN, behind: 0, projects: [] } } });
     render(<Settings />);
-    const card = within(await screen.findByRole("group", { name: `build tools ${String(rebuild.id).slice(7, 19)}` }));
-    expect(card.queryByRole("button", { name: "Approve for every app" })).toBeNull();
+    const card = within(await screen.findByRole("group", { name: "Newest build tools" }));
+    expect(card.getByText(`Image ${String(rebuild.id).slice(7, 19)}`)).toBeDefined();
+    expect(card.queryByRole("button", { name: /^Approve for every app/ })).toBeNull();
     cleanup();
     patching({ ...admin, rebuilds: "ask" }, { status: 200, body: { identities: [{ ...rebuild, apps: { planned: 0, patched_preview: 0, asked: 0, patched: 0, reverted: 0, held: 0, denied: 0 } }], run_image: { image: RUN, behind: 0, projects: [] } } });
     render(<Settings />);
@@ -1302,7 +1360,7 @@ describe("Settings › App hosting › Patching", () => {
     cleanup();
     const sent = patching({ ...admin, rebuilds: "off" }, { status: 200, body: { identities: [rebuild], run_image: { image: RUN, behind: 0, projects: [] } } });
     render(<Settings />);
-    await screen.findByRole("group", { name: `build tools ${String(rebuild.id).slice(7, 19)}` });
+    await screen.findByRole("group", { name: "Newest build tools" });
     expect((screen.getByRole("radio", { name: "Canyon doesn't rebuild apps" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole("radio", { name: "Canyon rebuilds previews on newer Node.js, Python, Java and Go releases and asks before production" }));
     await waitFor(() => expect(sent("/api/v1/preferences").filter((call) => call.startsWith("PUT"))).toEqual(['PUT /api/v1/preferences {"rebuilds":"ask"}']));
@@ -1311,17 +1369,17 @@ describe("Settings › App hosting › Patching", () => {
   it("an admin approves an identity for every app with a reason, and sees who approved it once approved", async () => {
     const sent = patching(admin, { status: 200, body: { identities: [identity], run_image: { image: RUN, behind: 0, projects: [] } } });
     const { unmount } = render(<Settings />);
-    fireEvent.click(await screen.findByRole("button", { name: "Approve for every app" }));
-    expect(screen.getByText(`Approve ${SHORT} for production on every app?`)).toBeDefined();
+    fireEvent.click(await screen.findByRole("button", { name: `Approve for every app: ${NEWEST}` }));
+    expect(screen.getByText(`Approve ${THESE} for production on every app?`)).toBeDefined();
     expect(screen.getByText("Type the reason above first.")).toBeDefined(); // no reason, no approval (D6: the disabled button says why)
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "USN-7001: libssl3 for the whole fleet" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Approve for every app" }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: `Approve for every app: ${NEWEST}` }));
     await waitFor(() => expect(sent("/api/v1/patching/identities/")).toEqual([`POST /api/v1/patching/identities/${encodeURIComponent(ID)}/approve {"reason":"USN-7001: libssl3 for the whole fleet"}`]));
     unmount();
     patching(admin, { status: 200, body: { identities: [{ ...identity, approved: { by: { kind: "person", subject: "sub-dana", display: "Dana Whitfield" }, at: "2026-10-20T09:00:00Z", reason: "USN-7001" } }], run_image: null } });
     render(<Settings />);
     expect(await screen.findByText("Approved for every app by Dana Whitfield, 20 Oct: USN-7001")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Approve for every app" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Approve for every app/ })).toBeNull();
     expect(screen.getByText("Canyon can't tell which system libraries it uses now, or whether apps wait for newer ones.")).toBeDefined();
   });
 
@@ -1340,23 +1398,62 @@ describe("Settings › App hosting › Patching", () => {
     patching(admin, { status: 200, body: { identities: [current, underWay, patched, held], run_image: { image: named, behind: 0, projects: [] } } });
     render(<Settings />);
     const section = within(await screen.findByRole("region", { name: /Patching/ }));
-    const reference = (await section.findByText(`System libraries image ${String(kube.id).slice(7, 19)}`)).closest("details")!;
+    await section.findByText("No app waits for newer system libraries");
+    expect(section.queryByText(/System libraries image/)).toBeNull(); // no hash in the summary
+    // a card by the 12 hex folded inside it: the one in use is the newest, the rest earlier
+    const card = (hex: string) => within(section.getAllByRole("group").find((group) => within(group).queryByText(`Image ${hex.repeat(6)}`) !== null)!);
+    const now = within(section.getByRole("group", { name: NEWEST }));
+    const reference = now.getByText(`Image ${String(kube.id).slice(7, 19)}`).closest("details")!;
     expect(reference.open).toBe(false);
     expect(within(reference).getByText(named)).toBeDefined(); // the whole reference, on demand
-    const card = (hex: string) => within(section.getByRole("group", { name: `system libraries image ${hex.repeat(6)}` }));
-    const now = card(String(kube.id).slice(7, 9));
-    expect(now.getByText(named)).toBeDefined();
     expect(now.getByText("No app to patch with these system libraries")).toBeDefined();
-    expect(now.queryByRole("button", { name: "Approve for every app" })).toBeNull();
-    expect(card("3c").getByText("next 5 apps · 4 planned · 1 patched in production")).toBeDefined();
-    expect(card("3c").getByRole("button", { name: "Approve for every app" })).toBeDefined();
-    expect(section.getAllByRole("button", { name: "Approve for every app" })).toHaveLength(1);
+    expect(now.queryByRole("button", { name: /^Approve for every app/ })).toBeNull();
+    expect(card("3c").getByText("Step 2 of 4: the next 5 apps · 4 planned · 1 patched in production")).toBeDefined();
+    expect(card("3c").getByRole("button", { name: `Approve for every app: ${earlierOf("2026-10-18T10:00:00Z")}` })).toBeDefined();
+    expect(section.getAllByRole("button", { name: /^Approve for every app/ })).toHaveLength(1);
     expect(card("2b").getByText("2 patched in production · 1 turned down for production")).toBeDefined();
     expect(card("1a").getByText("1 held")).toBeDefined();
-    expect(section.queryByText(/first app/)).toBeNull();
+    expect(section.queryByText(/Step 1 of 4/)).toBeNull();
     const earlier = section.getByText("2 earlier fixes, nothing left to do").closest("details")!;
     expect(earlier.open).toBe(false);
-    expect([...earlier.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label"))).toEqual([`system libraries image ${"2b".repeat(6)}`, `system libraries image ${"1a".repeat(6)}`]);
+    expect([...earlier.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label"))).toEqual([earlierOf("2026-10-18T10:00:00Z"), earlierOf("2026-10-18T10:00:00Z")]);
+    expect(card("2b")).toBeDefined();
+  });
+
+  // Two earlier cards are told apart by when each was planned (#118), in the title and in the name of every button on it;
+  // of the cards planned last, or planned together, exactly one of a kind is the newest.
+  it("an admin tells two earlier cards apart by when each was planned, and one card of a kind is the newest", async () => {
+    const some = { planned: 1, patched_preview: 0, asked: 0, patched: 0, reverted: 0, held: 0, denied: 0 };
+    const at = (hex: string, kind: string, planned_at: string) => ({ id: `sha256:${hex.repeat(32)}`, kind, run_image: `registry.example/run@sha256:${hex.repeat(32)}`, planned_at, wave: 0, apps: some, paused: { at: planned_at, projects: ["ledger"] } });
+    const [first, second, last] = ["2026-10-16T09:00:00Z", "2026-10-16T14:30:00Z", "2026-10-18T10:00:00Z"] as const;
+    patching(admin, { status: 200, body: { identities: [at("5e", "rebase", last), at("4d", "rebase", last), at("3c", "rebase", second), at("2b", "rebase", first), at("6f", "rebuild", last), at("7a", "rebuild", last), at("8b", "rebuild", first)], run_image: null } });
+    render(<Settings />);
+    const section = within(await screen.findByRole("region", { name: /Patching/ }));
+    await section.findByRole("group", { name: "Newest build tools" });
+    const titles = section.getAllByRole("group").map((group) => group.getAttribute("aria-label")).filter((title) => title !== null);
+    expect(titles.filter((title) => title.startsWith("Newest"))).toEqual(["Newest system libraries", "Newest build tools"]);
+    expect(new Set([first, second].map((one) => earlierOf(one))).size).toBe(2);
+    for (const one of [first, second, last]) {
+      const card = within(section.getByRole("group", { name: earlierOf(one) }));
+      expect(card.getByText(earlierOf(one))).toBeDefined();
+      expect(card.getByRole("button", { name: `Approve for every app: ${earlierOf(one)}` })).toBeDefined();
+      expect(card.getByRole("button", { name: `Resume: ${earlierOf(one)}` })).toBeDefined();
+    }
+    expect(section.getByRole("group", { name: earlierOf(first, "build tools") })).toBeDefined();
+    fireEvent.click(section.getByRole("button", { name: `Approve for every app: ${earlierOf(first)}` }));
+    expect(section.getByRole("button", { name: `Approve for every app: ${earlierOf(first)}` })).toBeDefined(); // the one that sends it, too
+  });
+
+  // Where a patch is, in a person's words (#118): the step of four, and who it waits for.
+  it("an admin reads which step of four a patch is at, and that an app waits for a person's approval", async () => {
+    const none = { planned: 0, patched_preview: 0, asked: 0, patched: 0, reverted: 0, held: 0, denied: 0 };
+    const steps = ["Step 1 of 4: the first app", "Step 2 of 4: the next 5 apps", "Step 3 of 4: the next 25 apps", "Step 4 of 4: the rest"];
+    for (const [wave, step] of steps.entries()) {
+      patching(admin, { status: 200, body: { identities: [{ ...identity, wave, apps: { ...none, asked: wave + 1 } }], run_image: { image: RUN, behind: 0, projects: [] } } });
+      render(<Settings />);
+      expect(await screen.findByText(`${step} · ${wave === 0 ? "1 app waits for a person's approval" : `${wave + 1} apps wait for a person's approval`}`)).toBeDefined();
+      cleanup();
+    }
   });
 
   // #2588: the identities read's plan, what Canyon's last check said, in the card of the identity it checked against: each
@@ -1367,7 +1464,7 @@ describe("Settings › App hosting › Patching", () => {
     const plan = { ...golden, apps: [...golden.apps, { project: "ledger", why: "wave" }, { project: "quote-engine", why: "sideways" }, { project: "zeta", why: "wave" }, { project: "proto", why: "constructor" }] };
     patching(admin, { status: 200, body: { identities: [identity], run_image: { image: RUN, behind: 0, projects: [] }, plan } });
     const { unmount } = render(<Settings />);
-    const card = within(await screen.findByRole("group", { name: SHORT }));
+    const card = within(await screen.findByRole("group", { name: NEWEST }));
     expect(card.getByText(/^Canyon's last check, \d+ \w+ ago$/)).toBeDefined();
     const causes = card.getAllByRole("listitem");
     expect(causes.map((cause) => cause.textContent)).toEqual([
@@ -1381,8 +1478,8 @@ describe("Settings › App hosting › Patching", () => {
     patching(admin, { status: 200, body: { identities: [identity], run_image: null, plan: { at: golden.at, identity: null, why: "org_off", apps: [] } } });
     render(<Settings />);
     const section = within(await screen.findByRole("region", { name: /Patching/ }));
-    expect(await section.findByText("Patching is off for this organisation")).toBeDefined();
-    expect(within(section.getByRole("group", { name: SHORT })).queryByText(/Canyon's last check/)).toBeNull();
+    expect(await section.findByText("Patching is off for this organization")).toBeDefined();
+    expect(within(section.getByRole("group", { name: NEWEST })).queryByText(/Canyon's last check/)).toBeNull();
     cleanup();
     const off = (patchGolden as unknown as { rule_off: { plan: unknown } }).rule_off; // the tick after the rule went off on every app
     patching(admin, { status: 200, body: { identities: [identity], run_image: null, plan: off.plan } });

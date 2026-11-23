@@ -396,8 +396,9 @@ to its page (the read's `projects`; an admin sees every app), or `No app waits f
 can't tell which system libraries it uses now, or whether apps wait for newer ones.` when the read can't tell; then each
 platform identity, its system libraries image, wave and apps — paused, `Canyon paused patching with <image>: <n> apps
 reverted after the patch.` with **Resume** (also offered on a stalled one), and **Approve for every app**, which
-asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Every such image
-reads `system libraries image <12 hex>`, the only place Canyon names it (#2605), its whole reference folded under it (#2582). Its apps by
+asks for a reason, then reads `Approved for every app by <name>, <date>: <reason>` (all D5's). Each card is
+`Newest system libraries` (exactly one) or `Earlier system libraries, planned <date>`, the same for build tools, and every button on
+it ends its accessible name with that; its image sits folded inside it as `Image <12 hex>` (#2582; getcanyon-ai/canyon#118). Its apps by
 state include `turned down for production`, those whose team denied the patch, production still unpatched (#2601). An
 identity's work left is its apps `planned`, `patched_preview` and `asked`: its wave is said, and **Approve for every
 app** offered, only while it has some, since the fleet approval decides only patch approvals, filed once a
@@ -1340,6 +1341,8 @@ Export: `CSV` · `JSON` · `Copy link to this view`. One line, no configuration 
 **Emotional beat:** *"I can govern this."* Specifically: *"I could make this stricter, and I could make it looser, and both are one click."*
 
 **An admin's screen** (**amended 2026-10-07**). A member's rail has no Guardrails, and `#/guardrails` opened by a member is the admins-only page: `Guardrails` as its heading, `Only an admin can open Guardrails.`, `What an app must pass is on that app's page.` and `Back to the fleet` — never the form read-only. It is the dashboard's choice, not the API's: agents and the CLI still read the policies (`GET /api/v1/policies`, `canyon manifest`, the session hook) as any member.
+
+**Its tabs** (amended 2026-11-23, getcanyon-ai/canyon#118): Policies, Pipeline, Scanners, Playbooks, *What agents are told*. `#/guardrails` opens on Policies, the first: the rules and their dials are what an admin comes for, and Pipeline, where a rule is also placed before production, reads as a diagram of the same rules. Pipeline stacks its stages so each rule reads full width, a line under the tabs links both gates with how many checks each lists (`Before preview (<n>)` · `Before production (<n>)`), and a rule's `Also before production` is a checkbox. Policies draws *Affects today* once a rule keeps an app out or a change is asked; a column saying no app is affected on every row is noise. On a phone the strip of tabs runs to the screen's edges, the tab shown scrolled to the middle of it.
 
 **Layout:** Four rows. That's the screen. Each row is a policy, and the copy is a plain sentence, not a rule name.
 

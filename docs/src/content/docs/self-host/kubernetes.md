@@ -770,7 +770,8 @@ Some network plugins don't apply a pod's NetworkPolicy to its traffic to its own
 AWS VPC CNI doesn't, even in strict mode: an app reaches the kubelet (10250), sshd (22) and the
 CNI's own introspection port on the server it runs on, though no other node. Calico does apply it.
 Canyon's front-door check tries 10250 and 22 from a probe pod and, when either answers, saves the
-front door and shows a warning naming the ports. Closing them is a rule on each node, yours to add.
+front door and warns: `canyon status` names the ports, and the dashboard links here. Closing them is
+a rule on each node, yours to add.
 
 On EKS (AL2023, `iptables-nft`), this drops every new connection a pod opens to its own node, and
 keeps the replies to the kubelet's health checks:

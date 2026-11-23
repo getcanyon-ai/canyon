@@ -96,7 +96,7 @@ export function Onboarding({ record, done }: { record: Preferences; done: () => 
         )}
         {step === 4 && (
           <dl className="mt-3 flex flex-col gap-2">
-            <Row label="Organisation" value={draft.orgName} edit={() => setStep(1)} />
+            <Row label="Organization" value={draft.orgName} edit={() => setStep(1)} />
             <Row label="Sign-in" value={sentence([...draft.emails, ...unlisted, ...draft.domains.map((one) => `anyone at ${one}`)])} edit={() => setStep(2)} />
             <Row label="Admins" value={sentence([...draft.admins, ...(draft.claim === "" ? [] : [`anyone in ${draft.claim} ${draft.value}`])])} edit={() => setStep(3)} />
           </dl>

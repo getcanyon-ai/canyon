@@ -558,7 +558,7 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
    copied as a device token copies it, bound to the client and to `/mcp`, with the scopes. The session lives 7 days
    from the consent, as a CLI session does (amended 2026-11-21). Its access token lives an hour and its refresh token as
    long as the session; each refresh rotates both on that row in place and checks the person is still on the
-   membership lists. A refresh token presented again within 10 seconds of its rotation, while the pair that rotation
+   membership lists, ending the session with an audit row when they aren't. A refresh token presented again within 10 seconds of its rotation, while the pair that rotation
    issued has served nothing, is a retry whose answer was lost, and gets a new pair in place of the one it lost, once;
    any other return of a replaced token, the lost pair's included, means one of its two holders isn't the client,
    so the session ends.

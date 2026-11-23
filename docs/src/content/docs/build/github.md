@@ -18,7 +18,7 @@ flowchart TD
   push --> app
   app --> review
   review --> check
-  review -->|"a push passed"| preview
+  review -->|"push passed"| preview
 ```
 
 ## Before you start: your admin connects GitHub

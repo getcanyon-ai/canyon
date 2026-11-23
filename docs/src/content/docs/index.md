@@ -30,18 +30,52 @@ every app behind your company's sign-in. It runs on one Docker host or on your K
 
 ## A deploy, from blocked to live
 
-```mermaid title="A deploy's journey: blocked, fixed, passed, live in preview, promoted by a person"
-flowchart TD
-  agent["Coding agent<br>runs canyon deploy"]
-  review["Canyon reviews it<br>scanners, AI review, your rules"]:::canyon
-  blocked["Blocked: nothing is built<br>the agent gets a file, a line and a fix"]:::blocked
-  preview["Built and live in preview<br>at its own address"]:::passed
-  prod["Production<br>the same image, its own secrets"]:::person
-  agent --> review
-  review -->|"a blocking finding"| blocked
-  blocked -->|"the agent fixes the code<br>and deploys again"| agent
-  review -->|"passed"| preview
-  preview -->|"a person promotes"| prod
+```diagram kind=flow title="A deploy's journey: blocked until it's fixed, then live in preview, then a person's call"
+steps:
+  - who: Your coding agent
+    icon: agent
+    step: 1
+    what: Runs `canyon deploy`
+    more: The CLI uploads the folder it's in, unpushed changes included.
+  - who: Canyon
+    icon: canyon
+    tone: canyon
+    step: 2
+    what: Reviews it before anything is built
+    more: The scanners, the AI review and your org's rules. Each finding names a file, a line and a fix.
+  - paths:
+      - label: If a finding blocks
+        tone: blocked
+        steps:
+          - who: Canyon
+            tone: blocked
+            what: Nothing is built
+            more: The agent reads the findings like a compiler's errors.
+          - who: Your coding agent
+            what: Fixes the code
+            more: Or an admin or a security responder approves the finding, with a reason.
+        loop: The agent deploys again, back to step 2.
+      - label: If nothing blocks
+        tone: passed
+        steps:
+          - who: Passed
+            icon: passed
+            tone: passed
+            step: 3
+            what: Built and live in preview
+            more: At its own address.
+          - who: A person
+            icon: person
+            tone: person
+            step: 4
+            what: Promotes it
+            more: Once the go-live checks pass. An agent can ask for it, signed in as its person.
+          - who: Canyon
+            icon: canyon
+            tone: canyon
+            step: 5
+            what: Runs it in production
+            more: The same image preview built, with production's own secrets.
 ```
 
 Here is an excerpt of what the review prints when it blocks, from a real run against the demo:

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Settings › People & sign-in › Connect an agent as a member and as an admin (design/specs/mcp.md §6 item 14, §12):
+// Settings › Agents › Connect an agent as a member and as an admin (design/specs/mcp.md §6 item 14, §12):
 // both get the laptop's three steps for this host, Canyon's address for agents and each cloud agent's way to it, and
 // no way to put the address on a laptop.
 func TestConnectAnAgentAsAMemberAndAnAdmin(t *testing.T) {

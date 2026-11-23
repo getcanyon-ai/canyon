@@ -17,25 +17,21 @@ all in the cluster. It is written for Ubuntu 24.04 with k3s v1.36, Calico v3.32.
 Read *Caveats* before exposing the host. The front door, its two ways of signing people in and the
 address form are defined in [How people reach apps](/self-host/front-door/).
 
-```mermaid title="One k3s host: Canyon and everything the install guide says you bring, on one Linux server"
-flowchart TD
-  people["People and coding agents<br>your domain and its app wildcards<br>point at the host"]
-  idp["Your identity provider<br>an OIDC client"]
-  subgraph host["One Linux host: k3s with Calico"]
-    caddy["Caddy, the gateway<br>ports 80 and 443"]
-    canyon["Canyon<br>its four namespaces"]:::canyon
-    kpack["kpack"]
-    reg["Registry<br>canyon-infra"]
-    pg[("Canyon's Postgres, 5432<br>canyon-infra")]
-    apg[("The apps' Postgres, 5433<br>canyon-infra")]
-  end
-  people -->|"https"| caddy
-  caddy --> canyon
-  canyon -->|"sign-in"| idp
-  canyon --> pg
-  canyon --> apg
-  canyon --> kpack
-  kpack --> reg
+```diagram kind=layers title="One k3s host: Canyon and everything the install guide says you bring, on one Linux server"
+layers:
+  - band: Outside
+    tiles:
+      - {icon: people, who: People and coding agents, what: "Your domain and its app wildcards", more: point at the host}
+      - {icon: key, who: Sign-in, what: Your identity provider, more: an OIDC client}
+  - via: https
+  - band: "One Linux host: k3s with Calico"
+    tiles:
+      - {what: "Caddy, the gateway", more: ports 80 and 443}
+      - {tone: canyon, what: Canyon, more: its four namespaces}
+      - {what: kpack, more: "builds, pushing to the registry"}
+      - {what: Registry, more: "`canyon-infra`"}
+      - {what: "Canyon's Postgres, 5432", more: "`canyon-infra`"}
+      - {what: "The apps' Postgres, 5433", more: "`canyon-infra`"}
 ```
 
 ## What you need

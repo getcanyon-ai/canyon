@@ -578,7 +578,7 @@ redeems nothing. A client asking for a secret is registered as the public
 client it is, told `none`.
 
 **Revoking.** An admin's revoke-all of a person (`DELETE /api/v1/sessions?subject=`) ends their OAuth sessions with the
-rest. A person sees their own sessions in Settings › People & sign-in, an admin everyone's, and ends one there by its
+rest. A person sees their own sessions in Settings › Agents, an admin everyone's, and ends one there by its
 digest, in a browser alone, so no MCP client and no CLI ever ends a session.
 
 **With sign-in off there is none of it.** A host where every caller is the anonymous admin serves neither the

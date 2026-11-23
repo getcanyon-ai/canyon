@@ -59,7 +59,7 @@ because a device code shown inside a tool result would have the agent driving th
   - `canyon_promote` is `openWorldHint`, because it changes what customers reach.
 - **Promotion asks.**
   - `canyon_promote` sends nothing until it has an answer. Where the client supports MCP elicitation, the server always asks the person, and `confirm` is ignored: `Promote <app> <version> to production?`, or for a rollback `Put <app> <version> back in production, replacing <version>?`, the CLI's §6.3 and §6.3.1 questions, at the point the CLI asks it. It asks as an input request (SEP-2322): the call ends before anything is sent, and the client calls again with the answer. The SDK turns that into an `elicitation/create` request for a client on a protocol version before 2026-07-28.
-  - Only `accept` promotes. A `decline`, and a question dismissed without an answer (`cancel`: Esc, or a client that declares elicitation but never shows the question, as headless Claude Code does), is a no whatever `confirm` says: nothing is sent, and the tool says why (`the person said no`, `nobody answered the question`) and where a person can promote it, the app's page, or locally `canyon deploy --env prod` in a terminal where they can answer; on `/mcp` the app's page alone. It ends by telling the agent not to promote it another way, because the person decides; the skill and the session's rules say the same (an agent read a no and ran `canyon deploy --env prod --yes` itself). Never `--yes` (amended 2026-11-22, twice).
+  - Only `accept` promotes. A `decline`, and a question dismissed without an answer (`cancel`: Esc, or a client that declares elicitation but never shows the question, as headless Claude Code does), is a no whatever `confirm` says: nothing is sent, and the tool says why (`the person said no`, `nobody answered the question`) and where a person can promote it, the app's page, locally and on `/mcp` alike. It ends by telling the agent not to promote it another way, because the person decides; the skill and the session's rules say the same (an agent read a no and ran `canyon deploy --env prod --yes` itself). None of them names a command: a way around the person's answer is not the agent's to know (amended 2026-11-22, twice; 2026-11-23, #106).
   - Elsewhere it needs `confirm: true`, which the server instructions say to set only when the person asked for production in this conversation. That's the skill's rule for `--yes`.
   - When the org has a person approve production, the tool asks nothing and returns the approval URL, as the CLI's WAITING FOR APPROVAL block does.
 - **Long runs.** A check or deploy outlasts most clients' tool-call timeout.
@@ -151,7 +151,7 @@ Canyon follows the MCP authorization specification: `/mcp` is an OAuth 2.1 prote
   - expiring as a CLI session does.
   - It is a person's session, so a tool acts as that person: `kind: person`, recorded under their name (AUTH.md §4.4).
   - `dashboard_required` refuses it, as it refuses a CLI session.
-- **Revoking.** Sign-outs revoke these sessions like any other (`DELETE /api/v1/sessions`). Settings › People & sign-in lists them with their client's name, through a new sessions list (§5).
+- **Revoking.** Sign-outs revoke these sessions like any other (`DELETE /api/v1/sessions`). Settings › Agents lists them with their client's name, through a new sessions list (§5; moved 2026-11-23 from People & sign-in).
 - **With sign-in off, it fails closed.** On a host with `CANYON_AUTH` off, Canyon serves neither `/mcp` nor the metadata or OAuth routes. `/mcp` answers `404 {error:"mcp_needs_sign_in", message}`, D5's line naming `canyon mcp` as the way on this machine. A host where every caller is the anonymous admin must not hand that power to anything that can reach a port. The laptop demo is such a host, with no exception: its `/mcp` answers `mcp_needs_sign_in` too.
 
 ### 2.3 Tools
@@ -325,7 +325,7 @@ Named here, and edited later in the PR that builds each.
   - a finding's playbook step, in both forms (§3.4);
   - the command count going from twenty-two to twenty-four (`mcp`, `playbook`).
 - **design/specs/cli.md:** `canyon mcp` and `canyon playbook`, the skill-install rows (§7.1) and the hook's native-skill sync, §7.2's skill text, and §5.2's playbook step.
-- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Settings › People & sign-in › Connect an agent, and *What agents are told*'s components and playbooks (§12).
+- **design/specs/screens.md:** the app page's Secrets section (§10.1), Guardrails › Playbooks (§3.2), Settings › Agents › Connect an agent, and *What agents are told*'s components and playbooks (§12).
 - **contracts/routes.md, again:** the two scopes and `insufficient_scope` on `/mcp`.
 - **design/AUTH.md:** a new §4.7, Canyon as an OAuth authorization server for MCP clients.
 - **runs:** a new DBOS workflow, if packaging a ref is one, bumps `durableVersion` (AGENTS.md, *Engineering rules*).
@@ -377,7 +377,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
 13. **Secrets in the dashboard.**
     - What: §10.1's Secrets section on the app page.
     - Acceptance: `cd web && npx vitest run src/screens/Secrets.test.tsx` · `make e2e-ui` (a journey per level: a contributor sets a value, a viewer sees no form).
-14. **Settings › People & sign-in › Connect an agent, and what agents receive.**
+14. **Settings › Agents › Connect an agent, and what agents receive.**
     - What: §12.
     - Acceptance: `cd web && npx vitest run src/screens/ConnectAgents.test.tsx` · `make e2e-ui` (a member's and an admin's view).
 15. **Connect your agent.**
@@ -463,7 +463,7 @@ What it took, each built for v0.11.0:
 
 ## 12. The dashboard
 
-- **Settings › People & sign-in › Connect an agent**, a new panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open):
+- **Settings › Agents › Connect an agent**, a panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open; **moved 2026-11-23**, getcanyon-ai/canyon#99's review, with the sessions list from People & sign-in to their own tab, which every member finds by name):
   - **On a laptop, the CLI** (amended 2026-11-21): three numbered steps with this host filled in, install the CLI, `canyon login <host>`, `canyon skill install`. Every host shows them.
   - **In the cloud, the URL**, for cloud agents alone: the protected-resource metadata's `resource`, exactly, with a copy button, then §2.4's way for each cloud agent: Claude Code on the web by a claude.ai connector, with a link to Anthropic's connector docs; Cursor's cloud agents by a team MCP server; and Codex, whose cloud tasks have no MCP, sent to the laptop steps. Nothing offers the URL for a laptop: no agent's command, no install link, no managed settings. Where the metadata read answers `404` (a public URL that isn't `https`), no URL, and one line saying why; on a host with sign-in off, no URL and a line saying why.
   - **Who sees it.** Every member, the same panel: each cloud agent's line says who adds the address.

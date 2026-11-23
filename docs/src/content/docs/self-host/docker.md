@@ -24,26 +24,20 @@ holds your values. The release must be v0.3.0 or later: earlier ones don't ship 
 Read [Security](#security) before you pick the server. Canyon's executor holds the server's Docker
 socket, and that decides what else may run there: nothing.
 
-```mermaid title="One Docker server: Caddy ends TLS, Canyon's server is the front door of Canyon and of every app"
-flowchart TD
-  people["People and coding agents<br>your domain and its app wildcards<br>point at the server"]
-  idp["Your identity provider<br>an OIDC client"]
-  subgraph host["One Linux server, Docker"]
-    caddy["Caddy, on ports 80 and 443<br>ends TLS"]
-    server["canyon-server<br>publishes no port"]:::canyon
-    executor["canyon-executor<br>holds the Docker socket"]:::canyon
-    apps["Each app's container<br>on a Docker network of its own"]
-    pg[("Canyon's Postgres")]
-    apg[("The apps' Postgres")]
-  end
-  people -->|"https"| caddy
-  caddy -->|"a network the two share<br>with nothing else"| server
-  server -->|"sign-in"| idp
-  server --> pg
-  server -->|"scan, build, run"| executor
-  executor --> apps
-  server -->|"each app's address,<br>after sign-in"| apps
-  apps --> apg
+```diagram kind=layers title="One Docker server: Caddy ends TLS, Canyon's server is the front door of Canyon and of every app"
+layers:
+  - band: Outside
+    tiles:
+      - {icon: people, who: People and coding agents, what: "Your domain and its app wildcards", more: point at the server}
+      - {icon: key, who: Sign-in, what: Your identity provider, more: an OIDC client the server signs people in with}
+  - via: https
+  - band: One Linux server, Docker
+    flow:
+      - {what: Caddy, more: "on ports 80 and 443; ends TLS"}
+      - {tone: canyon, what: "`canyon-server`", more: "publishes no port: Caddy reaches it on a network the two share with nothing else; sends each app's address on, after sign-in"}
+      - {tone: canyon, what: "`canyon-executor`", more: "holds the Docker socket; scans, builds and runs"}
+      - {what: "Each app's container", more: "on a Docker network of its own"}
+    wall: "Canyon's Postgres and the apps' Postgres run here too: the server alone reaches Canyon's, and each app reaches its own database."
 ```
 
 Canyon's server answers Canyon's own address and every app's. For an app, it checks the person's

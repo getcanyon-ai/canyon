@@ -40,7 +40,7 @@ served at https://www.getcanyon.ai/docs/: the workspace's website rewrites `/doc
 here first. It refuses to run unless the clone's HEAD carries the release's
 version tag, such as `v0.6.0` or `v0.7.0-rc.1` (`git describe --tags --exact-match`), and that tag is the
 version the published site names. It replaces `apps/canyon-docs` with a copy of this directory (the fonts
-and the published contracts copied in, this README, `scripts/screens.mjs` and `package-lock.json` left
+and the published contracts copied in, this README, `scripts/screens.mjs`, `scripts/diagram-hints.mjs` and `package-lock.json` left
 out) whose links `scripts/base-links.mjs` gives the `/docs` base, writes the app's `vercel.json`, whose
 build command sets `CANYON_DOCS_VERSION` to the tag and `CANYON_DOCS_BASE` to `/docs` and which
 redirects the old address, docs.getcanyon.ai, to the new one, and `agent.md`, and refreshes the workspace's `pnpm-lock.yaml`. Open a pull request on the workspace's
@@ -52,10 +52,32 @@ repository with the change. Nobody edits `apps/canyon-docs` by hand: the next pu
 - Every command and every output shown is one somebody ran, pasted from the run.
   `start/take-the-tour.md` is held to it: `make tour-check` runs the tour on CI and fails on a pasted
   line the run didn't print, so take its blocks from that job's log.
-- A diagram is a fenced `mermaid` block with a `title="…"`, its caption and its text for screen
-  readers. The build draws it as an SVG in Canyon's colours, and GitHub draws the same block when
-  you read the `.md` in the repository. Four classes give a box meaning: `canyon`, `blocked`,
-  `person` and `passed`. Use them for nothing else.
+- A diagram a reader needs is a fenced `diagram` block: its info line names the kind and the
+  caption, `kind=flow title="…"`, and its body is YAML. `src/plugins/diagram.mjs` draws it at
+  build time as the page's own HTML text, in the site's type, which a screen reader reads in order
+  and which stacks into one column on a phone. GitHub shows the YAML. Four kinds:
+  - `flow`: `steps`, cards in order. A `paths` step holds two or three paths side by side, each with
+    a `label`, `steps` and, for a loop back, a `loop` line. `{via: …}` between two cards labels the
+    arrow between them.
+  - `compare`: `columns`, each a `label`, a `sub` line and its `steps`, and a `note` under them all.
+  - `layers`: bands top to bottom, each a `band` title, a `note`, and `tiles` or a small `flow` of
+    its own, with an optional `wall`, the line that says what it can't reach. `{via: …}` between
+    two bands says what crosses.
+  - `choose`: a `question`, then `groups` of `options`.
+  A card is `what`, the line that matters, with optional `who` (the small label above it), `more`
+  (a sentence under it), `step` (a number), `icon`, `tone` and `link` (a page of this site, such as
+  `/self-host/docker/`, which the build gives the site's base). Text is one line of Markdown: code
+  and emphasis, never a link or HTML; write `\<agent\>` for angle brackets. Quote a YAML value that
+  holds a comma. A key a kind doesn't know, a missing `what`, or a link in text stops the build.
+- Four tones give a card or a band meaning, as they do in a `mermaid` block's classes: `canyon`,
+  what Canyon does; `person`, a person decides; `blocked`; and `passed`. Use them for nothing else.
+- A technical sequence or graph stays a fenced `mermaid` block with a `title="…"`, its caption and
+  its text for screen readers. The build draws it as an SVG in the tokens' colours, at its own size:
+  one wider than the column scrolls sideways in its frame and says so. `src/scripts/diagram-scroll.js`
+  shows that line exactly while the frame scrolls by more than 4px, and `node scripts/diagram-hints.mjs`,
+  after a build, checks it at 390px and 1280px in the e2e/ui harness's Chromium (the docs workflow runs
+  it). GitHub draws the same block.
+  Its classes are those four tones. Keep it narrow: past a phone's width, a flow reads better.
 - The build fails on a link to a page or heading that doesn't exist (starlight-links-validator), and
   `make docs-links` checks the repository's other Markdown.
 

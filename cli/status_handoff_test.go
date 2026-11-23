@@ -49,18 +49,18 @@ func TestStatusSaysAPodCheckedIn(t *testing.T) {
 	s.Envs["prod"].SeenAt = "2026-09-02T11:58:00Z"
 	wants(t, "status-handoff-seen.txt", renderedAt(s, FormatHuman, at))
 	ai := renderedAt(s, FormatAI, at)
-	if line := "\nproduction: v3.1 · http://claims-archive.prod.localhost:7777 · deployed 2026-08-24T13:55:02Z · a pod still checked in 2m ago (your platform's pods: nothing to do in Canyon) · removing · waiting on your platform\n"; !strings.Contains(ai, line) || strings.Contains(ai, "11:58:00") {
+	if line := "\nproduction: v3.1 · http://claims-archive.prod.localhost:7777 · deployed 2026-08-24T13:55:02Z · still running: your platform last reported it 2m ago (your platform's pods: nothing to do in Canyon) · being removed by your platform\n"; !strings.Contains(ai, line) || strings.Contains(ai, "11:58:00") {
 		t.Errorf("under --format ai, a stopped environment's status said\n%s", ai)
 	}
 	s.Envs["prod"].SeenAt = "2026-09-02T12:03:00Z" // ahead of this clock: now
-	if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      ! a pod still checked in just now\n") {
+	if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      ! still running: your platform last reported it just now\n") {
 		t.Errorf("a check-in ahead of the clock rendered\n%s", got)
 	}
 	s.Envs["prod"].SeenAt, s.Envs["prod"].Pending = "2026-09-02T11:58:00Z", nil
-	if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      a pod checked in 2m ago\n  access") {
+	if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      your platform reported it running 2m ago\n  access") {
 		t.Errorf("with no remove pending, the check-in rendered\n%s", got)
 	}
-	if ai := renderedAt(s, FormatAI, at); !strings.Contains(ai, " · a pod checked in 2m ago\n") || strings.Contains(ai, "nothing to do") {
+	if ai := renderedAt(s, FormatAI, at); !strings.Contains(ai, " · your platform reported it running 2m ago\n") || strings.Contains(ai, "nothing to do") {
 		t.Errorf("with no remove pending, under --format ai:\n%s", ai)
 	}
 }
@@ -73,15 +73,15 @@ func TestStatusSaysNoPodHasCheckedIn(t *testing.T) {
 	s.Envs["prod"].SeenAt = ""
 	wants(t, "status-handoff-unseen.txt", renderedAt(s, FormatHuman, at))
 	for _, c := range []struct{ seen, human string }{
-		{"2026-09-02T11:29:12Z", "! no pod has checked in since 11:29"},
-		{"2026-09-01T23:50:00Z", "! no pod has checked in since 1 Sep 23:50"},
-		{"", "! reported deployed, but no pod has checked in"},
+		{"2026-09-02T11:29:12Z", "! your platform hasn't reported v3.1 running since 11:29"},
+		{"2026-09-01T23:50:00Z", "! your platform hasn't reported v3.1 running since 1 Sep 23:50"},
+		{"", "! your platform reported v3.1 deployed, but not running"},
 	} {
 		s.Envs["prod"].SeenAt = c.seen
-		if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      "+c.human+"\n                      removing · waiting on your platform\n") {
+		if got := renderedAt(s, FormatHuman, at); !strings.Contains(got, "\n                      "+c.human+"\n                      being removed by your platform\n") {
 			t.Errorf("seen %q rendered\n%s", c.seen, got)
 		}
-		if ai := renderedAt(s, FormatAI, at); !strings.Contains(ai, " · "+strings.TrimPrefix(c.human, "! ")+" (your platform's pods: nothing to do in Canyon) · removing · waiting on your platform\n") {
+		if ai := renderedAt(s, FormatAI, at); !strings.Contains(ai, " · "+strings.TrimPrefix(c.human, "! ")+" (your platform's pods: nothing to do in Canyon) · being removed by your platform\n") {
 			t.Errorf("seen %q under --format ai:\n%s", c.seen, ai)
 		}
 	}

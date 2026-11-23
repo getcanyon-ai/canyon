@@ -1,7 +1,7 @@
 
   broker-portal · Meridian
 
-  preview      —   waiting on your platform since 10:00
+  preview      —   sent to your platform at 10:00, not running yet
   production   —   not promoted yet
   access       shared with 1 person · you are an owner
   review       · reviewing   0 blocking findings, 0 warnings   2h ago

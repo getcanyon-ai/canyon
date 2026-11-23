@@ -79,8 +79,6 @@ export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
               ) : viewer.github_link && (
                 <a href="/api/v1/github/link" className="-my-2 py-2 text-sm text-link no-underline hover:underline max-[860px]:-my-3 max-[860px]:py-3">{AUTH.githubLink}</a>
               )}
-              {/* The CLI's approval page with an empty code field (#2564): the page alone, never a pending request. */}
-              <a href="#/device" className="-my-2 py-2 text-sm text-link no-underline hover:underline max-[860px]:-my-3 max-[860px]:py-3">{AUTH.approveCli}</a>
             </div>
           </div>
         )}

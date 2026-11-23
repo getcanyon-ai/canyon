@@ -341,6 +341,7 @@ compose file of your own it names, stay as they are.
      kubectl -n canyon create configmap canyon-egress-policy-cert --from-literal=tls.crt="$cert" --dry-run=client -o yaml | kubectl apply -f -
    kubectl -n canyon rollout status deploy/canyon-egress
    ```
+5. **Wait for the new builder**, as [below](#wait-for-the-new-builder-on-kubernetes).
 
 The server migrates its schema when it starts. Once the new executor is up, every app Canyon runs
 moves to the new `canyon-identity` sidecar, ten environments a minute. Only that container's image
@@ -359,6 +360,38 @@ helm upgrade canyon https://github.com/getcanyon-ai/canyon-releases/releases/lat
 Upgrading from a release whose gateway ran no check (no `egress-control` in its pods), publish the
 certificate first, as the chart's [first install](/self-host/helm/) does: without it the gateway's
 rollout never finishes, and `--wait` fails.
+
+Then wait for the new builder, as below: `--wait` doesn't.
+
+### Wait for the new builder, on Kubernetes
+
+A release can bring newer language runtimes, in the builder that apps are built on. kpack rebuilds it
+after the upgrade, which can take minutes. Until then a deploy still uses the old builder, and the
+app stays on the old runtimes. Wait until kpack has read the release's images and rebuilt:
+
+```sh
+store=$(kubectl get clusterstore canyon -o jsonpath='{.metadata.generation}')
+stack=$(kubectl get clusterstack canyon -o jsonpath='{.metadata.generation}')
+kubectl wait clusterbuilder/canyon --for=jsonpath='{.status.observedStoreGeneration}'="$store" --timeout=15m
+kubectl wait clusterbuilder/canyon --for=jsonpath='{.status.observedStackGeneration}'="$stack" --timeout=15m
+kubectl wait clusterbuilder/canyon --for=condition=UpToDate --timeout=15m
+```
+
+Don't wait on `Ready` here. When the rebuild fails, the old builder stays in use and `Ready` stays
+true. If one of these times out, `UpToDate` or the ClusterStore says why:
+
+```sh
+kubectl get clusterbuilder canyon -o jsonpath='{.status.conditions[?(@.type=="UpToDate")].message}{"\n"}'
+kubectl get clusterstore canyon -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}{"\n"}'
+```
+
+Fix what they name, such as an image the cluster can't pull or a registry kpack can't push to. kpack
+tries again by itself, so run the wait again. Apps keep running meanwhile, and deploys keep building on
+the old builder.
+
+Then deploy each app again: `canyon deploy` from its code, changed or not. Unchanged code is rebuilt on
+the new builder, so its Build row doesn't say `reused the image built for`. Production keeps the runtimes
+it has until you promote that version, with `canyon deploy --env prod`.
 
 ### What carries over
 

@@ -193,13 +193,13 @@ func TestBuildNeverTrustsTheBuilder(t *testing.T) {
 			}
 		}
 	}
-	if lines := strings.Split(strings.TrimSpace(builderDockerfile), "\n"); lines[4] != "FROM docker.io/paketobuildpacks/ubuntu-noble-builder@sha256:f5dd94c89be567f151b4a3ca1d86267fbc304991f27ee0608dfde70d6bbab65c" ||
+	if lines := strings.Split(strings.TrimSpace(builderDockerfile), "\n"); lines[4] != "FROM docker.io/paketobuildpacks/ubuntu-noble-builder@sha256:5553d472fefc8dc1d9fb794422ec2f931fd2bf470c107b1786b048096c0d7f45" ||
 		!strings.Contains(lines[6], "apt-get install -y --no-install-recommends libpq5 ") || lines[len(lines)-1] != "USER 1001:1001" {
 		t.Fatalf("builder.Dockerfile is not the pinned noble builder plus libpq5, ending as the build user:\n%s", builderDockerfile)
 	}
 	kpack, err := os.ReadFile("build.Dockerfile") // canyon-build, kpack's build image: the builder's lines on Paketo's build image
 	got, want := strings.Split(strings.TrimSpace(string(kpack)), "\n"), strings.Split(strings.TrimSpace(builderDockerfile), "\n")
-	if err != nil || len(got) != len(want) || !slices.Equal(got[5:], want[5:]) || got[4] != "FROM docker.io/paketobuildpacks/ubuntu-noble-build@sha256:709c6561b13527882ce6030ef1e6ac1e3d747f3088be1d22dc8cf04e1c16df01" {
+	if err != nil || len(got) != len(want) || !slices.Equal(got[5:], want[5:]) || got[4] != "FROM docker.io/paketobuildpacks/ubuntu-noble-build@sha256:20752810c913fb51847cbf9159e0ad9769dd34db040cc89b6b588761269c68c4" {
 		t.Fatalf("build.Dockerfile is not the pinned noble build image plus builder.Dockerfile's libpq5, as the build user: %v\n%s", err, kpack)
 	}
 }
@@ -225,7 +225,7 @@ func TestBuildRunsTheAppOnCanyonRun(t *testing.T) {
 	if distro := strings.TrimPrefix(runTag, "canyon-run:"); !strings.Contains(lines[7], "/ubuntu-"+distro+"-run@") { // the name follows the distribution the file builds on
 		t.Fatalf("%s names %s, and run.Dockerfile builds on %s", runTag, distro, lines[7])
 	}
-	if lines[7] != "FROM docker.io/paketobuildpacks/ubuntu-noble-run@sha256:2d4960f5bbde527fdd2f821102ead22b7bddb1e8b015808db5d33c737a473506" ||
+	if lines[7] != "FROM docker.io/paketobuildpacks/ubuntu-noble-run@sha256:00209cf68f2a1ed1cdb2f5a9502384433f0194fa11e1a9ac674bd0a2b54601b5" ||
 		!strings.Contains(lines[11], "apt-get install -y --no-install-recommends libatomic1 libsqlite3-0 libpq5 ") || lines[len(lines)-1] != "USER 1002:1001" {
 		t.Fatalf("run.Dockerfile is not the noble run image plus libatomic1, libsqlite3-0 and libpq5, ending non-root:\n%s", runDockerfile)
 	}

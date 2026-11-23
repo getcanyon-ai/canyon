@@ -33,14 +33,12 @@
 }
 
 .diagram {
-  container-type: inline-size;
   margin: 1.5rem 0;
 }
 /* A diagram is drawn at its own size, never shrunk, so its text keeps the size it was drawn at. A wider one
    scrolls sideways inside its frame, never the page: a shadow shows at each edge with more to scroll to (the
    page-coloured covers scroll with the content and hide it at the ends, so one that fits shows none), and the
-   hint under it shows while the column is narrower than the drawing (--w, its width, from
-   src/plugins/mermaid.mjs). */
+   hint under it shows while it scrolls by more than 4px (src/scripts/diagram-scroll.js marks it). */
 .diagram-frame {
   overflow-x: auto;
   --edge: color-mix(in srgb, var(--ds-color-text) 28%, transparent);
@@ -74,14 +72,13 @@
   font-family: var(--ds-font-sans);
 }
 .diagram-hint {
-  overflow: hidden;
-  height: clamp(0px, (var(--w) - 100cqw) * 100, 1.9rem);
-  margin: 0 !important;
+  display: none;
+  margin: 0.35rem 0 0 !important;
   color: var(--ds-color-text-dim);
   font-size: var(--sl-text-sm);
-  line-height: 1.9rem;
   text-align: center;
 }
+.diagram.scrolls .diagram-hint { display: block; }
 .diagram figcaption {
   margin-top: 0.5rem;
   color: var(--ds-color-text-dim);

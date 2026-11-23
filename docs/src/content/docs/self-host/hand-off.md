@@ -1334,7 +1334,7 @@ steps:
   - {who: Your platform, step: 6, what: Runs the app and the sidecar}
   - {who: The sidecar beside the app, icon: canyon, tone: canyon, step: 7, what: "Pulls the app's access list from Canyon", more: "Then again every minute."}
   - {who: Your platform, step: 8, what: "Reports deployed to Canyon", more: "With the image's digest."}
-  - {who: Live, icon: passed, tone: passed, step: 9, what: "Live at the address your platform reported", more: "Canyon tells you or your agent."}
+  - {who: Live, icon: passed, tone: passed, step: 9, what: "Live at the address your platform reported", more: "Canyon tells you or your agent: your platform reported it running."}
 ```
 
 ### The release Canyon sends

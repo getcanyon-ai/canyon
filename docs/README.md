@@ -40,7 +40,7 @@ served at https://www.getcanyon.ai/docs/: the workspace's website rewrites `/doc
 here first. It refuses to run unless the clone's HEAD carries the release's
 version tag, such as `v0.6.0` or `v0.7.0-rc.1` (`git describe --tags --exact-match`), and that tag is the
 version the published site names. It replaces `apps/canyon-docs` with a copy of this directory (the fonts
-and the published contracts copied in, this README, `scripts/screens.mjs` and `package-lock.json` left
+and the published contracts copied in, this README, `scripts/screens.mjs`, `scripts/diagram-hints.mjs` and `package-lock.json` left
 out) whose links `scripts/base-links.mjs` gives the `/docs` base, writes the app's `vercel.json`, whose
 build command sets `CANYON_DOCS_VERSION` to the tag and `CANYON_DOCS_BASE` to `/docs` and which
 redirects the old address, docs.getcanyon.ai, to the new one, and `agent.md`, and refreshes the workspace's `pnpm-lock.yaml`. Open a pull request on the workspace's
@@ -73,7 +73,10 @@ repository with the change. Nobody edits `apps/canyon-docs` by hand: the next pu
   what Canyon does; `person`, a person decides; `blocked`; and `passed`. Use them for nothing else.
 - A technical sequence or graph stays a fenced `mermaid` block with a `title="…"`, its caption and
   its text for screen readers. The build draws it as an SVG in the tokens' colours, at its own size:
-  one wider than the column scrolls sideways in its frame and says so. GitHub draws the same block.
+  one wider than the column scrolls sideways in its frame and says so. `src/scripts/diagram-scroll.js`
+  shows that line exactly while the frame scrolls by more than 4px, and `node scripts/diagram-hints.mjs`,
+  after a build, checks it at 390px and 1280px in the e2e/ui harness's Chromium (the docs workflow runs
+  it). GitHub draws the same block.
   Its classes are those four tones. Keep it narrow: past a phone's width, a flow reads better.
 - The build fails on a link to a page or heading that doesn't exist (starlight-links-validator), and
   `make docs-links` checks the repository's other Markdown.

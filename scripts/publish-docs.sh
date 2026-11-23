@@ -5,7 +5,7 @@
 # release, from a clone of Canyon at the release, with pnpm on PATH and docs/'s packages installed (npm ci); then
 # open a pull request on the workspace's repository with the change. It refuses a HEAD with no version tag (v1.2.3, v1.2.3-rc.1): the tag is the version every page names (CANYON_DOCS_VERSION in
 # vercel.json, read by docs/astro.config.mjs). The copy is docs/'s tracked files with its links followed (src/fonts, contracts/), less
-# README.md, this repository's maintainer guide, scripts/screens.mjs, which needs the e2e harness, and
+# README.md, this repository's maintainer guide, scripts/screens.mjs and scripts/diagram-hints.mjs, which need the e2e harness, and
 # package-lock.json: the workspace installs with pnpm. scripts/base-links.mjs then puts the base in the copy's links, before
 # the copy replaces the workspace's.
 set -eu
@@ -28,7 +28,7 @@ printf '%s' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?' ||
 # cannot rewrite refuses the publish with apps/canyon-docs as it was.
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-git ls-files -z -- . ':!README.md' ':!scripts/screens.mjs' ':!package-lock.json' | tar --null -T - -chf - | tar -xf - -C "$tmp"
+git ls-files -z -- . ':!README.md' ':!scripts/screens.mjs' ':!scripts/diagram-hints.mjs' ':!package-lock.json' | tar --null -T - -chf - | tar -xf - -C "$tmp"
 node scripts/base-links.mjs "$tmp" "$base"
 rm -rf "$out"
 mkdir -p "$(dirname "$out")"

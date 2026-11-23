@@ -14,7 +14,7 @@
 .cd :is(p, li) { margin: 0; }
 .cd code {
   font-family: var(--ds-font-mono);
-  font-size: 0.86em;
+  font-size: 1em;
   padding: 0.05em 0.3em;
   border-radius: 4px;
   background: var(--ds-color-surface-2);

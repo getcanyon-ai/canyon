@@ -1,5 +1,5 @@
 // The Canyon docs: Starlight, built to static files by `npm run build` (docs/README.md).
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
@@ -43,6 +43,8 @@ export default defineConfig({
       description: "Canyon reviews every deploy your coding agents make, and runs the apps that pass.",
       social: [{ icon: "github", label: "Downloads", href: releases }],
       customCss: ["./src/styles/tokens.css", "./src/styles/canyon.css", "./src/styles/diagrams.css", "./src/styles/brand.css"],
+      // Shows a wide mermaid diagram's "Scroll sideways" hint exactly while its frame scrolls.
+      head: [{ tag: "script", content: readFileSync(fileURLToPath(new URL("./src/scripts/diagram-scroll.js", import.meta.url)), "utf8") }],
       components: { SiteTitle: "./src/components/SiteTitle.astro", SocialIcons: "./src/components/SocialIcons.astro" },
       lastUpdated: false,
       // Grouped by who reads: developers (Get started, Build and ship apps), operators (Install and run

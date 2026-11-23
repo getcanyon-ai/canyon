@@ -198,7 +198,7 @@ export function Guardrails() {
       <main className="mx-auto max-w-[1280px] min-w-0 flex-1 px-8 pt-3.5 pb-24 max-[860px]:px-4">
         <h1 className="text-title font-semibold tracking-tight">Guardrails</h1>
         <p className={SUB}>What every app must pass before it reaches production, and what coding agents are told.</p>
-        {record !== null && <nav aria-label="Guardrails" /* planted fault (#118 red): no padding at the edges */ className={"mt-4 flex gap-5 overflow-x-auto border-b border-border max-[860px]:-mx-4 max-[520px]:gap-4"}>
+        {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border max-[860px]:-mx-4 max-[860px]:px-4 max-[520px]:gap-4">
           {PAGES.map(([key, label]) => (
             <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined}
               className={`py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-dim hover:text-text"}`}>

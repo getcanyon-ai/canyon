@@ -84,7 +84,6 @@ jobs:
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 30
     strategy:
-      fail-fast: false # TEMPORARY
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8] # N is this list's length
     services:
@@ -112,23 +111,6 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: make web # as test-rest
-      - if: matrix.shard == 1 # TEMPORARY, reverted before merge: main's test and this branch's with every policy answer held 1.3 s, and this branch's with the wait skipped past its bound
-        run: |
-          set +e -uo pipefail
-          t=cmd/canyon-server/egress_policy_pull_test.go
-          run() { go test -race -count="$1" -run '^TestRunWaitsForEveryReplica$' ./cmd/canyon-server; echo "exit $?"; }
-          slow='s/\t_, policy := policyAt\(t, pool\)\n\tvar epoch string/\tslowed, policy := policyAt(t, pool)\n\tslowed.platform = func(context.Context, querier) ([]string, error) { time.Sleep(1300 * time.Millisecond); return []string{}, nil }\n\tvar epoch string/ or die "no policyAt"'
-          cp "$t" /tmp/new.go
-          git fetch -q --depth 1 origin main
-          echo "== RED: main's test, every answer 1.3 s"
-          git show FETCH_HEAD:"$t" | perl -0pe "$slow" > "$t"; run 2
-          echo "== GREEN: this branch's, every answer 1.3 s"
-          perl -0pe "$slow" /tmp/new.go > "$t"; run 5
-          echo "== GREEN: this branch's as it is"
-          cp /tmp/new.go "$t"; run 10
-          echo "== RED: this branch's, the wait passing at its bound"
-          perl -pi -e 's/return \*behind, nil/return "", nil/' runs/pipeline.go; git diff --stat runs; run 1
-          git checkout -q runs "$t"
       - run: make test-shards SHARD_PKG=./cmd/canyon-server SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
 
   noee-rest:

@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pending } from "../api";
-import { EnvCell, EnvLink, EnvOpen, EnvVersion, notRunning, restarts } from "./EnvLink";
+import { EnvCell, EnvLink, EnvOpen, EnvVersion, notRunning, restarts, shortPending } from "./EnvLink";
 
 describe("EnvLink", () => {
   afterEach(() => vi.useRealTimers());
@@ -20,9 +20,9 @@ describe("EnvLink", () => {
     const sentAt = "2026-09-27T10:00:00Z";
     const clock = new Date(sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const lines: [Pending, string][] = [
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "sent" }, `waiting on your platform since ${clock}`],
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "accepted" }, `waiting on your platform since ${clock}`],
-      [{ via: "webhook" as const, release: "rel_8f2a", event: "remove", sent_at: sentAt, state: "accepted" }, "removing · waiting on your platform"],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "sent" }, `Sent to your platform at ${clock}, not running yet`],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "accepted" }, `Sent to your platform at ${clock}, not running yet`],
+      [{ via: "webhook" as const, release: "rel_8f2a", event: "remove", sent_at: sentAt, state: "accepted" }, "Being removed by your platform"],
       [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "undelivered" }, "Your platform did not accept the release"],
       [{ via: "webhook" as const, release: "rel_8f2a", event: "deploy", sent_at: sentAt, state: "refused" }, "Your platform refused the release"],
     ];
@@ -34,13 +34,36 @@ describe("EnvLink", () => {
     }
   });
 
+  // The fleet's short form of each pending line (the UX review): what has none is said whole.
+  it("says a pending release short, and whole where there is no short form", () => {
+    const sentAt = "2026-09-27T10:00:00Z";
+    const clock = new Date(sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const of = (via: "webhook" | "repo", event: "deploy" | "remove", rest: Partial<Pending> = {}) => shortPending({ via, release: "rel_1", event, sent_at: sentAt, state: "accepted", ...rest } as Pending);
+    const pull_request = { number: 7, url: "https://github.com/meridian/deploy/pull/7" };
+    expect([of("webhook", "deploy"), of("webhook", "remove"), of("repo", "deploy"), of("repo", "remove"), of("repo", "remove", { pull_request })])
+      .toEqual([`Sent ${clock} · not running yet`, "Being removed", `Committed ${clock} · not running yet`, "Being removed", "Removed once merged"]);
+    expect([of("repo", "deploy", { pull_request }), of("webhook", "deploy", { missing: ["db"] }), of("webhook", "remove", { state: "refused" }), of("repo", "deploy", { state: "undelivered" })])
+      .toEqual([`waiting on your merge since ${clock}`, "Your platform's report left out where db is", "Your platform refused the release", "Canyon couldn't commit the release"]);
+  });
+
+  // The dot before a version is green only for what is known to run (the UX review).
+  it("marks what runs green, what the platform hasn't reported amber, and a fresh report neutral", () => {
+    const ago = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
+    const org = { url: "https://ledger.prod.meridian.example", package: "pkg_1a", label: "v2", image_digest: "sha256:1a", deployed_at: ago(120), gate_run: "gr_1", deployed_by: null, run_by: "org" as const };
+    const remove = { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: ago(2), state: "accepted" } as Pending;
+    const dots = [{ ...org, seen_at: ago(1) }, { ...org, seen_at: ago(20) }, { ...org, seen_at: ago(1), pending: remove }, org, { ...org, deployed_at: ago(2) },
+      { ...org, run_by: "canyon" as const, state: "running" as const }, { ...org, run_by: "canyon" as const, state: "unknown" as const }]
+      .map((env) => { const { container, unmount } = render(<EnvVersion env={env} name="production" />); const at = container.querySelector(".rounded-full")?.className.match(/bg-\S+/)?.[0]; unmount(); return at; });
+    expect(dots).toEqual(["bg-ok", "bg-amber", "bg-amber", "bg-amber", "bg-text-faint", "bg-ok", "bg-amber"]);
+  });
+
   // A release open over what runs (a redeploy or a removal under org): the live version stays, and
   // the release it waits on is said beside it, never silently gone (HAND-OFF §4).
   it("says the release a deployed environment waits on beside what runs there", () => {
     const pending: Pending = { via: "webhook" as const, release: "rel_7a15", event: "remove", sent_at: "2026-09-02T11:30:00Z", state: "accepted" };
     const { container } = render(<EnvCell env={{ url: "http://claims-archive.prod.localhost:7777", package: "pkg_8b21", label: "v3.1", image_digest: "sha256:767d", deployed_at: "2026-08-24T13:55:02Z", gate_run: "gr_2e88", deployed_by: null, run_by: "org", pending }} />);
     expect(screen.getByRole("link").getAttribute("href")).toBe("http://claims-archive.prod.localhost:7777");
-    expect(container.textContent).toContain("removing · waiting on your platform");
+    expect(container.textContent).toContain("Being removed by your platform");
   });
 
   // A version that keeps restarting opens nothing, up or not at this instant, and says so in red; its
@@ -70,8 +93,8 @@ describe("EnvLink", () => {
     const org = { url: "https://ledger.prod.meridian.example", package: "pkg_1a", label: "v2", image_digest: "sha256:1a", deployed_at: minutes(120), gate_run: "gr_1", deployed_by: null, run_by: "org" as const };
     const stale = minutes(20);
     const cases: [string, Parameters<typeof EnvVersion>[0]["env"], string | null][] = [
-      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `No pod has checked in since ${clock(stale)}`],
-      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "Reported deployed, but no pod has checked in"],
+      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `not reported since ${clock(stale)}`], // the table's short words (the UX review)
+      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "deployed, not running"], // the platform did report it deployed
       ["a check-in a minute ago", { ...org, seen_at: minutes(1) }, null],
       ["a report 2 minutes ago, no check-in yet", { ...org, deployed_at: minutes(2) }, null],
       ["a pod still pulling while it is removed", { ...org, seen_at: minutes(1), pending: { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: minutes(2), state: "accepted" } }, null],
@@ -86,7 +109,7 @@ describe("EnvLink", () => {
     }
     // A read-only member's row: an environment with a url and when its pods last checked in, no deploy time.
     const { container } = render(<EnvOpen env={{ url: org.url, seen_at: stale }} name="production" />);
-    expect(container.querySelector("time")?.textContent).toBe(`No pod has checked in since ${clock(stale)}`);
+    expect(container.querySelector("time")?.textContent).toBe(`not reported since ${clock(stale)}`);
     cleanup();
     expect(render(<EnvOpen env={{ url: org.url }} name="production" />).container.querySelector("time")).toBeNull();
   });

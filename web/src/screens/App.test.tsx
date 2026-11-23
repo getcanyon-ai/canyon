@@ -168,7 +168,7 @@ describe("the app page", () => {
     });
     render(<App id="broker-portal" auth="oidc" />);
     const clock = new Date("2026-09-02T10:00:00Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    expect(within(await screen.findByRole("region", { name: "Preview" })).getByText(`waiting on your platform since ${clock}`)).toBeDefined();
+    expect(within(await screen.findByRole("region", { name: "Preview" })).getByText(`Sent to your platform at ${clock}, not running yet`)).toBeDefined();
     expect(region("Preview").queryByRole("link")).toBeNull();
     expect(screen.queryByRole("link", { name: "Open v1.3 in production" })).toBeNull();
   });

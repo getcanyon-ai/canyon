@@ -44,7 +44,7 @@ A browser sign-in lasts 12 hours.
 The first admin to sign in sees "Set up Canyon": three questions, then a summary. Nothing is saved
 until the last step, so you can walk away halfway and the host stays in setup.
 
-1. **What is this organisation called?** The name is shown on every app's go-live checklist.
+1. **What is this organization called?** The name is shown on every app's go-live checklist.
 2. **Who may sign in?** Two lists:
    - **People**: single addresses. Your own address is already on the list. Canyon does not send
      invitations: add an address, then tell that person to open Canyon and sign in.

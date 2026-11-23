@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { getFleet, reduced, version, waiting, type FleetPage, type FleetRow, type FleetStats, type Reduced, type TeamAccess } from "../api";
-import { S } from "../strings";
+import { askForAccess, getFleet, reduced, said, version, waiting, type FleetPage, type FleetRow, type FleetStats, type Reduced, type TeamAccess } from "../api";
+import { FLEET, S } from "../strings";
+import { Button } from "../ui/Button";
 import { actorName, anonymous } from "../ui/Actor";
 import { Age } from "../ui/Age";
 import { AppName, labels } from "../ui/AppName";
 import { Avatar } from "../ui/Avatar";
-import { EnvOpen, EnvVersion, notRunning } from "../ui/EnvLink";
+import { checkIn, EnvOpen, EnvVersion, notRunning, shortPending } from "../ui/EnvLink";
 import { Icon } from "../ui/Icon";
 import { needInk, needShort } from "../ui/Need";
 import { useMedia } from "../ui/media";
@@ -14,12 +15,12 @@ import { Rail } from "../ui/Rail";
 import { Review } from "../ui/Stage";
 import { CELL, Table, TableWrap, WRAP_CELL } from "../ui/Table";
 import { Patched } from "../ui/Patched";
-import { shareParts } from "./Access";
 import { Assign, Claim } from "./Claim";
 import { POLL_MS, RecentActivity } from "./FleetActivity";
 import { NeedsAttention } from "./FleetAttention";
 import { FleetFilters } from "./FleetFilters";
-import { HoldCell, HoldDialog, type Acting } from "./FleetHold";
+import { HoldCell } from "./FleetHold";
+import { HoldDialog, type Acting } from "./HoldDialog";
 import { FleetPanel } from "./FleetPanel";
 import { OwnerApps, ownerHref, ownerName } from "./Owner";
 import { fleetHref, hashQuery } from "./query";
@@ -28,7 +29,7 @@ import { poll } from "../ui/poll";
 // Each column answers one question (the redesign): which version, did it pass review, what runs in
 // preview, what runs in production, who owns it, when it last moved. Access only where people sign
 // in, the one place an app can be shared.
-const NARROW_HIDDEN = "max-[1100px]:hidden";
+const NARROW_HIDDEN = "max-[1360px]:hidden"; // Updated gives way first: at 1280 the one-line Access column needs its width (the UX review); the pane says it
 const COLUMNS = [
   { key: "app", label: "App" },
   { key: "version", label: "Version" },
@@ -41,23 +42,58 @@ const COLUMNS = [
 const ACCESS_COLUMN = { key: "access", label: "Access" };
 // With the side pane open beside it, the table folds away what the pane says for the selected row and
 // keeps what is read down the list (the approved fleet redesign), so it fits beside the pane unscrolled.
-const PEEKED = new Set(["version", "owner", "access"]);
-// The wordy cells wrap, and under 1100px Updated gives way, so the table fits a laptop's width with
+const PEEKED = new Set(["version", "owner", "updated", "access"]); // Updated too: at 1280 the last column was cut off
+// The wordy cells wrap, and under 1360px Updated gives way, so the table fits a laptop's width with
 // Owner and its Claim in view.
-const WRAPS = new Set(["app", "preview", "prod", "access"]);
+const WRAPS = new Set(["app", "preview", "prod"]); // Access is one line, and the environments a line or two in the short words (the UX review: rows swelled to six)
 // The row's own way into its panel for the keyboard; a click anywhere on the row does the same.
 const DETAILS_COLUMN = { key: "details", label: "" };
+const RESPONDER = new Set(["app", "prod", "owner"]);
 
 const KBD = "rounded border border-b-2 border-border-strong bg-surface px-1.5 font-mono text-sm text-text";
+
 const DASH = <span className="text-text-faint">—</span>;
 
-// The Access column (EXPERIENCE.md D5): how far a team row is shared, and the reader's own place on
-// it as `canyon status` says it. An admin sees every row, and only their own grants say a place.
-const YOU: Partial<Record<TeamAccess["level"], string>> = { owner: "you are an owner", contributor: "you are a contributor" };
-function Shared({ access }: { access: TeamAccess }) {
-  const parts = shareParts(access);
+// The Access column (EXPERIENCE.md D5), one line (the UX review: it wrapped to four): the reader's own place on a
+// team row, then how far it is shared — Owner · shared with 2. An admin sees every row, and a row with no grant of
+// theirs says only how far it is shared.
+const YOU: Partial<Record<TeamAccess["level"], string>> = { owner: FLEET.owner, contributor: FLEET.contributor };
+function shared(access: TeamAccess): string { // the table's Access cell, and a phone card's meta line
+  const n = access.people + access.groups;
   const you = YOU[access.level];
-  return <>{access.everyone ? "Everyone" : parts.length === 0 ? "Private" : parts.join(" · ")}{you !== undefined && <span className="block text-md text-text-dim">{you}</span>}</>;
+  if (you === undefined) return access.everyone ? "Everyone" : n === 0 ? "Private" : FLEET.sharedWithAdmin.replace("<n>", String(n));
+  return `${you} · ${access.everyone ? FLEET.sharedEveryone : n === 0 ? FLEET.private : FLEET.sharedWith.replace("<n>", String(n))}`;
+}
+
+// A row the reader can't open whole says so once, in its Access cell, with the way to ask (the UX review: a dash in
+// every column said nothing): read-only to a viewer, no access to anyone else, and Ask to join, the app's access request.
+function Asking({ app }: { app: Reduced }) {
+  const [asked, setAsked] = useState<boolean | string>(false);
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="whitespace-nowrap">{app.access.level === "viewer" ? FLEET.readOnly : FLEET.noAccess}</span>
+      {asked === true ? <span className="text-text-faint">{FLEET.asked}</span>
+        : <Button variant="secondary" size="sm" label={`${FLEET.askToJoin} ${app.name}`} onClick={() => void askForAccess(app.id).then(() => setAsked(true), (err: unknown) => setAsked(said(err)))}>{FLEET.askToJoin}</Button>}
+      {typeof asked === "string" && <span role="alert" className="w-full text-critical">{asked}</span>}
+    </span>
+  );
+}
+
+// An org with no apps yet reads how to add the first, either way (the UX review): the CLI, with the panel that connects
+// a coding agent, and GitHub; an admin's links where only an admin can act on them.
+function EmptyFleet({ admin }: { admin: boolean }) {
+  const link = "font-medium text-link no-underline hover:underline";
+  return (
+    <section aria-label={FLEET.emptyTitle} className="grid gap-2 rounded-[10px] border border-border bg-surface px-4 py-3.5 text-base">
+      <h2 className="text-lg font-semibold">{FLEET.emptyTitle}</h2>
+      <p className="text-text-dim">{FLEET.emptyLead}</p>
+      <ul className="grid list-disc gap-1.5 pl-5">
+        <li>{FLEET.emptyCli.split("`").map((part, i) => (i % 2 === 1 ? <code key={i} className="font-mono text-sm">{part}</code> : part))} <a className={link} href="#/settings/agents">{FLEET.emptyCliLink}</a></li>
+        <li>{admin ? <>{FLEET.emptyGitHubAdmin} <a className={link} href="#/settings/github">{FLEET.emptyGitHubLink}</a></> : FLEET.emptyGitHubMember}</li>
+      </ul>
+      {admin && <p className="text-text-dim">{FLEET.emptyRules} <a className={link} href="#/guardrails">{FLEET.emptyRulesLink}</a></p>}
+    </section>
+  );
 }
 
 // The two D5 sentences say this host has no authentication; the banner sits above everything. On a
@@ -171,16 +207,21 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
             {app.envs?.prod !== undefined && <EnvOpen env={app.envs.prod} name="production" />}
           </span>
         )}
-        <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>
+        {page.banner === "none" && page.viewer.role !== "responder" && <span className="text-sm text-text-dim"><Asking app={app} /></span>}{/* the reader's level, as the table's Access column says it, where people sign in */}
+        <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>{/* a responder's Stop, Hold or Lift, as their table's Production cell; nothing to a member */}
         {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
       </li>
     );
   }
-  // what each environment runs now: a stopped app is never said to run
+  // what each environment runs now, in the table's short words (the UX review): a stopped app, or one the platform
+  // hasn't reported running, is never said to run
+  const lower = (line: string) => (line.startsWith("Canyon") ? line : line[0]!.toLowerCase() + line.slice(1));
   const running = (place: string, env: FleetRow["envs"]["preview"]) => {
-    if (env === undefined || waiting(env)) return null;
-    const not = notRunning(env);
-    return not === null ? `${place} runs ${version(env.package, env.label)}` : `${place} ${version(env.package, env.label)}: ${not.toLowerCase()}`;
+    if (env === undefined) return null;
+    if (waiting(env)) return `${place}: ${lower(shortPending(env.pending))}`;
+    const pods = checkIn(env);
+    const notes = [notRunning(env), env.pending === undefined ? null : shortPending(env.pending), pods?.silent ? pods.short : null].filter((one) => one !== null);
+    return notes.length === 0 ? `${place} runs ${version(env.package, env.label)}` : `${place} ${version(env.package, env.label)}: ${notes.map(lower).join(", ")}`;
   };
   const where = [running("Production", app.envs.prod), running("Preview", app.envs.preview)].filter(Boolean).join(" · ") || "not deployed";
   return (
@@ -190,9 +231,9 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
         <Review stage={app.latest.stage} gate={app.gate_state} warnings={app.warnings} />
       </span>
       <small className="text-sm text-text-faint">
-        {app.latest.package !== null && `${version(app.latest.package, app.latest.label)} · `}{where} · {owner}
+        {app.latest.package !== null && `${version(app.latest.package, app.latest.label)} · `}{where} · {owner}{page.banner === "none" && ` · ${shared(app.access)}`}
       </small>
-      <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>
+      {app.hold !== undefined && <span className="inline-flex items-center gap-1 text-sm font-medium text-critical"><Icon name="blocked" size={14} />{S.heldMark}</span>}{/* stopping and lifting are the app page's (#102), never a card's (the UX review) */}
       {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
     </li>
   );
@@ -278,7 +319,14 @@ export function Fleet({ org }: { org: string | null }) {
   const open = page?.apps.find((app) => app.id === selected);
   const signedIn = banner === "none";
   const peeking = open !== undefined && !reduced(open) && !stacked; // folded only where the pane sits beside the table
-  const columns = (signedIn ? [...COLUMNS, ACCESS_COLUMN, DETAILS_COLUMN] : [...COLUMNS, DETAILS_COLUMN]).filter(({ key }) => !peeking || !PEEKED.has(key));
+  // A responder off every team reads an app's name, owner and production, and stops or lifts it there (the UX review:
+  // their fleet was mostly "—"); a page with a team row on it keeps every column.
+  const offTeams = page !== null && page.viewer.role === "responder" && page.apps.length > 0 && page.apps.every(reduced);
+  // An org with no apps: No apps yet comes first, with no tiles of zeros and no empty Needs panel above it (the UX review);
+  // the org's own needs, an admin's, still show.
+  const none = page !== null && unfiltered && page.apps.length === 0;
+  const columns = offTeams ? COLUMNS.filter(({ key }) => RESPONDER.has(key))
+    : (signedIn ? [...COLUMNS, ACCESS_COLUMN, DETAILS_COLUMN] : [...COLUMNS, DETAILS_COLUMN]).filter(({ key }) => !peeking || !PEEKED.has(key));
   // The fleet as a triage list (the approved redesign, "Clicks and keys"): j and k move the pane down and
   // up the rows that open one, Space opens or closes it on the row the keys are on, Enter opens that app
   // and Esc closes. Only while the keyboard is in the table or its pane (WCAG 2.1.4: a one-letter key
@@ -331,25 +379,26 @@ export function Fleet({ org }: { org: string | null }) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-1">
             <h1 ref={heading} tabIndex={-1} className="text-title font-semibold tracking-tight outline-none">{owner === null ? org : ownerName(page?.apps ?? [], owner)}</h1>
-            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? "Every app in the org" : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
+            {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && !offTeams && !none ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
           </div>
-          {owner === null && <FleetFilters query={query} signedIn={signedIn} />}
+          {owner === null && !none && <FleetFilters query={query} signedIn={signedIn} scoped={signedIn && !offTeams} />}
         </div>
         {failure !== null && <p className="text-base text-critical">{failure}</p>}
         {/* What needs doing is the whole fleet's: org counts no filter narrows would read as this
             person's over their three apps, so one person's view leaves it out. */}
         {owner !== null ? (page !== null && <OwnerApps apps={page.apps} />) : (
           <>
-            {top !== null && <Stats stats={top.stats} admin={top.viewer.role === "admin"} />}
+            {top !== null && !offTeams && !none && <Stats stats={top.stats} admin={top.viewer.role === "admin"} />}{/* a responder off every team has no team counts: zeros help no one */}
             {page !== null && <DemoStrip page={page} />}
-            {top !== null && <NeedsAttention page={top} query={query} signedIn={signedIn} lift={(app) => act({ app, kind: "lift" })} />}
-            {page !== null && narrow && (
+            {top !== null && !(none && (top.org_needs ?? []).length === 0) && <NeedsAttention page={top} query={query} signedIn={signedIn} lift={(app) => act({ app, kind: "lift" })} />}
+            {page !== null && unfiltered && page.apps.length === 0 && <EmptyFleet admin={page.viewer.role === "admin"} />}
+            {page !== null && narrow && !(unfiltered && page.apps.length === 0) && (
               <ul aria-label="Apps" className="rounded-[10px] border border-border bg-surface">
                 {page.apps.length === 0 ? <li className="px-3.5 py-3 text-text-faint">{unfiltered ? "No apps yet" : "No apps match"}</li>
                   : page.apps.map((app) => <Card key={app.id} app={app} page={page} act={act} />)}
               </ul>
             )}
-            {page !== null && !narrow && (
+            {page !== null && !narrow && !(unfiltered && page.apps.length === 0) && (
               <div role="group" aria-label="Apps" aria-describedby={keyed ? "fleet-keys" : undefined} tabIndex={keyed ? 0 : undefined} onKeyDown={keys}
                 className="flex items-start gap-3 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-accent max-[1100px]:flex-col-reverse max-[1100px]:items-stretch">
                 <div className="min-w-0 flex-1">
@@ -381,7 +430,7 @@ export function Fleet({ org }: { org: string | null }) {
                           return (
                             <tr key={app.id}>
                               {cells({
-                                app: name, version: DASH, review: DASH, owner: <Owner app={app} page={page} />, updated: DASH, access: DASH, details: null,
+                                app: name, version: null, review: null, owner: <Owner app={app} page={page} />, updated: null, access: <Asking app={app} />, details: null,
                                 preview: app.envs?.preview === undefined ? DASH : <EnvOpen env={app.envs.preview} name="preview" />,
                                 prod: <HoldCell app={app} role={page.viewer.role} act={act}>{app.envs?.prod === undefined ? DASH : <EnvOpen env={app.envs.prod} name="production" />}</HoldCell>,
                               })}
@@ -395,10 +444,12 @@ export function Fleet({ org }: { org: string | null }) {
                               version: app.latest.package === null ? DASH : version(app.latest.package, app.latest.label),
                               review: <Review stage={app.latest.stage} gate={app.gate_state} warnings={app.warnings} />,
                               preview: <><EnvVersion env={app.envs.preview} name="preview" /><Patched env={app.envs.preview} />{refused("preview")}</>,
-                              prod: <HoldCell app={app} role={page.viewer.role} act={act}><span><EnvVersion env={app.envs.prod} name="production" /><Patched env={app.envs.prod} />{refused("prod")}</span></HoldCell>,
+                              // Held, the mark alone: stopping and lifting are the row's side pane's, never every row's (the UX review)
+                              prod: app.hold !== undefined ? <span className="inline-flex items-center gap-1 font-medium text-critical"><Icon name="blocked" size={14} />{S.heldMark}</span>
+                                : <span><EnvVersion env={app.envs.prod} name="production" /><Patched env={app.envs.prod} />{refused("prod")}</span>,
                               owner: <Owner app={app} page={page} />,
                               updated: <Age at={app.latest.since} long />,
-                              access: <Shared access={app.access} />,
+                              access: shared(app.access),
                               details: (
                                 <button type="button" className="grid size-7 place-items-center rounded-[7px] text-text-faint hover:bg-surface" aria-label={"Details for " + app.name} onClick={(event) => { opener.current = event.currentTarget; setSelected(app.id); }}>
                                   <Icon name="chevron" />
@@ -415,7 +466,7 @@ export function Fleet({ org }: { org: string | null }) {
                   </p>}
                 </div>
                 {open !== undefined && !reduced(open) && <FleetPanel key={open.id} app={open} display={page.viewer.display} org={org ?? "Your org"} close={() => { setSelected(null); opener.current?.focus(); }}
-                  viewer={page.viewer} signedIn={signedIn} lift={(app) => act({ app, kind: "lift" })} />}
+                  viewer={page.viewer} signedIn={signedIn} lift={(app) => act({ app, kind: "lift" })} act={act} />}
               </div>
             )}
           </>

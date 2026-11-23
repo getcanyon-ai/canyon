@@ -27,7 +27,7 @@ steps:
       - label: The code is right as it is
         tone: person
         steps:
-          - {who: An admin or a security responder, icon: person, tone: person, what: "Approves the finding, with a reason", more: "And an expiry, 30 days unless they change it, at most 90. Never on a deploy they started."}
+          - {who: An admin or a security responder, icon: person, tone: person, what: "Approves the finding, with a reason", more: "And an expiry, 30 days unless they change it, at most 89. Never on a deploy they started."}
   - {who: Your coding agent, icon: agent, what: "`canyon deploy` again"}
   - {who: Passed, icon: passed, tone: passed, what: Running in preview, more: Nothing blocking.}
 ```

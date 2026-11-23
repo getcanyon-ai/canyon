@@ -164,7 +164,7 @@ func TestMCPRemotePromoteAsksThePersonFirst(t *testing.T) {
 		}
 		why := map[string]string{"decline": "Nothing was promoted: the person said no.", "cancel": "Nothing was promoted: nobody answered the question."}[answer]
 		if why != "" && (!strings.Contains(text, why) || !strings.Contains(text, "a person opens "+remoteBase+"/#/apps/claims-portal") || cliCommand.MatchString(text) ||
-			!strings.Contains(text, notAnotherWayRemote)) {
+			!strings.Contains(text, notAnotherWay)) {
 			t.Errorf("%s on /mcp: want %q, the app's page and that the agent doesn't promote it, no CLI command:\n%s", answer, why, text)
 		}
 	}

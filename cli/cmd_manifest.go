@@ -638,7 +638,7 @@ func agentManifest(m manifest, hook bool) string {
 	case m.Remote && m.ProdApproval:
 		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
 	case m.Remote:
-		b.WriteString("\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation. It promotes; nobody else approves it." + promoteNoRemote + "\n")
+		b.WriteString("\nProduction: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation. It promotes; nobody else approves it." + promoteNo + "\n")
 	case m.ProdApproval:
 		b.WriteString("\nProduction: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself.\n")
 	default:
@@ -647,10 +647,7 @@ func agentManifest(m manifest, hook bool) string {
 	return b.String()
 }
 
-// promoteNo and promoteNoRemote end the Production line where no person approves production: canyon_promote asks the
-// person, and their no is the answer. An agent read "Nothing was promoted." and ran canyon deploy --env prod --yes
-// itself (#90).
-const (
-	promoteNo       = " When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says."
-	promoteNoRemote = " When canyon_promote says nothing was promoted, don't promote it another way: tell the user where they can promote it, as its answer says."
-)
+// promoteNo ends the Production line where no person approves production: canyon_promote asks the person, and their
+// no is the answer. An agent read "Nothing was promoted." and ran canyon deploy --env prod --yes itself (#90); the line
+// names no command around the no, locally or on /mcp (#106).
+const promoteNo = " When canyon_promote says nothing was promoted, don't promote it another way: tell the user where they can promote it, as its answer says."

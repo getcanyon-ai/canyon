@@ -643,8 +643,8 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   `guardrails`; `hold` in `app-page` and `fleet`.
 - **Audit** (both `governance`): `stop app` `{env, package?, image?, reason, cancelled[]}`, written
   when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244, amended
-  by #145): `stopped and held production: <reason>`, or `held production: <reason>` where nothing ran
-  (no `image_digest`) · `lifted the hold, leaving production stopped` · `lifted the hold and started
+  by #145): `held production: <reason>`, or `held production, but Canyon couldn't stop it: <reason>`
+  (`stopped: false`) · `lifted the hold without starting production` · `lifted the hold and started
   <version>`.
 
 ### 3.10 Testing

@@ -164,7 +164,8 @@ the page: its edges drop away and the buttons are thumb height.
 - **A page of the dashboard comes back too** (amended 2026-11-23, #145): opened signed out, or on a
   `401` mid-session, its address is kept for the sign-in and opened after it, if it is one `SignIn.tsx` lists (an app's
   pages, Audit and the like), written in the characters those use. Any other address lands on the
-  fleet, so a link can't make Canyon send a person elsewhere. Signing out on purpose keeps none.
+  fleet, so a link can't make Canyon send a person elsewhere. Signing out on purpose keeps none, and puts the
+  fleet in the address bar, so a reload keeps none either.
 - **Expiry lands here too**, with no warning modal and no countdown beforehand. A `401` mid-session
   shows this screen; signing back in returns to that page as above, not to whatever was half-done
   on it. Losing an

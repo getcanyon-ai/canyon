@@ -254,6 +254,31 @@ describe("the shell", () => {
     expect(screen.getByRole("link", { name: "Continue to company sign-in" }).getAttribute("href")).toBe("/auth/start?prompt=select_account");
   });
 
+  // Signing out was chosen, and the next person at this browser may be another: the address the first one read is out of the
+  // bar, so a reload, or Back from the provider, keeps no page for them (#145).
+  it("a chosen sign-out leaves no page to come back to, reloaded or not", async () => {
+    window.location.hash = "#/audit?range=7d";
+    server(prefs, () => answer(200, signedIn));
+    const { unmount } = render(<Shell />);
+    fireEvent.click(await screen.findByRole("button", { name: AUTH.signOut }));
+    expect(await screen.findByText("You're signed out of Canyon")).toBeDefined();
+    expect(window.location.hash).toBe("#/fleet");
+    unmount(); // a reload: nothing in memory is left
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (url === "/auth/config" ? answer(200, { canyon: true, auth: "oidc", org: "Meridian Insurance", device: true }) : answer(401, { error: "unauthenticated" }))));
+    render(<Shell />);
+    fireEvent.click(await screen.findByRole("link", { name: "Continue to company sign-in" }));
+    expect(sessionStorage.getItem("canyon_return")).toBeNull();
+  });
+
+  it("a sign-out on a step of signing in stays on it, to be come back to", async () => {
+    window.location.hash = "#/device?code=K7QP-4RXM";
+    server(prefs, () => answer(200, signedIn));
+    render(<Shell />);
+    await waitFor(() => expect(document.title).not.toBe(""));
+    act(() => { window.dispatchEvent(new CustomEvent(UNAUTHENTICATED, { detail: "signed-out" })); });
+    expect(window.location.hash).toBe("#/device?code=K7QP-4RXM");
+  });
+
   // The rail names who is signed in on every page, from one read of the fleet; a host with sign-in
   // off has nobody to name, so it never asks.
   it("names the signed-in person at the foot of the rail on a page that is not the fleet", async () => {

@@ -14,7 +14,7 @@ import { Onboarding } from "./Onboarding";
 import { hashQuery } from "./query";
 import { Settings } from "./Settings";
 import { SetupNotice } from "./SetupNotice";
-import { SignIn, takeReturn } from "./SignIn";
+import { SignIn, signingIn, takeReturn } from "./SignIn";
 
 // The dashboard, and the one question asked before any of it is drawn: is this a host nobody has
 // configured? Both halves are needed. `auth` alone says nothing about whether somebody has finished
@@ -160,7 +160,12 @@ export function Shell() {
   useEffect(() => {
     const follow = () => setHash(window.location.hash);
     // A chosen sign-out sticks: a poll already on its way answers 401 after it.
-    const out = (event: Event) => setSignedOut((was) => ((event as CustomEvent).detail === "signed-out" ? "signed-out" : was ?? (hadSession.current ? "ended" : "none")));
+    const out = (event: Event) => {
+      const chosen = (event as CustomEvent).detail === "signed-out";
+      // The address it was chosen on leaves the bar, so a reload keeps no page of theirs for whoever signs in next (#145).
+      if (chosen && !signingIn(window.location.hash)) window.history.replaceState(null, "", "#/fleet");
+      setSignedOut((was) => (chosen ? "signed-out" : was ?? (hadSession.current ? "ended" : "none")));
+    };
     window.addEventListener("hashchange", follow);
     window.addEventListener(UNAUTHENTICATED, out);
     return () => { window.removeEventListener("hashchange", follow); window.removeEventListener(UNAUTHENTICATED, out); };

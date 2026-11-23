@@ -16,6 +16,7 @@ const QUERY = "(\\?[A-Za-z0-9._~%&=+:,@/*-]{0,512})?";
 const step = new RegExp(`^#/((device|approve|oauth)(\\?[^#]*)?|no-access/${APP})$`);
 const linked = new RegExp(`^#/(apps/${APP}(/(outbound|secrets))?|audit|(guardrails|settings)(/[a-z-]{1,40})?)${QUERY}$`);
 const returnable = (hash: string) => step.test(hash) || linked.test(hash);
+export const signingIn = (hash: string) => step.test(hash); // a page that is a step of signing in, which a sign-out stays on
 
 // A browser that refuses storage (a private window) signs in all the same and lands on the fleet. A sign-in begun on any
 // other page forgets what an earlier one kept; trying a refused one again doesn't. After a sign-out the person chose, a

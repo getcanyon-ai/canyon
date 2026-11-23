@@ -82,9 +82,11 @@ describe("an audit row's sentence", () => {
     ["POST /api/v1/gate-runs/{id}/cancel", { package: "pkg_9e40", kind: "promote", started_by: { kind: "agent", subject: "claude-code:dana@meridian.example", display: "Claude Code" } }, "cancelled the promotion of 9e40 · started by Claude Code"],
     ["POST /api/v1/gate-runs/{id}/cancel", { package: "pkg_9e40", kind: "gate", started_by: null }, "cancelled the run of 9e40 · started by someone"],
     // The hold's two rows (design/OPERATIONS.md §3.9, #2244): a lift that started production again names the version.
-    ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "stopped and held production: Exports claimant SSNs (INC-2231)"],
+    ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // Canyon stopped it
+    // Canyon could not stop it, or the org's platform runs it and was sent a remove: neither says it stopped (contracts/routes.md, The hold)
+    ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: ["gr_1"], stopped: false }, "held production, but Canyon couldn't stop it: Exports claimant SSNs (INC-2231)"],
     ["stop app", { env: "prod", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // it ran nothing (contracts/routes.md: image_digest absent)
-    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "lifted the hold, leaving production stopped"],
+    ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "lifted the hold without starting production"],
     ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: true, package: "pkg_9e40", label: "v1.4" }, "lifted the hold and started v1.4"],
     ["POST /api/v1/nothing/{id}", {}, "POST /api/v1/nothing/{id}"], // a route the bundle was built before: shown as written, never blank
   ] as const) {

@@ -26,12 +26,13 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
   const send = async (call: () => Promise<unknown>) => {
     if (sending) return;
     setSending(true);
+    setFailure(null);
     try {
       await call();
       close();
     } catch (err) {
-      // fetch rejects with a TypeError when no answer came. Asking again is safe: the server resumes a stop it began, and
-      // answers 409 held to one it finished (contracts/routes.md, The hold).
+      // fetch rejects with a TypeError when no answer came. Asking again stops production if it runs: the server resumes a
+      // stop it began, and answers 409 held to one it finished (contracts/routes.md, The hold).
       setFailure(err instanceof TypeError && kind === "stop" && !empty(app) ? S.stopUnknown : said(err));
     }
     setSending(false);
@@ -43,6 +44,7 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
   // A lift's keyboard lands on Cancel, its safe answer: Enter on what opened the question, and Enter again, lifts nothing.
   // A stop's lands on its reason. Placed as the button mounts, which Modal then keeps.
   const safe = useCallback((button: HTMLButtonElement | null) => { if (kind === "lift") button?.focus(); }, [kind]);
+  const refusal = useCallback((line: HTMLElement | null) => line?.focus(), []); // what refused it is read before anything is pressed
   const cancel = sending ? null : <Button ref={safe} variant="ghost" onClick={close}>Cancel</Button>;
   const going = <p role="status" className="text-md text-text-dim">{kind === "stop" ? (holds ? "Holding production…" : "Stopping production…") : "Lifting the hold…"}</p>;
   return (
@@ -79,7 +81,7 @@ export function HoldDialog({ acting, now, close, offline = false }: { acting: Ac
           </span>
         </>
       )}
-      {failure !== null && <p role="alert" className="text-base text-critical">{failure}</p>}
+      {failure !== null && <p ref={refusal} tabIndex={-1} role="alert" className="text-base text-critical outline-none">{failure}</p>}
     </Modal>
   );
 }

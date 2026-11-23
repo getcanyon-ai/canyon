@@ -39,7 +39,7 @@ describe("lifting a hold is answered on purpose", () => {
 });
 
 // A stop whose answer never came (the network, not the server): nobody knows here whether it stopped. Asking again is
-// safe: the server resumes a stop it began, and answers 409 held to one it finished (contracts/routes.md, The hold).
+// a stop: the server resumes one it began, answers 409 held to one it finished, and stops one lifted since (contracts/routes.md, The hold).
 describe("a stop whose answer never arrives", () => {
   const ask = async (fetch: () => Promise<unknown>, running = true) => {
     vi.stubGlobal("fetch", vi.fn(fetch));
@@ -50,8 +50,8 @@ describe("a stop whose answer never arrives", () => {
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(close).not.toHaveBeenCalled();
   };
-  const LOST = "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again is safe.";
-  it("says the outcome isn't known and that asking again is safe, and keeps the question open", async () => {
+  const LOST = "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again stops it if it runs.";
+  it("says the outcome isn't known and what asking again does, and keeps the question open", async () => {
     await ask(() => Promise.reject(new TypeError("Failed to fetch")));
     expect(screen.getByRole("alert").textContent).toBe(LOST);
     expect(screen.queryByText("Failed to fetch")).toBeNull();
@@ -66,4 +66,17 @@ describe("a stop whose answer never arrives", () => {
     await ask(() => Promise.reject(new TypeError("Failed to fetch")), false);
     expect(screen.queryByText(LOST)).toBeNull();
   });
+});
+
+// A lift's question puts the keyboard on Cancel: a refused one must not, or a held Enter closes it on Cancel with the refusal
+// unread. The keyboard lands on the refusal.
+it("a refused lift puts the keyboard on what refused it, never on Cancel", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ error: "hold_changed", message: "production's hold changed since you read it: read it again" }) })));
+  render(<HoldDialog acting={{ app, kind: "lift", asked: 1 }} now={undefined} close={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "Lift the hold, keep it stopped" }));
+  const refusal = await screen.findByText("production's hold changed since you read it: read it again");
+  expect(document.activeElement).toBe(refusal);
+  fireEvent.click(screen.getByRole("button", { name: "Lift the hold, keep it stopped" })); // and refused again
+  await screen.findByText("Lifting the hold…");
+  await waitFor(() => expect(document.activeElement?.getAttribute("role")).toBe("alert"));
 });

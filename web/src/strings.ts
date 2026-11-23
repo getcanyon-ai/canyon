@@ -220,7 +220,7 @@ export const S = {
   liftKeepStopped: "Lift the hold, keep it stopped",
   liftAndStart: "Lift the hold and start <version>",
   // A stop whose answer never came, the network's failure and not the server's (#145).
-  stopUnknown: "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again is safe.",
+  stopUnknown: "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again stops it if it runs.",
   holdChanged: "production's hold changed since you read it: read it again",
   // The same hold where production runs nothing (#2696): nothing stops, so the row, its question and its
   // confirm say a hold, and a hold of a production that ran nothing says held, never stopped.
@@ -694,7 +694,7 @@ export const S = {
   // A secret's finding by where it is: its scanner's own sentence is its Why (#102).
   secretIn: "A secret is in <file>:<line>",
   // Approving a secret's finding, said above its Approve (#102).
-  // What an approval covers, said above its Approve: nothing ends one before its date (design/PERMISSIONS.md; #145).
+  // What an approval covers, said above its Approve: a fix doesn't end one before its date (design/PERMISSIONS.md; #145).
   approveCovers: "Covers this problem in every version of the app until the end of <date> (UTC), production included, even if it's fixed and comes back.",
   approveCoversAll: "Covers these problems in every version of the app until the end of <date> (UTC), production included, even if they're fixed and come back.",
   approveDates: "Pick a date from <first> to <last>.",
@@ -1304,8 +1304,8 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "egress.route.remove": "removed the credential for <destination> in <env>",
   "egress.ca.rotate": "replaced the root of Canyon's credential certificates",
   // The hold (design/OPERATIONS.md §3.9): a responder's or an admin's stop of production, and its lift.
-  "stop app": "stopped and held production: <reason>",
-  "lift hold": "lifted the hold, leaving production stopped",
+  "stop app": "held production: <reason>",
+  "lift hold": "lifted the hold without starting production",
   // An app's own guardrail (contracts/routes.md, the app policies row), as the Audit page's verb says it (#2603).
   "app_policy.set": "changed the app's guardrail <rule>",
   "app_policy.remove": "removed the app's guardrail <rule>",
@@ -1324,8 +1324,9 @@ export const AUDIT_ACTIONS: Record<string, string> = {
 };
 // lift hold when it started production again (detail.started), naming the version it started.
 export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
-// A hold of a production that ran nothing, so stopped nothing (contracts/routes.md, The hold: no image_digest).
-export const AUDIT_HELD_NOTHING = "held production: <reason>";
+// A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
+// platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
+export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";
 // egress.networks.recreate when its row's failed names the step that failed (#2563).
 export const AUDIT_RECREATE_FAILED = "tried to recreate the app's network, but it failed";
 // egress.route.set when its row names the secret it moved (detail.secret), and egress.ca.rotate onto an admin's sub-CA

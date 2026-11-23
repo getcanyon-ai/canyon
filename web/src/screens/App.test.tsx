@@ -781,6 +781,12 @@ describe("the app page", () => {
     render(<App id="claims-portal" auth="oidc" />);
     expect(await screen.findByRole("heading", { name: /^What blocks v1\.4/ })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Copy for your agent" })).toBeNull();
+    cleanup();
+    // with no need to name it, it is the newest version: never its package's id
+    server({ ...reads(() => ({ ...page.status, needs: [] })), "GET /api/v1/projects/claims-portal": { body: { project: row } },
+      "GET /api/v1/preferences": { body: { viewer: { email: "rhea@meridian.example", role: "responder" } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await screen.findByRole("heading", { name: /^What blocks the newest version/ })).toBeDefined();
   });
 
   // Approving is one click from the headline: it opens the first finding's form, the keyboard on its reason, whose label is

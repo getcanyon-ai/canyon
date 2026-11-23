@@ -658,6 +658,8 @@ export const S = {
   needSecretFix: "Rotate the key, then upload a fix.",
   // The blocked headline's step for whoever fixes the code (#102).
   copyFix: "Copy the fix for your agent",
+  // What blocks the newest version, said to a reader whose read names it no version (#102).
+  whatBlocksNewest: "What blocks the newest version",
   // A finding's chip where it lets preview go ahead and stops production (the run read's blocks_production; #102).
   blocksAtProduction: "Doesn't stop preview. Stops production until fixed or approved.",
   // A secret's finding by where it is: its scanner's own sentence is its Why (#102).

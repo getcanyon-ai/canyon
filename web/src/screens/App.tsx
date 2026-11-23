@@ -499,7 +499,11 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     : (prodRun.state === "clean" && !prodRun.not_checked ? S.provenance : prodRun.state === "blocked" && approved(prodRun) !== null ? S.provenanceApproved : "").replace("<version>", () => version(prod!.package, prod!.label)) || undefined;
   // What blocks, named by the version it blocks (the redesign: "What blocks 07128a"): the findings'
   // own run, which is the one before while a new review goes.
-  const shownFix = seen === null ? "What blocks" : `What blocks ${pinnedName !== null && seen.package === pinnedOwn?.package ? pinnedName : version(seen.package, named(seen.package))}`;
+  // A version with no name the reader's read gives (a responder's, whose read carries no labels) is the newest one, never
+  // its id (#102).
+  const unnamed = project !== null && reduced(project) && seen !== null && named(seen.package) === undefined && seen.id === status?.last_run;
+  const shownFix = seen === null ? "What blocks" : unnamed ? S.whatBlocksNewest
+    : `What blocks ${pinnedName !== null && seen.package === pinnedOwn?.package ? pinnedName : version(seen.package, named(seen.package))}`;
   // What production will refuse of what preview calls, as the status read's need lists it: the go-live box and Promote say it
   // from its destinations, host names apart from what only a change to the code fixes, never from the rule's own line.
   const refuses = status?.needs?.find((need) => need.kind === "will_refuse");

@@ -22,7 +22,7 @@ export function Modal({ label, close, busy = false, children }: { label: string;
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   };
   return (
-    <div className="fixed inset-0 z-30 grid place-items-start bg-black/40 px-4 pt-24">
+    <div className="fixed inset-0 z-30 grid place-items-start bg-scrim px-4 pt-24">
       <div ref={box} role="dialog" aria-modal="true" aria-label={label} onKeyDown={keep}
         className="mx-auto grid w-full max-w-[480px] gap-2.5 rounded-[10px] border border-border-strong bg-surface p-4 shadow-overlay">
         {children}

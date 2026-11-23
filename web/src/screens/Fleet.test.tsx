@@ -155,7 +155,9 @@ describe("the fleet screen", () => {
     await screen.findByText("claims-archive");
     expect(document.querySelector("dl")).toBeNull(); // no team, so no counts: zeros help no one
     expect(screen.getByText("Every app in the org")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Your apps" })).toBeNull(); // none of theirs: no scope to choose
     expect(screen.getAllByRole("columnheader").map((head) => head.textContent)).toEqual(["App", "Production", "Owner"]);
+    expect(rows().find((row) => named(row) === "claims-archive")!.cells[1]!.textContent).toBe(`${S.running}Open production${S.stopProduction}`);
     expect(within(rows().find((row) => named(row) === "claims-archive")!).getByRole("button", { name: "Stop production of claims-archive" })).toBeDefined();
     expect(within(rows().find((row) => named(row) === "claims-portal")!).getByRole("button", { name: "Lift the hold on claims-portal" })).toBeDefined();
   });
@@ -196,7 +198,8 @@ describe("the fleet screen", () => {
     render(<Fleet org="Meridian" />);
     await screen.findByText("claims-archive");
     expect(cell("claims-archive", 4)).toContain("v3.1");
-    expect(cell("claims-archive", 4)).toContain("Being removed by your platform");
+    expect(cell("claims-archive", 4)).toContain(S.removingShort); // the short form: the table's cells stay a line or two (the UX review)
+    expect(cell("claims-archive", 4)).not.toContain(S.removingPlatform);
     expect(within(rows().find((row) => named(row) === "claims-archive")!.cells[4]!).getByRole("link").getAttribute("href")).toBe("http://claims-archive.prod.localhost:7777");
   });
 
@@ -206,7 +209,7 @@ describe("the fleet screen", () => {
     render(<Fleet org="Meridian" />);
     await screen.findByText("broker-portal");
     const clock = new Date("2026-09-02T10:00:00Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    expect([cell("broker-portal", 4), cell("broker-portal", 3)]).toEqual(["—", `Sent to your platform at ${clock}, not running yet`]);
+    expect([cell("broker-portal", 4), cell("broker-portal", 3)]).toEqual(["—", `Sent ${clock} · not running yet`]);
   });
 
   it("an admin's row on no team of theirs says only who can open it: Private, or Everyone before any count", async () => {
@@ -464,6 +467,24 @@ describe("the fleet screen", () => {
     expect(card.textContent).toBe("claims-portalBlockedv1.4 · Preview runs v1.3 · Dana WhitfieldHold production"); // an admin's card, with nothing in production: a hold
   });
 
+  // A phone's card says what the table says (the UX review): the platform's state in the short form, never that
+  // production runs what the platform hasn't reported, and a reduced card the reader's level with Ask to join.
+  it("says on a phone's card what the table says of the platform, and the reader's level on a reduced one", async () => {
+    vi.setSystemTime(new Date("2026-09-02T12:00:00Z"));
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }));
+    server(() => memberPage);
+    render(<Fleet org="Meridian" />);
+    const card = async (name: string) => (await screen.findAllByRole("link", { name }))[0]!.closest("li") as HTMLElement;
+    const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const archive = (await card("claims-archive")).textContent!;
+    expect(archive).toContain(`Production v3.1: being removed, not reported since ${clock("2026-09-02T11:29:12Z")}`);
+    expect(archive).not.toContain("Production runs");
+    expect((await card("broker-portal")).textContent).toContain(`Preview: sent ${clock("2026-09-02T10:00:00Z")} · not running yet`);
+    expect(within(await card("claims-portal")).getByText(FLEET.readOnly)).toBeDefined();
+    expect(within(await card("claims-portal")).getByRole("button", { name: `${FLEET.askToJoin} claims-portal` })).toBeDefined();
+    expect(within(await card("quote-engine")).getByText(FLEET.noAccess)).toBeDefined();
+  });
+
   // A click on a row opens its panel; a click on what the row links or acts on does only that.
   it("opens the panel from a click on the row, never from a click on its links", async () => {
     server(() => golden);
@@ -483,7 +504,7 @@ describe("the fleet screen", () => {
     server(() => ({ ...golden, ...member, apps: [reduced] }));
     render(<Fleet org="Meridian Insurance" />);
     const card = (await screen.findByRole("link", { name: "pricing-lab" })).closest("li") as HTMLElement;
-    expect(card.textContent).toBe("pricing-labTries new premium curves · Nora Lind");
+    expect(card.textContent).toBe(`pricing-labTries new premium curves · Nora Lind${FLEET.noAccess}${FLEET.askToJoin}`); // the reader's level, as the table's Access column
   });
 
   it("offers an admin Assign on an ownerless row off their teams, and a member only Claim", async () => {
@@ -577,7 +598,9 @@ describe("the fleet screen", () => {
     server(() => ({ ...golden, apps: [], total: 0 }));
     const { unmount } = render(<Fleet org="Meridian Insurance" />);
     const empty = within(await screen.findByRole("region", { name: FLEET.emptyTitle }));
-    expect(empty.getByRole("link", { name: FLEET.emptyCliLink }).getAttribute("href")).toBe("#/settings/people");
+    expect(empty.getByRole("link", { name: FLEET.emptyCliLink }).getAttribute("href")).toBe("#/settings/agents");
+    expect(document.querySelector("dl")).toBeNull(); // no tiles and no Needs panel: No apps yet comes first (the UX review)
+    expect(screen.queryByText(/^Nothing needs you/)).toBeNull();
     expect(empty.getByRole("link", { name: FLEET.emptyGitHubLink }).getAttribute("href")).toBe("#/settings/github");
     expect(empty.getByRole("link", { name: FLEET.emptyRulesLink }).getAttribute("href")).toBe("#/guardrails");
     unmount();
@@ -610,14 +633,16 @@ describe("the fleet screen", () => {
   it("says where the org's pods stopped checking in to whoever reads the environment, and to nobody else", async () => {
     vi.setSystemTime(new Date("2026-09-02T12:00:00Z"));
     const seen = "2026-09-02T11:29:12Z";
-    const line = (version: string) => `Your platform hasn't reported ${version} running since ${new Date(seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    const clock = new Date(seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const line = `not reported since ${clock}`; // the table's short form; the pane and the app page say it whole
     const page = { ...memberPage, apps: memberPage.apps.map((app) => (app.id === "claims-portal" ? { ...app, envs: { preview: { url: "http://claims-portal.preview.localhost:7777", seen_at: seen } } } : app)) } as FleetPage;
     server(() => page);
     render(<Fleet org="Meridian" />);
     await screen.findByText("claims-archive");
     const row = (name: string) => rows().find((one) => named(one) === name)!;
-    expect(within(row("claims-archive")).getByText(line("v3.1")).closest("span")?.className).toContain("text-amber");
-    expect(within(row("claims-portal")).getByText(line("it"))).toBeDefined();
+    expect(within(row("claims-archive")).getByText(line).closest("span")?.className).toContain("text-amber");
+    expect(row("claims-archive").cells[4]!.textContent).toContain(`v3.1 · ${line}`);
+    expect(row("claims-portal").cells[3]!.textContent).toBe(`Open preview · ${line}`);
     expect(row("quote-engine").textContent).not.toContain("checked in");
   });
 

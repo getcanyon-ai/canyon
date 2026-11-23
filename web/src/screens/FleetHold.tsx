@@ -25,7 +25,7 @@ export function HoldCell({ app, role, act, children }: { app: Row; role: Viewer[
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {app.hold !== undefined ? <span className="inline-flex items-center gap-1 font-medium text-critical"><Icon name="blocked" size={14} />{S.heldMark}</span> : children}
-      {stop && <Button variant="ghost" size="sm" label={`${empty(app) ? S.holdProduction : S.stopProduction} of ${app.name}`} onClick={() => act({ app, kind: "stop" })}>{empty(app) ? S.holdProduction : S.stopProduction}</Button>}
+      {stop && <Button variant="secondary" size="sm" label={`${empty(app) ? S.holdProduction : S.stopProduction} of ${app.name}`} onClick={() => act({ app, kind: "stop" })}>{empty(app) ? S.holdProduction : S.stopProduction}</Button>}
       {lift && <Button variant="secondary" size="sm" label={`${S.liftHold} on ${app.name}`} onClick={() => act({ app, kind: "lift" })}>{S.liftHold}</Button>}
     </span>
   );

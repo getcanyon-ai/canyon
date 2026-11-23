@@ -600,6 +600,15 @@ export const S = {
   reportedStill: "Still running: your platform last reported it <ago>",
   notReportedSince: "Your platform hasn't reported <version> running since <time>",
   reportedNotRunning: "Your platform reported <version> deployed, but not running",
+  // The same, short, in the fleet's cells and a phone's cards, which stay a line or two (the UX review); the side pane
+  // and the app page say them whole.
+  pendingShort: "Sent <time> · not running yet",
+  committedShort: "Committed <time> · not running yet",
+  removingShort: "Being removed",
+  removingMergeShort: "Removed once merged",
+  notReportedShort: "not reported since <time>",
+  notRunningShort: "not running yet",
+  running: "Running",
   repoUndelivered: "Canyon couldn't commit the release",
   repoRefused: "Your deploy repo refused the release",
   // The two gates' lines on Guardrails › Pipeline (D14).

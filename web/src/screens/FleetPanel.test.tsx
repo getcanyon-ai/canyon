@@ -405,14 +405,14 @@ describe("the fleet's side panel", () => {
   });
 
   // Beside the pane the table keeps what is read down the list; the pane says the rest for its row.
-  it("folds the version, owner and access columns away while the pane is open", async () => {
+  it("folds the version, owner, updated and access columns away while the pane is open", async () => {
     server(() => ({ ...golden, banner: "none", viewer: { display: "Dana Whitfield", role: "admin", github_logins: [], github_link: false } }));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findByText("premium-ledger");
     const heads = () => screen.getAllByRole("columnheader").map((one) => one.textContent);
     expect(heads()).toEqual(["App", "Version", "Review", "Preview", "Production", "Owner", "Updated", "Access", ""]);
     openPanel("claims-portal");
-    expect(heads()).toEqual(["App", "Review", "Preview", "Production", "Updated", ""]);
+    expect(heads()).toEqual(["App", "Review", "Preview", "Production", ""]); // Updated too: at 1280 the row's way into its pane was cut off (the UX review)
     fireEvent.click(inPanel("claims-portal").getByRole("button", { name: "Close" }));
     expect(heads()).toHaveLength(9);
   });

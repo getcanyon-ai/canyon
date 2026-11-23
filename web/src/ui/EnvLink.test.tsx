@@ -70,8 +70,8 @@ describe("EnvLink", () => {
     const org = { url: "https://ledger.prod.meridian.example", package: "pkg_1a", label: "v2", image_digest: "sha256:1a", deployed_at: minutes(120), gate_run: "gr_1", deployed_by: null, run_by: "org" as const };
     const stale = minutes(20);
     const cases: [string, Parameters<typeof EnvVersion>[0]["env"], string | null][] = [
-      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `Your platform hasn't reported v2 running since ${clock(stale)}`],
-      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "Your platform reported v2 deployed, but not running"],
+      ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `not reported since ${clock(stale)}`], // the table's short words (the UX review)
+      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "not running yet"],
       ["a check-in a minute ago", { ...org, seen_at: minutes(1) }, null],
       ["a report 2 minutes ago, no check-in yet", { ...org, deployed_at: minutes(2) }, null],
       ["a pod still pulling while it is removed", { ...org, seen_at: minutes(1), pending: { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: minutes(2), state: "accepted" } }, null],
@@ -86,7 +86,7 @@ describe("EnvLink", () => {
     }
     // A read-only member's row: an environment with a url and when its pods last checked in, no deploy time.
     const { container } = render(<EnvOpen env={{ url: org.url, seen_at: stale }} name="production" />);
-    expect(container.querySelector("time")?.textContent).toBe(`Your platform hasn't reported it running since ${clock(stale)}`); // its read carries no version
+    expect(container.querySelector("time")?.textContent).toBe(`not reported since ${clock(stale)}`);
     cleanup();
     expect(render(<EnvOpen env={{ url: org.url }} name="production" />).container.querySelector("time")).toBeNull();
   });

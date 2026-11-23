@@ -8,7 +8,7 @@ export async function opensInside(page: Page, opener: Locator, items: Locator) {
   const own = page.viewportSize()!;
   const wrong: string[] = [];
   for (const height of [own.height, 375]) {
-    for (let width = 320; width <= 1280; width += 20) {
+    for (const width of [667, ...Array.from({ length: 49 }, (_, i) => 320 + 20 * i)]) {
       await page.setViewportSize({ width, height });
       await page.evaluate(() => scrollTo(0, 60));
       await opener.click();

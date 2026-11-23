@@ -102,11 +102,10 @@ func TestTelemetryShowSaysItIsStillTrying(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(golden.State)
 	}))
 	defer h.Close()
-	was := time.Local
-	time.Local = time.UTC
-	defer func() { time.Local = was }()
+	next := time.Date(2026, 11, 24, 21, 4, 0, 0, time.UTC).Local().Format("2 Jan 15:04") // the golden's, as this machine's zone has it
+	until := time.Date(2027, 2, 21, 14, 4, 0, 0, time.UTC).Local().Format("2 Jan")
 	out, errs, code := run(t, map[string]string{"CANYON_HOST": h.URL, "XDG_CONFIG_HOME": t.TempDir(), "NO_COLOR": "1"}, false, "telemetry", "show")
-	if want := "Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after 24 Nov 21:04 and gives up by 21 Feb. It would send:\n{}\n"; code != exitOK || errs != "" || out != want {
+	if want := "Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after " + next + " and gives up by " + until + ". It would send:\n{}\n"; code != exitOK || errs != "" || out != want {
 		t.Errorf("exit %d, stderr %q\n%s\nwant\n%s", code, errs, out, want)
 	}
 }

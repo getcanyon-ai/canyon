@@ -55,7 +55,7 @@ const telemetryNotice = "Canyon sends one report of counts a day to help improve
 
 // telemetryConfig is the server's environment's part: read once at boot.
 type telemetryConfig struct {
-	envOff   bool          // CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI: off, whatever an admin sets
+	envOff   bool          // CANYON_TELEMETRY, DO_NOT_TRACK or CI (envTurnsOff): off, whatever an admin sets
 	mode     string        // CANYON_INSTALL_MODE: "" leaves install_mode out
 	url      string        // where the report goes: "" sends nothing, as a test that drives a send itself
 	every    time.Duration // how often the sender looks; 0 runs no sender
@@ -64,10 +64,17 @@ type telemetryConfig struct {
 	gateway  bool          // CANYON_MODEL_URL is set: the model is reached through a gateway
 }
 
+// envTurnsOff reads the variables that turn telemetry off, any value that isn't plainly on being off: CANYON_TELEMETRY is
+// on empty, 1, true, on or yes, DO_NOT_TRACK off empty, 0 or false, in any case, and CI is any value at all.
+func envTurnsOff(getenv func(string) string) bool {
+	on, track := strings.ToLower(getenv("CANYON_TELEMETRY")), strings.ToLower(getenv("DO_NOT_TRACK"))
+	return !slices.Contains([]string{"", "1", "true", "on", "yes"}, on) || !slices.Contains([]string{"", "0", "false"}, track) || getenv("CI") != ""
+}
+
 // telemetryConfigOf reads the environment. An install mode the schema does not name refuses the boot, never a report
 // that carries one.
 func telemetryConfigOf(getenv func(string) string) (telemetryConfig, error) {
-	c := telemetryConfig{envOff: getenv("CANYON_TELEMETRY") == "0" || getenv("DO_NOT_TRACK") == "1" || getenv("CI") != "", url: telemetryEndpoint, every: telemetryEvery,
+	c := telemetryConfig{envOff: envTurnsOff(getenv), url: telemetryEndpoint, every: telemetryEvery,
 		demo: getenv("CANYON_DEMO_SEED") == "1", provider: getenv("CANYON_MODEL_PROVIDER"), gateway: getenv("CANYON_MODEL_URL") != ""}
 	switch c.mode = getenv("CANYON_INSTALL_MODE"); c.mode {
 	case "", "laptop", "one_server", "helm_one_node", "kubernetes":

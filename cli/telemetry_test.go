@@ -65,7 +65,7 @@ func TestTelemetryShowPrintsTheReportAsSent(t *testing.T) {
 		line    string
 	}{
 		{true, "", "Telemetry is on. Canyon sends this report once a day, exactly as it reads here:"},
-		{false, "env", "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI). It would send:"},
+		{false, "env", "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI). It would send:"},
 		{false, "admin", "Telemetry is off: an admin turned it off. It would send:"},
 		{false, "unreachable", "Telemetry is off: it couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry. It would send:"},
 		{false, "not_seen", "Telemetry is off (not_seen). It would send:"},
@@ -121,7 +121,7 @@ func TestTelemetryOffAndOn(t *testing.T) {
 	}{
 		{"off", "", "✓ Telemetry is off: Canyon sends nothing.\n", `PUT /api/v1/telemetry {"enabled":false}`, exitOK},
 		{"on", "", "✓ Telemetry is on: Canyon sends one report a day.\n", `PUT /api/v1/telemetry {"enabled":true}`, exitOK},
-		{"on", "env", "! Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).\n", `PUT /api/v1/telemetry {"enabled":true}`, exitOK},
+		{"on", "env", "! Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).\n", `PUT /api/v1/telemetry {"enabled":true}`, exitOK},
 		{"on", "dashboard", "! An admin turns telemetry on in Canyon's dashboard: Settings › Telemetry.\n", `PUT /api/v1/telemetry {"enabled":true}`, exitBlocked},
 		{"off", "dashboard", "✓ Telemetry is off: Canyon sends nothing.\n", `PUT /api/v1/telemetry {"enabled":false}`, exitOK},
 	} {

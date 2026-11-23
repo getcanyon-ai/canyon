@@ -129,17 +129,38 @@ func TestTheCollectorIsReal(t *testing.T) {
 	}
 }
 
-// The environment turns telemetry off whatever an admin sets: CANYON_TELEMETRY=0, DO_NOT_TRACK=1, or CI set to
-// anything at all. An install mode the schema does not name refuses the boot.
+// The environment turns telemetry off whatever an admin sets: CANYON_TELEMETRY set to anything but 1, true, on or yes,
+// DO_NOT_TRACK to anything but 0 or false, or CI to anything at all. An install mode the schema does not name refuses the boot.
 func TestTelemetryConfigOf(t *testing.T) {
 	for _, c := range []struct {
 		env map[string]string
 		off bool
 	}{
 		{nil, false},
-		{map[string]string{"CANYON_TELEMETRY": "0"}, true},
+		{map[string]string{"CANYON_TELEMETRY": ""}, false},
 		{map[string]string{"CANYON_TELEMETRY": "1"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "true"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "TRUE"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "on"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "On"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "yes"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "0"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "false"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "FALSE"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "no"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "off"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "disabled"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "enabled"}, true}, // not one of those that say on
+		{map[string]string{"CANYON_TELEMETRY": " "}, true},
+		{map[string]string{"DO_NOT_TRACK": ""}, false},
+		{map[string]string{"DO_NOT_TRACK": "0"}, false},
+		{map[string]string{"DO_NOT_TRACK": "false"}, false},
+		{map[string]string{"DO_NOT_TRACK": "FALSE"}, false},
 		{map[string]string{"DO_NOT_TRACK": "1"}, true},
+		{map[string]string{"DO_NOT_TRACK": "true"}, true},
+		{map[string]string{"DO_NOT_TRACK": "yes"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "1", "DO_NOT_TRACK": "true"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "false", "DO_NOT_TRACK": "0"}, true},
 		{map[string]string{"CI": "true"}, true},
 		{map[string]string{"CI": "1"}, true},
 	} {

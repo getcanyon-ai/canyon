@@ -23,7 +23,7 @@ type telemetryState struct {
 
 // telemetryOff is why the report is not sent, as show says it.
 var telemetryOff = map[string]string{
-	"env":         "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).",
+	"env":         "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).",
 	"admin":       "Telemetry is off: an admin turned it off.",
 	"unreachable": "Telemetry is off: it couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry.",
 }

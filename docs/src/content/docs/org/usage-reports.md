@@ -67,7 +67,8 @@ Any one of these turns it off:
   Turning it back on is done there too, in the dashboard. On a Canyon with sign-in,
   `canyon telemetry on` prints `An admin turns telemetry on in Canyon's dashboard: Settings › Telemetry.`
   and exits 2.
-- `CANYON_TELEMETRY=0` or `DO_NOT_TRACK=1` in the server's environment. An admin can't turn it back
+- `CANYON_TELEMETRY=0` or `DO_NOT_TRACK=1` in the server's environment. Any other value but `1`, `true`, `on` or
+  `yes` for `CANYON_TELEMETRY`, or `0` or `false` for `DO_NOT_TRACK`, turns it off too. An admin can't turn it back
   on while one is set.
 - `telemetry.enabled: false` in the Helm chart's values.
 - `CI` set in the server's environment, so test and pipeline installs never send.

@@ -144,7 +144,8 @@ test-all: ## the full suite: every package but the sharded ones, then each shard
 	$(MAKE) --no-print-directory test-rest
 	$(MAKE) --no-print-directory test-shards
 
-# the packages too slow for one go test process, whose tests test-shards runs split by name: the server's and runs
+# the packages too slow for one go test process, whose tests test-shards runs split by name: the server's and runs.
+# A shard's -timeout is 25m: its longest takes 482 s, and a runner 2.65 times slow would take it 21 minutes (#124)
 SHARDED := github.com/getcanyon-ai/canyon/cmd/canyon-server github.com/getcanyon-ai/canyon/runs
 # the build flags every test target below runs with, and finds its packages with
 RACE := -race
@@ -154,8 +155,8 @@ BASE ?= origin/main
 test-rest: ## every package but the sharded ones, whose tests test-shards runs
 	pkgs=$$(go list $(RACE) ./...) || exit 1; rest=$$(printf '%s\n' $$pkgs | grep -vxF $(addprefix -e ,$(SHARDED))) || exit 1; go test $(RACE) $$rest
 
-test-shards: ## each sharded package's tests (SHARDED: the server's, runs) split by name into N (2) go test processes run at once, or SHARD_PKG=<package> SHARD=i/n the i-th of n of one package alone (CI's matrices: the server's 8, runs 3); every test a package lists must be in exactly one shard before any runs, and each shard must run exactly its own tests (internal/tools/testsel)
-	set -e; for p in $(or $(SHARD_PKG),$(SHARDED)); do go run ./internal/tools/testsel shards $(if $(SHARD),-shard $(SHARD),-n $(N)) $$p $(RACE); done
+test-shards: ## each sharded package's tests (SHARDED: the server's, runs) split by name into N (2) go test processes run at once, or SHARD_PKG=<package> SHARD=i/n the i-th of n of one package alone (CI's matrices: the server's 4, runs 3); every test a package lists must be in exactly one shard before any runs, and each shard must run exactly its own tests (internal/tools/testsel)
+	set -e; for p in $(or $(SHARD_PKG),$(SHARDED)); do go run ./internal/tools/testsel shards $(if $(SHARD),-shard $(SHARD),-n $(N)) $$p $(RACE) -timeout 25m; done
 
 test-affected: ## only the packages a change since BASE's merge base (origin/main) can affect, from Go's own graph under -race (internal/tools/testsel), plus the declared readers of a changed directory's Go source; every package runs when a changed file is not Go source (go.mod, go.sum, this Makefile, db/migrations, testdata, goldens, docs, contracts) or is Go source no package builds (a build tag, a testdata app). The test cache stays on; a sharded package runs in N shards
 	@pkgs=$$(go run ./internal/tools/testsel affected -base $(BASE) -- $(RACE)) || exit 1; \

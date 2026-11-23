@@ -195,6 +195,7 @@ jobs:
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 30
     strategy:
+      fail-fast: false # TEMPORARY (#113)
       matrix:
         shard: [1, 2, 3] # N is this list's length
     services:
@@ -216,7 +217,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - run: go test -race -count=50 -run '^TestAPatchTestsWorkflowsHaveEndedBeforeItGoesOn$' ./runs # TEMPORARY (#113): the flaky test 50 times a shard, reverted before merge
+      - env: # TEMPORARY (#113), reverted before merge: 1 the old helpers with the window held open 300 ms, red; 2 the fix with it held open, green; 3 the fix as it is, 50 times, green
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          test='^TestAPatchTestsWorkflowsHaveEndedBeforeItGoesOn$'
+          [ "$SHARD" = 3 ] || perl -0pi -e 's/(dbos\.WithStepName\("terminal"\)\); err != nil \{\n\t\treturn Result\{\}, err\n\t\}\n)/$1\ttime.Sleep(300 * time.Millisecond)\n/ or die "no terminal step"' runs/pipeline.go
+          [ "$SHARD" != 1 ] || sed -i '/^\tendedToo(t, run/d' runs/patchrun_db_test.go
+          git diff
+          case "$SHARD" in 1) n=3 ;; 2) n=10 ;; *) n=50 ;; esac
+          go test -race -count=$n -run "$test" ./runs
 
   provisioners:
     # the built-in driver's tests on every Postgres it supports (design/DATABASE-SESSIONS.md §4): 15 to

@@ -2596,6 +2596,7 @@ describe("taking an environment offline and deleting the app", () => {
     await askOffline();
     const offline = screen.getByRole("dialog", { name: "Take production offline" }); // over the page, as Delete is
     expect(within(offline).getByText(S.offlineOrStop)).toBeDefined();
+    expect(document.activeElement).toBe(within(offline).getByRole("button", { name: "Cancel" })); // the safe answer first
   });
 
   it("lists what the delete destroys and enables it only on the exact name", async () => {

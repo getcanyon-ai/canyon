@@ -182,16 +182,18 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
   // no severity to weigh and no line to point at, so it is a short row, its digest behind Details.
   const unread = finding.ruleId === "gate.unreadable";
   return (
-    <article aria-label={heading} className={`mt-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 ${unread ? "border-l-[3px] border-l-critical" : ""}`}>
+    <article aria-label={heading} className={`mt-2.5 min-w-0 rounded-xl border border-border bg-surface px-3.5 py-3 ${unread ? "border-l-[3px] border-l-critical" : ""}`}>
       <div className="flex flex-wrap items-baseline gap-2">
         {approval !== undefined
           ? <Chip tone="approved">{`approved by ${actorName(approval.approved_by)} until ${shortDate(approval.expires_at)}`}</Chip>
           : unread ? <Chip tone="blocks">couldn't finish</Chip>
-          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.blocksAtProduction}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
+          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.stopsProduction}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
         {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
         <span className="text-lg font-semibold">{heading}</span>
       </div>
+      {/* the short chip, the sentence under it: a chip that can't wrap stretched a phone's page (#102) */}
+      {approval === undefined && !unread && !blocks && atProduction && <p className="mt-1.5 text-md text-text-dim">{S.blocksAtProduction}</p>}
       {approval !== undefined && <p className="mt-1.5 text-base text-text-dim">{approval.reason}</p>}
       {also.length > 0 ? <p className="mt-1.5 text-base text-text-dim">{foundBy([finding, ...also])}</p>
         : from !== undefined ? <p className="mt-1.5 text-base text-text-dim">{`Found by ${from.tool} · rule ${from.rule}`}</p>

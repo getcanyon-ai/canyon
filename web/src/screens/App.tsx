@@ -554,8 +554,11 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const unheld = project === null || status === null && !reduced(project) ? null
     : { ...project, envs: reduced(project) ? project.envs : status?.envs ?? project.envs, hold: status?.hold } as typeof project;
   const stopWord = unheld !== null && empty(unheld) ? S.holdProduction : S.stopProduction;
-  const stopping = unheld !== null && role !== null && stops(role, unheld) ? () => setLifting({ app: unheld, kind: "stop", asked: Date.now() }) : null;
-  const stop = stopping === null || unheld === null ? null : <Button key="stop" variant="secondary" label={`${stopWord} of ${unheld.name}`} onClick={stopping}>{stopWord}</Button>;
+  // The question gives the keyboard back to what opened it on close: the headline's button, or ⋯, whose item is gone (#102).
+  const opener = useRef<HTMLElement | null>(null);
+  const stopping = unheld !== null && role !== null && stops(role, unheld)
+    ? (from?: HTMLElement | null) => { opener.current = from ?? (document.activeElement as HTMLElement | null); setLifting({ app: unheld, kind: "stop", asked: Date.now() }); } : null;
+  const stop = stopping === null || unheld === null ? null : <Button key="stop" variant="secondary" label={`${stopWord} of ${unheld.name}`} onClick={() => stopping()}>{stopWord}</Button>;
   const lift = held !== null && role !== null && lifts(role, held)
     ? <Button variant="secondary" label={`${S.liftHold} on ${held.name}`} onClick={() => setLifting({ app: held, kind: "lift", asked: Date.now() })}>{S.liftHold}</Button> : null;
   // What waits on a person leads the page (D15): the server's needs, most urgent first, with the headline where Headline's
@@ -659,7 +662,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <a className="text-link no-underline hover:underline" href="#/fleet">{S.backToFleet}</a></p>
         )}
         {/* The question names the hold it read; the page's newest read, held or not, says when someone else changed it (#2723). */}
-        {lifting !== null && <HoldDialog offline={admin || project?.access.level === "owner"} acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); void tick.current(); }} />}
+        {lifting !== null && <HoldDialog offline={admin || project?.access.level === "owner"} acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); opener.current?.focus(); opener.current = null; void tick.current(); }} />}
         {/* The body waits on the app's row and its status read, one after the other: until they answer, it says so (#2561). */}
         {project === null && failure === null && !gone && <p role="status" className="text-base text-text-dim">{S.appReading}</p>}
         {project !== null && reduced(project) && (
@@ -692,7 +695,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             )}
             {/* A responder's: the newest review's findings, to approve them, and what stops production (#2204). */}
             {status !== null && (
-              <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-7 max-[1100px]:grid-cols-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-7 max-[1100px]:grid-cols-[minmax(0,1fr)]">
                 <section aria-label="Review" className="grid min-w-0 gap-2.5">
                   {(cards.length > 0 || run instanceof Error) && <h2 className={H2}>Review</h2>}
                   {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}
@@ -745,7 +748,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {rows(project, status).length > 0 && <Versions rows={rows(project, status)} />}
             {/* Why the newest version stopped, beside what it takes to ship what preview runs: the
                 builder sees what to fix and the approver whether it can ship, together (spec A2). */}
-            <div className={`grid items-start gap-7 max-[1100px]:grid-cols-1 ${beside ? "grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]"}`}>
+            <div className={`grid items-start gap-7 max-[1100px]:grid-cols-[minmax(0,1fr)] ${beside ? "grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]"}`}>
             <section aria-label="Review" aria-busy={dimmed} className="grid min-w-0 gap-2.5">
               {!(stopped && fix.length > 0) && (
                 <h2 className={H2}>
@@ -866,7 +869,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
 // The ⋯ in the header: taking an environment offline is rare and risky, so it is not in the reading
 // flow (the redesign: "Take offline and Delete live in the ⋯ menu"). Each item asks before it acts.
 // Renaming and deleting are managing the app, its owners' and admins' (manage).
-function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: () => void }; live?: string; done: () => Promise<void> }) {
+function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: (from: HTMLElement | null) => void }; live?: string; done: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -884,7 +887,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] max-[520px]:right-auto max-[520px]:left-0 rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
           {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
-          {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(); }}>{`${stop.word}…`}</button>}
+          {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}
           {(preview || prod || stop !== undefined) && manage && <div role="separator" className="my-1 h-px bg-border" />}
           {manage && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("rename"); setOpen(false); }}>{RENAME.title}</button>}
           {manage && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setEnv("delete"); setOpen(false); }}>{TEARDOWN.deleteTitle}</button>}

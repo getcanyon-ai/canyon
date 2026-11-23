@@ -262,6 +262,7 @@ describe("a held production on the app page", () => {
       expect(within(ask).queryByText(S.stopOrOffline)).toBeNull(); // nothing runs to take offline
       fireEvent.keyDown(ask, { key: "Escape" });
       expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "More actions" })); // back where it was opened from
     });
 
     it("an owner neither stops nor holds production", async () => {

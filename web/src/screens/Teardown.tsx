@@ -18,9 +18,9 @@ const FIELD = "w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 f
 // page, polling, shows the environment leaving when it has.
 export function TakeOffline({ id, env, done, cancel }: { id: string; env: "preview" | "prod"; done: () => Promise<void>; cancel: () => void }) {
   const [failure, setFailure] = useState<string | null>(null);
-  const confirming = useRef<HTMLButtonElement>(null);
+  const cancelling = useRef<HTMLButtonElement>(null);
   const sending = useRef(false);
-  useEffect(() => { confirming.current?.focus(); }, []);
+  useEffect(() => { cancelling.current?.focus(); }, []); // the safe answer first, never the red one (#102)
 
   const send = async () => {
     if (sending.current) return;
@@ -39,8 +39,8 @@ export function TakeOffline({ id, env, done, cancel }: { id: string; env: "previ
       <p className="text-md text-text-dim">{T.offlineConfirm.replace("<app>", () => id).replace("<env>", WORD[env]).replace("<back>", env === "prod" ? "Promote" : "Deploy")}</p>
       {env === "prod" && <p className="text-md text-text-dim">{S.offlineOrStop}</p>}
       <span className="flex flex-wrap gap-2">
-        <Button ref={confirming} variant="danger" onClick={() => void send()}>{T.takeOffline.replace("<env>", WORD[env])}</Button>
-        <Button variant="ghost" onClick={cancel}>Cancel</Button>
+        <Button variant="danger" onClick={() => void send()}>{T.takeOffline.replace("<env>", WORD[env])}</Button>
+        <Button ref={cancelling} variant="ghost" onClick={cancel}>Cancel</Button>
       </span>
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
     </div>

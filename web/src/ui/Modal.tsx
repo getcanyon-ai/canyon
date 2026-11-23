@@ -4,9 +4,12 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 // busy, and the focus back where it was when it closes. label names it; first is what the keyboard lands on.
 export function Modal({ label, close, busy = false, children }: { label: string; close: () => void; busy?: boolean; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
+  // where the keyboard was before the question: read while rendering, before the question's own parts take it
+  const was = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    box.current?.querySelector<HTMLElement>("textarea, input, select, button:not([disabled])")?.focus();
+    const before = was.current;
+    // a question that put the keyboard somewhere already (its safe answer) keeps it there
+    if (!box.current?.contains(document.activeElement)) box.current?.querySelector<HTMLElement>("textarea, input, select, button:not([disabled])")?.focus();
     return () => before?.focus?.();
   }, []);
   const keep = (event: KeyboardEvent) => {

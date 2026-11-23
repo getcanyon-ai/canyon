@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { answered } from "./host";
+import { opensInside } from "../harness/menu";
+import { answered, unbroken } from "./host";
 
 // Every menu and dialog opens inside the window, or scrolls to its end inside itself (#126): on a phone, on a phone held
 // sideways and on a laptop. A box off the left edge widens no page, so each is measured, never the page's scrollWidth.
@@ -38,6 +39,8 @@ const more = async (page: Page, app: string, item: RegExp) => {
 
 const OPEN: Record<string, (page: Page) => Promise<Locator>> = {
   "Stop production": async (page) => { await more(page, "premium-ledger", /^Stop production/); return dialog(page); },
+  "Hold production": async (page) => { await more(page, "endorsement-hub", /^Hold production/); return dialog(page); },
+  "Rename": async (page) => { await more(page, "premium-ledger", /^Rename/); return page.locator("form, div").filter({ has: page.getByRole("textbox") }).filter({ has: page.getByRole("button", { name: "Cancel" }) }).last(); },
   "Take production offline": async (page) => { await more(page, "premium-ledger", /^Take production offline/); return dialog(page); },
   "Delete app": async (page) => { await more(page, "premium-ledger", /^Delete/); await expect(dialog(page).getByRole("textbox")).toBeVisible(); return dialog(page); },
   "Lift the hold": async (page) => { await page.goto("/#/apps/held"); await page.getByRole("button", { name: /^Lift the hold/ }).first().click(); return dialog(page); },
@@ -57,6 +60,45 @@ for (const [width, height] of WINDOWS) {
     for (const [name, open] of Object.entries(OPEN)) {
       test(`${name} opens on screen`, async ({ page }) => { await opensOnScreen(page, await open(page)); });
     }
+
+    test("Rename opens under its button on a scrolled page", async ({ page }) => {
+      await page.goto("/#/apps/blocked");
+      const opener = page.getByRole("button", { name: "More actions" });
+      await expect(page.getByText(/apps\/web\/src\/app\/api\/admin\/policies\/route\.ts/).first()).toBeVisible();
+      await page.evaluate(() => scrollTo(0, 60));
+      expect(await page.evaluate(() => scrollY), "the page scrolls").toBe(60);
+      await opener.click();
+      await page.getByRole("menuitem", { name: /^Rename/ }).click();
+      const [button, box] = [(await opener.boundingBox())!, (await page.getByRole("button", { name: "Cancel" }).locator("xpath=ancestor::*[contains(@class,'shadow-overlay')]").boundingBox())!];
+      expect(box.y - button.y - button.height, "from its button down to it").toBeGreaterThanOrEqual(0);
+      expect(box.y - button.y - button.height, "from its button down to it").toBeLessThanOrEqual(30);
+    });
+
+    for (const length of [30, 48]) {
+      test(`an app's name of ${length} unbroken letters leaves the page its width, and its ⋯ on screen`, async ({ page }) => {
+        await page.goto(`/#/apps/${unbroken(length)}`);
+        const opener = page.getByRole("button", { name: "More actions" });
+        await expect(opener).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(width);
+        const at = (await opener.boundingBox())!;
+        expect(at.x, "the ⋯'s left edge").toBeGreaterThanOrEqual(0);
+        expect(at.x + at.width, "the ⋯'s right edge").toBeLessThanOrEqual(width);
+      });
+    }
+    // the fleet's list and the audit's App filter name every app
+    for (const at of ["fleet", "audit"]) {
+      test(`an app's name of 48 unbroken letters leaves the ${at} its width`, async ({ page }) => {
+        await page.goto(`/#/${at}`);
+        await expect(page.getByText(unbroken(48)).first()).toBeAttached();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(width);
+      });
+    }
+
+    test("a finding's long path leaves the page its width", async ({ page }) => {
+      await page.goto("/#/apps/blocked");
+      await expect(page.getByText(/apps\/web\/src\/app\/api\/admin\/policies\/route\.ts/).first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(width);
+    });
 
     // The tab shown is whole in its strip once the fonts, wider than what stood in for them, are in.
     test("the tab shown is whole", async ({ page }) => {
@@ -105,3 +147,22 @@ for (const [width, height] of WINDOWS) {
     });
   });
 }
+
+// Menus, at every width and on a scrolled page (harness/menu.ts): the dialogs above cover their buttons, so not they.
+test.describe("a menu at every width", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test.setTimeout(180_000);
+  test.beforeEach(async ({ page }) => { await answered(page); });
+  test("the app's ⋯", async ({ page }) => {
+    await page.goto("/#/apps/premium-ledger");
+    await opensInside(page, page.getByRole("button", { name: "More actions" }), page.getByRole("menu").getByRole("menuitem"));
+  });
+  test("the audit's Export", async ({ page }) => {
+    await page.goto("/#/audit");
+    await opensInside(page, page.locator("summary", { hasText: "Export" }), page.locator("details[open]").filter({ hasText: "Export" }).getByRole("button"));
+  });
+  test("the fleet's Filter", async ({ page }) => {
+    await page.goto("/#/fleet");
+    await opensInside(page, page.getByRole("button", { name: /^Filter/ }), page.locator("#fleet-filter"));
+  });
+});

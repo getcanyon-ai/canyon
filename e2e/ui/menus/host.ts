@@ -14,7 +14,21 @@ const webhook = golden("release/meridian.json");
 fleet.banner = "none";
 fleet.viewer = { display: "Dana Whitfield", role: "admin", github_logins: [], github_link: false };
 const row = (id: string) => structuredClone(fleet.apps.find((one: { id: string }) => one.id === id));
+// An app whose name is one unbroken word, in preview and in production.
+export const unbroken = (length: number) => "m".repeat(length);
+for (const length of [30, 48]) fleet.apps.push({ ...row("premium-ledger"), id: unbroken(length), name: unbroken(length), envs: { ...row("claims-portal").envs, ...row("premium-ledger").envs } });
 const status = (id: string) => ({ ...app.status, project: id, envs: row(id).envs, last_run: null, promote_run: null, needs: [] });
+
+// An app whose review found something on a path far wider than a phone.
+function blocked(rest: string) {
+  const ok = (body: unknown) => ({ status: 200, body });
+  if (rest === "") return ok({ project: { ...row("claims-portal"), id: "blocked" } });
+  if (rest === "/status") return ok({ ...app.status, project: "blocked" });
+  if (rest === "/access") return ok(golden("access/claims-portal.json").read);
+  if (rest === "/packages") return ok(app.packages[0]);
+  if (rest === "/gate-runs") return ok(app.gate_runs[0]);
+  return { status: 404, body: { error: "not_found", message: "not found" } };
+}
 
 function answer(method: string, path: string): { status: number; body: unknown } {
   const ok = (body: unknown) => ({ status: 200, body });
@@ -27,6 +41,7 @@ function answer(method: string, path: string): { status: number; body: unknown }
   if (method === "POST" && at === "/platform-webhook/token") return ok({ token: "filler-host-token" });
   if (method !== "GET") return ok({});
   if (project !== undefined) {
+    if (project === "blocked") return blocked(rest);
     const known = project === "held" ? { ...row("claims-portal"), id: "held", hold: held.hold } : row(project);
     if (known === undefined) return { status: 404, body: { error: "not_found", message: "not found" } };
     switch (rest) {
@@ -39,7 +54,9 @@ function answer(method: string, path: string): { status: number; body: unknown }
       case "/gate-runs": return ok({ runs: [], next: null });
     }
   }
+  if (/^\/gate-runs\/[^/]+$/.test(at)) return ok(app.run_placed);
   switch (at) {
+    case "/audit": return ok(app.audit[0]);
     case "/preferences": return ok(prefs.preferences_admin);
     case "/fleet": return ok(fleet);
     case "/projects": return ok({ projects: fleet.apps });

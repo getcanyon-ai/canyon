@@ -199,7 +199,7 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
   if (reduced(app)) {
     return (
       <li className="grid gap-1 border-b border-border px-3.5 py-3 last:border-b-0">
-        <a className="font-semibold text-text no-underline" href={"#/apps/" + app.id}><AppName app={app} /></a>
+        <a className="min-w-0 font-semibold wrap-anywhere text-text no-underline" href={"#/apps/" + app.id}><AppName app={app} /></a>
         <small className="text-sm text-text-faint">{app.summary || S.noDescription} · {owner}</small>
         {(app.envs?.preview ?? app.envs?.prod) !== undefined && (
           <span className="flex flex-wrap gap-3 text-sm">
@@ -227,7 +227,7 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
   return (
     <li className="grid gap-1.5 border-b border-border px-3.5 py-3 last:border-b-0">
       <span className="flex items-center justify-between gap-2">
-        <a className="font-semibold text-text no-underline" href={"#/apps/" + app.id}><AppName app={app} /></a>
+        <a className="min-w-0 font-semibold wrap-anywhere text-text no-underline" href={"#/apps/" + app.id}><AppName app={app} /></a>
         <Review stage={app.latest.stage} gate={app.gate_state} warnings={app.warnings} />
       </span>
       <small className="text-sm text-text-faint">

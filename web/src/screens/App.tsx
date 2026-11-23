@@ -10,6 +10,7 @@ import { EnvCard } from "../ui/EnvCards";
 import { down } from "../ui/EnvLink";
 import { DependencyCard } from "../ui/DependencyCard";
 import { CopyFix, Finding, type ApproveBody } from "../ui/Finding";
+import { useInWindow } from "../ui/media";
 import { Modal } from "../ui/Modal";
 import { goLive, Headline, headline, heldBand, LastLines, leads, viewerBand, type Act } from "../ui/Headline";
 import { NeedsBand } from "../ui/Need";
@@ -617,12 +618,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-md text-text-faint">
             <a className="text-text-faint no-underline hover:underline" href="#/fleet">Fleet</a>
             <Icon name="chevron" size={14} />
-            <span aria-current="page">{project?.name ?? id}</span>
+            <span aria-current="page" className="min-w-0 wrap-anywhere">{project?.name ?? id}</span>
           </nav>
           {/* the actions stay top-right whatever grows under the title; only a phone stacks them */}
           <div className="flex items-start justify-between gap-3 max-[860px]:flex-wrap">
             <div className="grid min-w-0 flex-1 gap-1">
-              <h1 className="text-title font-semibold tracking-tight"><AppName app={project ?? { id, name: id }} /></h1>
+              <h1 className="text-title font-semibold tracking-tight wrap-anywhere"><AppName app={project ?? { id, name: id }} /></h1>
               {project !== null && (
                 <p className="text-md text-text-dim">
                   {[project.summary || S.noDescription, reduced(project) ? null : project.stack].filter(Boolean).join(" · ")}
@@ -873,6 +874,8 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const renaming = useRef<HTMLDivElement>(null);
+  useInWindow(renaming, env === "rename");
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
   if (!preview && !prod && !manage && stop === undefined) return null;
@@ -901,7 +904,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         </Modal>
       )}
       {env === "rename" && (
-        <div className="absolute right-0 z-10 mt-1.5 w-[360px] rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:fixed max-[520px]:inset-x-4 max-[520px]:w-auto">
+        <div ref={renaming} className="absolute right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}

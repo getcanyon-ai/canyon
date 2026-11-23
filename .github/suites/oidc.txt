@@ -41,6 +41,8 @@ e2e/ui/menus/**
 web/src/ui/Modal*
 web/src/ui/media*
 web/src/screens/Access.tsx
+web/src/screens/AuditTrail.tsx
+web/src/screens/Fleet.tsx
 web/src/screens/FleetFilters.tsx
 web/src/screens/GitHub.tsx
 web/src/screens/HandOff.tsx

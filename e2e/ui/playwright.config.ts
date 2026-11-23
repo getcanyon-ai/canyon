@@ -66,7 +66,7 @@ export default defineConfig({
       retries: 0,
       use: { baseURL: process.env.E2E_CANYON_URL, trace: "off", video: "off", viewport: { width: 1360, height: 900 } },
     },
-    // Every menu and dialog, opened in four windows (e2e/oidc/menus_test.go, never make e2e-ui): the running server's
+    // Every menu and dialog, opened in five windows (e2e/oidc/menus_test.go, never make e2e-ui): the running server's
     // dashboard, its reads answered with the contracts' goldens (menus/host.ts), so there is no state to make or watch.
     {
       name: "menus",

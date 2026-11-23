@@ -15,13 +15,19 @@ async function shownInStrip(page: Page, strip: string) {
   }, strip)).toBe("inside");
 }
 
-// Every rule's name on Pipeline reads in at most two lines (#118): at 1280 its gates squeezed names over four to six.
+// Every rule's name on Pipeline reads in at most two lines (#118): at 1280 its gates squeezed names over four to six. The
+// name's own text is measured, at both widths: on a phone the Beta chip sits on a line of its own under a two-line name.
 async function namesFit(page: Page) {
   await expect.poll(() => page.evaluate(() => {
-    const names = [...document.querySelectorAll('section[aria-label="Pipeline"] section > span.grid > span:first-child')] as HTMLElement[];
+    const names = [...document.querySelectorAll('section[aria-label="Pipeline"] section > span.grid > span:first-child')];
     if (names.length === 0) return "no rule names";
-    const tall = names.filter((one) => one.getBoundingClientRect().height > 2 * parseFloat(getComputedStyle(one).lineHeight) + 1);
-    return tall.length === 0 ? "fits" : tall.map((one) => `${one.textContent} (${Math.round(one.getBoundingClientRect().height)}px)`).join(", ");
+    const lines = (one: Element) => {
+      const text = document.createRange();
+      text.selectNodeContents(one.firstChild!);
+      return Math.round(text.getBoundingClientRect().height / parseFloat(getComputedStyle(one).lineHeight));
+    };
+    const tall = names.filter((one) => lines(one) > 2);
+    return tall.length === 0 ? "fits" : tall.map((one) => `${one.firstChild!.textContent} (${lines(one)} lines)`).join(", ");
   })).toBe("fits");
 }
 

@@ -43,7 +43,7 @@ job. A deleted project's id is never free again (contracts/routes.md), which the
 setup state (`onboarded_at` null), `CANYON_ADMINS` holds the admin's address. *Steps*: open
 `$E2E_CANYON_URL`; the sign-in screen's one button reads `Sign in` and never names the provider;
 sign in on the provider's pages as admin; the dashboard renders onboarding, not the fleet; fill
-step 1 (organisation name `E2E Org`), step 2 (sign-in: the three addresses, no domain), step 3
+step 1 (organization name `E2E Org`), step 2 (sign-in: the three addresses, no domain), step 3
 (admins: the admin alone), step 4 shows `Ready 4 of 4` and the identity row read-only; click
 `Finish setup`. *Assert*: the fleet loads with no apps; `GET /api/v1/preferences` answers
 `onboarded_at` set; the audit trail's newest row renders `finished setting Canyon up`; before the

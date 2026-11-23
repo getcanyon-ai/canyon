@@ -46,7 +46,7 @@ Every row names who acted, as one of three kinds. The **Who** filter picks them:
   person's CLI sign-in is recorded as that person, with "The CLI" under **Via**.
 - **Agents**: callers that aren't a person. A push that arrives through Canyon's GitHub App is
   recorded under the GitHub account that pushed it. Under [hand-off](/self-host/hand-off/), your own
-  deployment platform's reports are recorded as your organisation's platform.
+  deployment platform's reports are recorded as your organization's platform.
 - **Canyon**: Canyon's own steps, such as a review's result or a build that failed.
 
 How it was done is its own filter, **Via**: "From anywhere", "From the dashboard", "From the CLI", "From

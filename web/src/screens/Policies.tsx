@@ -100,7 +100,12 @@ export function Policies() {
 
   // "Affects today" is drawn once it has something to say (#118): a rule's preview names an app or failed, or a change
   // is asked. A column of "No app is affected today." on every row is noise. Its track stays, so the dials hold their place.
-  const affects = flow.changes.length > 0 || Object.values(today).some((one) => typeof one === "string" || (Array.isArray(one) && one.length > 0));
+  // Row by row: a line on every row, for one row's change, moves the control just tapped.
+  const speaks = (rule: Policy) => {
+    const now = today[rule.id];
+    return flow.of(rule.id) !== undefined || typeof now === "string" || (Array.isArray(now) && now.length > 0);
+  };
+  const affects = rows?.some(speaks) ?? false;
   return (
     <section aria-label="Policies" className="grid gap-3">
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
@@ -121,7 +126,7 @@ export function Policies() {
                 <Scheduled rule={rule} flow={flow} />
               </span>
               <Dial name={rule.name} value={flow.state(rule)} change={(state) => void flow.ask(rule, { state })} />
-              {affects && <Impact flow={flow} rule={rule} today={today[rule.id]} />}
+              {speaks(rule) && <Impact flow={flow} rule={rule} today={today[rule.id]} />}
             </section>
           );
         })}

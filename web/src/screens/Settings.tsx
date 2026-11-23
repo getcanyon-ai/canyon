@@ -172,7 +172,7 @@ export function Settings() {
                     ? <p className={NOTE}>{S.frontDoorNone}</p>
                     : <p className={NOTE}><Actor actor={read.front_door.set_by} /> · <Age at={read.front_door.set_at} /></p>}
                   {/* The probe's warning in plain words, the docs a link away (#118): its whole text, ports and all, is canyon status's. */}
-                  {read.warning !== "" && <p role="note" className="text-md text-amber">{S.reachesNode} <a className="text-link no-underline hover:underline" href={FIREWALL_DOCS}>{S.reachesNodeHow}</a></p>}
+                  {read.warning !== "" && <p role="note" className="text-md text-amber">{S.reachesNode} <a className="text-link no-underline hover:underline" href={FIREWALL_DOCS} target="_blank" rel="noreferrer">{S.reachesNodeHow}</a></p>}
                   {read.grants_note !== "" && <p role="note" className="text-md text-amber">{read.grants_note}</p>}
                   {read.egress_note !== "" && <p role="note" className="text-md text-amber">{read.egress_note}</p>}
                   {read.discovery_note !== "" && <p role="note" className="text-md text-amber">{read.discovery_note}</p>}
@@ -464,8 +464,15 @@ function OutboundSettings() {
   const live = useRef(true);
   const impactRead = useRef(0); // reads overlap: only the newest one's answer is drawn
   const yes = useRef<HTMLButtonElement>(null);
+  // Advanced (#118) opens by itself when a read lands that needs a person, judged as it lands and never again as the page
+  // redraws; nothing here closes it. `landed` is when, so a replica's age says what the read said.
+  const [advanced, setAdvanced] = useState(false);
+  const [landed, setLanded] = useState(0);
   const adopt = (answer: EgressSetting) => {
     if (!live.current) return;
+    const now = Date.now();
+    setLanded(now);
+    if (needsPerson(answer, now)) setAdvanced(true);
     setRead(answer); setVia(answer.via); setMode(answer.mode); setRoutes(answer.credential_routes); setAskingMode(false);
     setCaps(answer.caps === undefined ? null : { new_names: String(answer.caps.new_names), destinations: String(answer.caps.destinations), pending: String(answer.caps.pending) });
   };
@@ -715,10 +722,10 @@ function OutboundSettings() {
         </fieldset>
       )}
       {busy !== null && <p role="status" className={NOTE}>{busy}</p>}
-      {/* Advanced (#118): the limits, the gateway replicas and the certificates, an admin's, folded away; open on their
-          own while a replica holds an old policy or the sub-CA is ending, so a warning is never folded. */}
+      {/* Advanced (#118): the limits, the gateway replicas and the certificates, an admin's, folded away until a read needs
+          a person, so a warning is never folded by itself. */}
       {read !== null && ((caps !== null && read.caps !== undefined) || (read.replicas?.length ?? 0) > 0 || caOf(read) !== null) && (
-        <details className="mt-6 rounded-[10px] border border-border bg-surface px-4 py-3" open={advancedOpen(read)}>
+        <details className="mt-6 rounded-[10px] border border-border bg-surface px-4 py-3" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
           <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-normal text-text-dim">{S.advancedWhat}</span></summary>
           <fieldset disabled={busy !== null} className="min-w-0">
             {/* The limits, an admin's (#2691): a server from before them names none, and then none is shown. */}
@@ -748,7 +755,7 @@ function OutboundSettings() {
               <p className={NOTE}>{S.replicasNote}</p>
               <ul className="mt-2 grid gap-1">
                 {read.replicas?.map((one) => {
-                  const line = policyAge(one.current_at);
+                  const line = policyAge(one.current_at, landed);
                   return (
                     <li key={one.replica} className="flex flex-wrap items-center gap-3">
                       <span className="font-mono text-base break-all">{one.replica}</span>
@@ -773,15 +780,15 @@ const CAPS: [keyof EgressCaps, string, string, [number, number]][] = [
   ["pending", S.capPending, S.capPendingNote, [1, 500]],
 ];
 
-// Settings › Outbound's Advanced opens on its own while something in it needs a person (#118): a replica that doesn't hold
-// the current policy, or the org's own sub-CA ending.
-const advancedOpen = (read: EgressSetting) => (read.replicas ?? []).some((one) => policyAge(one.current_at) !== S.replicaCurrent) || subCAEnding(read) !== null;
+// What in a read needs a person, and opens Settings › Outbound's Advanced (#118): a replica that doesn't hold the current
+// policy, or the org's own sub-CA ending.
+const needsPerson = (read: EgressSetting, now: number) => (read.replicas ?? []).some((one) => policyAge(one.current_at, now) !== S.replicaCurrent) || subCAEnding(read, now) !== null;
 
 // A replica's policy age, now less the last time it held the current one (design/EGRESS.md §3.2): an old one is
 // cut off from Canyon, which is why it alarms. Under a minute it asked within its 5 s polls.
-const policyAge = (currentAt: string | null) => {
+const policyAge = (currentAt: string | null, now: number) => {
   if (currentAt === null) return S.replicaNone;
-  return Date.now() - new Date(currentAt).getTime() < 60_000 ? S.replicaCurrent : S.replicaAge.replace("<age>", () => age(currentAt));
+  return now - new Date(currentAt).getTime() < 60_000 ? S.replicaCurrent : S.replicaAge.replace("<age>", () => age(currentAt));
 };
 
 // Settings › Outbound for a member (design/PERMISSIONS.md, Outbound, Host settings): the host's via and the

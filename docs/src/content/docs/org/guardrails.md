@@ -237,7 +237,7 @@ When Opengrep runs, it always uses GitLab's open-source security rules (sast-rul
 Canyon, and Canyon's own SQL rule. You can add a rules repository of your own, at a fixed commit, and
 say which of its folders to read. "Use the community rules" fills in a community repository that
 adds SQL injection rules for Ruby, PHP and Java. Its licence carries the Commons Clause, which limits
-selling software built on it, so whether your organisation may use it is your decision.
+selling software built on it, so whether your organization may use it is your decision.
 
 A private rules repository needs a username and token, saved once. Canyon never shows the token
 again, only that a credential is set, for which repository, by whom and when. "Remove" deletes it,

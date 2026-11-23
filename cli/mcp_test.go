@@ -449,10 +449,10 @@ func TestMCPPromoteAsksThePersonFirst(t *testing.T) {
 			if len(h.posts) != c.posts || !strings.Contains(text, c.says) || res.IsError != c.isError {
 				t.Errorf("posts %q, isError %v, text:\n%s", h.posts, res.IsError, text)
 			}
-			if (c.elicit == "decline" || c.elicit == "cancel") && (!strings.Contains(text, server.URL+"/#/apps/claims-portal") ||
-				!strings.Contains(text, "canyon deploy --env prod in a terminal where they can answer") || strings.Contains(text, "--yes") ||
-				!strings.Contains(text, notAnotherWay)) { // the agent read a no and ran canyon deploy --env prod --yes itself (#90)
-				t.Errorf("a %s says where a person promotes it, and that the agent doesn't, never --yes:\n%s", c.elicit, text)
+			if (c.elicit == "decline" || c.elicit == "cancel") && (!strings.Contains(text, "To promote it, a person opens "+server.URL+"/#/apps/claims-portal.\n") ||
+				cliCommand.MatchString(text) || strings.Contains(text, "--yes") ||
+				!strings.Contains(text, notAnotherWay)) { // the agent read a no and ran canyon deploy --env prod --yes itself (#90): no command is named to it (#106)
+				t.Errorf("a %s says where a person promotes it, and that the agent doesn't, naming no command:\n%s", c.elicit, text)
 			}
 			if c.elicit != "" && !slices.Equal(asked, []string{"Promote claims-portal v1.3 to production?"}) { // D5's, as the terminal asks it
 				t.Errorf("asked %q", asked)
@@ -636,8 +636,6 @@ func TestMCPAClientThatPrefersStructuredContentReadsTheNextSteps(t *testing.T) {
 	}
 }
 
-// notAnotherWay and notAnotherWayRemote are the last line of canyon_promote's answer to a no (design/EXPERIENCE.md, D5).
-const (
-	notAnotherWay       = "Don't promote it another way, such as running canyon deploy --env prod yourself: the person decides what goes to production."
-	notAnotherWayRemote = "Don't promote it another way: the person decides what goes to production."
-)
+// notAnotherWay is the last line of canyon_promote's answer to a no, local and remote alike (design/EXPERIENCE.md,
+// D5): it names no way around the person's answer (#106).
+const notAnotherWay = "Don't promote it another way: the person decides what goes to production."

@@ -233,7 +233,7 @@ Resources an app can declare in canyon.toml: postgres, s3
 
 Outbound: an app's environment may be under an allowlist, where Canyon refuses calls to any outside service not on it. Only a person on the app's team can allow a new one, in Canyon's dashboard; you cannot. Never try to reach a refused service another way. Canyon also refuses any call out to the internet to an IP address, a one-word host name or a port other than 80 and 443, and no one can allow it: call a host name on 80 or 443.
 
-Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says.
+Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, don't promote it another way: tell the user where they can promote it, as its answer says.
 ```
 
 Then it ran `canyon check`, which reviews the app without deploying it, and Canyon blocked it on

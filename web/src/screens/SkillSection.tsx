@@ -92,7 +92,7 @@ export function handed(m: Manifest & { app_additions?: Held[] }, outbound = fals
   sections.push(["Secrets: never ask for or accept a secret's value in this conversation. When the app needs one, give the user canyon secret set NAME to run in their own terminal, which reads the value there."]); // always said: a value pasted into a chat is in the agent's transcript (cli.md §7.4)
   sections.push([m.prod_approval
     ? "Production: a person on the app's team approves it in Canyon's dashboard. When the user asks for production, call canyon_promote, or run canyon deploy --env prod where Canyon's tools aren't loaded; Canyon answers WAITING FOR APPROVAL with a link: give the link to the user and stop. Never open or approve it yourself."
-    : "Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, never run canyon deploy --env prod yourself, with or without --yes: tell the user where they can promote it, as its answer says."]); // always said: an agent never guesses
+    : "Production: when the user asks for production, call canyon_promote, setting confirm only when they asked for production in this conversation; where Canyon's tools aren't loaded, run canyon deploy --env prod, adding --yes only then. It promotes; nobody else approves it. When canyon_promote says nothing was promoted, don't promote it another way: tell the user where they can promote it, as its answer says."]); // always said: an agent never guesses
   return sections.map((one) => one.join("\n")).join("\n\n");
 }
 

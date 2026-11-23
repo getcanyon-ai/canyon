@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { journey } from "../harness/factory";
+import { insideWindow } from "../harness/menu";
 import { api, appId, deploy, promote, review, upload } from "../harness/seed";
 
 type Finding = { partialFingerprints: Record<string, string>; properties: { canyon: { blocks: boolean } } };
@@ -24,6 +25,7 @@ const stop = async (page: Page, app: string, reason: string) => {
   } else {
     await rows(page).getByRole("link", { name: app, exact: true }).click();
     await page.getByRole("button", { name: "More actions" }).click();
+    await insideWindow(page, page.getByRole("menu").getByRole("menuitem"));
     await page.getByRole("menuitem", { name: "Stop production…" }).click();
   }
   const dialog = page.getByRole("dialog", { name: `Stop and hold ${app} in production?` });

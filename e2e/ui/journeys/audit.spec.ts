@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { journey } from "../harness/factory";
+import { insideWindow } from "../harness/menu";
 import { api, appId, review, upload } from "../harness/seed";
 
 journey("read the audit trail by actor and time range", {
@@ -16,6 +17,14 @@ journey("read the audit trail by actor and time range", {
       name: "open the audit trail",
       do: async (page) => { await page.goto("/#/audit"); },
       see: async (page) => { await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible(); },
+    },
+    {
+      name: "the Export menu opens inside the window",
+      do: async (page) => { await page.locator("summary", { hasText: "Export" }).click(); },
+      see: async (page) => {
+        await insideWindow(page, page.locator("details[open]").filter({ hasText: "Export" }).getByRole("button"));
+        await page.locator("summary", { hasText: "Export" }).click(); // closed again
+      },
     },
     {
       name: "Canyon's own rows only",

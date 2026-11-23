@@ -99,19 +99,18 @@ export function Policies() {
   }, [ready]);
 
   // "Affects today" is drawn once it has something to say (#118): a rule's preview names an app or failed, or a change
-  // is asked. A column of "No app is affected today." on every row is noise.
+  // is asked. A column of "No app is affected today." on every row is noise. Its track stays, so the dials hold their place.
   const affects = flow.changes.length > 0 || Object.values(today).some((one) => typeof one === "string" || (Array.isArray(one) && one.length > 0));
-  const columns = (grid: string) => (affects ? grid : grid.replace("_minmax(0,220px)]", "]"));
   return (
     <section aria-label="Policies" className="grid gap-3">
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
-      <div className={`${columns(COLUMNS)} text-sm font-semibold text-text-faint max-[860px]:hidden`}>
+      <div className={`${COLUMNS} text-sm font-semibold text-text-faint max-[860px]:hidden`}>
         <span>Policy</span><span>Mode</span>{affects && <span>Affects today</span>}
       </div>
       <div>
         {rows?.filter(shown).map((rule) => {
           return (
-            <section key={rule.id} id={`rule-${rule.id}`} aria-label={rule.name} aria-current={rule.id === linked ? "true" : undefined} className={rule.id === linked ? `${columns(ROW)} ${LINKED}` : columns(ROW)}>
+            <section key={rule.id} id={`rule-${rule.id}`} aria-label={rule.name} aria-current={rule.id === linked ? "true" : undefined} className={rule.id === linked ? `${ROW} ${LINKED}` : ROW}>
               <span className="grid gap-0.5">
                 <span className="flex flex-wrap items-center gap-x-2 text-base font-medium">{rule.name}{BETA.includes(rule.id) && <Chip tone="beta">{S.beta}</Chip>}</span>
                 {POLICY_MEANING[rule.id] !== undefined && <span className="text-md text-text-dim">{POLICY_MEANING[rule.id]}</span>}

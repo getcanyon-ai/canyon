@@ -61,5 +61,5 @@ test("H2 a test delivery reaches the platform, then the admin hands apps to it",
 
 test("H3 the app page says a pod checked in", async ({ page }) => {
   await page.goto(`/#/apps/${env("HANDOFF_APP")}`);
-  await expect(page.getByRole("region", { name: "Preview" }).getByText(/^A pod checked in (just now|\d+m ago)$/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Preview" }).getByText(/^Your platform reported it running (just now|\d+m ago)$/)).toBeVisible({ timeout: 30_000 });
 });

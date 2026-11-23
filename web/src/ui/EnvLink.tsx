@@ -43,16 +43,26 @@ export function pendingLine(p: PendingRelease): string {
   if (p.via === "repo") return repoLine(p);
   if (p.state === "undelivered") return "Your platform did not accept the release";
   if (p.state === "refused") return "Your platform refused the release";
-  if (p.event === "remove") return "removing · waiting on your platform";
+  if (p.event === "remove") return S.removingPlatform;
   if (p.missing !== undefined && p.missing.length > 0) return `Your platform's report left out where ${p.missing.join(", ")} ${p.missing.length === 1 ? "is" : "are"}`;
-  return `waiting on your platform since ${clock(p.sent_at)}`;
+  return S.pendingPlatform.replace("<time>", clock(p.sent_at));
+}
+
+// The short form of that line, for the fleet's cells and a phone's cards (the UX review): what the platform has to do,
+// said in a few words; a refusal, a report that left something out and a merge waited on are already short.
+export function shortPending(p: PendingRelease): string {
+  if (p.state === "undelivered" || p.state === "refused") return pendingLine(p);
+  if (p.event === "remove") return p.via === "repo" && p.pull_request !== undefined ? S.removingMergeShort : S.removingShort;
+  if (p.via === "repo") return p.pull_request === undefined ? S.committedShort.replace("<time>", clock(p.sent_at)) : pendingLine(p);
+  if (p.missing !== undefined && p.missing.length > 0) return pendingLine(p);
+  return S.pendingShort.replace("<time>", clock(p.sent_at));
 }
 
 // A delivery: repo release's line (design/EXPERIENCE.md, the environment's pending line under delivery: repo; #2470).
 function repoLine(p: PendingRelease): string {
   if (p.state === "undelivered") return S.repoUndelivered;
   if (p.state === "refused") return S.repoRefused;
-  if (p.event === "remove") return p.pull_request === undefined ? "removing · waiting on your platform" : S.removingMerge;
+  if (p.event === "remove") return p.pull_request === undefined ? S.removingPlatform : S.removingMerge;
   return (p.pull_request === undefined ? S.pendingPod : S.pendingMerge).replace("<time>", clock(p.sent_at));
 }
 
@@ -81,8 +91,8 @@ export function EnvCell({ env }: { env: Env | Waiting | undefined }) {
 
 // The release an environment that runs something waits on, said under what runs (HAND-OFF §4: never
 // silent); nothing while none is open.
-export function Pending({ env }: { env: Env }) {
-  return env.pending === undefined ? null : <span className="block text-sm text-text-faint">{pendingLine(env.pending)}<PullLink p={env.pending} /></span>;
+export function Pending({ env, short = false }: { env: Env; short?: boolean }) {
+  return env.pending === undefined ? null : <span className="block text-sm text-text-faint">{(short ? shortPending : pendingLine)(env.pending)}<PullLink p={env.pending} /></span>;
 }
 
 // An environment that runs nothing to count on: it stopped, or it keeps restarting, up or not at this
@@ -124,23 +134,34 @@ export function NotRunning({ env }: { env: ViewerEnv }) {
 // The fleet's Preview and Production cells: the version that runs there, which opens the app, or a
 // dash. A release the platform has not taken yet is said under it, as everywhere; an app that is not
 // running says so under its version: one that stopped opens nothing, one Canyon could not check still opens.
+// The platform's words are the short ones (the UX review: whole sentences swelled a row to six lines).
 export function EnvVersion({ env, name }: { env: Env | Waiting | undefined; name: string }) {
   if (env === undefined) return <span className="text-text-faint">—</span>;
-  if (waiting(env)) return <span className="text-sm text-text-faint">{pendingLine(env.pending)}</span>;
+  if (waiting(env)) return <span className="text-sm text-text-faint">{shortPending(env.pending)}</span>;
   const shown = version(env.package, env.label);
   const url = opens(env);
   return (
     <>
       {url === undefined ? <span className="tnum inline-flex items-center gap-1.5 text-text-dim">{shown}</span> : (
         <a className="tnum inline-flex items-center gap-1.5 text-text no-underline hover:underline" href={url} target="_blank" rel="noreferrer" aria-label={`${shown}, open ${name}`}>
-          <span aria-hidden="true" className={`size-2 rounded-full ${env.state === "unknown" ? "bg-amber" : "bg-ok"}`} />{shown}<span className="text-text-faint"><Icon name="external" size={14} /></span>
+          <span aria-hidden="true" className={`size-2 rounded-full ${mark(env)}`} />{shown}<span className="text-text-faint"><Icon name="external" size={14} /></span>
         </a>
       )}
+      <NoCheckIn env={env} short />
       <NotRunning env={env} />
-      <NoCheckIn env={env} />
-      <Pending env={env} />
+      <Pending env={env} short />
     </>
   );
+}
+
+// The dot before what runs: green only for what is known to run. Amber where Canyon could not check, or where the
+// org runs it and its platform hasn't reported it running (the UX review); neutral where the org runs it and the
+// first minutes after the report have not passed.
+function mark(env: Env): string {
+  if (env.state === "unknown") return "bg-amber";
+  if (env.run_by !== "org") return "bg-ok";
+  const pods = checkIn(env);
+  return pods === null ? "bg-text-faint" : pods.warn ? "bg-amber" : "bg-ok";
 }
 
 // A read-only member's way into an environment (contracts/routes.md, the project read): `Open preview` or
@@ -149,9 +170,10 @@ export function EnvOpen({ env, name }: { env: ViewerEnv; name: "preview" | "prod
   const url = opens(env);
   return (
     <span>
-      {url === undefined ? <span className="text-text-dim">{`Open ${name}`}</span> : <a className="text-link no-underline hover:underline" href={url} target="_blank" rel="noreferrer">{`Open ${name}`}</a>}
+      {env.state === "running" && <span className="mr-2 inline-flex items-center gap-1.5 whitespace-nowrap text-text"><span aria-hidden="true" className="size-2 rounded-full bg-ok" />{S.running}</span>}
+      {url === undefined ? <span className="text-text-dim">{`Open ${name}`}</span> : <a className="whitespace-nowrap text-link no-underline hover:underline" href={url} target="_blank" rel="noreferrer">{`Open ${name}`}</a>}
+      <NoCheckIn env={env} short />
       <NotRunning env={env} />
-      <NoCheckIn env={env} />
     </span>
   );
 }
@@ -174,26 +196,30 @@ function since(at: Date, now: Date): string {
 // While the environment waits on a remove (an undeploy's, a hold's or a delete's) its pods pull a list that admits
 // nobody, so a fresh check-in is a warning: a pod the platform has not taken down yet (#2450). silent is the two
 // lines the fleet says too: the pods stopped checking in, or never began (#2455).
-export function checkIn(env: ViewerEnv | Env, now = Date.now()): { line: string; warn: boolean; silent: boolean } | null {
+export function checkIn(env: ViewerEnv | Env, now = Date.now()): { line: string; short: string | null; warn: boolean; silent: boolean } | null {
   const full = "package" in env ? (env as Env) : null;
   if (env.state !== undefined || (full !== null && full.run_by !== "org")) return null;
   if (env.seen_at !== undefined) {
     const seen = new Date(env.seen_at);
     if (Number.isNaN(seen.getTime())) return null;
     const still = full?.pending?.event === "remove";
-    const checked = still ? "A pod still checked in" : "A pod checked in";
-    if (now - seen.getTime() < 60_000) return { line: `${checked} just now`, warn: still, silent: false }; // as canyon status says the first minute
-    if (now - seen.getTime() <= STALE_MS) return { line: `${checked} ${age(env.seen_at)} ago`, warn: still, silent: false };
-    return { line: `No pod has checked in since ${since(seen, new Date(now))}`, warn: true, silent: true };
+    const said = (ago: string) => (still ? S.reportedStill : S.reported).replace("<ago>", ago);
+    if (now - seen.getTime() < 60_000) return { line: said("just now"), short: null, warn: still, silent: false }; // as canyon status says the first minute
+    if (now - seen.getTime() <= STALE_MS) return { line: said(`${age(env.seen_at)} ago`), short: null, warn: still, silent: false };
+    const at = since(seen, new Date(now));
+    return { line: S.notReportedSince.replace("<version>", full === null ? "it" : version(full.package, full.label)).replace("<time>", at), short: S.notReportedShort.replace("<time>", at), warn: true, silent: true };
   }
-  if (full !== null && now - new Date(full.deployed_at).getTime() > NEVER_MS) return { line: "Reported deployed, but no pod has checked in", warn: true, silent: true };
+  if (full !== null && now - new Date(full.deployed_at).getTime() > NEVER_MS) return { line: S.reportedNotRunning.replace("<version>", version(full.package, full.label)), short: S.notRunningShort, warn: true, silent: true };
   return null;
 }
 
 // The fleet's word on an environment the org runs whose pods stopped checking in, or never began (EXPERIENCE.md
 // D5; #2455): the app page's amber line, under the version, on every row that carries the environment; nothing
 // while they check in, nor for a pod still pulling while its environment is removed, which the app page says.
-export function NoCheckIn({ env }: { env: ViewerEnv | Env }) {
+// short is the fleet table's: after what runs, on its line, ` · not reported since 11:29` (the UX review).
+export function NoCheckIn({ env, short = false }: { env: ViewerEnv | Env; short?: boolean }) {
   const pods = checkIn(env);
-  return pods === null || !pods.silent ? null : <span className="block text-sm text-amber"><time dateTime={env.seen_at}>{pods.line}</time></span>;
+  if (pods === null || !pods.silent) return null;
+  return short ? <span className="text-sm text-amber"> · <time dateTime={env.seen_at}>{pods.short}</time></span>
+    : <span className="block text-sm text-amber"><time dateTime={env.seen_at}>{pods.line}</time></span>;
 }

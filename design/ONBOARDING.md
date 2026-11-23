@@ -94,7 +94,7 @@ asks the questions. The `WHERE` clause is the whole rule, not a precaution.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │  Set up Canyon                                                    1 of 4   │
 │                                                                            │
-│  What is this organisation called?                                         │
+│  What is this organization called?                                         │
 │                                                                            │
 │  ┌──────────────────────────────────────┐                                  │
 │  │ Meridian Insurance                   │                                  │

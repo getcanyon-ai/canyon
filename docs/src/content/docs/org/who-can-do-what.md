@@ -143,7 +143,7 @@ your platform to remove it, and the app lets nobody in within about a minute, ev
 platform's pods are still running (see
 [When an environment is stopped](/self-host/hand-off/#when-an-environment-is-stopped)).
 
-A responder or an admin lifts the hold with **Lift the hold** on the fleet row, in the dashboard
+A responder or an admin lifts the hold with **Lift the hold** in the dashboard's fleet (on the app's row, or in its details pane),
 only, and can start the held version again. Nobody on the app's team (an owner or a contributor)
 lifts its hold unless they are an admin, nor does anyone who was on the team when it was held.
 

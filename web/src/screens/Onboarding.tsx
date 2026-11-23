@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { putPreferences, said, type Overridable, type Preferences, type PreferencesEdit } from "../api";
+import { FLEET } from "../strings";
 import { Button } from "../ui/Button";
 import { AdminFields, domainOf, OrganisationFields, SignInFields, useOrgDraft } from "./OrgSettings";
 
@@ -10,7 +11,7 @@ const ROW = "text-xs tracking-caps text-text-faint uppercase";
 // The four questions, in the order design/ONBOARDING.md §3 asks them. The step heading is the
 // question; the fields under it are the settings page's own sections, composed rather than copied,
 // so the form somebody meets a year later is the form they filled in on day one.
-const STEPS = ["What is this organisation called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
+const STEPS = ["What is this organization called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
 const NOBODY = "At least one person or one domain has to be allowed to sign in.";
 
 // A list read as prose: "dana@meridian.example, and anyone at meridian.example". Blank rows are the
@@ -81,6 +82,8 @@ export function Onboarding({ record, done }: { record: Preferences; done: () => 
         <h1 className="text-4xl font-semibold tracking-tight">Set up Canyon</h1>
         <span className="text-md text-text-dim">{`${step} of ${STEPS.length}`}</span>
       </div>
+      {/* a first admin meets this knowing nothing of Canyon: what it is, and the four steps (the UX review) */}
+      <p className="mt-2 text-base text-text-dim">{FLEET.setupIntro}</p>
       <section aria-label={STEPS[step - 1]}>
         <h2 className={H2}>{STEPS[step - 1]}</h2>
         {step === 1 && <OrganisationFields {...fields} />}

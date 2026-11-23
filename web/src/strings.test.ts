@@ -3,12 +3,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { S } from "./strings";
+import { FLEET, S } from "./strings";
 
 const experience = readFileSync(new URL("../../design/EXPERIENCE.md", import.meta.url), "utf8");
 
 describe("the strings registry", () => {
-  for (const [key, value] of Object.entries(S)) {
+  for (const [key, value] of [...Object.entries(S), ...Object.entries(FLEET)]) {
     it(`${key} appears verbatim in design/EXPERIENCE.md`, () => {
       expect(experience).toContain(value);
     });

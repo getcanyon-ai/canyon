@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Preferences } from "../api";
+import { FLEET } from "../strings";
 import { Onboarding } from "./Onboarding";
 
 // The admin's projection of the golden row, turned back into the host it was before anybody
@@ -39,6 +40,12 @@ const box = () => screen.getByRole("checkbox", { name: `Allow everyone at ${MY_D
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("setting a host up", () => {
+  // A first admin meets setup knowing nothing of Canyon: one line says what it is and names the four steps (the UX review).
+  it("says what Canyon is and names its four steps", () => {
+    show(FRESH);
+    expect(screen.getByText(FLEET.setupIntro)).toBeDefined();
+  });
+
   // THE RED. Step 2 is the one input in the product where a wrong value lets the world in, and the
   // reader's own domain is never prefilled and never ticked: their address proves their account
   // works, it does not prove the domain is a company's. An admin at a consumer mail provider must

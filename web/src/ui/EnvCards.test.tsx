@@ -104,7 +104,7 @@ describe("an environment the org runs", () => {
 
   it("says a pod checked in, neutral, and still says deployed", () => {
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:58:00Z" })} empty="" />);
-    const line = card().getByText("A pod checked in 2m ago");
+    const line = card().getByText("Your platform reported it running 2m ago");
     expect(line.closest("p")?.className).not.toMatch(/amber/);
     expect(line.getAttribute("datetime")).toBe("2026-10-23T11:58:00Z");
     expect(card().getByText("Deployed")).toBeDefined();
@@ -115,17 +115,17 @@ describe("an environment the org runs", () => {
   it("says in amber that no pod has checked in since a time, the day too before today", () => {
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:50:00Z" })} empty="" />);
     const clock = new Date("2026-10-23T11:50:00Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    expect(card().getByText(`No pod has checked in since ${clock}`).closest("p")?.className).toMatch(/text-amber/);
+    expect(card().getByText(`Your platform hasn't reported v1.3 running since ${clock}`).closest("p")?.className).toMatch(/text-amber/);
     expect(dot()).toMatch(/bg-amber/);
     cleanup();
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-21T09:00:00Z" })} empty="" />);
     const day = new Date("2026-10-21T09:00:00Z").toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    expect(card().getByText(`No pod has checked in since ${day}`)).toBeDefined();
+    expect(card().getByText(`Your platform hasn't reported v1.3 running since ${day}`)).toBeDefined();
   });
 
   it("says in amber that no pod has checked in ten minutes after the report, and nothing before", () => {
     render(<EnvCard name="Production" env={org({ deployed_at: "2026-10-23T11:49:00Z" })} empty="" />);
-    expect(card().getByText("Reported deployed, but no pod has checked in").closest("p")?.className).toMatch(/text-amber/);
+    expect(card().getByText("Your platform reported v1.3 deployed, but not running").closest("p")?.className).toMatch(/text-amber/);
     expect(dot()).toMatch(/bg-amber/);
     cleanup();
     render(<EnvCard name="Production" env={org({ deployed_at: "2026-10-23T11:52:00Z" })} empty="" />);
@@ -136,15 +136,15 @@ describe("an environment the org runs", () => {
   it("says in amber that a pod still checked in while the environment waits on its removal", () => {
     const removing = { via: "webhook" as const, release: "rel_9c2d", event: "remove" as const, sent_at: "2026-10-23T11:57:00Z", state: "accepted" as const };
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:59:00Z", pending: removing })} empty="" />);
-    expect(card().getByText("A pod still checked in 1m ago").closest("p")?.className).toMatch(/text-amber/);
-    expect(card().queryByText("A pod checked in 1m ago")).toBeNull();
+    expect(card().getByText("Still running: your platform last reported it 1m ago").closest("p")?.className).toMatch(/text-amber/);
+    expect(card().queryByText("Your platform reported it running 1m ago")).toBeNull();
     expect(dot()).toMatch(/bg-amber/);
     cleanup();
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:59:40Z", pending: removing })} empty="" />);
-    expect(card().getByText("A pod still checked in just now")).toBeDefined();
+    expect(card().getByText("Still running: your platform last reported it just now")).toBeDefined();
     cleanup();
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:59:00Z", pending: { ...removing, event: "deploy" } })} empty="" />);
-    expect(card().getByText("A pod checked in 1m ago").closest("p")?.className).not.toMatch(/amber/);
+    expect(card().getByText("Your platform reported it running 1m ago").closest("p")?.className).not.toMatch(/amber/);
   });
 
   it("says nothing of pods where Canyon runs it", () => {
@@ -155,15 +155,15 @@ describe("an environment the org runs", () => {
 
   it("says just now within the first minute, as canyon status does", () => {
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T11:59:30Z" })} empty="" />);
-    expect(card().getByText("A pod checked in just now")).toBeDefined();
+    expect(card().getByText("Your platform reported it running just now")).toBeDefined();
     cleanup();
     render(<EnvCard name="Production" env={org({ seen_at: "2026-10-23T12:00:20Z" })} empty="" />); // ahead of the clock: now
-    expect(card().getByText("A pod checked in just now")).toBeDefined();
+    expect(card().getByText("Your platform reported it running just now")).toBeDefined();
   });
 
   it("gives a read-only member the check-in beside the way in", () => {
     render(<EnvCard name="Preview" env={{ url: "https://p.example.com", seen_at: "2026-10-23T11:59:00Z" }} empty="" />);
-    expect(card().getByText("A pod checked in 1m ago")).toBeDefined();
+    expect(card().getByText("Your platform reported it running 1m ago")).toBeDefined();
     expect(card().getByRole("link", { name: "Open preview" })).toBeDefined();
   });
 

@@ -74,7 +74,7 @@ function Typed({ name, sent, send, type, placeholder, label, className }: { name
 // filters or counts. Every change goes back to the first page: page 4 of one view is no page of
 // another. There is no Apply: a choice is sent as it is made. `access` and "Your apps" are offered
 // only where people sign in, the one place an app is shared and a reader holds grants of their own.
-export function FleetFilters({ query, signedIn }: { query: string; signedIn: boolean }) {
+export function FleetFilters({ query, signedIn, scoped }: { query: string; signedIn: boolean; scoped: boolean }) { // scoped: Your apps / All apps, none for a responder on no team
   const params = new URLSearchParams(query);
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -107,7 +107,7 @@ export function FleetFilters({ query, signedIn }: { query: string; signedIn: boo
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {signedIn && (
+      {scoped && (
         <div role="group" aria-label="Which apps" className="inline-flex h-[34px] rounded-[7px] border border-border-strong bg-surface p-0.5">
           {SCOPES.map(([value, word]) => (
             <button key={word} type="button" aria-pressed={params.get("scope") === value} onClick={() => go({ scope: value })}

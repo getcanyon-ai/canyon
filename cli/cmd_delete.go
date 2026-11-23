@@ -98,7 +98,7 @@ func runDelete(ctx context.Context, a *app, args []string) int {
 			a.printf("\n  %s Canyon is still deleting %s's databases. Run this again to finish.\n", a.render.glyph(statePending), cell(p.App))
 		}
 		if releases {
-			a.printf("\n  %s %s: removing · waiting on your platform. Run this again to finish.\n", a.render.glyph(statePending), cell(p.App))
+			a.printf("\n  %s %s: being removed by your platform. Run this again to finish.\n", a.render.glyph(statePending), cell(p.App))
 		}
 		return exitOK
 	}

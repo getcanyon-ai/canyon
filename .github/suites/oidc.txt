@@ -36,6 +36,16 @@ e2e/ui/harness/**
 e2e/ui/playwright.config.ts
 e2e/ui/package*.json
 web/src/screens/Secrets*
+# every menu and dialog on screen (e2e/oidc/menus_test.go, e2e/ui/menus)
+e2e/ui/menus/**
+web/src/ui/Modal*
+web/src/ui/media*
+web/src/screens/Access.tsx
+web/src/screens/FleetFilters.tsx
+web/src/screens/GitHub.tsx
+web/src/screens/HandOff.tsx
+web/src/screens/HoldDialog.tsx
+web/src/screens/Teardown.tsx
 # the screens since the release walk began, as each person: an MCP client's consent page, Sessions with an agent and
 # Disconnect, Connect an agent, the app page a secret link opens, the rail (e2e/ui/release, the agent screens)
 web/src/screens/Consent*

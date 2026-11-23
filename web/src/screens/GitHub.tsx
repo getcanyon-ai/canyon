@@ -3,6 +3,7 @@ import { getGitHub, getGitHubRepositories, importRepository, linkRepository, sai
 import { S } from "../strings";
 import { Age } from "../ui/Age";
 import { Button } from "../ui/Button";
+import { useMedia } from "../ui/media";
 import { CELL, Table, TableWrap } from "../ui/Table";
 
 const LABEL = "mt-3 mb-1 block text-xs tracking-caps text-text-faint uppercase";
@@ -19,6 +20,7 @@ export function GitHubSettings() {
   const [failure, setFailure] = useState<string | null>(null);
   const [org, setOrg] = useState("");
   const [imports, setImports] = useState<boolean | null>(null);
+  const phone = useMedia("(max-width: 619px)"); // the table's 560px and the page's gutters
   const [keeps, setKeeps] = useState(false);
   useEffect(() => {
     let live = true;
@@ -74,9 +76,10 @@ export function GitHubSettings() {
       {read.orgs.length > 0 && (
         <div className="min-w-0">
           <h2 className="text-base font-semibold">{S.githubConnected}</h2>
-          <TableWrap minWidth={560}>
-            <Table columns={COLUMNS} rows={read.orgs} renderRow={(one) => <Row key={one.app_slug} org={one} />} />
-          </TableWrap>
+          {/* on a phone each organization is a card: the table's end starts past its edge (#126) */}
+          {phone
+            ? <ul className="mt-2.5 grid gap-2.5">{read.orgs.map((one) => <OrgCard key={one.app_slug} org={one} />)}</ul>
+            : <TableWrap minWidth={560}><Table columns={COLUMNS} rows={read.orgs} renderRow={(one) => <Row key={one.app_slug} org={one} />} /></TableWrap>}
         </div>
       )}
       {read.orgs.filter((one) => !one.links_accounts && one.account !== "").map((one) => (
@@ -87,22 +90,33 @@ export function GitHubSettings() {
   );
 }
 
-function Row({ org }: { org: GitHubOrg }) {
+// An organization's columns, the same in the table and in a phone's card.
+function partsOf(org: GitHubOrg) {
   const app = `https://github.com/apps/${org.app_slug}`;
+  return [
+    <>
+      <a className="font-medium text-text no-underline hover:underline" href={app}>{org.account || org.app_slug}</a>
+      {org.keeps_code && <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-sm text-text-dim">Keeps code</span>}
+    </>,
+    org.account === "" ? "Picked by an admin" : <NewRepositories org={org} />,
+    org.last_event_at === null ? <span className="text-sm text-text-faint">None yet</span> : <Age at={org.last_event_at} />,
+    org.installed ? "Receiving events" : <>Not installed · <a className="text-link no-underline hover:underline" href={`${app}/installations/new`}>Install</a></>,
+  ];
+}
+
+function Row({ org }: { org: GitHubOrg }) {
+  return <tr>{partsOf(org).map((part, at) => <td key={COLUMNS[at]!.key} className={CELL}>{part}</td>)}</tr>;
+}
+
+function OrgCard({ org }: { org: GitHubOrg }) {
+  const [name, ...rest] = partsOf(org);
   return (
-    <tr>
-      <td className={CELL}>
-        <a className="font-medium text-text no-underline hover:underline" href={app}>{org.account || org.app_slug}</a>
-        {org.keeps_code && <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-sm text-text-dim">Keeps code</span>}
-      </td>
-      <td className={CELL}>{org.account === "" ? "Picked by an admin" : <NewRepositories org={org} />}</td>
-      <td className={CELL}>{org.last_event_at === null ? <span className="text-sm text-text-faint">None yet</span> : <Age at={org.last_event_at} />}</td>
-      <td className={CELL}>
-        {org.installed
-          ? "Receiving events"
-          : <>Not installed · <a className="text-link no-underline hover:underline" href={`${app}/installations/new`}>Install</a></>}
-      </td>
-    </tr>
+    <li className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
+      <span className="break-words">{name}</span>
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-md">
+        {rest.map((part, at) => <div key={COLUMNS[at + 1]!.key} className="contents"><dt className="text-text-faint">{COLUMNS[at + 1]!.label}</dt><dd>{part}</dd></div>)}
+      </dl>
+    </li>
   );
 }
 

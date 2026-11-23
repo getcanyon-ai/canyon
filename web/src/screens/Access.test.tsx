@@ -241,6 +241,19 @@ describe("the Access card", () => {
     expect(screen.getByRole("button", { name: "Share" })).toBeDefined();
   });
 
+  // On a phone each grant is a card, its access and Remove inside it: the table's start past the screen's edge (#126).
+  it("on a phone, reads each grant as a card with its access to change and its Remove", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 719px)", addEventListener: () => {}, removeEventListener: () => {} }));
+    const sent = server({ [`GET ${ACCESS}`]: { body: golden.read }, [`DELETE ${ACCESS}/group/claims-engineering`]: { status: 204 } });
+    show(owner);
+    const card = within((await screen.findByText("claims-engineering")).closest("li")!);
+    expect(screen.queryByRole("table")).toBeNull();
+    expect((card.getByRole("combobox", { name: "Access for the group claims-engineering" }) as HTMLSelectElement).value).toBe("contributor");
+    for (const label of ["Access", "Roles", "Added by", "When"]) expect(card.getByText(label)).toBeDefined();
+    fireEvent.click(card.getByRole("button", { name: "Remove the group claims-engineering" }));
+    await waitFor(() => expect(sent()).toContain(`DELETE ${ACCESS}/group/claims-engineering`));
+  });
+
   // A host with no sign-in routes none of the Access group (contracts/routes.md, Access): the card
   // must know this itself and ask nothing, rather than asking and losing the 404 to the console
   // (canyonv2-028b) — the auth-off e2e stack failed this way on every app page, not just fresh ones.

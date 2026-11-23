@@ -69,6 +69,17 @@ describe("GitHubSettings", () => {
     expect(screen.getByText(S.githubKeeper.replace("<org>", "acme-canyon"))).toBeDefined();
   });
 
+  // On a phone each organization is a card, what it does with new repositories inside it (#126).
+  it("on a phone, reads each connected org as a card", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 619px)", addEventListener: () => {}, removeEventListener: () => {} }));
+    server({ reachable: true, orgs: [acme, labs] });
+    render(<GitHubSettings />);
+    const card = within((await screen.findByRole("link", { name: "acme-canyon" })).closest("li")!);
+    expect(card.getByRole("combobox", { name: "New repositories in acme-canyon" })).toBeDefined();
+    for (const words of ["New repositories", "Last event", "State", "Receiving events"]) expect(card.getByText(words)).toBeDefined();
+    expect(screen.queryByRole("columnheader", { name: "New repositories" })).toBeNull();
+  });
+
   // Repositories (#1917): what the Apps see, the apps linked to each, and the three things an admin does.
   it("lists the repositories, makes an app of one, links and unlinks", async () => {
     const sent = server({ reachable: true, orgs: [acme] });

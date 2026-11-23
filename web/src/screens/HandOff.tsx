@@ -7,6 +7,7 @@ import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, ago } from "../ui/Age";
 import { Button } from "../ui/Button";
+import { OVER, OVER_BOX } from "../ui/Modal";
 import { RepoStep, RepoTeamCard, type RepoRevealed } from "./HandOffRepo";
 
 const LABEL = "mt-3 mb-1 block text-xs tracking-caps text-text-faint uppercase";
@@ -378,9 +379,9 @@ function Reveal({ values, done }: { values: Revealed; done: () => void }) {
     </div>
   );
   return (
-    <div className="fixed inset-0 z-30 grid place-items-start bg-black/40 px-4 pt-24">
+    <div className={OVER}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="reveal-title" aria-describedby="reveal-ask" onKeyDown={keep}
-        className="mx-auto grid w-full max-w-[560px] gap-2 rounded-[10px] border border-border-strong bg-surface p-4 shadow-overlay">
+        className={`${OVER_BOX} max-w-[560px] gap-2`}>
         <h2 id="reveal-title" className="text-base font-semibold">{S.revealTitle}</h2>
         <p id="reveal-ask" className="text-md text-text-dim">{both ? S.revealAsk : S.revealAskOne}</p>
         {values.secret !== undefined && field("reveal-secret", "Webhook secret", values.secret, S.secretNote)}

@@ -1,0 +1,64 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Page } from "@playwright/test";
+
+// A host that answers with the contracts' goldens, so every menu and dialog can be opened with no state to make: the
+// dashboard is the running server's own, its reads are these. An admin's, on a host where people sign in.
+const golden = (path: string) => JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata", path), "utf8"));
+const fleet = golden("fleet/page.json");
+const app = golden("app-page/claims-portal.json");
+const held = golden("app-page/claims-portal-held-status.json");
+const prefs = golden("guardrails/preferences.json");
+const webhook = golden("release/meridian.json");
+
+fleet.banner = "none";
+fleet.viewer = { display: "Dana Whitfield", role: "admin", github_logins: [], github_link: false };
+const row = (id: string) => structuredClone(fleet.apps.find((one: { id: string }) => one.id === id));
+const status = (id: string) => ({ ...app.status, project: id, envs: row(id).envs, last_run: null, promote_run: null, needs: [] });
+
+function answer(method: string, path: string): { status: number; body: unknown } {
+  const ok = (body: unknown) => ({ status: 200, body });
+  if (path === "/auth/config") return ok({ canyon: true, auth: "oidc", org: "Meridian Insurance", device: true });
+  const at = path.replace("/api/v1", "");
+  const [, project, rest = ""] = /^\/projects\/([^/]+)(\/.*)?$/.exec(at) ?? [];
+  if (method === "DELETE" && project !== undefined && rest === "") {
+    return { status: 409, body: { error: "confirm_required", message: "type the app's name to delete it", resources: [{ name: "db", type: "postgres", env: "preview", state: "ready" }, { name: "db", type: "postgres", env: "prod", state: "ready" }] } };
+  }
+  if (method === "POST" && at === "/platform-webhook/token") return ok({ token: "filler-host-token" });
+  if (method !== "GET") return ok({});
+  if (project !== undefined) {
+    const known = project === "held" ? { ...row("claims-portal"), id: "held", hold: held.hold } : row(project);
+    if (known === undefined) return { status: 404, body: { error: "not_found", message: "not found" } };
+    switch (rest) {
+      case "": return ok({ project: known });
+      case "/status": return ok(project === "held" ? { ...held, project } : status(project));
+      case "/access": return ok(golden("access/claims-portal.json").read);
+      case "/egress": return ok(golden("egress/claims-portal.json").project_read);
+      case "/secrets": return ok({ secrets: [] });
+      case "/packages": return ok(app.packages[0]);
+      case "/gate-runs": return ok({ runs: [], next: null });
+    }
+  }
+  switch (at) {
+    case "/preferences": return ok(prefs.preferences_admin);
+    case "/fleet": return ok(fleet);
+    case "/projects": return ok({ projects: fleet.apps });
+    case "/policies": return ok(golden("policies/meridian.json").policies);
+    case "/front-door": return ok(golden("front-door/meridian.json").get);
+    case "/licence": return ok(golden("licence/licence.json").admin);
+    case "/egress": return ok(golden("egress/claims-portal.json").setting_admin);
+    case "/platform-webhook": return ok(webhook.webhook_get);
+    case "/platform-repo": return ok(null);
+    case "/github": return ok({ reachable: true, orgs: [{ account: "meridian-apps", app_slug: "canyon-meridian", keeps_code: true, imports_new: true, installed: true, last_event_at: "2026-09-02T08:00:00Z", links_accounts: true }] });
+    case "/github/repositories": return ok({ repositories: [], unreachable: [] });
+    case "/db-sessions": return ok(golden("db-session/meridian.json").list);
+  }
+  return { status: 404, body: { error: "not_found", message: "not found" } };
+}
+
+export async function answered(page: Page) {
+  await page.route((url) => /^\/(api|auth)\//.test(url.pathname), async (route) => {
+    const { status: code, body } = answer(route.request().method(), new URL(route.request().url()).pathname);
+    await route.fulfill({ status: code, contentType: "application/json", body: JSON.stringify(body) });
+  });
+}

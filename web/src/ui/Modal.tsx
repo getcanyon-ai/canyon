@@ -24,9 +24,9 @@ export function Modal({ label, close, busy = false, children }: { label: string;
     }
     if (event.key !== "Tab") return;
     const stops = [...(box.current?.querySelectorAll<HTMLElement>("a[href], textarea, input, select, button:not([disabled])") ?? [])];
-    const [first, last] = [stops[0], stops[stops.length - 1]];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    const at = stops.indexOf(document.activeElement as HTMLElement); // -1 on a line that took the keyboard and is no stop, as a refusal (#145)
+    const ends = event.shiftKey ? at <= 0 : at === -1 || at === stops.length - 1;
+    if (ends) { event.preventDefault(); stops[event.shiftKey ? stops.length - 1 : 0]?.focus(); }
   };
   return (
     // Never taller than the window, where it scrolls inside itself and its buttons are always reached (#126): a short window,

@@ -76,6 +76,12 @@ it("a refused lift puts the keyboard on what refused it, never on Cancel", async
   fireEvent.click(screen.getByRole("button", { name: "Lift the hold, keep it stopped" }));
   const refusal = await screen.findByText("production's hold changed since you read it: read it again");
   expect(document.activeElement).toBe(refusal);
+  // and Tab from it stays in the dialog: the refusal is no stop of its own, so neither the first nor the last
+  fireEvent.keyDown(refusal, { key: "Tab" });
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Lift the hold, keep it stopped" }));
+  refusal.focus();
+  fireEvent.keyDown(refusal, { key: "Tab", shiftKey: true });
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
   fireEvent.click(screen.getByRole("button", { name: "Lift the hold, keep it stopped" })); // and refused again
   await screen.findByText("Lifting the hold…");
   await waitFor(() => expect(document.activeElement?.getAttribute("role")).toBe("alert"));

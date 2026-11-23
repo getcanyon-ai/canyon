@@ -270,6 +270,19 @@ describe("the shell", () => {
     expect(sessionStorage.getItem("canyon_return")).toBeNull();
   });
 
+  it("a sign-out of a session that had already ended is still one the person chose", async () => {
+    window.location.hash = "#/audit?range=7d";
+    const sent = server(prefs, () => answer(200, signedIn));
+    render(<Shell />);
+    const button = await screen.findByRole("button", { name: AUTH.signOut });
+    const before = fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (init?.method === "DELETE" ? answer(401, { error: "unauthenticated" }) : before(url, init))));
+    fireEvent.click(button);
+    expect(await screen.findByText("You're signed out of Canyon")).toBeDefined();
+    expect(window.location.hash).toBe("#/fleet");
+    expect(sent().length).toBeGreaterThan(0);
+  });
+
   it("a sign-out on a step of signing in stays on it, to be come back to", async () => {
     window.location.hash = "#/device?code=K7QP-4RXM";
     server(prefs, () => answer(200, signedIn));

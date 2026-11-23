@@ -331,7 +331,8 @@ export async function getAgentAddress(): Promise<string | null> {
 export const getAuthConfig = async () => (await fetch("/auth/config")).json() as Promise<{ org: string; auth: "oidc" | "off" }>;
 // Revokes the caller's session, then the app shows the sign-in page as it would on any 401.
 // The sign-in page this lands on says the company account is still signed in: only a chosen sign-out does.
-export const signOut = () => call<void>("DELETE", "/sessions").then(() => window.dispatchEvent(new CustomEvent(UNAUTHENTICATED, { detail: "signed-out" })));
+// A session that had already ended (401) is signed out too: it was asked for, whatever ended it first (#145).
+export const signOut = () => call<void>("DELETE", "/sessions").catch((err: unknown) => { if (!(err instanceof ApiError) || err.status !== 401) throw err; }).then(() => window.dispatchEvent(new CustomEvent(UNAUTHENTICATED, { detail: "signed-out" })));
 
 // The code goes to the server as typed: it ignores dashes and case, and answers 404 for a code that
 // is not pending, so the screen normalises nothing.

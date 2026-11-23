@@ -268,7 +268,7 @@ func TestReachAnswersWhatAChangeReaches(t *testing.T) {
 	}{
 		{"web/src/screens/Versions.tsx", map[string]string{"journeys": "true"}},
 		{"web/src/screens/Fleet.tsx", map[string]string{"journeys": "true", "oidc": "true"}}, // the menus check opens the fleet (e2e/oidc/menus_test.go, #126)
-		{"cmd/canyon-server/telemetry_v2.go", map[string]string{"old-cli": "true"}}, // every stack but old-cli's, which reads all the server answers, turns the report off
+		{"cmd/canyon-server/telemetry_v2.go", map[string]string{"old-cli": "true"}},          // every stack but old-cli's, which reads all the server answers, turns the report off
 		{"cmd/canyon-server/routes_gate.go", map[string]string{"probes": "true", "old-cli": "true"}},
 		{"executor/kube/run.go", map[string]string{"kind": "true", "build-arch": "true", "executor-e2e": "true", "old-cli": "true"}},
 		{"docs/src/content/docs/org/usage-reports.md", map[string]string{}},

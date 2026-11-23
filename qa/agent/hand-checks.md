@@ -23,8 +23,8 @@ Never type a password into a browser for these from a script: the person signs i
      AND 'ses_' || left(encode(sha256(convert_to(id, 'UTF8')), 'hex'), 16) = '<digest>';
    ```
 
-   Ask again. The call works with no new consent: the client refreshed. The sessions list still shows that one
-   session, with a later `last_seen_at`.
+   Ask again. The call works with no new consent: the client refreshed. The same session, not revoked, now has an
+   `access_expires_at` an hour on; its `last_seen_at` moves at most once an hour, so it needn't have changed.
 
 Record: `pass | Claude Code: its own /mcp sign-in | connected, rules read, refreshed after its token was ended`.
 
@@ -49,25 +49,31 @@ own.
 Once, on one client (Claude Code): disconnect it in the dashboard, see its next call refused, run `/mcp` and
 authenticate again, see it work. Record it as `Claude Code: reconnect after a disconnect`.
 
-## Claude Code on the web: one sitting
+## Claude Code on the web
 
-A real cloud agent, run by the person in one sitting. Before it, the operator:
+A real cloud agent, run by a person in one sitting. Its parts are set up once and kept between rounds.
 
-1. pushes a branch, `qa/web-session`, to the test repository with the deploy key, holding an app with one blocking
-   finding (`hosted-deploy-ref.md`'s seed does), and a `.mcp.json` at its root:
+**Kept between rounds:**
 
-   ```json
-   {
-     "mcpServers": {
-       "canyon": { "type": "http", "url": "https://<canyon>/mcp" }
-     }
-   }
-   ```
+- **Canyon as a claude.ai custom connector**, the route Canyon's docs give: Settings › Connectors › Add custom
+  connector, with the URL `https://<canyon>/mcp`, "Sign in now", "Use Claude's published identity", and no headers.
+  It is connected as the tester, through Canyon's consent page with `act`. A repository's `.mcp.json` alone doesn't
+  work: the web session can't sign in to it, and the default environment's network blocks the host.
+- **A personal cloud environment** for the test repository whose network allows `<canyon>`.
+- **The operator's GitHub account** as a collaborator on `<test-org>/<test-repo>`, and the Claude GitHub App
+  installed on `<test-org>`.
+- **The branch and the app:**
+  - branch `qa/web-session` on `<test-org>/<test-repo>`, holding an app with one blocking finding
+    (`hosted-deploy-ref.md`'s seed does);
+  - the app `qa-web-session`, made by the tester and linked to the repository's root (`PUT …/repository`).
 
-2. makes the app `qa-web-session` as the tester and links it to the repository (`PUT …/repository`).
+  The linked root is held by one app alone, so unlink any other app at the root first.
 
-The person opens Claude Code on the web on that repository and branch, connects canyon when asked (the consent
-page, as the tester, `act`), and sends this, word for word:
+**Before each round,** the operator resets `qa/web-session` to the seed with a revert commit, never a force push.
+The agent will notice the revert and may say so, which is fine.
+
+**The sitting.** The person opens Claude Code on the web on `<test-org>/<test-repo>`, branch `qa/web-session`, in
+that environment, with the Canyon connector on, and sends this, word for word:
 
 ```
 This branch is our team lunch poll, and it's linked to Canyon as the app qa-web-session. Use Canyon's tools: check
@@ -75,7 +81,14 @@ this branch, fix whatever Canyon blocks on, push the fix to this branch, then de
 link. Don't put it in production.
 ```
 
-Good: `canyon_check_ref` on the branch, blocked; the key moved out of the browser code; a push; `canyon_check_ref`
-or `canyon_deploy_ref` on the new commit, passed; the preview link; no production. Save the session's transcript
-beside the run, and record `pass` or `fail | Claude Code on the web | <what happened>`; where the web session
-can't sign in to a remote MCP server at all, that is the finding.
+**What good looks like:**
+
+- `canyon_check_ref` on the branch, blocked on the key in the browser code;
+- the key moved out of the browser code, and a push to the branch;
+- a check of the new commit that passes, then `canyon_deploy_ref`, followed with `canyon_review` if it's handed off;
+- the preview link, answering 200, and no production.
+
+Save the session's transcript beside the run, and record `pass` or `fail | Claude Code on the web | <what happened>`.
+
+**Teardown** removes only the round's deploy key and its OAuth sessions. The connector, the environment, the
+collaborator, the Claude GitHub App, the branch and the app all stay for the next round.

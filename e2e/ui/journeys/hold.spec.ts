@@ -35,16 +35,8 @@ const stop = async (page: Page, app: string, reason: string) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   if (!wide(page)) await fleetRow(page, app);
 };
-// Lift the hold on the fleet: in the pane on a desktop, in Needs attention on a phone. The pane's Needs you lists the hold
-// too, with a Lift of its own, once the status read answers: waited for here, so what is pressed is the pane's own, the one
-// outside it, and never whichever came first.
-const lift = async (page: Page, app: string) => {
-  const name = { name: `Lift the hold on ${app}` };
-  if (!wide(page)) return page.getByRole("main").getByRole("button", name);
-  const side = page.getByRole("complementary", { name: `Details for ${app}` });
-  await expect(side.getByRole("region", { name: "Needs you" }).getByRole("button", name)).toBeVisible();
-  return side.getByRole("button", name).and(page.locator(":not([aria-label='Needs you'] *)"));
-};
+// Lift the hold on the fleet: in the pane on a desktop, which offers it once, in Needs attention on a phone.
+const lift = (page: Page, app: string) => (wide(page) ? rows(page) : page.getByRole("main")).getByRole("button", { name: `Lift the hold on ${app}` });
 
 // A journey that failed part way leaves its app held, and the outbound journeys after it on the shard are then refused 409 held.
 let held = "";
@@ -74,7 +66,7 @@ journey("stop production, read the banner, lift the hold", {
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await expect(page.getByRole("main").getByText("Held", { exact: true }).first()).toBeVisible(); // the row's, and on a desktop its pane's too
-        await expect(await lift(page, app)).toBeVisible();
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -101,7 +93,7 @@ journey("stop production, read the banner, lift the hold", {
       do: async (page, { app, version }) => {
         await fleetRow(page, app);
         await pane(page, app);
-        await (await lift(page, app)).click();
+        await lift(page, app).click();
         await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: `Lift the hold and start ${version}` }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);
@@ -127,7 +119,7 @@ journey("stop production, read the banner, lift the hold", {
       do: async (page, { app }) => stop(page, app, "UX journey: held again, to lift it leaving production stopped"),
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(await lift(page, app)).toBeVisible();
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -141,7 +133,7 @@ journey("stop production, read the banner, lift the hold", {
     {
       name: "lift the hold leaving production stopped: production is empty",
       do: async (page, { app }) => {
-        await (await lift(page, app)).click();
+        await lift(page, app).click();
         await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: "Lift the hold, keep it stopped" }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);

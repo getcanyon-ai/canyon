@@ -13,7 +13,7 @@ const FIELD = "max-w-[640px] rounded-lg border border-border bg-surface px-2.5 p
 const NOTE = "mt-1 max-w-[720px] text-md text-text-dim";
 const CARD = "mt-1 rounded-xl border border-border bg-surface-2 px-3.5 py-3";
 // The Policies tab's row: what it is, its one control, and what a change would block today.
-const ROW = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] items-start gap-x-6 gap-y-1.5 border-t border-border py-3.5 first:border-t-0 max-[860px]:grid-cols-1";
+const ROW = "grid grid-cols-[minmax(0,1fr)_280px_minmax(0,220px)] items-start gap-x-6 gap-y-1.5 border-t border-border py-3.5 first:border-t-0 max-[1100px]:grid-cols-1";
 
 // COMMUNITY is SIG's maintained fork of the community Opengrep rules, at a commit pinned here, and the
 // folders of the three languages it adds: a rules repo an organisation may choose, never one Canyon

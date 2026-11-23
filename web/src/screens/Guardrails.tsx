@@ -62,14 +62,14 @@ function Register({ done, close }: { done: (row: DesignSystemRow) => void; close
   );
 }
 
-// Guardrails' four pages (the redesign: "Only the rules live here now"): the pipeline, the policies,
-// the scanners, and what coding agents are told. Each is #/guardrails/<page>; the bare route is the
-// first, Pipeline, and a link to a rule's row (?rule=) is the tab that rule's row is on.
-const PAGES = [["pipeline", "Pipeline"], ["policies", "Policies"], ["scanners", "Scanners"], ["playbooks", "Playbooks"], ["agents", "What agents are told"]] as const;
+// Guardrails' pages (the redesign: "Only the rules live here now"): the policies, the pipeline, the scanners, the
+// playbooks and what coding agents are told. Each is #/guardrails/<page>; the bare route is the first, Policies (#118),
+// and a link to a rule's row (?rule=) is the tab that rule's row is on.
+const PAGES = [["policies", "Policies"], ["pipeline", "Pipeline"], ["scanners", "Scanners"], ["playbooks", "Playbooks"], ["agents", "What agents are told"]] as const;
 const pageOf = (hash: string) => {
   const rule = new URLSearchParams(hashQuery()).get("rule");
   if (rule !== null) return SCANNER_RULES.includes(rule) ? "scanners" : "policies";
-  return PAGES.find(([key]) => hash.startsWith(`#/guardrails/${key}`))?.[0] ?? "pipeline";
+  return PAGES.find(([key]) => hash.startsWith(`#/guardrails/${key}`))?.[0] ?? "policies"; // Guardrails opens on Policies (#118)
 };
 
 // The org's guardrails: the rules every app must pass, the stacks every agent is handed, and the
@@ -198,7 +198,7 @@ export function Guardrails() {
       <main className="mx-auto max-w-[1280px] min-w-0 flex-1 px-8 pt-3.5 pb-24 max-[860px]:px-4">
         <h1 className="text-title font-semibold tracking-tight">Guardrails</h1>
         <p className={SUB}>What every app must pass before it reaches production, and what coding agents are told.</p>
-        {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border pr-4 max-[520px]:gap-4">
+        {record !== null && <nav aria-label="Guardrails" className="mt-4 flex gap-5 overflow-x-auto border-b border-border max-[860px]:-mx-4 max-[860px]:px-4 max-[520px]:gap-4">
           {PAGES.map(([key, label]) => (
             <a key={key} href={`#/guardrails/${key}`} aria-current={page === key ? "page" : undefined}
               className={`py-2.5 text-base font-medium whitespace-nowrap no-underline ${page === key ? "text-text shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-text-dim hover:text-text"}`}>

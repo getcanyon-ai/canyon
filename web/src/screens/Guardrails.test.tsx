@@ -226,7 +226,7 @@ describe("the guardrails screen", () => {
     server(reads);
     await loaded();
     expect(screen.queryByText(/model/)).toBeNull();
-    expect(screen.queryByLabelText("Organisation name")).toBeNull();
+    expect(screen.queryByLabelText("Organization name")).toBeNull();
     expect(screen.queryByRole("region", { name: "Who may sign in" })).toBeNull();
   });
 
@@ -727,6 +727,16 @@ describe("what agents are told, first", () => {
   });
 });
 
+// Policies leads the strip, the page Guardrails opens on (#118); Pipeline is the second.
+it("orders the tabs Policies first", async () => {
+  window.location.hash = "#/guardrails";
+  server({ ...reads, "GET /api/v1/policies": { body: { policies: [] } }, "GET /api/v1/custom-rules": { body: { custom_rules: [] } } });
+  render(<Guardrails />);
+  const tabs = within(await screen.findByRole("navigation", { name: "Guardrails" })).getAllByRole("link").map((one) => one.textContent);
+  expect(tabs).toEqual(["Policies", "Pipeline", "Scanners", "Playbooks", "What agents are told"]);
+  window.location.hash = "";
+});
+
 // Guardrails' five tabs: each is its own route, the bare one is Pipeline, a rule's link is the tab its
 // row is on, and only the page shown is read.
 describe("the guardrails tabs", () => {
@@ -735,7 +745,8 @@ describe("the guardrails tabs", () => {
   const current = () => screen.getByRole("navigation", { name: "Guardrails" }).querySelector("[aria-current=page]")?.textContent;
 
   it.each([
-    ["#/guardrails", "Pipeline", "Pipeline"],
+    ["#/guardrails", "Policies", "Policies"], // Guardrails opens on Policies (#118)
+    ["#/guardrails/pipeline", "Pipeline", "Pipeline"],
     ["#/guardrails/policies", "Policies", "Policies"],
     ["#/guardrails?rule=prod.clean-gate", "Policies", "Policies"], // the app's checklist and the receipt link here
     ["#/guardrails/scanners", "Scanners", "Scanners"],

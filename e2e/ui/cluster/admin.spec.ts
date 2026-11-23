@@ -32,7 +32,7 @@ test("A1 sign in through the identity provider, then onboard", async ({ page, br
   expect(before.onboarded_at, "the install is not fresh: onboarded_at is already set").toBeNull();
   await expect(page.getByRole("heading", { name: "Set up Canyon" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What is this organization called?" })).toBeVisible();
-  await page.getByLabel("Organisation name").fill("E2E Org");
+  await page.getByLabel("Organization name").fill("E2E Org");
   await page.getByRole("button", { name: "Continue" }).click();
   // Step 2: the three addresses, no domain. The admin's own address is already the first row.
   await expect(page.getByRole("heading", { name: "Who may sign in?" })).toBeVisible();

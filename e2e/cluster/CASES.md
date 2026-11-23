@@ -43,7 +43,7 @@ job. A deleted project's id is never free again (contracts/routes.md), which the
 setup state (`onboarded_at` null), `CANYON_ADMINS` holds the admin's address. *Steps*: open
 `$E2E_CANYON_URL`; the sign-in screen's one button reads `Sign in` and never names the provider;
 sign in on the provider's pages as admin; the dashboard renders onboarding, not the fleet; fill
-step 1 (organisation name `E2E Org`), step 2 (sign-in: the three addresses, no domain), step 3
+step 1 (organization name `E2E Org`), step 2 (sign-in: the three addresses, no domain), step 3
 (admins: the admin alone), step 4 shows `Ready 4 of 4` and the identity row read-only; click
 `Finish setup`. *Assert*: the fleet loads with no apps; `GET /api/v1/preferences` answers
 `onboarded_at` set; the audit trail's newest row renders `finished setting Canyon up`; before the
@@ -409,7 +409,7 @@ asked. It is not yet in `TestSuite`, so run it by hand. *Given*:
   code and the same dependencies with <newer>. A rebuild is a new program, not a copy of what production runs, so
   a person on your team decides.` (`<newer>` is `a newer Node.js` only when every fix is in node-engine's layers,
   else `newer build tools`). `GET /api/v1/patching/identities` reads the identity with `kind: "rebuild"`, and
-  Settings › App hosting names it `build tools <12 hex>` with no **Approve for every app**.
+  Settings › App hosting names it `Newest build tools` with no **Approve for every app**.
 - **A person approves.** bob, a contributor, approves it in the browser at `/#/approve?code=<code>`, which
   answers `202 {run}`. Production then reads `patched`, and its image read's `image_digest` equals preview's.
 

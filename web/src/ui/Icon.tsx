@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUp, ArrowUpRight, Check, ChevronRight, CircleCheck, CircleDashed, CircleSmall, CircleX, Clock, Ellipsis, Funnel, GripVertical, Info, LayoutGrid, List, LoaderCircle, Lock, Menu, Search, Shield, SlidersVertical, Terminal, TriangleAlert, User, X, type LucideIcon } from "lucide-react";
+import { ArrowRight, ArrowUp, ArrowUpRight, Check, ChevronRight, CircleCheck, CircleDashed, CircleSmall, CircleX, Clock, Ellipsis, Funnel, Info, LayoutGrid, List, LoaderCircle, Lock, Menu, Search, Shield, SlidersVertical, Terminal, TriangleAlert, User, X, type LucideIcon } from "lucide-react";
 
 // The dashboard's icons, from Lucide by name: a 24-unit grid, a 2-unit stroke in the current colour,
 // so an icon takes the colour of the word beside it. Decorative — the word carries the meaning
@@ -25,7 +25,6 @@ const ICONS = {
   person: User,
   close: X,
   locked: Lock,
-  grip: GripVertical,
   info: Info,
   done: Check,
   terminal: Terminal,

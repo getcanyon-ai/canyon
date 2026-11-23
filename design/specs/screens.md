@@ -996,9 +996,9 @@ responder with no grant never read it, nor see the card (the reduced page reads 
 
 ### Connect an agent (design/specs/mcp.md §12)
 
-On Settings › People & sign-in, directly above the sessions list, so an agent is connected and disconnected in one
-place, and both lead the page, above the forms that set who signs in: they are the part every member acts on
-(amended 2026-11-23, getcanyon-ai/canyon#99). The laptop part and the cloud part are each a card, the laptop's first, and
+On Settings › Agents (`#/settings/agents`), directly above the sessions list, so an agent is connected and
+disconnected in one place, on a tab every member finds by name; People & sign-in keeps the forms that set who signs
+in (amended 2026-11-23, getcanyon-ai/canyon#99 and its review). The laptop part and the cloud part are each a card, the laptop's first, and
 every line to run has its own `Copy` (`Copied`). Titled `Connect an agent`, then `Give your coding agents Canyon's tools. An agent acts as the person who
 connects it, and each one you connect is listed under Sessions, where you can disconnect it.`
 

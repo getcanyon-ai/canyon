@@ -67,11 +67,14 @@ Someone without access to an app who opens its link sees "You don't have access 
 
 ## Settings
 
-Settings has six tabs. An admin sees all six; a member sees five, without **GitHub**.
+Settings has a tab for each part of the organisation's set-up. A member doesn't see the tabs that are an admin's alone, such as **GitHub**.
 
 - **Organisation**: the organisation's name.
 - **People & sign-in**: who may sign in, who administers Canyon, the groups claim, and the
   production approval switch. See [First boot and sign-in](/org/first-boot/).
+- **Agents**: how to connect a coding agent to Canyon, from a laptop or the cloud, and **Sessions**:
+  where you're signed in, where you disconnect an agent. Every member's. See
+  [Connect your agent](/start/connect-your-agent/).
 - **App hosting**: on Kubernetes, the front door: "The front door is how people get to an app on this
   Canyon: the address it answers at, and who signs them in before the app sees them."
   [How people reach apps](/self-host/front-door/) explains the choices. On a Canyon that runs apps
@@ -83,7 +86,7 @@ Settings has six tabs. An admin sees all six; a member sees five, without **GitH
 - **Outbound** (beta): whether apps' calls out go through Canyon, and what they may call. Every member
   reads it; an admin changes it. See [Outbound](/org/outbound/).
 
-Admins change these settings. Members see them read-only.
+Admins change these settings. Members see them read-only, except Agents, which is every member's own.
 
 ## Approve a promotion
 

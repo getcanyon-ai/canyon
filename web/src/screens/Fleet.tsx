@@ -57,11 +57,11 @@ const DASH = <span className="text-text-faint">—</span>;
 // team row, then how far it is shared — Owner · shared with 2. An admin sees every row, and a row with no grant of
 // theirs says only how far it is shared.
 const YOU: Partial<Record<TeamAccess["level"], string>> = { owner: FLEET.owner, contributor: FLEET.contributor };
-function Shared({ access }: { access: TeamAccess }) {
+function shared(access: TeamAccess): string { // the table's Access cell, and a phone card's meta line
   const n = access.people + access.groups;
   const you = YOU[access.level];
-  if (you === undefined) return <>{access.everyone ? "Everyone" : n === 0 ? "Private" : FLEET.sharedWithAdmin.replace("<n>", String(n))}</>;
-  return <>{`${you} · ${access.everyone ? FLEET.sharedEveryone : n === 0 ? FLEET.private : FLEET.sharedWith.replace("<n>", String(n))}`}</>;
+  if (you === undefined) return access.everyone ? "Everyone" : n === 0 ? "Private" : FLEET.sharedWithAdmin.replace("<n>", String(n));
+  return `${you} · ${access.everyone ? FLEET.sharedEveryone : n === 0 ? FLEET.private : FLEET.sharedWith.replace("<n>", String(n))}`;
 }
 
 // A row the reader can't open whole says so once, in its Access cell, with the way to ask (the UX review: a dash in
@@ -230,7 +230,7 @@ function Card({ app, page, act }: { app: FleetRow | Reduced; page: FleetPage; ac
         <Review stage={app.latest.stage} gate={app.gate_state} warnings={app.warnings} />
       </span>
       <small className="text-sm text-text-faint">
-        {app.latest.package !== null && `${version(app.latest.package, app.latest.label)} · `}{where} · {owner}
+        {app.latest.package !== null && `${version(app.latest.package, app.latest.label)} · `}{where} · {owner}{page.banner === "none" && ` · ${shared(app.access)}`}
       </small>
       <HoldCell app={app} role={page.viewer.role} act={act}>{null}</HoldCell>{/* a card has no side pane: it keeps them until the app's ⋯ menu offers them */}
       {app.owners.length === 0 && <span className="flex flex-wrap gap-2"><Takers app={app} page={page} /></span>}
@@ -380,7 +380,7 @@ export function Fleet({ org }: { org: string | null }) {
             <h1 ref={heading} tabIndex={-1} className="text-title font-semibold tracking-tight outline-none">{owner === null ? org : ownerName(page?.apps ?? [], owner)}</h1>
             {owner === null && <p className="text-md text-text-dim">{params.get("scope") !== "team" ? (page !== null && page.viewer.role !== "admin" && !offTeams ? FLEET.allScopeMember : "Every app in the org") : page?.viewer.role === "admin" ? "The apps you own or work on. The counts are the whole org's." : "The apps you own or work on"}</p>}
           </div>
-          {owner === null && <FleetFilters query={query} signedIn={signedIn} scoped={signedIn && !offTeams} />}
+          {owner === null && !none && <FleetFilters query={query} signedIn={signedIn} scoped={signedIn && !offTeams} />}
         </div>
         {failure !== null && <p className="text-base text-critical">{failure}</p>}
         {/* What needs doing is the whole fleet's: org counts no filter narrows would read as this
@@ -448,7 +448,7 @@ export function Fleet({ org }: { org: string | null }) {
                                 : <span><EnvVersion env={app.envs.prod} name="production" /><Patched env={app.envs.prod} />{refused("prod")}</span>,
                               owner: <Owner app={app} page={page} />,
                               updated: <Age at={app.latest.since} long />,
-                              access: <Shared access={app.access} />,
+                              access: shared(app.access),
                               details: (
                                 <button type="button" className="grid size-7 place-items-center rounded-[7px] text-text-faint hover:bg-surface" aria-label={"Details for " + app.name} onClick={(event) => { opener.current = event.currentTarget; setSelected(app.id); }}>
                                   <Icon name="chevron" />

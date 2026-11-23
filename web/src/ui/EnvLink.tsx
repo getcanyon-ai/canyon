@@ -144,7 +144,7 @@ export function EnvVersion({ env, name }: { env: Env | Waiting | undefined; name
     <>
       {url === undefined ? <span className="tnum inline-flex items-center gap-1.5 text-text-dim">{shown}</span> : (
         <a className="tnum inline-flex items-center gap-1.5 text-text no-underline hover:underline" href={url} target="_blank" rel="noreferrer" aria-label={`${shown}, open ${name}`}>
-          <span aria-hidden="true" className={`size-2 rounded-full ${env.state === "unknown" ? "bg-amber" : "bg-ok"}`} />{shown}<span className="text-text-faint"><Icon name="external" size={14} /></span>
+          <span aria-hidden="true" className={`size-2 rounded-full ${mark(env)}`} />{shown}<span className="text-text-faint"><Icon name="external" size={14} /></span>
         </a>
       )}
       <NoCheckIn env={env} short />
@@ -152,6 +152,16 @@ export function EnvVersion({ env, name }: { env: Env | Waiting | undefined; name
       <Pending env={env} short />
     </>
   );
+}
+
+// The dot before what runs: green only for what is known to run. Amber where Canyon could not check, or where the
+// org runs it and its platform hasn't reported it running (the UX review); neutral where the org runs it and the
+// first minutes after the report have not passed.
+function mark(env: Env): string {
+  if (env.state === "unknown") return "bg-amber";
+  if (env.run_by !== "org") return "bg-ok";
+  const pods = checkIn(env);
+  return pods === null ? "bg-text-faint" : pods.warn ? "bg-amber" : "bg-ok";
 }
 
 // A read-only member's way into an environment (contracts/routes.md, the project read): `Open preview` or

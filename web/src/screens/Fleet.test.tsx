@@ -479,6 +479,8 @@ describe("the fleet screen", () => {
     const archive = (await card("claims-archive")).textContent!;
     expect(archive).toContain(`Production v3.1: being removed, not reported since ${clock("2026-09-02T11:29:12Z")}`);
     expect(archive).not.toContain("Production runs");
+    expect(archive).toContain("Tomas Neri · Owner · shared with 2"); // the reader's place, as the table's Access column
+    expect((await card("fnol-intake")).textContent).toContain("Marcus Bell · Contributor · shared with 2");
     expect((await card("broker-portal")).textContent).toContain(`Preview: sent ${clock("2026-09-02T10:00:00Z")} · not running yet`);
     expect(within(await card("claims-portal")).getByText(FLEET.readOnly)).toBeDefined();
     expect(within(await card("claims-portal")).getByRole("button", { name: `${FLEET.askToJoin} claims-portal` })).toBeDefined();
@@ -601,6 +603,9 @@ describe("the fleet screen", () => {
     expect(empty.getByRole("link", { name: FLEET.emptyCliLink }).getAttribute("href")).toBe("#/settings/agents");
     expect(document.querySelector("dl")).toBeNull(); // no tiles and no Needs panel: No apps yet comes first (the UX review)
     expect(screen.queryByText(/^Nothing needs you/)).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull(); // nothing to search, filter or sort yet
+    expect(screen.queryByRole("button", { name: /Filter/ })).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(empty.getByRole("link", { name: FLEET.emptyGitHubLink }).getAttribute("href")).toBe("#/settings/github");
     expect(empty.getByRole("link", { name: FLEET.emptyRulesLink }).getAttribute("href")).toBe("#/guardrails");
     unmount();
@@ -642,6 +647,7 @@ describe("the fleet screen", () => {
     const row = (name: string) => rows().find((one) => named(one) === name)!;
     expect(within(row("claims-archive")).getByText(line).closest("span")?.className).toContain("text-amber");
     expect(row("claims-archive").cells[4]!.textContent).toContain(`v3.1 · ${line}`);
+    expect(row("claims-archive").cells[4]!.querySelector(".rounded-full")?.className).toContain("bg-amber"); // never the running dot on what the platform hasn't reported
     expect(row("claims-portal").cells[3]!.textContent).toBe(`Open preview · ${line}`);
     expect(row("quote-engine").textContent).not.toContain("checked in");
   });

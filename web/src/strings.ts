@@ -1032,7 +1032,7 @@ export const SECRETS = {
   unread: "The app's secrets couldn't be read.",
 } as const;
 
-// Settings › People & sign-in's Connect an agent (design/specs/screens.md, Connect an agent; design/specs/mcp.md §12;
+// Settings › Agents' Connect an agent (design/specs/screens.md, Connect an agent; design/specs/mcp.md §12;
 // EXPERIENCE.md D5): every member's, its org-managed snippets an admin's alone.
 export const CONNECT = {
   title: "Connect an agent",

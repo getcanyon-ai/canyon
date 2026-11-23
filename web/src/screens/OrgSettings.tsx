@@ -382,8 +382,10 @@ export function Sessions({ admin }: { admin: boolean }) {
       <p className={SUB}>{SESSIONS.line}</p>
       {failure !== null && <p className="mt-2 text-md text-critical">{failure}</p>}
       {sessions !== null && (
-        <table className="mt-3 w-full text-left text-md">
-          <thead className="text-text-dim">
+        // Below 600px a row is two lines, how over when, with Disconnect beside them (#100's review): the columns are a
+        // wide screen's, and the second line says what each date is.
+        <table className="mt-3 w-full text-left text-md max-[600px]:block">
+          <thead className="text-text-dim max-[600px]:hidden">
             <tr>
               {admin && <th className="py-1.5 font-medium">{SESSIONS.person}</th>}
               <th className="py-1.5 font-medium">{SESSIONS.how}</th>
@@ -393,21 +395,29 @@ export function Sessions({ admin }: { admin: boolean }) {
               <th className="py-1.5"><span className="sr-only">{SESSIONS.disconnect}</span></th>
             </tr>
           </thead>
-          <tbody>
-            {sessions.map((s) => (
-              <tr key={s.id} className="border-t border-border">
-                {admin && <td className="py-2">{s.person?.email ?? ""}</td>}
-                <td className="py-2">{s.flow === "oauth" ? SESSIONS.flow.oauth.replace("<client>", s.client ?? "") : SESSIONS.flow[s.flow]}</td>
-                <td className="py-2">{when(s.created_at)}</td>
-                <td className="py-2">{s.last_seen_at === null ? "" : when(s.last_seen_at)}</td>
-                <td className="py-2">{when(s.expires_at)}</td>
-                <td className="py-2 text-right">
-                  {s.current && s.flow === "browser"
-                    ? <span className="text-text-dim">{SESSIONS.current}</span>
-                    : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={end(s.id)}>{SESSIONS.disconnect}</Button>}
-                </td>
-              </tr>
-            ))}
+          <tbody className="max-[600px]:block">
+            {sessions.map((s) => {
+              const how = s.flow === "oauth" ? SESSIONS.flow.oauth.replace("<client>", s.client ?? "") : SESSIONS.flow[s.flow];
+              const own = s.current && s.flow === "browser";
+              const dates = [`${SESSIONS.since} ${when(s.created_at)}`, ...(s.last_seen_at === null ? [] : [`${SESSIONS.lastUsed.toLowerCase()} ${when(s.last_seen_at)}`]), `${SESSIONS.expires.toLowerCase()} ${when(s.expires_at)}`];
+              return (
+                <tr key={s.id} className="border-t border-border max-[600px]:grid max-[600px]:grid-cols-[minmax(0,1fr)_auto] max-[600px]:items-center max-[600px]:gap-x-3 max-[600px]:py-2">
+                  {admin && <td className="py-2 max-[600px]:col-start-1 max-[600px]:py-0 max-[600px]:font-medium">{s.person?.email ?? ""}</td>}
+                  <td className="py-2 max-[600px]:col-start-1 max-[600px]:py-0">
+                    <span className="max-[600px]:block">{how}{own && <span className="hidden max-[600px]:inline">{` · ${SESSIONS.current.toLowerCase()}`}</span>}</span>
+                    <span className="hidden text-sm text-text-dim max-[600px]:block">{dates.join(" · ")}</span>
+                  </td>
+                  <td className="py-2 max-[600px]:hidden">{when(s.created_at)}</td>
+                  <td className="py-2 max-[600px]:hidden">{s.last_seen_at === null ? "" : when(s.last_seen_at)}</td>
+                  <td className="py-2 max-[600px]:hidden">{when(s.expires_at)}</td>
+                  <td className={`py-2 text-right max-[600px]:col-start-2 max-[600px]:row-start-1 max-[600px]:row-span-3 max-[600px]:py-0 ${own ? "max-[600px]:hidden" : ""}`}>
+                    {own
+                      ? <span className="text-text-dim">{SESSIONS.current}</span>
+                      : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={end(s.id)}>{SESSIONS.disconnect}</Button>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

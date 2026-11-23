@@ -35,6 +35,18 @@ describe("the sessions list", () => {
     await waitFor(() => expect(sent()).toContain("DELETE /api/v1/sessions/ses_0000000000000001"));
   });
 
+  // On a phone a row is two lines (#100's review): how and whether it is this one, over when it began, was last used and
+  // ends, with Disconnect beside them; the table's columns are a wide screen's.
+  it("says each session in two lines for a narrow screen", async () => {
+    server([row("ses_0000000000000003", "browser", { current: true, last_seen_at: "2026-11-20T10:00:00Z" })]);
+    render(<Sessions admin={false} />);
+    const list = await screen.findByRole("region", { name: SESSIONS.title });
+    const when = (at: string) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    const said = (text: string) => [...list.querySelectorAll("span")].some((one) => one.textContent === text);
+    expect(said(`${SESSIONS.flow.browser} · ${SESSIONS.current.toLowerCase()}`)).toBe(true);
+    expect(within(list).getByText(`${SESSIONS.since} ${when("2026-11-20T09:00:00Z")} · ${SESSIONS.lastUsed.toLowerCase()} ${when("2026-11-20T10:00:00Z")} · ${SESSIONS.expires.toLowerCase()} ${when("2026-11-20T21:00:00Z")}`)).toBeDefined();
+  });
+
   it("shows an admin whose each session is", async () => {
     server([row("ses_0000000000000004", "browser", { person: { display: "Gina Ruiz", email: "gina@meridian.example" } })]);
     render(<Sessions admin />);

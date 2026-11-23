@@ -66,11 +66,16 @@ const region = (name: string) => within(screen.getByRole("region", { name }));
 // Every assertion about the manifest goes through this scope: its labels are the same words as two
 // of the form's headings, and its URLs are the same strings as the form's.
 const skill = () => region("What agents are told");
-const states = () => skill().getAllByText(/^(blocking|advisory)$/);
+// The text an agent reads, as the tab shows it, all of it.
+const told = () => { const more = skill().queryByRole("button", { name: /^Show all / }); if (more !== null) fireEvent.click(more); return skill().getByTestId("told").textContent ?? ""; };
 const picker = () => screen.getByLabelText("Default design system") as HTMLSelectElement;
 const options = () => within(picker()).getAllByRole("option").map((one) => one.textContent);
 const value = (scope: ReturnType<typeof region>, label: string) => (scope.getByLabelText(label) as HTMLInputElement).value;
-const loaded = async () => { render(<Guardrails />); await screen.findByRole("button", { name: "Save" }); };
+const loaded = async () => { render(<Guardrails />); await screen.findByRole("button", { name: "Add a stack" }); };
+// The bar's Save, which only a change brings up (#99).
+const save = () => fireEvent.click(within(screen.getByRole("region", { name: "Unsaved changes" })).getByRole("button", { name: "Save" }));
+// A change that a Save sends as it was: the default design system, picked again after another.
+const touch = () => { const was = picker().value; fireEvent.change(picker(), { target: { value: "" } }); fireEvent.change(picker(), { target: { value: was === "" ? golden.design_systems.design_systems[0]!.id : "" } }); };
 const fill = (body: { name: string; namespace: string; registry_url: string; tokens_url?: string }) => {
   fireEvent.change(screen.getByLabelText("Name"), { target: { value: body.name } });
   fireEvent.change(screen.getByLabelText("Namespace"), { target: { value: body.namespace } });
@@ -83,6 +88,7 @@ const queue = (...answers: Answer[]) => () => answers.shift() ?? { status: 500, 
 const posted = (sent: () => string[]) => sent().filter((one) => one.startsWith(`POST ${SETUP} `))
   .map((one) => JSON.parse(one.slice(`POST ${SETUP} `.length)) as { messages: SetupMessage[] });
 const say = (line: string) => {
+  if (screen.queryByLabelText("Your message") === null) fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" })); // the chat opens from its button
   fireEvent.change(screen.getByLabelText("Your message"), { target: { value: line } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 };
@@ -105,7 +111,7 @@ describe("the guardrails screen", () => {
     await loaded();
     const long = "R".repeat(65);
     fireEvent.change(region("Stack 1").getByLabelText("Framework 1"), { target: { value: long } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    save();
     expect(await screen.findByText(STACKS_RULE)).toBeDefined();
     expect(sent().filter((request) => request.startsWith("PUT")).join("")).toContain(long);
     expect(value(region("Stack 1"), "Framework 1")).toBe(long);
@@ -121,7 +127,7 @@ describe("the guardrails screen", () => {
     server({ ...reads, [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response } });
     await loaded();
     fireEvent.change(region("Stack 1").getByLabelText("Language"), { target: { value: "Elixir" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    save();
     expect(await screen.findByText("Saved.")).toBeDefined();
     const stored = golden.preferences_put.response;
     stored.stacks.forEach((stack, i) => {
@@ -151,9 +157,9 @@ describe("the guardrails screen", () => {
     const sent = server({ ...reads, [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response } });
     await loaded();
     fireEvent.change(picker(), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    save();
     await screen.findByText("Saved.");
-    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, approved_buildpacks: golden.preferences.approved_buildpacks, design_system_id: null })}`);
+    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, design_system_id: null })}`);
     cleanup();
     const posted = server({ ...fresh, [`POST ${SYSTEMS}`]: { body: golden.design_system_create.response } });
     await loaded();
@@ -179,16 +185,14 @@ describe("the guardrails screen", () => {
     expect(section.queryByText(/flagged, never blocked/)).toBeNull();
   });
 
-  it("the URLs shown are the record's, not the picker's draft", async () => {
+  it("the design system agents are told is the record's, not the picker's draft", async () => {
     server(reads);
     await loaded();
     const other = golden.design_systems.design_systems.find((row) => row.id !== golden.preferences.design_system?.id);
     fireEvent.change(picker(), { target: { value: other?.id } });
     expect(picker().value).toBe(other?.id);
-    // Scoped to the form's own section: the skill section below renders the same URL, and this test
-    // was always about what the picker's draft does to the form.
-    expect(region("Design system").getByText(golden.preferences.design_system?.registry_url ?? "", { exact: false })).toBeDefined();
-    expect(region("Design system").queryByText(other?.registry_url ?? "", { exact: false })).toBeNull();
+    expect(told()).toContain(golden.manifest.design_system?.registry_url ?? "");
+    expect(told()).not.toContain(other?.registry_url ?? "");
   });
 
   it("a registered system is selectable at once and the org's only after Save", async () => {
@@ -201,9 +205,9 @@ describe("the guardrails screen", () => {
     expect(options()).toContain(`${created.name} · ${created.namespace}`);
     expect(picker().value).toBe(created.id);
     expect(sent().filter((request) => request.startsWith("PUT"))).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    save();
     await screen.findByText("Saved.");
-    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, approved_buildpacks: golden.preferences.approved_buildpacks, design_system_id: created.id })}`);
+    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, design_system_id: created.id })}`);
   });
 
   it("removing a stack renumbers the ones after it", async () => {
@@ -243,7 +247,7 @@ describe("the guardrails screen", () => {
     render(<Guardrails />);
     expect(await screen.findByText("internal error")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await screen.findByRole("button", { name: "Save" });
+    await screen.findByRole("button", { name: "Add a stack" });
     expect(screen.queryByText("internal error")).toBeNull();
     expect(value(region("Stack 1"), "Language")).toBe(golden.preferences.stacks[0]?.language);
     expect(sent().filter((one) => one.startsWith(`GET ${PREFERENCES}`))).toHaveLength(2);
@@ -253,7 +257,7 @@ describe("the guardrails screen", () => {
     vi.useFakeTimers();
     const sent = server(reads);
     render(<Guardrails />);
-    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDefined());
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Add a stack" })).toBeDefined());
     expect(sent()).toHaveLength(4); // the form's three and the host's via: the policies are another tab's
     await vi.advanceTimersByTimeAsync(10_000);
     await act(async () => {});
@@ -305,7 +309,7 @@ describe("the guardrails screen", () => {
     });
     await loaded();
     fireEvent.change(region("Stack 1").getByLabelText("Framework 1"), { target: { value: "R".repeat(65) } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    save();
     await screen.findByText(STACKS_RULE);
     say(golden.setup.request.messages[0]?.content ?? "");
     await settled();
@@ -333,8 +337,8 @@ describe("the guardrails screen", () => {
   it("an empty box does not send", async () => {
     const sent = server({ ...reads, [`POST ${SETUP}`]: { body: golden.setup.response } });
     await loaded();
+    say("");
     expect(screen.getByText("Type something first.")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(posted(sent)).toHaveLength(0);
   });
 
@@ -423,20 +427,22 @@ describe("the guardrails screen", () => {
     expect(posted(sent)).toHaveLength(0);
   });
 
-  it("the empty state offers the chat and the form, and only when there is nothing", async () => {
+  it("the empty state opens the chat beside the form, and elsewhere its button does", async () => {
     server({ ...reads, [`GET ${PREFERENCES}`]: { body: { ...golden.preferences, stacks: [], design_system: null } } });
     await loaded();
     expect(screen.getByText("Nothing configured yet.")).toBeDefined();
+    expect(screen.getByLabelText("Your message")).toBeDefined(); // nothing set: the chat is open already
     expect(screen.getAllByRole("button", { name: "Add a stack" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
     expect(document.activeElement).toBe(screen.getByLabelText("Your message"));
     cleanup();
-    // A design system and no stacks is not nothing: the line goes, and the form says the rest.
+    // A design system and no stacks is not nothing: the line goes, and the chat waits for its button.
     server({ ...reads, [`GET ${PREFERENCES}`]: { body: { ...golden.preferences, stacks: [] } } });
     await loaded();
     expect(screen.queryByText("Nothing configured yet.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Set up with Canyon" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Add a stack" })).toHaveLength(1);
+    expect(screen.queryByLabelText("Your message")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Your message"));
   });
 
   // Guardrails is an admin's screen (design/specs/screens.md, A4b): a member who opens it is told so and
@@ -454,45 +460,14 @@ describe("the guardrails screen", () => {
     expect(page.queryAllByRole("button")).toHaveLength(0);
   });
 
-  // What "Approved stacks only" approves: every buildpack an app's deploy ran, each by its builder's
-  // name or else its id, ticked when approved; a tick is saved with the form, sorted by id.
-  it("an admin approves the buildpacks apps build with", async () => {
-    const admin = golden.preferences_admin;
-    const sent = server({ ...reads, [`GET ${PREFERENCES}`]: { body: admin }, [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response } });
-    await loaded();
-    const boxes = within(screen.getByRole("region", { name: "Approved buildpacks" })).getAllByRole("checkbox") as HTMLInputElement[];
-    expect(boxes.map((box) => [box.closest("label")?.textContent, box.checked])).toEqual(
-      admin.buildpacks_seen.map((bp) => [bp.name ?? bp.id, admin.approved_buildpacks.includes(bp.id)]));
-    fireEvent.click(screen.getByRole("checkbox", { name: "paketo-buildpacks/pip" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByText("Saved.");
-    const put = sent().find((one) => one.startsWith(`PUT ${PREFERENCES} `));
-    expect(JSON.parse(put!.slice(`PUT ${PREFERENCES} `.length)).approved_buildpacks).toEqual([...admin.approved_buildpacks, "paketo-buildpacks/pip"].sort());
-  });
 
-  it("the section is the manifest the server answered, field by field", async () => {
+  it("the section is the text an agent is handed, from the manifest the server answered", async () => {
     server(reads);
     await loaded();
-    const handed = golden.manifest;
-    expect(skill().getByText(handed.host)).toBeDefined();
-    expect(states()).toHaveLength(handed.policies.length);
-    for (const one of handed.policies) {
-      expect(skill().getByText(one.name)).toBeDefined();
-      expect(skill().getByText(one.id)).toBeDefined();
-    }
-    expect(skill().getByText(handed.component_types.join(" · "))).toBeDefined();
-    for (const one of handed.stacks) {
-      expect(skill().getByText(one.language)).toBeDefined();
-      expect(skill().getByText(one.frameworks.join(" · "))).toBeDefined();
-    }
-    expect(skill().getByText(handed.design_system?.name ?? "")).toBeDefined();
-    expect(skill().getByText(handed.design_system?.namespace ?? "")).toBeDefined();
-    expect(skill().getByText(handed.design_system?.registry_url ?? "")).toBeDefined();
-    expect(skill().getByText(handed.design_system?.tokens_url ?? "")).toBeDefined();
-    // Read-only, and nothing on it is built into somewhere to go: the host is server configuration,
-    // not a destination.
-    expect(skill().queryByRole("link")).toBeNull();
+    expect(told()).toBe(handed(golden.manifest, true));
+    // Read-only: nothing on it edits, and it links only to where its other parts are changed.
     expect(skill().queryByRole("textbox")).toBeNull();
+    expect(skill().getAllByRole("link").map((one) => one.getAttribute("href"))).toEqual(["#/guardrails/policies", "#/guardrails/playbooks"]);
   });
 
   it("the section says how big it is, counted the way an agent is handed it", async () => {
@@ -501,9 +476,7 @@ describe("the guardrails screen", () => {
     // The fixture as §7.4 renders it for an agent, cli/testdata/manifest-agent.txt without its last
     // newline: tokens as characters over four. Recorded, not recomputed: a wrong count is meant to fail here.
     expect(skill().getByText("49 lines · ~742 tokens")).toBeDefined();
-    // Where production is promoted is always said, so an agent never guesses whether a person approves it.
-    expect(skill().getByText("Promoted from the CLI or the dashboard")).toBeDefined();
-    expect(skill().queryByRole("status")).toBeNull();
+    expect(skill().queryByText(/^Over 500 lines\./)).toBeNull();
   });
 
   it("the text it counts is the text canyon manifest hands an agent, how to pass each rule that blocks among it", () => {
@@ -551,25 +524,24 @@ describe("the guardrails screen", () => {
     const many = Array.from({ length: 600 }, (_, i) => ({ ...golden.manifest.policies[0]!, id: `rule.${i}`, name: `Rule ${i}` }));
     server({ ...reads, [`GET ${MANIFEST}`]: { body: { ...golden.manifest, policies: many } } });
     await loaded();
-    expect(skill().getByRole("status").textContent).toContain("Over 500 lines.");
-    expect(states()).toHaveLength(600); // recommended, not trimmed
+    expect(skill().getByText(/^Over 500 lines\./)).toBeDefined();
+    expect(told()).toContain("- Rule 599"); // recommended, not trimmed
   });
 
-  it("every rule the server sends is shown", async () => {
+  it("every rule the server sends is in the text, as an agent is handed it", async () => {
     server(reads);
     await loaded();
-    // The client filters nothing. An off rule cannot arrive, so the only thing a filter on state
-    // could do here is hide a rule the agent really is handed.
-    expect(states()).toHaveLength(golden.manifest.policies.length);
-    for (const one of golden.manifest.policies) expect(skill().getByText(one.name)).toBeDefined();
+    // The client filters nothing: a person promotes is said by the last line, and an AI twin by its scanner rule's, as
+    // canyon manifest says them (cli.md §7.4).
+    for (const one of golden.manifest.policies.filter((rule) => rule.id !== "prod.human-approval" && !rule.id.startsWith("ai."))) expect(told()).toContain(`- ${one.name}`);
   });
 
   it("the section is the record, not the form's draft", async () => {
     server(reads);
     await loaded();
     fireEvent.change(region("Stack 1").getByLabelText("Language"), { target: { value: "Elixir" } });
-    expect(skill().queryByText("Elixir")).toBeNull(); // nobody has saved that word
-    expect(skill().getByText(golden.manifest.stacks[0]?.language ?? "")).toBeDefined();
+    expect(told()).not.toContain("Elixir"); // nobody has saved that word
+    expect(told()).toContain(`- ${golden.manifest.stacks[0]?.language ?? ""}`);
   });
 
   it("a save re-reads what the agents are handed", async () => {
@@ -579,10 +551,11 @@ describe("the guardrails screen", () => {
       [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response },
     });
     await loaded();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    touch();
+    save();
     await screen.findByText("Saved.");
-    expect(skill().getByText("No approved stacks yet.")).toBeDefined();
-    expect(skill().getByText("No design system yet.")).toBeDefined();
+    expect(told()).not.toContain("Approved stacks:");
+    expect(told()).not.toContain("Design system:");
     expect(sent().filter((one) => one.startsWith(`GET ${MANIFEST}`))).toHaveLength(2);
   });
 
@@ -594,24 +567,20 @@ describe("the guardrails screen", () => {
       [`POST ${SETUP}`]: { body: golden.setup.response },
     });
     await loaded();
-    expect(skill().getByText("No approved stacks yet.")).toBeDefined();
+    expect(told()).not.toContain("Approved stacks:");
     say(golden.setup.request.messages[0]?.content ?? "");
     await settled();
     // The chat wrote the row: the form moved, and so did what the agents are handed.
-    expect(skill().getByText(golden.manifest.stacks[0]?.language ?? "")).toBeDefined();
-    expect(skill().queryByText("No approved stacks yet.")).toBeNull();
+    expect(told()).toContain(`Approved stacks:\n- ${golden.manifest.stacks[0]?.language ?? ""}`);
     expect(sent().filter((one) => one.startsWith(`GET ${MANIFEST}`))).toHaveLength(2);
   });
 
   it("the section is the manifest even where the form disagrees with it", async () => {
-    // The form shows the golden's stacks and design system; the manifest says nothing is
-    // configured, and the section says what the manifest says. The policy list is the host's, not
-    // the org's, so it is handed over either way.
+    // The form shows the golden's stacks and design system; the manifest says nothing is configured, and the
+    // section says what the manifest says.
     server({ ...reads, [`GET ${MANIFEST}`]: { body: { ...golden.manifest, stacks: [], design_system: null } } });
     await loaded();
-    expect(skill().getByText("No approved stacks yet.")).toBeDefined();
-    expect(skill().getByText("No design system yet.")).toBeDefined();
-    expect(states()).toHaveLength(golden.manifest.policies.length);
+    expect(told()).toBe(handed({ ...golden.manifest, stacks: [], design_system: null }, true));
   });
 
   it("a save clears the failure of a read before it", async () => {
@@ -622,11 +591,13 @@ describe("the guardrails screen", () => {
       [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response },
     });
     await loaded();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    touch();
+    save();
     await screen.findByText("Saved.");
     // The save landed and the manifest read after it did not: both sentences, as the brief says.
     expect(screen.getByText(READ_FAILED)).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    touch();
+    save();
     await waitFor(() => expect(screen.queryByText(READ_FAILED)).toBeNull());
     expect(sent().filter((one) => one.startsWith(`GET ${MANIFEST}`))).toHaveLength(3);
   });
@@ -636,8 +607,123 @@ describe("the guardrails screen", () => {
     // screen outlives the cleanup, and the second setup has to turn it back on.
     server(reads);
     render(<StrictMode><Guardrails /></StrictMode>);
-    await screen.findByRole("button", { name: "Save" });
-    expect(states()).toHaveLength(golden.manifest.policies.length);
+    await screen.findByRole("button", { name: "Add a stack" });
+    expect(told()).toBe(handed(golden.manifest, true));
+  });
+});
+
+// The tab opens with what agents read and only then what sets it (#99; design/specs/mcp.md §12): the text an agent is
+// handed, exactly, collapsed to fourteen lines, copied whole; then the stacks and the design system, saved from a bar that
+// shows only once something changed.
+describe("what agents are told, first", () => {
+  beforeEach(() => { window.location.hash = "#/guardrails/agents"; });
+  afterEach(() => { window.location.hash = ""; });
+  const ready = async () => { render(<Guardrails />); await screen.findByRole("button", { name: "Add a stack" }); };
+  const text = handed(golden.manifest, true);
+  const lines = text.split("\n");
+  const shownText = () => skill().getByTestId("told").textContent;
+
+  it("shows the text agents read, its first fourteen lines, then all of it", async () => {
+    server(reads);
+    await ready();
+    expect(shownText()).toBe(lines.slice(0, 14).join("\n"));
+    fireEvent.click(skill().getByRole("button", { name: `Show all ${lines.length} lines` }));
+    expect(shownText()).toBe(text);
+    fireEvent.click(skill().getByRole("button", { name: "Show fewer" }));
+    expect(shownText()).toBe(lines.slice(0, 14).join("\n"));
+    for (const one of golden.manifest.policies) expect(skill().queryByText(one.id)).toBeNull(); // an agent never reads a rule's id
+  });
+
+  it("copies all of the text, not the lines it shows", async () => {
+    server(reads);
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    await ready();
+    fireEvent.click(skill().getByRole("button", { name: "Copy" }));
+    expect(await skill().findByText("Copied")).toBeDefined();
+    expect(writeText).toHaveBeenCalledWith(text);
+  });
+
+  it("sends policies and playbooks to their tabs, and comes before the settings", async () => {
+    server(reads);
+    await ready();
+    expect(skill().getByRole("link", { name: "Policies" }).getAttribute("href")).toBe("#/guardrails/policies");
+    expect(skill().getByRole("link", { name: "playbooks" }).getAttribute("href")).toBe("#/guardrails/playbooks");
+    const told = screen.getByRole("region", { name: "What agents are told" });
+    const stacks = screen.getByRole("region", { name: "Stacks agents are told to use" });
+    expect(told.compareDocumentPosition(stacks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Approved buildpacks" })).toBeNull(); // Policies' now, on its rule's row
+  });
+
+  it("offers Save only once something changed, and Discard puts the record back", async () => {
+    server(reads);
+    await ready();
+    expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    fireEvent.change(region("Stack 1").getByLabelText("Language"), { target: { value: "Elixir" } });
+    const bar = within(screen.getByRole("region", { name: "Unsaved changes" }));
+    expect(bar.getByRole("button", { name: "Save" })).toBeDefined();
+    fireEvent.click(bar.getByRole("button", { name: "Discard" }));
+    expect(value(region("Stack 1"), "Language")).toBe(golden.preferences.stacks[0]?.language);
+    expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();
+  });
+
+  it("saves the stacks and the design system, and nothing of the buildpacks", async () => {
+    const sent = server({ ...reads, [`PUT ${PREFERENCES}`]: { body: golden.preferences_put.response } });
+    await ready();
+    fireEvent.change(picker(), { target: { value: "" } });
+    fireEvent.click(within(screen.getByRole("region", { name: "Unsaved changes" })).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved.")).toBeDefined();
+    expect(sent()).toContain(`PUT ${PREFERENCES} ${JSON.stringify({ stacks: golden.preferences.stacks, design_system_id: null })}`);
+  });
+
+  // On a phone the tabs scroll sideways: the tab shown is brought into view (#100's review), as Settings does.
+  it("scrolls the tab shown into view", async () => {
+    const scrolled = vi.fn(); // jsdom has no scrollIntoView; the stub is removed below
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      server(reads);
+      await ready();
+      expect(scrolled.mock.contexts).toContain(screen.getByRole("link", { name: "What agents are told", current: "page" }));
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("shows what to say in the chat, and links Policies from the design system", async () => {
+    server(reads);
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
+    expect(screen.getByLabelText("Your message").getAttribute("placeholder")).toBe("Our teams build React with Vite and Python with FastAPI, using our design system.");
+    expect(region("Design system").getByRole("link", { name: "Policies" }).getAttribute("href")).toBe("#/guardrails?rule=design.org-system");
+  });
+
+  // A new stack takes the typing at once, scrolled clear of the save bar its change brings up (#100's review).
+  it("Add a stack puts the cursor in the new row's language", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      server(reads);
+      await ready();
+      fireEvent.click(screen.getByRole("button", { name: "Add a stack" }));
+      const added = region(`Stack ${golden.preferences.stacks.length + 1}`).getByLabelText("Language");
+      await waitFor(() => expect(document.activeElement).toBe(added));
+      expect(scrolled.mock.contexts).toContain(added);
+      expect(scrolled).toHaveBeenCalledWith({ block: "center" });
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("says type something first only after an empty Send", async () => {
+    const sent = server({ ...reads, [`POST ${SETUP}`]: { body: golden.setup.response } });
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Set up with Canyon" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Your message"));
+    expect(screen.queryByText("Type something first.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(screen.getByText("Type something first.")).toBeDefined();
+    expect(posted(sent)).toHaveLength(0);
   });
 });
 
@@ -654,7 +740,7 @@ describe("the guardrails tabs", () => {
     ["#/guardrails?rule=prod.clean-gate", "Policies", "Policies"], // the app's checklist and the receipt link here
     ["#/guardrails/scanners", "Scanners", "Scanners"],
     ["#/guardrails/playbooks", "Playbooks", "Playbooks"],
-    ["#/guardrails/agents", "What agents are told", "Approved stacks"],
+    ["#/guardrails/agents", "What agents are told", "Stacks agents are told to use"],
     ["#/guardrails?rule=sarif.trivy", "Scanners", "Scanners"], // a tool's rule lives on the Scanners tab
   ])("%s shows %s", async (hash, tab, section) => {
     window.location.hash = hash;
@@ -662,6 +748,6 @@ describe("the guardrails tabs", () => {
     render(<Guardrails />);
     expect(await screen.findByRole("region", { name: section })).toBeDefined();
     expect(current()).toBe(tab);
-    for (const other of ["Pipeline", "Policies", "Scanners", "Playbooks", "Approved stacks"].filter((one) => one !== section)) expect(screen.queryByRole("region", { name: other })).toBeNull();
+    for (const other of ["Pipeline", "Policies", "Scanners", "Playbooks", "Stacks agents are told to use"].filter((one) => one !== section)) expect(screen.queryByRole("region", { name: other })).toBeNull();
   });
 });

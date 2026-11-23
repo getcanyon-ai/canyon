@@ -61,8 +61,8 @@ note: "**Either way, the agent can do only what you can.** Each tool does what t
 
 Connect each agent one way, not both: one `canyon` server per agent.
 
-In the dashboard, **Settings › People & sign-in › Connect an agent** shows both, with your Canyon's
-address filled in, right above the **Sessions** list where you disconnect an agent.
+In the dashboard, **Settings › Agents** shows both, with your Canyon's address filled in, right above
+the **Sessions** list where you disconnect an agent.
 
 ## On a laptop
 

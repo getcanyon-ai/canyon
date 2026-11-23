@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Settings › People & sign-in › Connect an agent, as a member and as an admin, who see the same panel
+// Settings › Agents › Connect an agent, as a member and as an admin, who see the same panel
 // (design/specs/mcp.md §6 item 14, §12):
 // e2e/oidc/connect_test.go signs each in on the team setup (make e2e-up OIDC=1) and runs one of these with their session.
 // A screenshot of each is kept in .work/walk, the walk the panel is reviewed by.
@@ -18,7 +18,7 @@ test.beforeEach(async ({ context }) => {
 
 const panel = (page: Page) => page.getByRole("region", { name: "Connect an agent" });
 const opened = async (page: Page) => {
-  await page.goto("/#/settings/people");
+  await page.goto("/#/settings/agents");
   // the textbox alone: the Copy button's label names the address too
   await expect(panel(page).getByRole("textbox", { name: "Canyon's address for agents", exact: true })).toHaveValue(env("CONNECT_ADDRESS"));
   const laptop = panel(page).getByRole("region", { name: "On your laptop" });

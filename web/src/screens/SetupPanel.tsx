@@ -90,6 +90,7 @@ function Proposal({ p }: { p: SetupProposal }) {
 export function SetupPanel({ box, refresh }: { box: Ref<HTMLTextAreaElement>; refresh: () => Promise<void> }) {
   const [items, setItems] = useState<Item[]>([]);
   const [draft, setDraft] = useState("");
+  const [empty, setEmpty] = useState(false); // an empty box was sent
   const [refusal, setRefusal] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -124,26 +125,26 @@ export function SetupPanel({ box, refresh }: { box: Ref<HTMLTextAreaElement>; re
   return (
     <section aria-label="Set up with Canyon">
       <h2 className={H2}>Set up with Canyon</h2>
-      <p className={SUB}>Say what your teams build. Canyon writes it into the form above, and the form is the record.</p>
+      <p className={SUB}>Say what your teams build. Canyon writes it into the form below, and the form is the record.</p>
       {items.map((item, i) => <Row key={i} item={item} />)}
       {refusal !== null && <p role="status" className="mt-2.5 text-base text-critical">{refusal}</p>}
       {/* A textarea, and no Enter-to-send: a newline is content the server counts. */}
       <label className={`${LABEL} mt-3`} htmlFor="setup-message">Your message</label>
-      <textarea id="setup-message" ref={box} rows={3} className={`${FIELD} block w-full max-w-[720px]`}
-        value={draft} onChange={(event) => setDraft(event.target.value)} />
+      <textarea id="setup-message" ref={box} rows={3} placeholder="Our teams build React with Vite and Python with FastAPI, using our design system." className={`${FIELD} block w-full max-w-[720px]`}
+        value={draft} onChange={(event) => { setDraft(event.target.value); setEmpty(false); }} />
       <span className="mt-2.5 flex flex-wrap items-start gap-2">
         {/* The only content this panel declines to send is no content — the conversation goes back
             whole, so one empty line the server refuses would refuse every later turn too. The
             in-flight reason is the working line: there is no spinner in this codebase. */}
         {busy
           ? <Button disabled reason="Canyon is working on it.">Send</Button>
-          : draft === ""
-            ? <Button disabled reason="Type something first.">Send</Button>
-            : <Button variant="primary" onClick={() => void send()}>Send</Button>}
+          : <Button variant="primary" onClick={() => { if (draft === "") setEmpty(true); else void send(); }}>Send</Button>}
         {/* The way out of a conversation the server will not take any more, and nowhere else: an
             always-on button that throws away a working conversation has no job. */}
         {refusal !== null && <Button variant="ghost" onClick={() => { setItems([]); setRefusal(null); }}>Start over</Button>}
       </span>
+      {/* Said only once an empty box was sent, never before anyone typed (#99). */}
+      {empty && draft === "" && <p role="status" className="mt-1 text-md text-text-dim">Type something first.</p>}
     </section>
   );
 }

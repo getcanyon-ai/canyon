@@ -63,6 +63,26 @@ const DESIGN = golden.policies.policies.find((one) => one.id === "design.org-sys
 const prefs = (designSystem: unknown) => ({ [`GET /api/v1/preferences`]: { body: { design_system: designSystem } } });
 
 describe("Policies", () => {
+  // The buildpacks "Approved stacks only" accepts are set on its own row (#99), each by its builder's name or else its
+  // id, ticked when accepted, and saved as it is ticked, sorted by id.
+  it("the Approved stacks only row sets the buildpacks it accepts", async () => {
+    const seen = [{ id: "paketo-buildpacks/node-engine", name: "Paketo Buildpack for Node Engine" }, { id: "paketo-buildpacks/pip" }];
+    const sent = server({
+      ...routes,
+      [`GET /api/v1/preferences`]: { body: { design_system: null, approved_buildpacks: ["paketo-buildpacks/node-engine"], buildpacks_seen: seen } },
+      [`PUT /api/v1/preferences`]: { body: { design_system: null, approved_buildpacks: ["paketo-buildpacks/node-engine", "paketo-buildpacks/pip"], buildpacks_seen: seen } },
+    });
+    render(<Policies />);
+    const blessed = within(await screen.findByRole("region", { name: "Approved stacks only" }));
+    expect(await blessed.findByText("Buildpacks this rule accepts. Canyon lists the ones it has seen apps build with.")).toBeDefined();
+    const boxes = blessed.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(boxes.map((box) => [box.closest("label")?.textContent, box.checked])).toEqual([["Paketo Buildpack for Node Engine", true], ["paketo-buildpacks/pip", false]]);
+    fireEvent.click(blessed.getByRole("checkbox", { name: "paketo-buildpacks/pip" }));
+    await waitFor(() => expect((blessed.getByRole("checkbox", { name: "paketo-buildpacks/pip" }) as HTMLInputElement).checked).toBe(true));
+    expect(sent()).toContain(`PUT /api/v1/preferences ${JSON.stringify({ approved_buildpacks: ["paketo-buildpacks/node-engine", "paketo-buildpacks/pip"] })}`);
+    expect(await blessed.findByText("Saved")).toBeDefined(); // a tick is saved at once, and says so (#100's review)
+  });
+
   it("the design-system row says it checks nothing until a default is picked, and links the picker", async () => {
     server({ ...routes, ...prefs(null) });
     render(<Policies />);

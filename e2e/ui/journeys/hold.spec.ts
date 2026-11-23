@@ -15,8 +15,9 @@ const rows = (page: Page) => page.locator("[aria-label='Apps']");
 // A team row's side pane, where Stop production and Lift the hold are on a desktop (the UX review: never on every
 // row); a phone's card, which has no pane, offers them itself.
 const peek = async (page: Page, app: string) => {
+  await rows(page).getByRole("link", { name: app, exact: true }).first().waitFor(); // the page read, before asking what it offers
   const details = page.getByRole("button", { name: `Details for ${app}` });
-  if (await details.isVisible()) await details.click();
+  if (await details.count() > 0) await details.click();
 };
 
 journey("stop production, read the banner, lift the hold", {

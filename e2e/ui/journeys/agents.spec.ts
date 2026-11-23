@@ -15,11 +15,12 @@ async function shownInStrip(page: Page, strip: string) {
   }, strip)).toBe("inside");
 }
 
-// Every rule's name on Pipeline reads in at most two lines (#118): at 1280 its gates squeezed names over four to six. The
-// name's own text is measured, at both widths: on a phone the Beta chip sits on a line of its own under a two-line name.
-async function namesFit(page: Page) {
-  await expect.poll(() => page.evaluate(() => {
-    const names = [...document.querySelectorAll('section[aria-label="Pipeline"] section > span.grid > span:first-child')];
+// Every rule's name on a tab of Guardrails reads in at most two lines (#118): at 1280 Pipeline's gates squeezed names over
+// four to six, and at 861 Policies' columns over nine. The name's own text is measured, at every width: on a phone the Beta
+// chip sits on a line of its own under a two-line name.
+async function namesFit(page: Page, tab: string) {
+  await expect.poll(() => page.evaluate((label) => {
+    const names = [...document.querySelectorAll(`section[aria-label="${label}"] section > span.grid > span:first-child`)];
     if (names.length === 0) return "no rule names";
     const lines = (one: Element) => {
       const text = document.createRange();
@@ -28,7 +29,7 @@ async function namesFit(page: Page) {
     };
     const tall = names.filter((one) => lines(one) > 2);
     return tall.length === 0 ? "fits" : tall.map((one) => `${one.firstChild!.textContent} (${lines(one)} lines)`).join(", ");
-  })).toBe("fits");
+  }, tab)).toBe("fits");
 }
 
 // Each rule's dial sits on its rule's row, beside its name (#118): with nothing affected the dials once fell under the names.
@@ -56,7 +57,13 @@ journey("read what agents are told, then how to connect one", {
         await page.goto("/#/guardrails");
       },
       see: async (page) => {
-        if (page.viewportSize()!.width > 860) await dialsBeside(page); // a phone stacks them
+        const size = page.viewportSize()!;
+        if (size.width > 860) await dialsBeside(page); // a phone stacks them
+        for (const width of size.width > 860 ? [861, 900, 1024, 1100] : [size.width]) { // stacked below 1100, where the columns leave a name too little
+          await page.setViewportSize({ ...size, width });
+          await namesFit(page, "Policies");
+        }
+        await page.setViewportSize(size);
         await expect(page.getByRole("navigation", { name: "Guardrails" }).getByRole("link", { name: "Policies", exact: true })).toHaveAttribute("aria-current", "page");
         await shownInStrip(page, "Guardrails");
       },
@@ -68,7 +75,7 @@ journey("read what agents are told, then how to connect one", {
         const size = page.viewportSize()!;
         for (const width of size.width > 860 ? [1280, 1440, 1920] : [size.width]) { // pages stop growing at 1280px wide, so a wider window doesn't widen a name
           await page.setViewportSize({ ...size, width });
-          await namesFit(page);
+          await namesFit(page, "Pipeline");
         }
         await page.setViewportSize(size);
       },

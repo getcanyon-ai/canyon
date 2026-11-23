@@ -66,7 +66,8 @@ describe("Guardrails › Playbooks", () => {
     render(<Playbooks />);
     const last = await card(service.name);
     const order = (text: string | RegExp) => screen.getByText(text);
-    const kinds = [order(`${S.playbookSkill}: ${S.playbookSkillMeans}`), order(`${S.playbookNote}: ${S.playbookNoteMeans}`)];
+    const item = (text: string) => screen.getByText((_, one) => one?.tagName === "LI" && one.textContent === text);
+    const kinds = [item(`${S.playbookSkill}: ${S.playbookSkillMeans}`), item(`${S.playbookNote}: ${S.playbookNoteMeans}`)];
     const intro = order(S.playbooksIntro);
     const caveat = order(/Canyon can't see an agent reading its local copy of a skill/);
     const follows = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;

@@ -28,14 +28,13 @@ function Card({ title, line, children, place, drop }: {
 
 // One org check in one gate: what it is, and its Dial there, named `label` (a rule in both gates is
 // named for the gate in its second). An admin's check before preview also carries, under its Dial,
-// the button that places it before production or takes it out again — the keyboard's and a touch
+// the checkbox that places it before production or takes it out again — the keyboard's and a touch
 // screen's way to do what dragging it does — and, while it is not there, the grip it is dragged by.
 function Check({ rule, gate, label, flow, place, carry }: {
   rule: Policy; gate: Gate; label: string; flow: Flow;
   place?: { placed: boolean; toggle: () => void }; carry?: (rule: Policy | null) => void;
 }) {
   const grip = place !== undefined && !place.placed && carry !== undefined;
-  const move = place?.placed ? "Take out of before production" : "Also before production";
   return (
     <section aria-label={label} className={`${ROW} border-border bg-surface`} draggable={grip}
       onDragStart={grip ? (event) => { event.dataTransfer.setData("text/plain", rule.id); event.dataTransfer.effectAllowed = "copy"; carry(rule); } : undefined}
@@ -48,11 +47,12 @@ function Check({ rule, gate, label, flow, place, carry }: {
       </span>
       <span className="flex flex-col items-start gap-1">
         <Dial name={label} value={flow.state(rule, gate)} change={(state) => void flow.ask(rule, { [gate]: state })} />
+        {/* A checkbox, ticked while the check is there (#118): what dragging it does, by keyboard or touch. */}
         {place !== undefined && (
-          <button type="button" aria-label={`${move}: ${rule.name}`} onClick={place.toggle}
-            className={`text-left text-md ${place.placed ? "text-link hover:underline" : "text-text-dim hover:text-link focus-visible:text-link"}`}>
-            {move}
-          </button>
+          <label className="flex items-center gap-1.5 text-md text-text-dim">
+            <input type="checkbox" aria-label={`Also before production: ${rule.name}`} checked={place.placed} onChange={place.toggle} />
+            Also before production
+          </label>
         )}
       </span>
     </section>
@@ -123,13 +123,13 @@ export function Pipeline() {
     <section aria-label="Pipeline" className="grid gap-3">
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
       {rows !== null && (
-        <div className="relative grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-start gap-3 max-[1100px]:grid-cols-1">
-          {/* The line the stages sit on: across above 1100px, down below it. Every stage and gate is
+        <div className="relative grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-start gap-3 max-[1440px]:grid-cols-1">
+          {/* The line the stages sit on: across above 1440px, down below it, where each gate's rules read full width (#118). Every stage and gate is
               positioned after it, so each is drawn over it. */}
-          <span aria-hidden="true" className="absolute inset-x-0 top-[27px] h-px bg-border-strong max-[1100px]:inset-x-auto max-[1100px]:inset-y-0 max-[1100px]:left-8 max-[1100px]:h-auto max-[1100px]:w-px" />
+          <span aria-hidden="true" className="absolute inset-x-0 top-[27px] h-px bg-border-strong max-[1440px]:inset-x-auto max-[1440px]:inset-y-0 max-[1440px]:left-8 max-[1440px]:h-auto max-[1440px]:w-px" />
           <ol aria-label="Pipeline stages" className="contents">
             {STAGES.map(([stage, who, place]) => (
-              <li key={stage} className={`${place} relative mt-3 flex flex-col items-center gap-1 max-[1100px]:mt-0 max-[1100px]:flex-row max-[1100px]:gap-2`}>
+              <li key={stage} className={`${place} relative mt-3 flex flex-col items-center gap-1 max-[1440px]:mt-0 max-[1440px]:flex-row max-[1440px]:gap-2`}>
                 <span className="rounded-full border border-border-strong bg-surface px-3 py-1 text-base font-semibold">{stage}</span>
                 <span className="text-sm text-text-dim">{who}</span>
               </li>
@@ -142,7 +142,7 @@ export function Pipeline() {
             ))}
             {added(rows, false)}
           </Card>
-          <Card title="Before production" line={S.beforeProduction} place="order-4 min-[1100px]:sticky min-[1100px]:top-4" drop={drop}>
+          <Card title="Before production" line={S.beforeProduction} place="order-4 min-[1440px]:sticky min-[1440px]:top-4" drop={drop}>
             {carried !== null && (
               <p className="rounded-lg border border-dashed border-accent bg-accent-dim px-3 py-2.5 text-center text-md text-accent">{`Drop here: ${carried.name}, before production`}</p>
             )}

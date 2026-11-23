@@ -159,7 +159,7 @@ export const S = {
   skipBlinds: "A skipped path is never scanned: a pattern like ** skips everything, and the tool finds nothing.",
   bundledRules: "Canyon's open-source security rules (GitLab's sast-rules) and its own SQL rule always run, beside any rules repo named here.",
   rulesFolders: "Only the rules files in these folders of the repo are read; none, and every rules file is.",
-  communityRules: "The community rules add Ruby, PHP and Java SQL injection. They carry the Commons Clause, so whether your organisation may use them is its decision; Canyon does not ship them.",
+  communityRules: "The community rules add Ruby, PHP and Java SQL injection. They carry the Commons Clause, so whether your organization may use them is its decision; Canyon does not ship them.",
   credentialAsk: "A private rules repo is read with the username and token set here. Canyon never shows the token again.",
   credentialSet: "A credential is set for <repo>.",
   // Who can open an app (design/PERMISSIONS.md). `…` is what follows "Shared with" in the shared line.
@@ -414,6 +414,9 @@ export const S = {
   offStillThroughAsk: "Outbound is Off, but this app's calls still go through Canyon until its network is recreated. Ask an admin to recreate it.",
   outboundOffNote: "Outbound is Off",
   prodRefuses: "Preview connected to these in the last 30 days, and production doesn't allow them:",
+  // Settings › Outbound's fold over the limits, the gateway replicas and the certificates (#118).
+  advanced: "Advanced",
+  advancedWhat: "Limits, gateway replicas and credential certificates",
   replicasHeading: "Gateway replicas",
   replicasNote: "A replica with an old policy has stopped, or can't reach Canyon and is refusing every call.",
   replicaCurrent: "policy up to date",
@@ -467,7 +470,9 @@ export const S = {
   keysKeyNote: "Canyon never shows the key again.",
   keysSaved: "Saved. Apps trust it from their next deploy or promotion.",
   frontDoorNone: "No front door is set, so no app can run on this Canyon yet.",
-  hostFirewall: "The rule is in deploy/k8s/README.md, under Host firewall.",
+  // Beside a front door saved with the probe's warning (#118): the dashboard's plain line, and the docs a link away.
+  reachesNode: "Apps on this cluster can reach the server they run on.",
+  reachesNodeHow: "How your cluster admin closes this",
   handOffNeeds: "To hand apps off to your platform, Canyon's server still needs:",
   gateway: "Your gateway signs people in",
   gatewayNote: "Canyon checks who your gateway says it signed in: a standard OIDC ID token, or the token an AWS load balancer signs.",
@@ -902,7 +907,15 @@ export const PATCHING = {
   behindOne: "1 app waits for newer system libraries: <apps>",
   current: "No app waits for newer system libraries",
   unknown: "Canyon can't tell which system libraries it uses now, or whether apps wait for newer ones.",
-  runImage: "System libraries image",
+  // A card's name in plain words (#118): the system libraries or build tools in use are the newest, older ones earlier;
+  // a sentence in the card names them these, and the 12 hex sits folded in the card as its image.
+  newestLibraries: "Newest system libraries",
+  earlierLibraries: "Earlier system libraries",
+  newestTools: "Newest build tools",
+  earlierTools: "Earlier build tools",
+  theseLibraries: "these system libraries",
+  theseTools: "these build tools",
+  imageHex: "Image <hex>",
   paused: "Canyon paused patching with <image>: <n> apps reverted after the patch.",
   pausedOne: "Canyon paused patching with <image>: 1 app reverted after the patch.",
   stalled: "Canyon is holding the next wave of patches with <image>: <app> reverted after the patch.",
@@ -922,7 +935,7 @@ export const PATCHING = {
   lastCheck: "Canyon's last check, <ago>",
   checkedNone: {
     server_off: "Patching is off on this Canyon server",
-    org_off: "Patching is off for this organisation",
+    org_off: "Patching is off for this organization",
     not_wired: "This Canyon server isn't set up to patch apps",
     no_preview: "No app has a preview to patch",
     rule_off: "The known-vulnerable packages check is off on every app",

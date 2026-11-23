@@ -10,7 +10,7 @@ const ROW = "text-xs tracking-caps text-text-faint uppercase";
 // The four questions, in the order design/ONBOARDING.md §3 asks them. The step heading is the
 // question; the fields under it are the settings page's own sections, composed rather than copied,
 // so the form somebody meets a year later is the form they filled in on day one.
-const STEPS = ["What is this organisation called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
+const STEPS = ["What is this organization called?", "Who may sign in?", "Who administers Canyon?", "Ready"] as const;
 const NOBODY = "At least one person or one domain has to be allowed to sign in.";
 
 // A list read as prose: "dana@meridian.example, and anyone at meridian.example". Blank rows are the
@@ -93,7 +93,7 @@ export function Onboarding({ record, done }: { record: Preferences; done: () => 
         )}
         {step === 4 && (
           <dl className="mt-3 flex flex-col gap-2">
-            <Row label="Organisation" value={draft.orgName} edit={() => setStep(1)} />
+            <Row label="Organization" value={draft.orgName} edit={() => setStep(1)} />
             <Row label="Sign-in" value={sentence([...draft.emails, ...unlisted, ...draft.domains.map((one) => `anyone at ${one}`)])} edit={() => setStep(2)} />
             <Row label="Admins" value={sentence([...draft.admins, ...(draft.claim === "" ? [] : [`anyone in ${draft.claim} ${draft.value}`])])} edit={() => setStep(3)} />
           </dl>

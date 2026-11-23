@@ -56,7 +56,7 @@ describe("Settings' pages", () => {
     window.location.hash = "#/settings";
     server(golden.get);
     const { unmount } = render(<Settings />);
-    expect(await screen.findByLabelText("Organisation name")).toBeDefined();
+    expect(await screen.findByLabelText("Organization name")).toBeDefined();
     const pages = within(screen.getByRole("navigation", { name: "Settings" })).getAllByRole("link");
     expect(pages.map((one) => [one.firstChild?.textContent, one.getAttribute("href")])).toEqual([
       ["Organization", "#/settings/organisation"], ["People & sign-in", "#/settings/people"], ["Agents", "#/settings/agents"], ["App hosting", "#/settings/hosting"], ["AI review", "#/settings/ai"],
@@ -67,7 +67,7 @@ describe("Settings' pages", () => {
     unmount();
     server(golden.get, { status: 404 }, prefs.preferences_member);
     render(<Settings />);
-    await screen.findByText("Organisation name");
+    await screen.findByText("Organization name");
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "GitHub" })).toBeNull();
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "Integrations" })).toBeNull(); // an admin's alone (#2725)
     expect(within(screen.getByRole("navigation", { name: "Settings" })).queryByRole("link", { name: "Licence" })).toBeNull(); // an admin's alone (#2879)
@@ -159,7 +159,7 @@ describe("Settings' pages", () => {
       return { ok: true, status: 200, json: async () => body } as unknown as Response;
     }));
     render(<Settings />);
-    expect(await screen.findByLabelText("Organisation name")).toBeDefined();
+    expect(await screen.findByLabelText("Organization name")).toBeDefined();
     expect(screen.getByText("internal error")).toBeDefined();
   });
 

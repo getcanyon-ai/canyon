@@ -106,7 +106,8 @@ function Section({ name, admin, adopt, body, children }: { name: string; admin: 
   );
 }
 
-// Pinned is a key the environment sets: read-only, naming the variable it comes from. An empty
+// Pinned is a key the environment sets: read-only, naming the variable it comes from, so it is an admin's alone; a member
+// reads what the key holds, plain (#118). An empty
 // list shows the variable and no values, never "Nobody." — a member's read redacts the admin claim
 // while `overridden` still names the pair, and a reader who cannot tell a redacted field from an
 // unset one reads an operator-pinned claim as no claim at all (contracts/routes.md row 219).
@@ -142,7 +143,7 @@ export function OrganisationFields({ record, draft, admin }: Fields) {
   return (
     <>
       <label className={`${LABEL} mt-3`} htmlFor="org-name">Organization name</label>
-      {pinnedIn(record, "org_name")
+      {admin && pinnedIn(record, "org_name")
         ? <Pinned keys={["org_name"]} values={[record.org_name]} />
         : admin
           ? <input id="org-name" className={FIELD} value={draft.orgName} onChange={(event) => draft.setOrgName(event.target.value)} />
@@ -162,7 +163,7 @@ export function SignInFields({ record, draft, admin, mine = null }: Fields) {
   return (
     <>
       <p className={`${LABEL} mt-3`}>People</p>
-      {pinnedIn(record, "allowed_emails")
+      {admin && pinnedIn(record, "allowed_emails")
         ? <Pinned keys={["allowed_emails"]} values={record.allowed_emails} />
         : admin
           ? <List name="Address" values={draft.emails} onChange={draft.setEmails} add="Add person" mine={mine} />
@@ -171,7 +172,7 @@ export function SignInFields({ record, draft, admin, mine = null }: Fields) {
             ? <p className="text-base text-text-dim">{`No one by address; anyone at ${listed(record.allowed_domains)} can sign in.`}</p>
             : <Values values={record.allowed_emails} />}
       <p className={`${LABEL} mt-3`}>Domains</p>
-      {pinnedIn(record, "allowed_domains")
+      {admin && pinnedIn(record, "allowed_domains")
         ? <Pinned keys={["allowed_domains"]} values={record.allowed_domains} />
         : admin
           ? (
@@ -206,12 +207,14 @@ export function AdminFields({ record, draft, admin, mine = null }: Fields) {
   // The claim and its value are present together or absent together, and both are absent on a
   // member's read: the pair is whatever the read carries, never a blank standing in for one.
   const pair = [record.admin_claim, record.admin_value].filter((one) => one !== undefined);
+  const everyone = [...new Set([...record.admin_emails, ...record.bootstrap_admins])];
   return (
     <>
       {/* Two groups, never one merged list. The environment's admins are answered apart from the
           row's and are not a key a PUT can write, so a single list would let somebody remove one,
           see the save succeed, and have that person still be an admin. */}
-      {/* What the environment sets is an admin's to read (#118): a member reads the admins by email alone. */}
+      {/* Who the environment makes an admin is everyone's to read, the variable's name an admin's alone (#118): a member
+          reads every admin in one list. */}
       {admin && record.bootstrap_admins.length > 0 && (
         <>
           <p className={`${LABEL} mt-3`}>From the environment</p>
@@ -224,7 +227,7 @@ export function AdminFields({ record, draft, admin, mine = null }: Fields) {
       <p className={`${LABEL} mt-3`}>By email</p>
       {admin
         ? <List name="Admin" values={draft.admins} onChange={draft.setAdmins} add="Add an admin" mine={mine} />
-        : <Values values={record.admin_emails} />}
+        : everyone.length === 0 ? <p className="text-base text-text-dim">No one by address; a sign-in group decides.</p> : <Values values={everyone} />}
       {/* The sign-in group is an admin's alone (#118): a member is answered neither the claim nor its value, and the
           variables that pin them are an admin's to read. */}
       {admin && (<>
@@ -345,7 +348,7 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
         <section aria-label="Groups">
           <h2 className={H2}>Groups</h2>
           <label className={`${LABEL} mt-3`} htmlFor="groups-claim">Groups claim</label>
-          {groupsPinned
+          {admin && groupsPinned
             ? <Pinned keys={["groups_claim"]} values={[record.groups_claim]} />
             : admin && groupsUnlocked
               ? <input id="groups-claim" className={FIELD} value={groups} onChange={(event) => setGroups(event.target.value)} />

@@ -81,8 +81,9 @@ steps:
 - **Before production**: "Checked when a person clicks Promote. A Blocking check keeps the button
   disabled."
 
-To also check a rule before production, tick "Also before production" under its control. Each place then has its own state for that rule. Untick it to take the rule out
-again. Under the tabs, "Before preview" and "Before production" take you to each one's rules.
+To also check a rule before production, tick "Also before production" under its control. Each place
+then has its own state for that rule. Untick it to take the rule out again. Under the tabs, "Before
+preview" and "Before production" take you to each one's rules.
 
 Six rules only ever run before production, because they are about going live. They are the
 **go-live checks** on each app's page:

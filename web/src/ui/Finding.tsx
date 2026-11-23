@@ -13,7 +13,7 @@ const PLAIN: Record<string, string> = { "canyon-review": "AI review", "custom-ru
 export const plainName = (producer: string) => PLAIN[producer] ?? (producer.startsWith("sarif/") ? producer.slice("sarif/".length) : producer);
 
 const FIELD = "rounded-lg border border-border bg-surface px-2.5 py-1.5 text-base";
-const LABEL = "mb-1.5 text-xs tracking-caps text-text-faint uppercase";
+const LABEL = "mb-1 text-md font-medium text-text-dim"; // sentence case, as every form's label (#102)
 const day = (from: number) => new Date(Date.now() + from * 86_400_000).toISOString().slice(0, 10);
 
 export type ApproveBody = { reason: string; expires_at: string };
@@ -156,8 +156,9 @@ export const AFTER = "Then run: canyon check\n" +
 // once every finding of it is. A dependency's findings are one DependencyCard instead.
 // atProduction: the finding blocks before production (the run read's blocks_production), so a finding that
 // does not block preview still blocks the promotion, and its card says both.
-export function Finding({ finding, also = [], app, approve, atProduction = false }: {
+export function Finding({ finding, also = [], app, approve, atProduction = false, copies = true }: {
   finding: FindingRead; also?: FindingRead[]; app: string; approve?: { org: string; send: (body: ApproveBody) => Promise<void> }; atProduction?: boolean;
+  copies?: boolean; // whether the reader deploys, so has an agent to copy the fix for: a responder off the team doesn't (#102)
 }) {
   const { copy, copied } = useCopy(() => forAgent(finding, app, also));
   const [approving, setApproving] = useState(false);
@@ -216,7 +217,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         </details>
       )}
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-        <Button size="sm" onClick={copy}>Copy for your agent</Button>
+        {copies && <Button size="sm" onClick={copy}>Copy for your agent</Button>}
         {approve !== undefined && (blocks || atProduction) && approval === undefined && !approving && <Button variant="secondary" size="sm" onClick={() => setApproving(true)}>Approve with a reason</Button>}
         {copied}
       </div>

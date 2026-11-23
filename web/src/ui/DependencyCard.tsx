@@ -37,9 +37,9 @@ function cardForAgent(findings: FindingRead[], head: string, severity: string, b
 // those nobody has approved together. approve is the single approval of a finding a person may approve;
 // approveAll is given for two to the route's 200 of them. An advisory entry says so, and so does one whose rule
 // blocks before production (atProduction), as a finding's card does.
-export function DependencyCard({ findings, app, approve, approveAll, atProduction = false }: {
+export function DependencyCard({ findings, app, approve, approveAll, atProduction = false, copies = true }: {
   findings: FindingRead[]; app: string; approve: (one: FindingRead) => { org: string; send: (body: ApproveBody) => Promise<void> } | undefined;
-  approveAll?: { org: string; group: Group; send: (body: ApproveBody) => Promise<void> }; atProduction?: boolean;
+  approveAll?: { org: string; group: Group; send: (body: ApproveBody) => Promise<void> }; atProduction?: boolean; copies?: boolean;
 }) {
   const [first] = findings as [FindingRead];
   const { name, version } = first.dependency!;
@@ -80,7 +80,7 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
         <dt className="text-text-faint">Fix</dt><dd className="text-text-dim">{upgrade(findings)}</dd>
       </dl>
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-        <Button size="sm" onClick={copy}>Copy for your agent</Button>
+        {copies && <Button size="sm" onClick={copy}>Copy for your agent</Button>}
         {approveAll !== undefined && action === undefined && (
           <Button variant="ghost" size="sm" onClick={() => setApproving("all")}>{`Approve all ${approveAll.group.titles.length} for ${name} ${version}`}</Button>
         )}

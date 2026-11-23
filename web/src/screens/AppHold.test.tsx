@@ -111,13 +111,15 @@ describe("a held production on the app page", () => {
       "GET /api/v1/gate-runs/gr_8f2a": { run },
     });
     render(<App id="claims-portal" auth="oidc" />);
-    expect(await screen.findByText(S.responderAccess)).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "Production is held" })).toBeDefined();
     const preview = within(screen.getByRole("region", { name: "Preview" }));
     expect(preview.queryByText("Nothing running")).toBeNull();
     expect(preview.queryByText(/Nothing is in preview/)).toBeNull();
     expect(preview.getByText("Not shown to you")).toBeDefined();
     expect(screen.queryByRole("heading", { name: "Not running" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Not running in production" })).toBeDefined();
+    // held, the hold is the one headline: never a second one saying production isn't running (#102)
+    expect(screen.queryByRole("heading", { name: "Not running in production" })).toBeNull();
+    expect(screen.queryByText(S.responderAccess)).toBeNull();
     const prod = within(screen.getByRole("region", { name: "Production" }));
     expect(prod.getByText(S.heldSince.replace("<date>", held.hold!.at.slice(0, 10)))).toBeDefined();
     expect(prod.queryByText(SENTENCE)).toBeNull();
@@ -134,7 +136,6 @@ describe("a held production on the app page", () => {
     });
     render(<App id="claims-portal" auth="oidc" />);
     expect(await screen.findAllByText(SENTENCE)).toHaveLength(1); // the banner alone: production's card says since when
-    expect(screen.getByText(S.responderAccess)).toBeDefined();
     expect(screen.queryByRole("button", { name: /^Promote/ })).toBeNull();
     expect(window.location.hash).toBe("#/apps/claims-portal");
   });

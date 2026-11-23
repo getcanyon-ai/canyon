@@ -771,6 +771,30 @@ describe("the app page", () => {
     window.location.hash = "";
   });
 
+  // A responder reads the newest version by its label, as everyone else does, from the need the status read names it in;
+  // and, never deploying, is given no block to copy for an agent (#102).
+  it("names the newest version to a responder by its label, and gives them nothing to copy for an agent", async () => {
+    const row = { id: "claims-portal", name: "claims-portal", owners: [], owner_groups: [], summary: "x", claimable: false, access: { level: "none" } };
+    const need: Need = { kind: "blocked", env: null, rank: 6, since: null, you: true, ask: [], version: "v1.4", count: 1 };
+    server({ ...reads(() => ({ ...page.status, needs: [need] })), "GET /api/v1/projects/claims-portal": { body: { project: row } },
+      "GET /api/v1/preferences": { body: { viewer: { email: "rhea@meridian.example", role: "responder" } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await screen.findByRole("heading", { name: /^What blocks v1\.4/ })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Copy for your agent" })).toBeNull();
+  });
+
+  // Approving is one click from the headline: it opens the first finding's form, the keyboard on its reason, whose label is
+  // in sentence case as every form's is (#102).
+  it("opens the first finding's approval from the headline's Approve with a reason", async () => {
+    server(reads(() => page.status));
+    render(<App id="claims-portal" auth="oidc" />);
+    const headed = await screen.findByRole("region", { name: "Where it stands" });
+    fireEvent.click(await within(headed).findByRole("button", { name: "Approve with a reason: go to the findings" }));
+    const reason = await screen.findByLabelText("Reason");
+    await waitFor(() => expect(document.activeElement).toBe(reason));
+    expect(screen.getByText("Reason").className).not.toContain("uppercase");
+  });
+
   // A package only the built app holds is approved from deps.known-vuln's go-live check (#2610), on the review the
   // receipt is read for: a responder with no grant, whose status read names no preview, reads the check and approves
   // it, every fingerprint of the package at once; whoever that review's run read lets approve nothing — an admin who

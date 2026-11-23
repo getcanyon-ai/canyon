@@ -354,8 +354,10 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     },
   };
   const card = (one: FindingRead) => (one.dependency === undefined
-    ? <Finding key={one.partialFingerprints["canyon/v1"]} finding={one} also={membersOf(one).slice(1)} app={id} approve={approvesEntry(membersOf(one))} atProduction={atProduction(one)} />
-    : <DependencyCard key={one.partialFingerprints["canyon/v1"]} findings={membersOf(one)} app={id} approve={approvable} approveAll={together(membersOf(one))} atProduction={atProduction(one)} />);
+    ? <Finding key={one.partialFingerprints["canyon/v1"]} finding={one} also={membersOf(one).slice(1)} app={id} approve={approvesEntry(membersOf(one))} atProduction={atProduction(one)} copies={deploys} />
+    : <DependencyCard key={one.partialFingerprints["canyon/v1"]} findings={membersOf(one)} app={id} approve={approvable} approveAll={together(membersOf(one))} atProduction={atProduction(one)} copies={deploys} />);
+  // A responder off the app's team approves and holds, and never deploys: no block to copy for an agent (#102).
+  const deploys = project === null || !reduced(project);
   // The versions that matter, newest first, each once: the newest, then what preview runs, then what
   // production runs. A version's place on the four stages is the server's facts, never inferred.
   const rows = (app: AppRead, at: Status): Version[] => {
@@ -410,7 +412,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // The newest version, named, for the review section's heading and verdict.
   const newest = project !== null && !reduced(project) && project.latest.package !== null ? version(project.latest.package, project.latest.label) : null;
   const stopped = project !== null && !reduced(project) && project.latest.stage === "blocked";
-  const named = (pkg: string) => (project !== null && !reduced(project) && pkg === project.latest.package ? project.latest.label : pkg === preview?.package ? preview.label : pkg === prod?.package ? prod.label : undefined);
+  // A responder's reduced read carries no latest: the newest run's version is the one the status read's needs name for it,
+  // its blocked or secret line (#102: a responder read "What blocks 9e40" where everyone else read "v1.4").
+  const newestLabel = status?.needs?.find((need) => (need.kind === "blocked" || need.kind === "secret" || need.kind === "unchecked") && need.version !== undefined)?.version;
+  const named = (pkg: string) => (project !== null && !reduced(project) && pkg === project.latest.package ? project.latest.label
+    : project !== null && reduced(project) && pkg === seen?.package && seen.id === status?.last_run ? newestLabel
+    : pkg === preview?.package ? preview.label : pkg === prod?.package ? prod.label : undefined);
   // A pinned run, or a check's, is not the newest version's: its own verdict says how it ended, under Review.
   const other = reading !== null && (pinned !== null || fromCheck !== null) ? reading : null;
   // The run a link pins, as the runs list has it (#2696): its label, and whether it is a check's or a pull request's,
@@ -496,11 +503,17 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // What production will refuse of what preview calls, as the status read's need lists it: the go-live box and Promote say it
   // from its destinations, host names apart from what only a change to the code fixes, never from the rule's own line.
   const refuses = status?.needs?.find((need) => need.kind === "will_refuse");
-  // Approving is on each finding's card: the headline's button brings the reader to the first one.
+  // Approving is on each finding's card: the headline's button opens the first one's form, and the keyboard lands on its
+  // reason (#102: it only scrolled there, and a second click opened it).
   const toApprove = () => {
     const button = [...document.querySelectorAll<HTMLButtonElement>('section[aria-label="Review"] button')].find((one) => one.textContent === "Approve with a reason");
-    button?.scrollIntoView({ block: "center" });
-    button?.focus();
+    const card = button?.closest("article");
+    button?.click();
+    setTimeout(() => {
+      const reason = card?.querySelector<HTMLTextAreaElement>("textarea");
+      reason?.scrollIntoView?.({ block: "center" });
+      reason?.focus();
+    }, 0);
   };
   const act = (one: Act | undefined, primary: boolean) => {
     if (one === undefined || project === null || reduced(project) || status === null) return null;
@@ -631,13 +644,14 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
         {project === null && failure === null && !gone && <p role="status" className="text-base text-text-dim">{S.appReading}</p>}
         {project !== null && reduced(project) && (
           <>
-            <Headline band={viewerBand(project.envs, status === null ? `${S.readOnly} ${S.readOnlyUse}` : S.responderAccess, project.access.level !== "none")}>
+            {/* Held, the hold is the page's one headline: a second one saying "Not running in production" told another story (#102). */}
+            {status?.hold === undefined && <Headline band={viewerBand(project.envs, status === null ? `${S.readOnly} ${S.readOnlyUse}` : S.responderAccess, project.access.level !== "none")}>
               {role === "responder" ? stop ?? undefined
                 : asked === null ? <Button variant="secondary" onClick={() => void askForAccess(id).then(() => setAsked(true), (err: unknown) => setAsked(said(err)))}>{project.access.level === "viewer" ? S.askToJoin : S.askForAccess}</Button>
                 : asked === true ? <p role="status" className="text-md text-ok">{project.owners[0] !== undefined ? S.asked.replace("<owner>", () => actorName(project.owners[0]!))
                   : project.owner_groups[0] !== undefined ? S.askedGroup.replace("<group>", () => project.owner_groups[0]!) : S.askedNoOwner}</p>
                 : <p className="text-md text-critical">{asked}</p>}
-            </Headline>
+            </Headline>}
             {/* A responder reads the hold above production; a read-only member's read carries none. */}
             {status?.hold !== undefined && <Headline band={heldBand(status.hold)}>{lift ?? undefined}</Headline>}
             <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
@@ -660,7 +674,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {status !== null && (
               <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-7 max-[1100px]:grid-cols-1">
                 <section aria-label="Review" className="grid min-w-0 gap-2.5">
-                  <h2 className={H2}>Review</h2>
+                  {(cards.length > 0 || run instanceof Error) && <h2 className={H2}>Review</h2>}
                   {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}
                   {lastRun !== null && reading === null && seen === null && !(run instanceof Error) && <p role="status" className="text-md text-text-dim">{S.reviewReading}</p>}
                   {fix.length > 0 && <h3 className={H2}>{shownFix}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(fix).length}</span></h3>}

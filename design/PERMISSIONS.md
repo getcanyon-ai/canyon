@@ -58,7 +58,9 @@ Everyone else holds, per app, one **level**:
   and whose detail names the author. An approval within 10 minutes of its expiry no longer clears a
   deploy or a promotion, which judges it as it starts the container (`runs.ShipMargin`), though every
   read shows it until it expires. An approval stands when its approver later loses the role: a
-  demotion revokes none, and an admin who wants one gone files the finding's fix, or lets it expire.
+  demotion revokes none. Nothing ends one before its date, the finding's fix included: the same finding
+  back before then is covered again (corrected 2026-11-23, #145: it said a fix ends one). Another
+  approval of the finding, by someone who may approve it, replaces its date.
   A known-vulnerable package only the built app holds — what `deps.known-vuln` counts in the image before
   production, in no run's findings (design/PATCHING.md §3.6) — is approved as a blocking finding of the run
   the receipt is read for: by the same people, under the same rules, through the dependency's approve

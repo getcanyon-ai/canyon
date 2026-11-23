@@ -607,7 +607,7 @@ export const S = {
   removingShort: "Being removed",
   removingMergeShort: "Removed once merged",
   notReportedShort: "not reported since <time>",
-  notRunningShort: "not running yet",
+  notRunningShort: "deployed, not running",
   running: "Running",
   repoUndelivered: "Canyon couldn't commit the release",
   repoRefused: "Your deploy repo refused the release",

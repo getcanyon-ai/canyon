@@ -71,7 +71,7 @@ describe("EnvLink", () => {
     const stale = minutes(20);
     const cases: [string, Parameters<typeof EnvVersion>[0]["env"], string | null][] = [
       ["a check-in 20 minutes ago", { ...org, seen_at: stale }, `not reported since ${clock(stale)}`], // the table's short words (the UX review)
-      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "not running yet"],
+      ["a report 30 minutes ago, no check-in", { ...org, deployed_at: minutes(30) }, "deployed, not running"], // the platform did report it deployed
       ["a check-in a minute ago", { ...org, seen_at: minutes(1) }, null],
       ["a report 2 minutes ago, no check-in yet", { ...org, deployed_at: minutes(2) }, null],
       ["a pod still pulling while it is removed", { ...org, seen_at: minutes(1), pending: { via: "webhook" as const, release: "rel_1", event: "remove", sent_at: minutes(2), state: "accepted" } }, null],

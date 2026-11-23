@@ -62,20 +62,23 @@
     "bucket": { "description": "A size, bucketed so a small install can't be told apart by it.", "enum": ["0", "1", "2-5", "6-25", "26-100", "101+"] },
     "dur": { "description": "A duration, bucketed: under 10 minutes, 10 minutes to an hour, an hour to a day, a day to a week, over a week.", "enum": ["lt_10m", "10m_1h", "1h_1d", "1d_7d", "gt_7d"] },
     "state": {
-      "description": "GET /api/v1/telemetry: the next report exactly as it would be sent, and whether it will be. off_because names the first reason it is off: env (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI on the server), admin (turned off), or unreachable (the first send could not reach the collector). On by default: nothing else holds it back.",
+      "description": "GET /api/v1/telemetry: the next report exactly as it would be sent, and whether it will be. off_because names the first reason it is off: env (CANYON_TELEMETRY, DO_NOT_TRACK or CI on the server), admin (turned off), or unreachable (no report reached the collector in 90 days of trying). On by default: nothing else holds it back. next_try_at and gives_up_at are there together while it is on and no report has reached the collector since its tries began, and otherwise absent, never null: the next try comes at the server's hourly look nearest after next_try_at, at most half a minute before it, and none after gives_up_at.",
       "type": "object",
       "additionalProperties": false,
       "required": ["enabled", "report", "last_sent_at", "last_report"],
       "properties": {
         "enabled": { "type": "boolean" },
         "off_because": { "enum": ["env", "admin", "unreachable"] },
+        "next_try_at": { "type": "string", "format": "date-time" },
+        "gives_up_at": { "type": "string", "format": "date-time" },
         "report": { "description": "The next send's body as a JSON string holding its exact bytes, which a reader shows as it is and never re-writes: parsed, it is this schema's report.", "type": "string", "contentMediaType": "application/json", "contentSchema": { "$ref": "#" } },
         "last_sent_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
         "last_report": { "description": "What the last send the collector answered carried, as a JSON string holding its exact bytes, null before one.", "anyOf": [{ "type": "string", "contentMediaType": "application/json", "contentSchema": { "$ref": "#" } }, { "type": "null" }] }
       },
       "if": { "properties": { "enabled": { "const": true } } },
       "then": { "not": { "required": ["off_because"] } },
-      "else": { "required": ["off_because"] }
+      "else": { "required": ["off_because"], "not": { "anyOf": [{ "required": ["next_try_at"] }, { "required": ["gives_up_at"] }] } },
+      "dependencies": { "next_try_at": ["gives_up_at"], "gives_up_at": ["next_try_at"] }
     },
     "set": {
       "description": "PUT /api/v1/telemetry: turn it on or off. On clears an admin's or an unreachable off; it cannot override the server's environment.",

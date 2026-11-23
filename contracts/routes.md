@@ -1732,16 +1732,28 @@ on conflict.
 
 | Route | Who | Answers |
 |---|---|---|
-| `GET /api/v1/telemetry` | admin | `200` the schema's `state`: `{enabled, off_because?, report, last_sent_at, last_report}`, `report` the body the next send POSTs and `last_report` what the last send the collector answered carried, null before one, each a JSON string holding those exact bytes: a reader shows the string as it is, and never parses and re-writes it, since what is sent is the promise (**amended 2026-11-12**, #2807's web review). · `403 admin_required` |
-| `PUT /api/v1/telemetry` `{enabled}` | admin; `enabled: true` in a browser | `200` the `state` after it. `enabled: true` lifts an admin's off and an `unreachable` one; it cannot lift `env`, the server's environment. It is a widening, a person's from the dashboard: `403 person_required` to an `agent` or `canyon` actor, and on a host with sign-in `403 {error:"dashboard_required", message:"change it in Canyon's dashboard"}` from any session but a browser's; `enabled: false` from any session (**amended 2026-11-12**, #2807). · `400 bad_request` for any other body · `403 admin_required` |
+| `GET /api/v1/telemetry` | admin | `200` the schema's `state`: `{enabled, off_because?, next_try_at?, gives_up_at?, report, last_sent_at, last_report}`, `next_try_at` and `gives_up_at` there together while it is on and no report has reached the collector since its tries began (Sending, below), and otherwise absent, never null, `report` the body the next send POSTs and `last_report` what the last send the collector answered carried, null before one, each a JSON string holding those exact bytes: a reader shows the string as it is, and never parses and re-writes it, since what is sent is the promise (**amended 2026-11-12**, #2807's web review). · `403 admin_required` |
+| `PUT /api/v1/telemetry` `{enabled}` | admin; `enabled: true` in a browser | `200` the `state` after it. `enabled: true` lifts an admin's off and an `unreachable` one, and where no report has ever reached the collector starts the tries afresh (Sending, below); it cannot lift `env`, the server's environment. It is a widening, a person's from the dashboard: `403 person_required` to an `agent` or `canyon` actor, and on a host with sign-in `403 {error:"dashboard_required", message:"change it in Canyon's dashboard"}` from any session but a browser's; `enabled: false` from any session (**amended 2026-11-12**, #2807). · `400 bad_request` for any other body · `403 admin_required` |
 
-Sending: at most one POST a day across replicas, the replica that claims the day's row sends, 2 seconds,
-no retry, no log line either way. A report's counts cover the period since the previous claim, at most a week, and say
+Sending: once a report has reached the collector, at most one POST a day across replicas, the replica that claims the
+day's row sends, 2 seconds, no retry, no log line either way. A report's counts cover the period since the previous claim, at most a week, and say
 how long in `period_hours` (**added 2026-11-15**, #2953): a rolling 24 hours sent every 23 to 24 lost a missed day and
 counted overlaps twice. Off, and nothing sent, while any of these holds (`off_because`, the first
-that does): `env` — `CANYON_TELEMETRY=0`, `DO_NOT_TRACK=1` or a non-empty `CI` on the server; `admin`;
-`unreachable` — the first send could not reach the collector. The first send is the first day's, whether or
-not anyone has read the report. Each `403` writes one `denied` audit row; a `PUT` writes one audit row, `PUT
+that does): `env` — on the server, `CANYON_TELEMETRY` set to anything but `1`, `true`, `on` or `yes`, `DO_NOT_TRACK` to anything but `0` or
+`false` (any case; an empty one is unset), or a non-empty `CI` (**amended 2026-11-23**: `false` still sent); `admin`;
+`unreachable` — no report reached the collector in 90 days of trying. The first send is the first day's, whether or
+not anyone has read the report.
+
+Until a first report reaches the collector (**amended 2026-11-23**, the owner: one slow first boot turned it off for
+good), a failed try is tried again after at least 1 hour, then at least 2, 4, 8 and so on, up to a week, for 90 days from the
+first try: at most 20 tries. A server looks once an hour, so a try can be up to an hour late, or later if the server was
+stopped, and is never more than half a minute early; a late try lengthens the waits after it, up to the week. Each
+try is one claim of the row and one POST of 2 seconds, as a day's send is; only the collector's own `2xx` is no
+failure. The wait is kept in the row, from the database's clock, before the POST: a restart, a crash or a second
+replica adds no try and shortens no wait. When the next try would come after the 90 days, telemetry is off,
+`unreachable`, until an admin turns it on; a server started after the 90 days turns it off and tries nothing. The tries'
+reports count from the first try, at most a week, as every report does. Once one reaches the collector it is sent daily,
+and no later failure turns it off. An install off as `unreachable` before this stays off. Each `403` writes one `denied` audit row; a `PUT` writes one audit row, `PUT
 /api/v1/telemetry` with `detail{enabled}`.
 
 ## Licence

@@ -31,14 +31,32 @@ async function namesFit(page: Page) {
   })).toBe("fits");
 }
 
+// Each rule's dial sits on its rule's row, beside its name (#118): with nothing affected the dials once fell under the names.
+async function dialsBeside(page: Page) {
+  await expect.poll(() => page.evaluate(() => {
+    const rows = [...document.querySelectorAll('section[aria-label="Policies"] > div > section[id^="rule-"]')];
+    if (rows.length === 0) return "no rules";
+    const off = rows.filter((row) => {
+      const [name, dial] = [row.children[0]!.getBoundingClientRect(), row.children[1]!.getBoundingClientRect()];
+      return dial.left < name.right || dial.top > name.top + 24;
+    });
+    return off.length === 0 ? "beside" : `${off.length} of ${rows.length} dials off their rows`;
+  })).toBe("beside");
+}
+
 // The two places a person meets agents (#99): what every agent is told, and how to connect one. Both read, and change
 // nothing; the harness holds each to the page's layout rules at desktop and phone width.
 journey("read what agents are told, then how to connect one", {
   steps: [
     {
       name: "open Guardrails, which opens on Policies, its first tab",
-      do: async (page) => { await page.goto("/#/guardrails"); },
+      do: async (page) => {
+        // every preview answers that no app is affected, so "Affects today" isn't drawn; the journey changes no rule
+        await page.route("**/api/v1/policies/*", (route) => (route.request().method() === "PUT" ? route.fulfill({ json: { would_block: [] } }) : route.continue()));
+        await page.goto("/#/guardrails");
+      },
       see: async (page) => {
+        if (page.viewportSize()!.width > 860) await dialsBeside(page); // a phone stacks them
         await expect(page.getByRole("navigation", { name: "Guardrails" }).getByRole("link", { name: "Policies", exact: true })).toHaveAttribute("aria-current", "page");
         await shownInStrip(page, "Guardrails");
       },

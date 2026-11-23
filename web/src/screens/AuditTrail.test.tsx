@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditPage } from "../api";
+import { AUDIT_ACTIONS } from "../strings";
+import { what } from "./AuditTable";
 import { AuditTrail } from "./AuditTrail";
 
 // The contract's trail in four pages: the first all agents, the second mostly people.
@@ -203,6 +205,51 @@ describe("the audit screen", () => {
     ]);
     expect(asked()[0]!.get("action")?.split(",")).toEqual(["denied", "sign in refused", "build failed", "start failed", "detect failed", "build had no room", "platform reported failed"]);
     expect(screen.getByRole("link", { name: "Denied and failed" }).getAttribute("aria-current")).toBe("true");
+  });
+
+  // Production changes (#145): what went to production, was taken from it or held, and who was asked and said what. Every
+  // action the bundle words is sorted here, so a new one is production's or isn't before it ships; the server has no one
+  // list of the actions it records, so one it writes and the bundle has no words for is not seen here. The org's platform's
+  // rows are worded by the table and each names its environment.
+  const PRODUCTION = [
+    "deploy prod", "POST /api/v1/projects/{id}/promotions", "request promotion", "approve promotion", "deny promotion",
+    "stop app", "lift hold", "DELETE /api/v1/projects/{id}/envs/{env}", "request undeploy", "send remove again",
+    "patch prod", "revert patch prod", "request patch approval", "approve patch identity",
+  ];
+  const PLATFORM = [
+    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest",
+    "commit release", "release live by check-in", "release removed by commit", "release tree mismatch", "pull request closed", "pull request changed",
+  ];
+  const NOT_PRODUCTION = [
+    "sign in", "sign out", "revoke sessions", "complete setup", "PUT /api/v1/preferences", "POST /api/v1/guardrails/setup",
+    "deploy preview", "verdict", "build failed", "start failed", "detect failed", "build had no room",
+    "policy.set", "custom_rule.set", "set playbook", "restore playbook", "remove playbook", "app_policy.set", "app_policy.remove",
+    "POST /api/v1/projects", "PUT /api/v1/projects/{id}/owner", "DELETE /api/v1/projects/{id}",
+    "declare resource", "ensure resource", "update sidecar", "reissue resource password", "delete resource",
+    "package from github", "gate run from github", "github app registered", "POST /api/v1/projects/{id}/packages",
+    "POST /api/v1/projects/{id}/packages/from-repository", "POST /api/v1/projects/{id}/gate-runs", "POST /api/v1/projects/{id}/deploys",
+    "POST /api/v1/gate-runs/{run}/findings/{fingerprint}/approve", "POST /api/v1/gate-runs/{run}/findings/approve", "POST /api/v1/gate-runs/{id}/cancel",
+    "PUT /api/v1/projects/{id}/secrets/{name}", "DELETE /api/v1/projects/{id}/secrets/{name}", "GET /api/v1/projects/{id}/logs",
+    "POST /api/v1/design-systems", "share app", "unshare app", "request access", "dismiss access request",
+    "egress.allow", "egress.disallow", "egress.set", "egress.mode.set", "egress.request", "egress.request.dismiss", "egress.networks.recreate",
+    "egress.route.set", "egress.route.remove", "egress.ca.rotate",
+    "patch preview", "revert patch preview", "pause patching", "resume patching", "patching off at start",
+  ];
+  it("Production changes asks for every action that is one, and every worded action is sorted", async () => {
+    expect([...PRODUCTION, ...NOT_PRODUCTION].sort()).toEqual(Object.keys(AUDIT_ACTIONS).sort());
+    const asked = server(EMPTY);
+    render(<AuditTrail query="question=production" />);
+    await screen.findByText(/^Nothing happened/);
+    const actions = asked()[0]!.get("action")!.split(",");
+    expect([...actions].sort()).toEqual([...PRODUCTION, ...PLATFORM].sort());
+    expect(actions.length).toBeLessThanOrEqual(64); // what the read takes (contracts/routes.md)
+  });
+  it("each of them that can be preview's names its environment", () => {
+    const either = ["DELETE /api/v1/projects/{id}/envs/{env}", "request undeploy", "send remove again", ...PLATFORM];
+    for (const action of either) for (const [env, word] of [["prod", "production"], ["preview", "preview"]] as const) {
+      const { verb, rest } = what({ ...pages[0]!.events[0]!, action, detail: { env, package: "pkg_1" } });
+      expect(`${verb} ${rest ?? ""}`, action).toContain(word);
+    }
   });
 
   // A refused change to a credential or the roots (#2145) says what was tried in words, never the route's path.

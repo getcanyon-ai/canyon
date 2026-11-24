@@ -15,6 +15,13 @@ const (
 // PulledImages are the images above.
 var PulledImages = []string{TrivyImage, GrypeImage, CheckovImage}
 
-// LifecycleRepository is where the lifecycle image the executor names comes from. pack pulls it by its platform's
-// digest, never the pinned index's, so it is found by repository.
+// LifecycleRepository is where the lifecycle image the executor names comes from.
 const LifecycleRepository = "buildpacksio/lifecycle"
+
+// LifecyclePlatforms are the digests of the executor's pinned lifecycle index (0.21.20, sha256:ffdceee5…) for
+// linux/amd64 and linux/arm64. pack pulls the lifecycle by its platform's digest, never the index's, so canyon demo
+// down --purge looks for it by these and nothing else, never by repository (#170).
+var LifecyclePlatforms = []string{
+	LifecycleRepository + "@sha256:b5b5f6c4e98b07fdb6e4f300a5eb4ef27573da6f0e4ea2eec696685f000bfce2", // linux/amd64
+	LifecycleRepository + "@sha256:86de0d01207444eaa4159e424bc60c9c8c8fb89e74901ce54e42678aa046c2de", // linux/arm64
+}

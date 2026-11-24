@@ -41,26 +41,29 @@ type demoMachine struct {
 	env      map[string]string // what canyon reads of the environment
 	run      func(args ...string) (out, errs string, code int)
 
-	apps     []string          // the apps the demo's server lists
-	answers  bool              // the demo's server answers
-	server   string            // the compose project of the container named canyon-server, "" for none
-	serverAt string            // that project's folder
-	ctrs     map[string]string // every container: its name, and the app its canyon.app label names ("" for none)
-	transit  []string          // the build and scan containers made since the demo's executor started
-	nets     map[string]string // every network labelled canyon.app, and the app it names
-	vols     []string          // every volume
-	images   map[string]string // canyon/*, canyon-scan/*, canyon-run, canyon-builder and buildpacksio/lifecycle: id → repository:tag
-	refs     map[string]bool   // the images pulled by digest: the compose file's, and those the executor pulls
-	project  []string          // the containers of the demo's compose project
-	hangs    bool              // the deployer's log never ends
-	imaged   bool              // every image the demo's compose file names is here
+	apps     []string            // the apps the demo's server lists
+	answers  bool                // the demo's server answers
+	server   string              // the compose project of the container named canyon-server, "" for none
+	serverAt string              // that project's folder
+	ctrs     map[string]string   // every container: its name, and the app its canyon.app label names ("" for none)
+	transit  []string            // the build and scan containers made since the demo's executor started
+	nets     map[string]string   // every network labelled canyon.app, and the app it names
+	vols     []string            // every volume
+	images   map[string]string   // canyon/*, canyon-scan/*, canyon-run, canyon-builder and buildpacksio/lifecycle: id → repository:tag
+	refs     map[string]bool     // the images pulled by digest: the compose file's, those the executor pulls, the lifecycle's
+	tags     map[string][]string // a pulled image's tags (RepoTags), by its reference: none unless a case gives some
+	users    map[string][]string // the containers that use a pulled image, by its reference: "<name> <compose project>"
+	project  []string            // the containers of the demo's compose project
+	hangs    bool                // the deployer's log never ends
+	imaged   bool                // every image the demo's compose file names is here
 }
 
 // A machine with everything the demo needs: Docker 28 with Compose, 8 CPUs, 8 GB, 57 GB free, port free.
 func demoOn(t *testing.T) *demoMachine {
 	t.Helper()
 	m := &demoMachine{t: t, home: t.TempDir(), deployer: "0", answers: true, apps: []string{"claims-portal", "witty-wren"},
-		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}, refs: map[string]bool{}}
+		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}, refs: map[string]bool{},
+		tags: map[string][]string{}, users: map[string][]string{}}
 	bundle := demoTar(t, map[string]string{"canyon/docker-compose.yml": "services: {}\n", "canyon/deploy/egress/floor.sh": "#!/bin/sh\n"})
 	release := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.fetched++
@@ -121,7 +124,21 @@ func demoOn(t *testing.T) *demoMachine {
 			return "", errors.New("exit status 1: Error response from daemon: No such container: e1e2e3e4e5e6")
 		}
 		if ref, one := strings.CutPrefix(line, "image inspect --format {{.Id}} "); one && !strings.Contains(ref, " ") && m.refs[ref] {
-			return "sha256:" + fmt.Sprintf("%x", sha256.Sum256([]byte(ref))), nil // one image pulled by digest, there
+			return demoID(ref), nil // one image pulled by digest, there
+		}
+		if ref, one := strings.CutPrefix(line, "image inspect --format {{json .RepoTags}} "); one && m.refs[ref] {
+			tags, err := json.Marshal(append([]string{}, m.tags[ref]...))
+			must(t, err)
+			return string(tags), nil
+		}
+		if id, ok := strings.CutPrefix(line, "ps -a --filter ancestor="); ok {
+			id, _, _ = strings.Cut(id, " ")
+			for ref, rows := range m.users {
+				if demoID(ref) == id {
+					return strings.Join(rows, "\n"), nil
+				}
+			}
+			return "", nil
 		}
 		if strings.HasPrefix(line, "image inspect ") && !m.imaged {
 			return "", errors.New("exit status 1: Error response from daemon: No such image")
@@ -168,8 +185,9 @@ func (m *demoMachine) answer(line string) string {
 			m.images["id-"+app] = "canyon/" + app + ":pkg_1"
 		}
 		m.images["id-builder"], m.images["id-scan"] = "canyon-builder:0a1b2c3d4e5f", "canyon-scan/opengrep:latest"
-		m.images["id-lifecycle"] = "buildpacksio/lifecycle:<none>" // pack pulls it by its platform's digest, never the pinned index's
-		for _, ref := range append(strings.Split(m.answer(compose("config --images")), "\n"), names.TrivyImage, names.CheckovImage) {
+		m.images["id-lifecycle-other"] = "buildpacksio/lifecycle:0.20.0" // another lifecycle, pack's own pull for another builder: never the demo's
+		// the lifecycle pack pulled by its platform's digest, the scanners' images and the compose file's
+		for _, ref := range append(strings.Split(m.answer(compose("config --images")), "\n"), names.TrivyImage, names.CheckovImage, names.LifecyclePlatforms[1]) {
 			m.refs[ref] = true
 		}
 		m.vols = append(m.vols, "canyon-scandb-trivy")
@@ -194,7 +212,7 @@ func (m *demoMachine) answer(line string) string {
 		must(m.t, err)
 		return string(labels)
 	case line == compose("config --images"):
-		return "ghcr.io/getcanyon-ai/canyon-server@sha256:aa\nghcr.io/getcanyon-ai/canyon-executor@sha256:bb"
+		return "ghcr.io/getcanyon-ai/canyon-server@sha256:aa\nghcr.io/getcanyon-ai/canyon-executor@sha256:bb\ndocker.io/library/busybox@sha256:cc\npostgres:16-alpine@sha256:dd"
 	case line == compose("ps -aq executor"):
 		if m.up {
 			return "e1e2e3e4e5e6"
@@ -244,6 +262,9 @@ func (m *demoMachine) answer(line string) string {
 	}
 	return ""
 }
+
+// demoID is the ID the machine's Docker gives the image a reference pulled.
+func demoID(ref string) string { return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(ref))) }
 
 func (m *demoMachine) listed(byName map[string]string) string {
 	var rows []string
@@ -610,7 +631,9 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 	if code != exitOK || errs != "" || !strings.Contains(out, "The demo is gone: its containers, data and images, and its files in ~/.canyon/demo.") {
 		t.Fatalf("down --purge: exit %d, stderr %q\n%s", code, errs, out)
 	}
-	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f "+names.CheckovImage+" "+names.TrivyImage+" ghcr.io/getcanyon-ai/canyon-executor@sha256:bb ghcr.io/getcanyon-ai/canyon-server@sha256:aa id-builder id-claims-portal id-lifecycle id-scan id-witty-wren") != 1 ||
+	removed := slices.Sorted(slices.Values([]string{names.LifecyclePlatforms[1], names.CheckovImage, names.TrivyImage, "docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd",
+		"ghcr.io/getcanyon-ai/canyon-executor@sha256:bb", "ghcr.io/getcanyon-ai/canyon-server@sha256:aa", "id-builder", "id-claims-portal", "id-scan", "id-witty-wren"}))
+	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f "+strings.Join(removed, " ")) != 1 ||
 		m.ran("volume rm canyon-cache-claims-portal-build canyon-cache-claims-portal-launch canyon-cache-witty-wren-build canyon-cache-witty-wren-launch canyon-scandb-trivy") != 1 {
 		t.Errorf("down --purge ran %q", m.calls)
 	}
@@ -642,9 +665,9 @@ func TestDemoDownPurgeAfterADownRemovesWhatTheDemoMade(t *testing.T) {
 		if code != exitOK || errs != "" || !strings.Contains(out, "The demo is gone: its containers, data and images") {
 			t.Fatalf("another Canyon here %v: down --purge after a down: exit %d, stderr %q\n%s", other, code, errs, out)
 		}
-		want := []string{}
+		want := []string{"buildpacksio/lifecycle:0.20.0"} // another lifecycle: the demo's is its pin's platform digest alone
 		if other {
-			want = []string{"canyon/ux-data:pkg_9"}
+			want = append(want, "canyon/ux-data:pkg_9")
 		}
 		if left := slices.Sorted(maps.Values(m.images)); !slices.Equal(left, want) {
 			t.Errorf("another Canyon here %v: down --purge after a down left images %q, or took another Canyon's", other, left)
@@ -657,6 +680,59 @@ func TestDemoDownPurgeAfterADownRemovesWhatTheDemoMade(t *testing.T) {
 				t.Errorf("down --purge removed another Canyon's container")
 			}
 		}
+	}
+}
+
+// Another Canyon's compose project holds canyon-server, while ~/.canyon/demo still holds the demo's files, as after a
+// down and a team Canyon started since: down and down --purge refuse it by name, never ask its server which apps are
+// its own, never keep them as the demo's, and touch nothing of it (#170).
+func TestDemoDownNeverActsOnAnotherCanyonWhileTheDemosFilesAreHere(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	if _, errs, code := m.run("down"); code != exitOK {
+		t.Fatalf("down: exit %d, %s", code, errs)
+	}
+	m.server, m.serverAt, m.answers, m.apps = "canyon", "/home/you/team", true, []string{"team-app"} // a team Canyon, on the demo's port
+	m.ctrs["team-app-preview"] = "team-app"
+	for _, args := range [][]string{{"down"}, {"down", "--purge"}} {
+		m.calls = nil
+		out, errs, code := m.run(args...)
+		if code != exitError || !strings.Contains(errs, "This Canyon wasn't started by canyon demo up: Docker Compose project canyon, in /home/you/team.") || m.ran("rm") != 0 || m.ran("image rm") != 0 || m.ran("compose") != 0 {
+			t.Errorf("%v with another Canyon running: exit %d, stdout %q, stderr %q, ran %q", args, code, out, errs, m.calls)
+		}
+	}
+	if kept, _ := demoKept(filepath.Join(m.home, ".canyon", "demo")); slices.Contains(kept, "team-app") {
+		t.Errorf("the team Canyon's app was kept as the demo's: %v", kept)
+	}
+	if _, ok := m.ctrs["team-app-preview"]; !ok {
+		t.Errorf("down removed the team Canyon's app")
+	}
+}
+
+// On Docker's containerd image store, removing a reference by digest takes every tag of its repository at that digest
+// with it (#170): purge keeps an image the demo pulled when a container outside the demo uses it, running or stopped,
+// or when it carries a tag the demo's compose file doesn't name, and says which and why.
+func TestDemoDownPurgeKeepsAnImageSomethingElseHolds(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	m.tags["docker.io/library/busybox@sha256:cc"] = []string{"busybox:1.37"}        // the person's own tag, at the demo's digest
+	m.users["postgres:16-alpine@sha256:dd"] = []string{"team-postgres canyon-team"} // a stopped team Canyon's database
+	m.users[names.CheckovImage] = []string{"canyon-demo-scan-1 " + demoProject}     // the demo's own: no reason to keep it
+	if _, errs, code := m.run("down"); code != exitOK {
+		t.Fatalf("down: exit %d, %s", code, errs)
+	}
+	out, errs, code := m.run("down", "--purge")
+	if code != exitOK || errs != "" || !strings.Contains(out, "These images stay, because something else on this Docker holds them:\n"+
+		"    image docker.io/library/busybox@sha256:cc (it is also tagged busybox:1.37)\n"+
+		"    image postgres:16-alpine@sha256:dd (the container team-postgres uses it)\n") {
+		t.Fatalf("exit %d, stderr %q\n%s", code, errs, out)
+	}
+	if left := slices.Sorted(maps.Keys(m.refs)); !slices.Equal(left, []string{"docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd"}) {
+		t.Errorf("purge left %q, want the two something else holds", left)
 	}
 }
 

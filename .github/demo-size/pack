@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# The pack the trial's executor runs: the pinned pack, with the one composite buildpack the app's own files ask for
+# when /tmp/trial-thin is there, at the digests Canyon pins for Kubernetes, the versions inside its pinned builder.
+set -euo pipefail
+real=/usr/local/bin/pack
+[ "${1:-}" = build ] || exec "$real" "$@"
+args=("$@"); path=
+for ((n = 0; n < ${#args[@]}; n++)); do [ "${args[$n]}" = --path ] && path=${args[$((n + 1))]}; done
+[ -f /tmp/trial-verbose ] && args+=(--verbose)
+if [ -f /tmp/trial-thin ]; then
+  lang=
+  if [ -f "$path/composer.json" ]; then lang=php
+  elif [ -f "$path/go.mod" ]; then lang=go
+  elif [ -f "$path/requirements.txt" ]; then lang=python
+  elif [ -f "$path/vite.config.js" ]; then lang=web-servers
+  elif [ -f "$path/package.json" ]; then lang=nodejs
+  fi
+  if [ -n "$lang" ]; then
+    ref=$(grep -o "docker.io/paketobuildpacks/$lang@sha256:[0-9a-f]*" "$(cat /tmp/trial-repo)/deploy/k8s/builds.yaml" | head -1)
+    args+=(--buildpack "docker://$ref")
+  fi
+fi
+exec "$real" "${args[@]}"

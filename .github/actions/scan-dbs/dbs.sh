@@ -12,9 +12,9 @@
 #                            changed is read again (grype hashes its whole database on every read: ~25 s cold)
 set -euo pipefail
 
-pin() { go doc -u ./executor "$1" | sed -n "s/^const $1 = \"\(.*\)\"\$/\1/p"; } # the executor's pin
-trivy=$(pin trivyImage)
-grype=$(pin grypeImage)
+pin() { go doc ./internal/names "$1" | sed -n "s/^[[:space:]]*$1 = \"\(.*\)\"\$/\1/p"; } # the executor's pin (internal/names)
+trivy=$(pin TrivyImage)
+grype=$(pin GrypeImage)
 [[ -n $trivy && -n $grype ]] || { echo "::error::the executor's scanner image pins could not be read (go doc)"; exit 1; }
 tools=(trivy trivy-java grype)
 

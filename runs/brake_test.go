@@ -85,13 +85,13 @@ func midSwitch(t *testing.T, ctx context.Context, p *pgxpool.Pool, f *executorte
 
 // A promotion still pending when production is taken offline is ended there and then, interrupted,
 // and the trail names the run the undeploy ended.
-// A row says "stopped" only of what Canyon ran: what the org's platform runs is a remove asked for, and nothing ran is
-// nothing (#156).
+// A row says "stopped" only of what Canyon ran and nothing else serves: a remove asked of the org's platform wins, a
+// takeover under way included, since the platform's copy may serve; nothing ran is nothing (#156).
 func TestStopOfSaysStoppedOnlyOfWhatCanyonRan(t *testing.T) {
 	for _, c := range []struct {
 		canyon, removal bool
 		want            string
-	}{{true, false, "stopped"}, {true, true, "stopped"}, {false, true, "remove_sent"}, {false, false, "nothing"}} {
+	}{{true, false, "stopped"}, {true, true, "remove_sent"}, {false, true, "remove_sent"}, {false, false, "nothing"}} {
 		if got := StopOf(c.canyon, c.removal); got != c.want {
 			t.Errorf("Canyon ran it %t, a remove stands %t: %q, want %q", c.canyon, c.removal, got, c.want)
 		}
@@ -466,6 +466,31 @@ func TestAnOrgRunStoppedBeforeItsReleaseSendsNone(t *testing.T) {
 	}
 	if line := lastLine(t, ctx, p, "gr_orgstop0000"); line != "Taken offline before the release was sent, as Lee Okafor asked: nothing was handed to your platform" {
 		t.Fatalf("the run's last line: %q", line)
+	}
+	if n := countOf(t, ctx, p, "SELECT count(*) FROM audit_events WHERE action = '"+UndeployAction+"' AND detail->>'stop' = 'remove_sent'"); n != 1 {
+		t.Fatalf("the row says a remove went to the platform: %d", n)
+	}
+}
+
+// A run's stop says what ran there, never what the org's mode is (#156): run_by org is set, and the environment is still
+// a row Canyon runs with no release of it open, so Canyon stopped it.
+func TestARunsStopSaysWhatRanNotTheOrgsMode(t *testing.T) {
+	p, ctx := releasing(t, "wh_org_pipeline_secret_2433", newStubPlatform(t, 200)) //nolint:gosec // a test fixture, not a real secret
+	image := "registry.example/canyon/claims-portal@sha256:" + strings.Repeat("d", 64)
+	for _, q := range []string{
+		"INSERT INTO runs (id, project_id, package_id, state, kind, deploys, deploy_started_at, stop_requested_at, stop_requested_by_kind, stop_requested_by_subject, stop_requested_by_display) VALUES ('gr_ranbycanyon', '" + project + "', '" + pkg + "', 'running', 'gate', true, now(), now(), 'person', '" + lee.Subject + "', '" + lee.Display + "')",
+		"INSERT INTO deploys (project_id, env, package_id, image, url, gate_run, run_by) VALUES ('" + project + "', 'preview', '" + pkg + "', '" + image + "', 'http://claims-portal.preview.localhost:7777', 'gr_ranbycanyon', 'canyon')",
+	} {
+		if _, err := p.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in := Input{Run: "gr_ranbycanyon", Project: project, Package: pkg, Deploy: true, Actor: dana}
+	if err := pipe.stopped(ctx, durable, in, "preview", stopAsk{Asked: true, By: lee}, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := countOf(t, ctx, p, "SELECT count(*) FROM audit_events WHERE action = '"+UndeployAction+"' AND detail->>'stop' = 'stopped'"); n != 1 {
+		t.Fatalf("Canyon's own row, stopped under run_by org: %d rows with stop stopped", n)
 	}
 }
 

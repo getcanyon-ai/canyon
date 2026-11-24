@@ -16,15 +16,16 @@ import (
 // route's row (contracts/routes.md, The brake).
 const UndeployAction = "DELETE /api/v1/projects/{id}/envs/{env}"
 
-// StopOf is what a stop did to what ran, the `stop` of its audit row (contracts/routes.md, the undeploy row): Canyon
-// stopped what it ran, a remove stands for what the org's platform runs, or nothing ran there. A stop Canyon couldn't
-// make is `failed`, which its caller says itself.
+// StopOf is what a stop did to what ran, the `stop` of its audit row (contracts/routes.md, the undeploy row): a remove
+// stands for what the org's platform runs or holds a release of, which wins, since the platform's copy may still serve,
+// a takeover under way included; else Canyon stopped what it ran, or nothing ran there. A stop Canyon couldn't make is
+// `failed`, which its caller says itself.
 func StopOf(canyon, removal bool) string {
 	switch {
-	case canyon:
-		return "stopped"
 	case removal:
 		return "remove_sent"
+	case canyon:
+		return "stopped"
 	}
 	return "nothing"
 }
@@ -305,7 +306,7 @@ func (p *Pipeline) stopped(ctx context.Context, dc dbos.Client, in Input, env st
 					return err
 				}
 			}
-			stop = StopOf(!ask.Released && !orgMode, removed) // what this run handed the platform, or never handed it, Canyon didn't run
+			stop = StopOf(runBy == "canyon", removed) // what ran there, read before the delete, as the routes read it
 			switch {
 			case ask.Released && removed:
 				line = "Taken offline while your platform was deploying, as " + who + " asked: Canyon sent it a remove"

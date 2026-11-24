@@ -130,7 +130,9 @@ sign-in can do it too, since it counts as them; Canyon's own automated steps, an
 deployment platform uses under [hand-off](/self-host/hand-off/), can't. There are three ways:
 
 - from the CLI: `canyon undeploy --app <app> --env prod --hold --reason "…"`;
-- in the dashboard: **Stop production** on the app's row in the fleet, the dashboard's list of apps;
+- in the dashboard: **Stop production** in the app's details panel in the fleet, the dashboard's list
+  of apps, or on the app's page, under **⋯**. For an app outside a responder's teams, it is on the
+  app's row in the fleet. Where nothing runs in production, it reads **Hold production**;
 - through the API: `POST /api/v1/projects/<app>/envs/prod/hold`, with a CLI sign-in
   ([Calling Canyon's API](/reference/api/)).
 
@@ -143,8 +145,9 @@ your platform to remove it, and the app lets nobody in within about a minute, ev
 platform's pods are still running (see
 [When an environment is stopped](/self-host/hand-off/#when-an-environment-is-stopped)).
 
-A responder or an admin lifts the hold with **Lift the hold** in the dashboard's fleet (on the app's row, or in its details pane),
-only, and can start the held version again. Nobody on the app's team (an owner or a contributor)
+A responder or an admin lifts the hold with **Lift the hold**, only in the dashboard: on the app's
+page, or in the fleet, where an admin finds it in the app's details panel and a responder on the
+app's row. They can start the held version again. Nobody on the app's team (an owner or a contributor)
 lifts its hold unless they are an admin, nor does anyone who was on the team when it was held.
 
 ### Claiming an app nobody owns

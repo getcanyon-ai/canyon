@@ -98,6 +98,11 @@ type scanImage struct {
 }
 
 // builtAt is when this executor last built the image, zero when it never did: it found it on the daemon.
+// on is whether the daemon holds this image already, as built finds it, without building it.
+func (s *scanImage) on(ctx context.Context, docker string) bool {
+	return child(ctx, docker, "image", "inspect", "--format", "{{.Id}}", s.repo).Run() == nil
+}
+
 func (s *scanImage) builtAt() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()

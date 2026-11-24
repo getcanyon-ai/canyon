@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getcanyon-ai/canyon/internal/answered"
@@ -59,26 +60,28 @@ var (
 
 // Executor runs pack and docker. Zero values mean the binaries on PATH and the defaults below.
 type Executor struct {
-	Builder   string         // buildpack builder image, a noble one; "" = paketobuildpacks/ubuntu-noble-builder
-	RunImage  string         // CANYON_IMAGE_RUN, the run image by digest; "" = canyon-run, which the executor builds
-	Lifecycle string         // CANYON_IMAGE_LIFECYCLE, pack's lifecycle image by digest; "" = lifecycleImage
-	Busybox   string         // CANYON_IMAGE_BUSYBOX, the port check's busybox by digest; "" = busyboxImage
-	Pool      netip.Prefix   // CANYON_APPS_POOL, the prefix app networks' /24s are cut from; zero = 172.28.0.0/16
-	Join      []string       // CANYON_EXECUTOR_JOIN, the containers every app network is shared with; nil = canyon-server, app-postgres
-	Door      []string       // CANYON_EXECUTOR_EGRESS_JOIN, the containers every internal app network is shared with besides; nil = canyon-egress
-	Holder    string         // CANYON_IMAGE_EGRESS_HOLDER, each build's holder by digest; "" = HolderImage
-	Allow     []string       // CANYON_BUILD_ALLOW's entries, checked by AllowSetting: what a build reaches besides public 80 and 443
-	AppsAllow []string       // CANYON_APPS_ALLOW's entries, checked by AllowSetting: the private addresses an app on an open network reaches besides its own
-	Canyon    []netip.Prefix // CANYON_EGRESS_POOLS, Canyon's networks, which a build's floor refuses before Allow; nil = canyonPools
-	Pack      string         // pack binary; "" = "pack"
-	Docker    string         // docker binary; "" = "docker"
-	Settle    time.Duration  // how long a started container must keep running before /run answers; 0 = 10 s
-	Roots     string         // the system roots a /run's egress.ca joins in system-and-canyon.pem; "" = SystemRoots
+	Builder     string         // buildpack builder image, a noble one; "" = paketobuildpacks/ubuntu-noble-builder
+	NodeBuilder string         // CANYON_BUILDER_NODE, Canyon's Node builder, which a Node app builds on; "" = none (nodebuilder.go)
+	RunImage    string         // CANYON_IMAGE_RUN, the run image by digest; "" = canyon-run, which the executor builds
+	Lifecycle   string         // CANYON_IMAGE_LIFECYCLE, pack's lifecycle image by digest; "" = lifecycleImage
+	Busybox     string         // CANYON_IMAGE_BUSYBOX, the port check's busybox by digest; "" = busyboxImage
+	Pool        netip.Prefix   // CANYON_APPS_POOL, the prefix app networks' /24s are cut from; zero = 172.28.0.0/16
+	Join        []string       // CANYON_EXECUTOR_JOIN, the containers every app network is shared with; nil = canyon-server, app-postgres
+	Door        []string       // CANYON_EXECUTOR_EGRESS_JOIN, the containers every internal app network is shared with besides; nil = canyon-egress
+	Holder      string         // CANYON_IMAGE_EGRESS_HOLDER, each build's holder by digest; "" = HolderImage
+	Allow       []string       // CANYON_BUILD_ALLOW's entries, checked by AllowSetting: what a build reaches besides public 80 and 443
+	AppsAllow   []string       // CANYON_APPS_ALLOW's entries, checked by AllowSetting: the private addresses an app on an open network reaches besides its own
+	Canyon      []netip.Prefix // CANYON_EGRESS_POOLS, Canyon's networks, which a build's floor refuses before Allow; nil = canyonPools
+	Pack        string         // pack binary; "" = "pack"
+	Docker      string         // docker binary; "" = "docker"
+	Settle      time.Duration  // how long a started container must keep running before /run answers; 0 = 10 s
+	Roots       string         // the system roots a /run's egress.ca joins in system-and-canyon.pem; "" = SystemRoots
 
 	collecting sync.WaitGroup // what answered calls left running: /run's image cleanups, the database refresh a /scan started
 	nets       sync.Mutex     // the one lock over app networks: creating, joining, removing, and a /run's start onto one
 	nonRoots   sync.Map       // builder image IDs whose user nonRoot read as no root's, so id -u runs once per image
 	warned     sync.Map       // the apps deployed before the floor already logged, so each is logged once a process
+	nodeReady  atomic.Int64   // when this executor pulled the Node builder, Unix nanoseconds: zero when it never had to
 }
 
 // BuildRequest is the json part of POST /build.
@@ -523,7 +526,12 @@ func builderFailed(err error) error {
 // waited_ms; #2711). CANYON_BUILDER and CANYON_IMAGE_RUN are pulled, never built, so they count for nothing.
 func (e *Executor) Prepared() time.Time {
 	var at time.Time
-	if e.Builder == "" {
+	switch {
+	case e.nodeOn(): // the Node builder's pull, in place of canyon-builder's build, which only a tree that needs it starts
+		if n := e.nodeReady.Load(); n != 0 {
+			at = time.Unix(0, n)
+		}
+	case e.Builder == "":
 		at = builderImage.builtAt()
 	}
 	if ran := runImage.builtAt(); e.RunImage == "" && ran.After(at) {
@@ -536,6 +544,13 @@ func (e *Executor) Prepared() time.Time {
 // CANYON_BUILDER's pulled first when the daemon has none, as a build pulls it, canyon-builder's built
 // first — (contracts/executor.md, GET /builder).
 func (e *Executor) BuilderImage(ctx context.Context) (string, error) {
+	if e.nodeOn() {
+		_, id, err := e.nodeBuilder(ctx)
+		if err != nil {
+			return "", fmt.Errorf("the Node builder %w", err)
+		}
+		return nodeIdentity(id), nil
+	}
 	if e.Builder == "" {
 		id, err := builderImage.built(ctx, e.docker())
 		if err != nil {
@@ -582,9 +597,7 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 	if !validApp(req.App) || !validPackage(req.Package) {
 		return BuildResult{}, fmt.Errorf("%w: app must match %s and package %s (contracts/schema/executor.schema.json)", ErrRequest, appPattern, packagePattern)
 	}
-	env := BuildEnv(req.BuildValues)
-	values, err := envPairs(env, true)
-	if err != nil {
+	if _, err := envPairs(BuildEnv(req.BuildValues), true); err != nil {
 		return BuildResult{}, err
 	}
 	dir, err := os.MkdirTemp("", "canyon-build-")
@@ -599,7 +612,43 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 	if _, err := e.RunImageID(ctx); err != nil {
 		return BuildResult{}, &HostFailed{Message: err.Error()}
 	}
-	builder, err := e.builder(ctx)
+	if e.nodeOn() { // contracts/executor.md, A Node app builds on Canyon's Node builder
+		why := e.fullBuilderFor(ctx, dir, req.BuildValues)
+		if why == "" {
+			res, err := e.buildOn(ctx, req, dir, out, true)
+			if undetected := (*Undetected)(nil); !errors.As(err, &undetected) {
+				return res, err
+			}
+			why = "the Node builder detects nothing"
+		}
+		log.Printf("executor: %s builds on canyon-builder: %s", req.App, why)
+	}
+	return e.buildOn(ctx, req, dir, out, false)
+}
+
+// buildOn builds the tree in dir on the Node builder, or else on the one builder (CANYON_BUILDER or canyon-builder).
+// The Node builder carries canyon-run:noble and the executor's two build variables, so with no build values pack is
+// handed neither --run-image nor --env and builds on it as it is, never on an ephemeral copy; its log is held back
+// until its detection passed.
+func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, out io.Writer, node bool) (BuildResult, error) {
+	env := BuildEnv(req.BuildValues)
+	if node {
+		env = req.BuildValues // fullBuilderFor sent a build value of either of the executor's own two elsewhere
+	}
+	values, err := envPairs(env, true)
+	if err != nil {
+		return BuildResult{}, err
+	}
+	var builder string
+	switch {
+	case node:
+		builder, _, err = e.nodeBuilder(ctx)
+	case e.nodeOn() && !builderImage.on(ctx, e.docker()): // the first app on this host the Node builder doesn't build
+		_, _ = fmt.Fprintf(out, "This app builds on Canyon's full build image, which this Docker host doesn't have yet. Getting it once%s\n", builderAbout)
+		fallthrough
+	default:
+		builder, err = e.builder(ctx)
+	}
 	if err != nil {
 		return BuildResult{}, &HostFailed{Message: err.Error()}
 	}
@@ -620,11 +669,14 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 	}
 	defer remove()
 	tag := "canyon/" + req.App + ":" + req.Package + "-" + nonce() // unique per build: two builds never read each other's image
-	args := []string{"build", tag, "--no-color", "--path", dir, "--builder", builder, "--run-image", e.runName(), "--pull-policy", "if-not-present",
+	args := []string{"build", tag, "--no-color", "--path", dir, "--builder", builder, "--pull-policy", "if-not-present",
 		"--lifecycle-image", or(e.Lifecycle, lifecycleImage), "--network", "container:" + holder, // every phase in the holder's floored namespace
 		"--descriptor", descriptor,
 		// one pair per app, one flag per type (pack reads one type from each): pack's default is named after the per-build tag, so each build left two volumes behind
 		"--cache", "type=build;format=volume;name=" + names.CacheVolume(req.App, "build"), "--cache", "type=launch;format=volume;name=" + names.CacheVolume(req.App, "launch")}
+	if !node || e.RunImage != "" { // the Node builder names canyon-run:noble itself
+		args = append(args, "--run-image", e.runName())
+	}
 	for _, k := range sortedKeys(env) {
 		args = append(args, "--env", k) // value-less: pack reads it from its own environment, so no value is in argv
 	}
@@ -632,20 +684,23 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 	cmd := child(ctx, e.pack(), args...)
 	cmd.Env = append(cmd.Env, values...)
 	last := &lastLine{} // pack's own last line, uncoloured (--no-color): it says which lifecycle status ended the build
-	both := io.MultiWriter(out, last)
+	gate := &gated{out: out, open: !node}
+	both := io.MultiWriter(gate, last)
 	cmd.Stdout, cmd.Stderr = both, both // one writer: exec hands both streams over one pipe, in order
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError // only a pack that exited on its own says how detection went: never one a signal or the ceiling killed
 		status, said := strings.CutPrefix(last.String(), lifecycleFailed)
 		said = said && errors.As(err, &exit) && exit.Exited() && ctx.Err() == nil
 		if said && (status == "20" || status == "21") {
-			return BuildResult{}, &Undetected{Builds: e.builds(ctx, builder), Errored: status == "21"}
+			return BuildResult{}, &Undetected{Builds: e.builds(ctx, builder), Errored: status == "21"} // the Node builder's log is dropped: canyon-builder decides
 		}
+		_ = gate.release()                                         // a build that failed for another reason shows all of its log
 		if code, err := strconv.Atoi(status); said && err == nil { // the step and its code, as Kubernetes says them (contracts/executor.md, /build; #1734)
 			return BuildResult{}, fmt.Errorf("the build step exited %d", code)
 		}
 		return BuildResult{}, fmt.Errorf("pack: %w", err)
 	}
+	_ = gate.release() // all of a build that passed, whatever pack printed
 	id, err := child(ctx, e.docker(), "image", "inspect", "--format", "{{.Id}}", tag).CombinedOutput()
 	if err != nil {
 		log.Printf("executor: image inspect %s: %s", tag, strings.TrimSpace(string(id)))

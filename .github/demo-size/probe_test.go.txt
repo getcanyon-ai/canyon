@@ -9,75 +9,42 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
 
-func pNum(sh string) int64 {
-	out, _ := exec.Command("bash", "-c", ". "+os.Getenv("TRIAL_LIB")+"; "+sh).Output()
-	var n int64
-	_, _ = fmt.Sscan(string(out), &n)
-	return n
+// pDisk writes where the disk went, as the store keeps it, under name.
+func pDisk(name string) {
+	out, _ := exec.Command("bash", "-c", `date +%s; df -B1 --output=used / | tail -1; sudo du -sb /var/lib/docker/* /var/lib/containerd/* 2>/dev/null | sort -k2; docker system df; docker image ls -a --no-trunc; docker ps -a --size; docker volume ls`).CombinedOutput()
+	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "disk-"+name+".txt"), out, 0o600)
 }
 
-func pStage(name string, fn func() error) error {
-	rx, used, began := pNum("rx"), pNum("used"), time.Now()
-	err := fn()
-	row := fmt.Sprintf("%s\t%.1f\t%d\t%d\t%v\n", name, time.Since(began).Seconds(), pNum("rx")-rx, pNum("used")-used, err)
-	f, _ := os.OpenFile(filepath.Join(os.Getenv("TRIAL_OUT"), "stages.tsv"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	_, _ = f.WriteString(row)
-	_ = f.Close()
-	fmt.Print("STAGE ", row)
-	df, _ := exec.Command("docker", "system", "df", "-v").CombinedOutput()
-	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "df-"+strings.ReplaceAll(name, " ", "-")+".txt"), df, 0o600)
-	return err
-}
-
-func pBuild(ctx context.Context, t *testing.T, e *Executor, name, app, dir, pkg string) error {
+func pB(ctx context.Context, t *testing.T, e *Executor, name, pkg string) {
 	var log bytes.Buffer
-	tree := treeOf(t, dir)
-	err := pStage(name, func() error { _, err := e.Build(ctx, BuildRequest{App: app, Package: pkg}, tree, &log); return err })
-	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "log-"+strings.ReplaceAll(name, " ", "-")+".txt"), log.Bytes(), 0o600)
-	return err
+	began := time.Now()
+	_, err := e.Build(ctx, BuildRequest{App: "claims-portal", Package: pkg}, treeOf(t, "../demo/apps/claims-portal"), &log)
+	fmt.Printf("STAGE %s %.1f s %v\n", name, time.Since(began).Seconds(), err)
+	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "log-"+name+".txt"), log.Bytes(), 0o600)
 }
 
 func TestProbe(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
 	defer cancel()
-	node := &Executor{Join: []string{}, Builder: "canyon-builder-nodejs:trial"}
-	today := &Executor{Join: []string{}}
-	// The laptop demo with a Node builder alone: then a visitor's first Python app.
-	_ = pStage("01 node builder made", func() error {
-		if out, err := exec.Command("bash", "-c", "nodeonly").CombinedOutput(); err != nil {
-			return fmt.Errorf("%v: %s", err, out)
-		}
-		return nil
-	})
-	_ = pStage("02 canyon-run", func() error { _, err := today.RunImageID(ctx); return err })
-	_ = pBuild(ctx, t, node, "03 claims-portal on the node builder", "claims-portal", "../demo/apps/claims-portal", "pkg_prb1")
-	_ = pStage("04 first python app: the full builder fetched and built", func() error { _, err := today.BuilderImage(ctx); return err })
-	_ = pBuild(ctx, t, today, "05 first python app: its build", "django-sqlite", "testdata/apps/django-sqlite", "pkg_prb1")
-	_ = pBuild(ctx, t, today, "06 the same python app again", "django-sqlite", "testdata/apps/django-sqlite", "pkg_prb2")
-	// What the full builder sets for every build.
-	builder, _ := today.BuilderImage(ctx)
-	out, err := exec.Command("docker", "run", "--rm", "--network", "none", "--entrypoint", "sh", builder, "-c",
-		`echo "image env:"; env | sort; echo; ls -laR /cnb/build-config 2>&1; for f in $(find /cnb/build-config -type f 2>/dev/null); do echo "== $f"; cat "$f"; echo; done`).CombinedOutput()
-	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "build-config.txt"), out, 0o600)
-	fmt.Printf("CONFIG %v\n%s\n", err, out)
-	paketo, _ := exec.Command("docker", "image", "inspect", "--format", "{{json .Config.Env}} {{json .Config.Labels}}", builder).Output()
-	_ = os.WriteFile(filepath.Join(os.Getenv("TRIAL_OUT"), "builder-inspect.json"), paketo, 0o600)
-	// claims-portal on today's builder: fresh, again with its caches, then again with them removed.
-	_ = pBuild(ctx, t, today, "07 claims-portal fresh", "cp-cache", "../demo/apps/claims-portal", "pkg_prb1")
-	_ = pBuild(ctx, t, today, "08 claims-portal again, caches kept", "cp-cache", "../demo/apps/claims-portal", "pkg_prb2")
-	_ = exec.Command("docker", "volume", "rm", "canyon-cache-cp-cache-build", "canyon-cache-cp-cache-launch").Run()
-	_ = pBuild(ctx, t, today, "09 claims-portal again, caches removed", "cp-cache", "../demo/apps/claims-portal", "pkg_prb3")
-	_ = pBuild(ctx, t, today, "10 claims-portal again, caches kept", "cp-cache", "../demo/apps/claims-portal", "pkg_prb4")
-	_ = exec.Command("docker", "volume", "rm", "canyon-cache-cp-cache-build", "canyon-cache-cp-cache-launch").Run()
-	_ = pBuild(ctx, t, today, "11 claims-portal again, caches removed", "cp-cache", "../demo/apps/claims-portal", "pkg_prb5")
-	// One build's phases timed, today's builder and the node builder, caches kept.
+	e := &Executor{Join: []string{}}
+	pDisk("0-empty")
+	_, err := e.BuilderImage(ctx)
+	must(t, err)
+	_, err = e.RunImageID(ctx)
+	must(t, err)
+	pDisk("1-builder-and-run")
+	pB(ctx, t, e, "first", "pkg_prb1")
+	pDisk("2-after-first-build")
 	must(t, os.WriteFile("/tmp/probe-verbose", nil, 0o600))
-	_ = pBuild(ctx, t, today, "12 timed phases, today's builder", "cp-cache", "../demo/apps/claims-portal", "pkg_prb6")
-	_ = pBuild(ctx, t, node, "13 timed phases, node builder", "claims-portal", "../demo/apps/claims-portal", "pkg_prb7")
+	pB(ctx, t, e, "second-timed", "pkg_prb2")
 	must(t, os.Remove("/tmp/probe-verbose"))
+	pDisk("3-after-second-build")
+	pB(ctx, t, e, "third", "pkg_prb3")
+	pDisk("4-after-third-build")
+	_ = exec.Command("docker", "image", "prune", "-f").Run()
+	pDisk("5-after-image-prune")
 }

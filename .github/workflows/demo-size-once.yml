@@ -14,33 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tour:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'exp/demo-size'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        store: [overlay2, containerd]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - run: .github/demo-size/prepare.sh ${{ matrix.store }}
-      - uses: ./.github/actions/hosted-docker
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      - run: .github/demo-size/tour.sh "$RUNNER_TEMP/out"
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tour-${{ matrix.store }}
-          path: ${{ runner.temp }}/out
-          retention-days: 3
-
   probe:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'exp/demo-size'
     runs-on: ubuntu-24.04-arm

@@ -76,8 +76,19 @@ func (e *Executor) Logs(ctx context.Context, app, target string, tail int, follo
 	opts := &corev1.PodLogOptions{Container: "app", Follow: follow, TailLines: &lines}
 	last := lastRun(newest, opts) // a crashed app's lines are its last run's (contracts/executor.md, A container that isn't running)
 	stream, err := e.Client.CoreV1().Pods(Namespace).GetLogs(newest.Name, opts).Stream(ctx)
-	if err != nil && last != nil && last.Message != "" { // that run's log is gone: the tail its status keeps
-		_, err = io.WriteString(out, strings.TrimSuffix(last.Message, "\n")+"\ncanyon: the cluster kept only the end of the app's last run\n")
+	if last != nil { // never followed: read whole, so the kubelet's own answer is told from the app's lines
+		var body []byte
+		if err == nil {
+			body, err = io.ReadAll(stream)
+			_ = stream.Close()
+		}
+		// Once the dead container is gone the kubelet answers 200 with this sentence (kubelet v1.33.0, kuberuntime_container.go).
+		gone := err == nil && string(body) == "unable to retrieve container logs for "+last.ContainerID
+		if gone || err != nil { // that run's log is gone: the end its status keeps
+			_, err = io.WriteString(out, kept(last, tail))
+			return err
+		}
+		_, err = out.Write(body)
 		return err
 	}
 	if err != nil {
@@ -106,6 +117,18 @@ func lastRun(p *corev1.Pod, opts *corev1.PodLogOptions) *corev1.ContainerStateTe
 		}
 	}
 	return nil
+}
+
+// kept is the end of a run whose log is gone, as its status keeps it under FallbackToLogsOnError: its last tail
+// lines, from a whole line (whole), then Canyon's line saying so. The kubelet's record of a container it lost
+// (ContainerStatusUnknown) carries the kubelet's sentence, never the app's, so nothing of the app is kept.
+func kept(t *corev1.ContainerStateTerminated, tail int) string {
+	said := strings.TrimSuffix(whole(t.Message), "\n")
+	if t.Reason == "ContainerStatusUnknown" || said == "" {
+		return "canyon: the cluster kept nothing of the app's last run\n"
+	}
+	lines := strings.Split(said, "\n")
+	return strings.Join(append(lines[max(0, len(lines)-tail):], "canyon: the cluster kept only the end of the app's last run"), "\n") + "\n"
 }
 
 // newestPod is the pod created last, nil for none.

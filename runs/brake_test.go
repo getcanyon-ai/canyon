@@ -85,6 +85,19 @@ func midSwitch(t *testing.T, ctx context.Context, p *pgxpool.Pool, f *executorte
 
 // A promotion still pending when production is taken offline is ended there and then, interrupted,
 // and the trail names the run the undeploy ended.
+// A row says "stopped" only of what Canyon ran: what the org's platform runs is a remove asked for, and nothing ran is
+// nothing (#156).
+func TestStopOfSaysStoppedOnlyOfWhatCanyonRan(t *testing.T) {
+	for _, c := range []struct {
+		canyon, removal bool
+		want            string
+	}{{true, false, "stopped"}, {true, true, "stopped"}, {false, true, "remove_sent"}, {false, false, "nothing"}} {
+		if got := StopOf(c.canyon, c.removal); got != c.want {
+			t.Errorf("Canyon ran it %t, a remove stands %t: %q, want %q", c.canyon, c.removal, got, c.want)
+		}
+	}
+}
+
 func TestUndeployProdCancelsAPendingPromotion(t *testing.T) {
 	p, ctx, _ := deploying(t, runstest.CleanGolden)
 	deployRun, image := previewImage(t, ctx, p)

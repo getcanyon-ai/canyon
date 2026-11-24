@@ -160,7 +160,10 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "POST /api/v1/projects": return { verb: "Created the app" };
     case "DELETE /api/v1/projects/{id}": return { verb: "Deleted the app" };
     case "PUT /api/v1/projects/{id}/owner": return { verb: "Claimed the app" };
-    case "DELETE /api/v1/projects/{id}/envs/{env}": return { verb: "Took", rest: `${env(event)} offline, keeping its data` };
+    case "DELETE /api/v1/projects/{id}/envs/{env}": // "Took" only what Canyon ran (#156)
+      return d.stop === "remove_sent" ? { verb: "Asked your platform to take", rest: `${env(event)} offline, keeping its data` }
+        : d.stop === "nothing" ? { verb: "Stopped the deploy to", rest: `${env(event)}; nothing ran there` }
+        : { verb: "Took", rest: `${env(event)} offline, keeping its data` };
     case "declare resource": return { verb: "Declared a resource", rest: text(d.name) };
     case "ensure resource": return { verb: "Made a resource ready", rest: `${text(d.name)} in ${env(event)}` };
     case "reissue resource password": return { verb: "Gave a resource a new password", rest: `${text(d.name)} in ${env(event)}` };

@@ -16,6 +16,19 @@ import (
 // route's row (contracts/routes.md, The brake).
 const UndeployAction = "DELETE /api/v1/projects/{id}/envs/{env}"
 
+// StopOf is what a stop did to what ran, the `stop` of its audit row (contracts/routes.md, the undeploy row): Canyon
+// stopped what it ran, a remove stands for what the org's platform runs, or nothing ran there. A stop Canyon couldn't
+// make is `failed`, which its caller says itself.
+func StopOf(canyon, removal bool) string {
+	switch {
+	case canyon:
+		return "stopped"
+	case removal:
+		return "remove_sent"
+	}
+	return "nothing"
+}
+
 // stopRetries is how often a run tries again to stop its environment before it ends failed/error, and
 // stopEvery the server-start reconcile's wait between its tries; variables so a test need not wait.
 var (
@@ -239,7 +252,7 @@ func (p *Pipeline) stopped(ctx context.Context, dc dbos.Client, in Input, env st
 			}
 		}
 		var line string
-		audit := false
+		audit, stop := false, ""
 		if !ok {
 			var version string
 			if err := tx.QueryRow(ctx, "SELECT coalesce(label, substr(id, 5)) FROM packages WHERE id = $1 AND project_id = $2", in.Package, in.Project).Scan(&version); err != nil {
@@ -249,7 +262,7 @@ func (p *Pipeline) stopped(ctx context.Context, dc dbos.Client, in Input, env st
 				" runs there. Take it offline again with canyon undeploy --env " + env
 			if hold != nil { // no undeploy is allowed while held: an admin looks the run up, and the trail says the stop failed
 				line = heldStopLine(version, in.Run)
-				if err := events.AuditTx(ctx, tx, hold.By, "stop app", in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "image_digest": digest, "reason": hold.Reason, "cancelled": []string{in.Run}, "stopped": false}); err != nil {
+				if err := events.AuditTx(ctx, tx, hold.By, "stop app", in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "image_digest": digest, "reason": hold.Reason, "cancelled": []string{in.Run}, "stop": "failed", "stopped": false}); err != nil {
 					return err
 				}
 			}
@@ -292,6 +305,7 @@ func (p *Pipeline) stopped(ctx context.Context, dc dbos.Client, in Input, env st
 					return err
 				}
 			}
+			stop = StopOf(!ask.Released && !orgMode, removed) // what this run handed the platform, or never handed it, Canyon didn't run
 			switch {
 			case ask.Released && removed:
 				line = "Taken offline while your platform was deploying, as " + who + " asked: Canyon sent it a remove"
@@ -304,12 +318,12 @@ func (p *Pipeline) stopped(ctx context.Context, dc dbos.Client, in Input, env st
 			}
 		}
 		if audit && hold != nil {
-			if err := events.AuditTx(ctx, tx, hold.By, "stop app", in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "image_digest": digest, "reason": hold.Reason, "cancelled": []string{in.Run}}); err != nil {
+			if err := events.AuditTx(ctx, tx, hold.By, "stop app", in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "image_digest": digest, "reason": hold.Reason, "cancelled": []string{in.Run}, "stop": stop}); err != nil {
 				return err
 			}
 		}
 		if audit && (hold == nil || ask.By.Kind != hold.By.Kind || ask.By.Subject != hold.By.Subject) { // an undeploy asked first: its row too
-			if err := events.AuditTx(ctx, tx, ask.By, UndeployAction, in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "run": in.Run}); err != nil {
+			if err := events.AuditTx(ctx, tx, ask.By, UndeployAction, in.Project, in.Run, map[string]any{"env": env, "package": in.Package, "run": in.Run, "stop": stop}); err != nil {
 				return err
 			}
 		}

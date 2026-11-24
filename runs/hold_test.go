@@ -197,7 +197,7 @@ func TestAHeldStopThatFailsSendsItToAnAdmin(t *testing.T) {
 		t.Fatal("the hold went with the failed stop")
 	}
 	if n := countOf(t, ctx, p, `SELECT count(*) FROM audit_events WHERE action = 'stop app' AND run_id = '`+run+`' AND actor_subject = '`+rhea.Subject+`'
-		AND detail @> '{"stopped": false, "env": "prod", "package": "`+pkg+`"}' AND detail->'cancelled' = '["`+run+`"]'`); n != 1 {
+		AND detail @> '{"stop": "failed", "stopped": false, "env": "prod", "package": "`+pkg+`"}' AND detail->'cancelled' = '["`+run+`"]'`); n != 1 {
 		t.Fatalf("the stop app row saying the stop failed: %d", n)
 	}
 }

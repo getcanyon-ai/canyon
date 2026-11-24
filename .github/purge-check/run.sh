@@ -16,6 +16,8 @@ docker volume ls -q | sort >"$work/vol-after"
 docker system df
 echo "== images now that weren't before"; comm -13 "$work/before" "$work/after" | tee "$work/added"
 echo "== volumes now that weren't before"; comm -13 "$work/vol-before" "$work/vol-after" | tee -a "$work/added"
+echo "== images that were here before and are gone"; comm -23 "$work/before" "$work/after" | tee "$work/taken"
 grep -q "The demo is gone" "$work/purge"
 [ ! -s "$work/added" ] || { echo "::error::down --purge left what the demo made"; exit 1; }
-echo "down --purge after a down left nothing the demo made"
+[ ! -s "$work/taken" ] || { echo "::error::down --purge removed an image that was here before the demo"; exit 1; }
+echo "down --purge after a down left nothing the demo made, and took nothing else"

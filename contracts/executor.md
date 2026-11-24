@@ -180,6 +180,32 @@ Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `exec
 `paketobuildpacks/ubuntu-noble-build` pinned by digest with `libpq5`, ending as `1001:1001`, which the
 deploy names by digest as it names `canyon-run`.
 
+**A Node app builds on Canyon's Node builder, on Docker** (**amended 2026-11-24**, #174). `CANYON_BUILDER_NODE`, in
+the executor's environment, names `canyon-builder-node`, as `CANYON_BUILDER` names a builder. Each release publishes it
+by digest beside its other images (`images.txt`), and the laptop demo's bundle names it so. It is made from `canyon-build` (above), Paketo's `nodejs`
+buildpack at the digest `deploy/k8s/builds.yaml` pins, and the lifecycle the pinned `canyon-builder` carries. Its run
+image is `canyon-run:noble`, and the executor's own two build variables (*Every build runs with*, below) are the
+builder's own build environment. A build with no build values therefore hands pack neither `--run-image` nor
+`--env`, so pack builds on the builder itself, never on an ephemeral copy it saves to the daemon. Saving that copy
+takes about 85 s a build on Docker's containerd image store, and leaves about 1.3 GB that nothing frees.
+
+- **Which builder.** `/build` uses it for a tree when both hold:
+  - (a) the tree and its build environment (its build values, and the `project.toml` Canyon reads) carry none of the
+    entries `executor/choose.go` lists;
+  - and no build value names either of those two variables, which only `--env` can replace;
+  - (b) the Node builder's detect passes, as pack's `detect` phase reports it. Its log is held until it has, so a
+    tree it detects nothing in shows `canyon-builder`'s build alone. When this host doesn't have `canyon-builder` yet,
+    that build's log says so and what it downloads, once.
+- **Otherwise `canyon-builder`**, which then decides exactly as today, its failed-detect answer included.
+- **(a)'s list.** It is read from the detect code of every buildpack group the full builder orders before `nodejs`,
+  at the versions `deploy/k8s/builds.yaml` pins: entry names and globs in the tree, and build variables set at all.
+  It never names the app's language. It is a superset of what could make an earlier group pass, so a tree it
+  can't rule out goes to today's builder.
+- **Keeping it true.** `choose.go` carries the pins it was read for, written so the Paketo bump never moves them. A
+  test fails while any of them differs from what the tree pins, until the detect code is read again.
+- **Unset, or with `CANYON_BUILDER` set:** every app builds on the one builder, as before.
+- **On Kubernetes** the ClusterBuilder is unchanged.
+
 **Every build runs with `NODE_ENV=production`**, the executor's own build variable, which a build value
 of that name replaces. Paketo's npm-install installs devDependencies under `NODE_ENV=development` and
 hands that value to the buildpacks after it; a build variable is applied over what an earlier buildpack
@@ -1130,7 +1156,15 @@ and no buildpack goes in, and nothing above the run image's layers changes.
 // 502 when the executor cannot tell (its daemon or the cluster API did not answer)
 ```
 
-Which builder a `/build` now would use (#1244): on Docker the builder image's ID (`docker image inspect
+Which builder a `/build` now would use (#1244). With `CANYON_BUILDER_NODE` set (**amended 2026-11-24**, #174), the
+SHA-256 of the Node builder's image ID, a newline, and `canyon-builder`'s name, the tag its file's hash makes, as
+`sha256:<64 hex>`. The Node builder is pulled first when the daemon has none. A new Node builder, or a change to
+`executor/builder.Dockerfile`, a pin bump among them, is a new identity.
+- **The full builder's part is its Dockerfile's hash, not its image ID.** So a `canyon-builder` built again from
+  the same file, with newer packages from apt, is not a new identity, where without a Node builder it is.
+- **Why:** the image ID exists only once the full builder is built, which means downloading it. Asking for it here
+  would download the full builder at the first deploy's reuse check, when a Node app never needs it.
+Otherwise, on Docker the builder image's ID (`docker image inspect
 --format {{.Id}}` of `CANYON_BUILDER`, pulled first when the daemon has none, as a build would pull it,
 else of `canyon-builder`, built first when the daemon has none, as a build would build it); on Kubernetes the ClusterBuilder `canyon`'s
 `status.latestImage`, a reference by digest, and `502` while it has none. A builder patched or replaced —
@@ -1156,7 +1190,9 @@ moves it. An executor from before it answers `builder` alone, and the server pla
 the first build on a host, and again when a Canyon release changes either image, `canyon-builder` up to a
 1.4 GB download. It runs from the call's start to the moment the later of the two was built during it.
 Absent when neither was built while it waited: both on the daemon already, `CANYON_BUILDER` and
-`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. The server turns it
+`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. With `CANYON_BUILDER_NODE`
+set it counts the Node builder's pull in place of `canyon-builder`'s build, which only a tree that needs it starts,
+inside its `/build`, whose log says what it downloads. The server turns it
 into the run's `build.image` row (events.md), which the CLI adds to the build's time.
 
 ## `GET /scandb`

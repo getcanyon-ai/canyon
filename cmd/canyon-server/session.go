@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -309,11 +310,20 @@ func (a *app) session(next http.Handler) http.Handler {
 			return
 		}
 		ctx := r.Context()
-		if signed, setup, prov, ok := a.sessionOf(ctx, r, name); ok {
+		signed, setup, prov, ok, err := a.sessionOf(ctx, r, name)
+		if ok {
 			a.serveSigned(w, r, signed, setup, prov, next)
 			return
 		}
-		if a.auth == authOIDC { // sessions are minted only by the sign-in routes (contracts/routes.md): the refusal comes before the handler and before the catch-all, with no row of any kind
+		if err != nil && a.auth == authOIDC { // the database didn't answer: the session may live, so never the 401 that says it ended (#153); with sign-in off every caller is the anonymous admin, as below
+			a.log.Printf("canyon-server: session: %v", err)
+			writeErr(w, http.StatusServiceUnavailable, "session_unread", "Canyon couldn't check your sign-in just now. Try again in a moment.", nil)
+			return
+		}
+		if a.auth == authOIDC {
+			if r.Method == http.MethodDelete && r.URL.Path == "/sessions" && !r.URL.Query().Has("subject") {
+				clearSession(w, a.public) // a sign-out of a session that ended: the browser keeps nothing of it
+			} // sessions are minted only by the sign-in routes (contracts/routes.md): the refusal comes before the handler and before the catch-all, with no row of any kind
 			writeErr(w, http.StatusUnauthorized, "unauthenticated", "sign in to Canyon", nil)
 			return
 		}
@@ -350,17 +360,23 @@ func setSessionCookie(w http.ResponseWriter, name, id string, secure bool) {
 // taken off one is out of Canyon on their next call, on every session they hold, with no revoke
 // step to remember and no cache to invalidate (design/AUTH.md §5). setup is the host's state;
 // groups are the session's, stored at sign-in.
-func (a *app) sessionOf(ctx context.Context, r *http.Request, name string) (s signedSession, setup bool, prov events.Provenance, ok bool) {
+func (a *app) sessionOf(ctx context.Context, r *http.Request, name string) (s signedSession, setup bool, prov events.Provenance, ok bool, err error) {
 	c, err := r.Cookie(name)
 	if err != nil || len(c.Value) != 2*tokenBytes { // a cookie of any other length is not one of ours: it never reaches the database
-		return s, false, prov, false
+		return s, false, prov, false, nil
 	}
-	s, setup, flow, ok := a.sessionFor(ctx, c.Value)
+	s, setup, flow, ok, err := a.readSession(ctx, c.Value)
 	if flow == "oauth" { // bound to the MCP resource and its client (design/AUTH.md §4.7): never a cookie's, anywhere
-		return signedSession{}, false, prov, false
+		return signedSession{}, false, prov, false, nil
 	}
 	// how and from where the request's audit rows were done (contracts/routes.md, the audit read)
-	return s, setup, events.Provenance{Via: viaOf[flow], Role: s.role, Session: sessionDigest(c.Value), Source: a.proxies.source(r)}, ok
+	return s, setup, events.Provenance{Via: viaOf[flow], Role: s.role, Session: sessionDigest(c.Value), Source: a.proxies.source(r)}, ok, err
+}
+
+// clearSession clears the session cookie, with its own attributes.
+func clearSession(w http.ResponseWriter, public string) {
+	name, secure := sessionCookieOf(public)
+	http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure}) //nolint:gosec // the session cookie's own attributes, as the callback clears its sign-in cookie
 }
 
 // signedSession is who a session is, as the session stage carries it beside the request: the actor, their
@@ -387,26 +403,37 @@ func sessionDigest(secret string) string {
 	return "ses_" + hex.EncodeToString(sum[:8])
 }
 
-// sessionFor is sessionOf for a session named by its id: an app session's (surfaces.go).
+// sessionFor is sessionOf for a session named by its id: an app session's (surfaces.go). One it can't read is no
+// session to its callers, which fail closed.
 func (a *app) sessionFor(ctx context.Context, id string) (s signedSession, setup bool, flow string, ok bool) {
+	s, setup, flow, ok, _ = a.readSession(ctx, id)
+	return s, setup, flow, ok
+}
+
+// readSession reads the session named by its id: err when the database answered an error, never when it has no such
+// session, so the stage tells a failed read from a session that ended (#153).
+func (a *app) readSession(ctx context.Context, id string) (s signedSession, setup bool, flow string, ok bool, err error) {
 	var claimedAdmin, claimedResponder, stale bool
 	var o org
 	if err := a.pool.QueryRow(ctx, "SELECT s.actor_kind, s.actor_subject, s.actor_display, s.email, s.email_verified, s.claimed_admin, s.claimed_responder, s.groups, s.groups_read = 'ok', s.flow, s.issuer, o.allowed_domains, o.allowed_emails, o.admin_emails, o.responder_emails, o.onboarded_at IS NULL, coalesce(s.last_seen_at < now() - interval '1 hour', true) FROM sessions s CROSS JOIN org_preferences o WHERE s.id = $1 AND s.revoked_at IS NULL AND s.expires_at > now()", id).
 		Scan(&s.act.Kind, &s.act.Subject, &s.act.Display, &s.email, &s.verified, &claimedAdmin, &claimedResponder, &s.groups, &s.read, &flow, &s.issuer, &o.domains, &o.emails, &o.admins, &o.responders, &o.setup, &stale); err != nil {
-		return signedSession{}, false, "", false
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = nil
+		}
+		return signedSession{}, false, "", false, err
 	}
 	if a.auth == authOIDC && s.issuer != "" && s.issuer != a.oidc.issuer { // minted through another issuer: its subject may be another person's under this one, so it signs in again (#2306); one recording none is this issuer's, as a grant's is
-		return signedSession{}, false, "", false
+		return signedSession{}, false, "", false, nil
 	}
 	o = a.withEnvironment(o)
 	if a.auth == authOIDC && !a.member(s.email, o) {
-		return signedSession{}, false, "", false
+		return signedSession{}, false, "", false, nil
 	}
 	s.role, s.issuer, s.id = a.role(s.email, claimedAdmin, claimedResponder, o), a.bindingIssuer(), id
 	if stale { // seen, at most hourly, for the usage report's people and agents active (#2953): a failed touch costs that count alone, never the request
 		_, _ = a.pool.Exec(ctx, "UPDATE sessions SET last_seen_at = now() WHERE id = $1", id)
 	}
-	return s, o.setup, flow, true
+	return s, o.setup, flow, true, nil
 }
 
 // sweepSessions deletes the expired rows: it runs on the boot path that runs migrations, and

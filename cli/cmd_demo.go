@@ -231,6 +231,33 @@ func demoApps(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
+// demoAppsKept is the file that keeps the ids of the demo's apps, one a line, as its server last listed them to up or
+// down: down reads it when the server no longer answers, as after an earlier down (#170).
+func demoAppsKept(dir string) string { return filepath.Join(dir, "apps") }
+
+// demoKept is the ids the file keeps; ok is false when there is none to read.
+func demoKept(dir string) (apps []string, ok bool) {
+	b, err := os.ReadFile(demoAppsKept(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
+	if err != nil {
+		return nil, false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if line = strings.TrimSpace(line); names.ValidProject(line) {
+			apps = append(apps, line)
+		}
+	}
+	return apps, true
+}
+
+// demoKeep adds apps to the ids the file keeps. A failed write is said: a later down may then not know them.
+func (a *app) demoKeep(dir string, apps []string) {
+	kept, _ := demoKept(dir)
+	all := slices.Compact(slices.Sorted(slices.Values(append(kept, apps...))))
+	if err := atomicWrite(demoAppsKept(dir), []byte(strings.Join(all, "\n")+"\n"), true); err != nil {
+		a.errf("\n  %s Couldn't save which apps are the demo's (~/.canyon/demo/apps): %s\n", a.render.glyph(stateWarn), plainly(err))
+	}
+}
+
 // demoHostBefore is the file that keeps the host canyon demo up replaced as this machine's default,
 // for down to name the way back to it.
 func demoHostBefore(dir string) string { return filepath.Join(dir, "host-before") }
@@ -241,7 +268,7 @@ func demoHostBefore(dir string) string { return filepath.Join(dir, "host-before"
 // and a name, and removing them takes the names in the order they come.
 type demoThing struct{ kind, name string }
 
-func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoThing, error) {
+func demoMade(ctx context.Context, stack string, apps, transit []string, purge bool) ([]demoThing, error) {
 	ours := func(app string) bool { return slices.Contains(apps, app) }
 	var made []demoThing
 	labelled := func(kind string, args ...string) error {
@@ -304,7 +331,22 @@ func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoTh
 				return nil
 			}
 		}
-		steps = append(steps,
+		// The images pulled by digest: the compose file's, which compose's own down --rmi all left behind, and those the
+		// executor pulls for its scans. Each is looked for, and removed, by its own reference (#170).
+		pulled := func() error {
+			refs, err := demoListed(ctx, stack, demoCompose("config", "--images")...)
+			if err != nil {
+				return fmt.Errorf("could not list the demo's images: %w", err)
+			}
+			for _, ref := range append(refs, names.PulledImages...) {
+				if _, err := demoDocker(ctx, "", nil, "image", "inspect", "--format", "{{.Id}}", ref); err == nil {
+					made = append(made, demoThing{"image", ref})
+				}
+			}
+			return nil
+		}
+		steps = append(steps, pulled,
+			image(every, "--filter", "reference="+names.LifecycleRepository),
 			image(func(ref string) bool {
 				repo, _, _ := strings.Cut(ref, ":")
 				return ours(strings.TrimPrefix(repo, "canyon/"))
@@ -397,7 +439,13 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 	}
 	before, _ := os.ReadFile(demoHostBefore(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
 	apps, asked := demoApps(ctx)                  // before the server stops
-	transit, err := demoTransit(ctx, stack)       // while the executor's container is there for since= to name
+	if asked == nil {
+		a.demoKeep(dir, apps)
+		apps, _ = demoKept(dir) // and those it listed before, which a server that lost them still made
+	} else if kept, ok := demoKept(dir); ok {
+		apps, asked = kept, nil // as up or the last down kept them
+	}
+	transit, err := demoTransit(ctx, stack) // while the executor's container is there for since= to name
 	if err != nil {
 		a.errf("\n  %s Docker %s\n\n  Is Docker running? Start it, then run: canyon %s\n", a.render.glyph(stateFail), plainly(err), a.form)
 		return exitError
@@ -413,10 +461,10 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		return exitError
 	}
 	a.demoStep("Removing the apps Canyon started")
-	made, err := demoMade(ctx, apps, transit, purge)
+	made, err := demoMade(ctx, stack, apps, transit, purge)
 	if err == nil {
 		demoRemove(ctx, made)
-		made, err = demoMade(ctx, apps, transit, purge)
+		made, err = demoMade(ctx, stack, apps, transit, purge)
 	}
 	if err == nil {
 		var rows []string

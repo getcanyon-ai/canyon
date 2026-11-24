@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/internal/names"
 )
 
 // demoMachine stands in for everything canyon demo reaches beyond this binary: Docker, the release
@@ -46,7 +49,8 @@ type demoMachine struct {
 	transit  []string          // the build and scan containers made since the demo's executor started
 	nets     map[string]string // every network labelled canyon.app, and the app it names
 	vols     []string          // every volume
-	images   map[string]string // canyon/*, canyon-scan/*, canyon-run and canyon-builder: id → repository:tag
+	images   map[string]string // canyon/*, canyon-scan/*, canyon-run, canyon-builder and buildpacksio/lifecycle: id → repository:tag
+	refs     map[string]bool   // the images pulled by digest: the compose file's, and those the executor pulls
 	project  []string          // the containers of the demo's compose project
 	hangs    bool              // the deployer's log never ends
 	imaged   bool              // every image the demo's compose file names is here
@@ -56,7 +60,7 @@ type demoMachine struct {
 func demoOn(t *testing.T) *demoMachine {
 	t.Helper()
 	m := &demoMachine{t: t, home: t.TempDir(), deployer: "0", answers: true, apps: []string{"claims-portal", "witty-wren"},
-		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}}
+		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}, refs: map[string]bool{}}
 	bundle := demoTar(t, map[string]string{"canyon/docker-compose.yml": "services: {}\n", "canyon/deploy/egress/floor.sh": "#!/bin/sh\n"})
 	release := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.fetched++
@@ -116,6 +120,9 @@ func demoOn(t *testing.T) *demoMachine {
 		if strings.Contains(line, "--filter since=e1e2e3e4e5e6") && !m.up { // Docker answers a since= that names a removed container with an error
 			return "", errors.New("exit status 1: Error response from daemon: No such container: e1e2e3e4e5e6")
 		}
+		if ref, one := strings.CutPrefix(line, "image inspect --format {{.Id}} "); one && !strings.Contains(ref, " ") && m.refs[ref] {
+			return "sha256:" + fmt.Sprintf("%x", sha256.Sum256([]byte(ref))), nil // one image pulled by digest, there
+		}
 		if strings.HasPrefix(line, "image inspect ") && !m.imaged {
 			return "", errors.New("exit status 1: Error response from daemon: No such image")
 		}
@@ -153,7 +160,7 @@ func (m *demoMachine) answer(line string) string {
 	case strings.HasPrefix(line, "run --rm "+demoProbe+" df"):
 		return "Filesystem           1K-blocks      Used Available Use% Mounted on\noverlay               61202244   1000000  60202244   2% /"
 	case line == compose("up -d"):
-		m.up, m.server, m.serverAt = true, demoProject, filepath.Join(m.home, ".canyon", "demo", "canyon")
+		m.up, m.server, m.serverAt, m.answers = true, demoProject, filepath.Join(m.home, ".canyon", "demo", "canyon"), true
 		m.project = []string{"canyon-server", "canyon-demo-executor-1", "canyon-demo-demo-apps-1"}
 		for _, app := range m.apps {
 			m.ctrs[app+"-preview"], m.nets["canyon-app-"+app] = app, app
@@ -161,6 +168,10 @@ func (m *demoMachine) answer(line string) string {
 			m.images["id-"+app] = "canyon/" + app + ":pkg_1"
 		}
 		m.images["id-builder"], m.images["id-scan"] = "canyon-builder:0a1b2c3d4e5f", "canyon-scan/opengrep:latest"
+		m.images["id-lifecycle"] = "buildpacksio/lifecycle:<none>" // pack pulls it by its platform's digest, never the pinned index's
+		for _, ref := range append(strings.Split(m.answer(compose("config --images")), "\n"), names.TrivyImage, names.CheckovImage) {
+			m.refs[ref] = true
+		}
 		m.vols = append(m.vols, "canyon-scandb-trivy")
 	case line == compose("logs --follow --no-log-prefix demo-apps"):
 		return "Deploying claims-portal\ncanyon-demo: running claims-portal\ncanyon-demo: running endorsement-hub\ncanyon-demo: running claims-archive\ncanyon-demo: running premium-ledger\nThe sample apps are running, and claims-portal's next version is blocked at review."
@@ -190,8 +201,8 @@ func (m *demoMachine) answer(line string) string {
 		}
 	case line == compose("ps -a --format {{.Name}}"):
 		return strings.Join(m.project, "\n")
-	case strings.HasPrefix(line, compose("down -v")):
-		m.up, m.server, m.project = false, "", nil
+	case strings.HasPrefix(line, compose("down -v")): // the server stops with it; --rmi all left the images it pulled by digest (#170)
+		m.up, m.server, m.project, m.answers = false, "", nil, false
 	case line == `ps -a --filter label=canyon.app --format {{.Names}} {{.Label "canyon.app"}}`:
 		return m.listed(m.ctrs)
 	case line == `network ls --filter label=canyon.app --format {{.Name}} {{.Label "canyon.app"}}`:
@@ -207,7 +218,11 @@ func (m *demoMachine) answer(line string) string {
 	case line == "images --filter reference=canyon/* --format {{.ID}} {{.Repository}}:{{.Tag}}":
 		return m.imageRows(func(ref string) bool { return strings.HasPrefix(ref, "canyon/") })
 	case line == "images --filter reference=canyon-scan/* --filter reference=canyon-run --filter reference=canyon-builder --format {{.ID}} {{.Repository}}:{{.Tag}}":
-		return m.imageRows(func(ref string) bool { return !strings.HasPrefix(ref, "canyon/") })
+		return m.imageRows(func(ref string) bool {
+			return !strings.HasPrefix(ref, "canyon/") && !strings.HasPrefix(ref, "buildpacksio/")
+		})
+	case line == "images --filter reference=buildpacksio/lifecycle --format {{.ID}} {{.Repository}}:{{.Tag}}":
+		return m.imageRows(func(ref string) bool { return strings.HasPrefix(ref, "buildpacksio/lifecycle:") })
 	case line == "network ls --filter label=canyon.build --format {{.Name}}":
 		return ""
 	case len(fields) > 2 && fields[0] == "rm" && fields[1] == "-f":
@@ -224,6 +239,7 @@ func (m *demoMachine) answer(line string) string {
 	case len(fields) > 3 && fields[0] == "image" && fields[1] == "rm" && fields[2] == "-f":
 		for _, id := range fields[3:] {
 			delete(m.images, id)
+			delete(m.refs, id)
 		}
 	}
 	return ""
@@ -594,7 +610,7 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 	if code != exitOK || errs != "" || !strings.Contains(out, "The demo is gone: its containers, data and images, and its files in ~/.canyon/demo.") {
 		t.Fatalf("down --purge: exit %d, stderr %q\n%s", code, errs, out)
 	}
-	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f id-builder id-claims-portal id-scan id-witty-wren") != 1 ||
+	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f "+names.CheckovImage+" "+names.TrivyImage+" ghcr.io/getcanyon-ai/canyon-executor@sha256:bb ghcr.io/getcanyon-ai/canyon-server@sha256:aa id-builder id-claims-portal id-lifecycle id-scan id-witty-wren") != 1 ||
 		m.ran("volume rm canyon-cache-claims-portal-build canyon-cache-claims-portal-launch canyon-cache-witty-wren-build canyon-cache-witty-wren-launch canyon-scandb-trivy") != 1 {
 		t.Errorf("down --purge ran %q", m.calls)
 	}
@@ -605,6 +621,43 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 		t.Errorf("down --purge left ~/.canyon/demo behind (%v)", err)
 	}
 	m.golden("demo-down-purge.txt", out)
+}
+
+// down --purge after a down, as down's own last line suggests: the server is gone with the first down, and purge
+// still removes every image the demo made (#170): its apps', from the list up and down kept, the compose file's and
+// those its executor pulled, by their references; and nothing another Canyon made.
+func TestDemoDownPurgeAfterADownRemovesWhatTheDemoMade(t *testing.T) {
+	for _, other := range []bool{false, true} {
+		m := demoOn(t)
+		if other {
+			m.another()
+		}
+		if _, errs, code := m.run("up"); code != exitOK {
+			t.Fatalf("up: exit %d, %s", code, errs)
+		}
+		if _, errs, code := m.run("down"); code != exitOK {
+			t.Fatalf("down: exit %d, %s", code, errs)
+		}
+		out, errs, code := m.run("down", "--purge")
+		if code != exitOK || errs != "" || !strings.Contains(out, "The demo is gone: its containers, data and images") {
+			t.Fatalf("another Canyon here %v: down --purge after a down: exit %d, stderr %q\n%s", other, code, errs, out)
+		}
+		want := []string{}
+		if other {
+			want = []string{"canyon/ux-data:pkg_9"}
+		}
+		if left := slices.Sorted(maps.Values(m.images)); !slices.Equal(left, want) {
+			t.Errorf("another Canyon here %v: down --purge after a down left images %q, or took another Canyon's", other, left)
+		}
+		if len(m.refs) != 0 {
+			t.Errorf("another Canyon here %v: down --purge after a down left the images pulled by digest: %v", other, slices.Sorted(maps.Keys(m.refs)))
+		}
+		if other {
+			if _, ok := m.ctrs["ux-data-preview"]; !ok {
+				t.Errorf("down --purge removed another Canyon's container")
+			}
+		}
+	}
 }
 
 // down says done only when Docker holds nothing of the demo's: what it could not remove is named,
@@ -640,15 +693,35 @@ func TestDemoDownNamesWhatItLeftAndExits1(t *testing.T) {
 		t.Fatalf("a listing Docker refused: exit %d, stdout %q, stderr\n%s", code, out, errs)
 	}
 
-	// A server that does not answer cannot say which apps are its own: down removes none, and says so.
+	// A server that does not answer cannot say which apps are its own: with no list up or an earlier down kept
+	// (#170), down removes none, and says so.
 	m = demoOn(t)
 	if _, errs, code := m.run("up"); code != exitOK {
 		t.Fatalf("up: exit %d, %s", code, errs)
 	}
+	must(t, os.Remove(demoAppsKept(filepath.Join(m.home, ".canyon", "demo"))))
 	m.answers = false
 	out, errs, code = m.run("down")
 	if code != exitError || m.ran("rm -f") != 0 || !strings.Contains(errs, "The demo's server didn't answer, so no app was removed. These may be the demo's:\n    container claims-portal-preview\n    container witty-wren-preview") {
 		t.Fatalf("exit %d, stdout %q, stderr\n%s", code, out, errs)
+	}
+}
+
+// A server that does not answer, on a demo whose up kept the list of its apps: down removes them all the same, and
+// nothing another Canyon made (#170).
+func TestDemoDownWithTheServerGoneRemovesTheAppsUpKept(t *testing.T) {
+	m := demoOn(t)
+	m.another()
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	m.answers = false
+	out, errs, code := m.run("down")
+	if code != exitOK || errs != "" || m.ran("rm -f claims-portal-preview witty-wren-preview") != 1 {
+		t.Fatalf("exit %d, stdout %q, stderr %q, ran %q", code, out, errs, m.calls)
+	}
+	if _, ok := m.ctrs["ux-data-preview"]; !ok {
+		t.Errorf("down removed another Canyon's container")
 	}
 }
 

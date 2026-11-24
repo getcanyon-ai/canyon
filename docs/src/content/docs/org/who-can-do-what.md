@@ -1,10 +1,10 @@
 ---
 title: Who can do what
-description: Every action in Canyon, and who may take it, from a member the app isn't shared with to an admin, a security responder and a coding agent using someone's CLI sign-in.
+description: Every action in Canyon, and who may take it, from a member the app isn't shared with to an admin, a security responder and a coding agent signed in as someone.
 ---
 
 What someone may do with an app depends on their role on Canyon and their level on that app, and a
-coding agent counts as the person whose CLI sign-in it uses. [The table](#what-each-person-can-do-with-an-app)
+coding agent counts as the person it is signed in as. [The table](#what-each-person-can-do-with-an-app)
 has every action; Canyon's own settings and what only the dashboard can do follow it.
 
 ## How Canyon decides
@@ -16,12 +16,12 @@ Canyon decides what someone may do from two things:
 - **Their level on each app:** owner, contributor, read-only, or no access at all. An app's owners
   set it when they share the app ([Share an app](/build/share/)).
 
-A coding agent never has access of its own. It works through a person's CLI sign-in, and Canyon
-treats it as that person.
+A coding agent never has access of its own. It works through a person's CLI sign-in on a laptop, or
+the connection they allowed it in the cloud, and Canyon treats it as that person.
 
 ```mermaid title="Who may do what: a role on Canyon, a level on each app, and an agent that counts as its person"
 flowchart TD
-  agent["A coding agent<br>on your CLI sign-in"]
+  agent["A coding agent<br>signed in as you"]
   person["You, signed in"]:::person
   role["Your role on Canyon<br>member, responder,<br>admin"]
   level["Your level on the app<br>owner, contributor,<br>read-only, no access"]
@@ -108,7 +108,7 @@ never from the CLI, so a coding agent can't do them.
 
 A **blocking finding** is one whose rule blocks it, before preview or before production. Only an
 admin or a security responder approves one, signed in to the dashboard. Nobody approves a blocking
-finding of a deploy they started, including one a coding agent started with their CLI sign-in. An
+finding of a deploy they started, including one a coding agent started, signed in as them. An
 approval an admin or a responder makes on someone else's deploy never counts for one they started
 themselves.
 

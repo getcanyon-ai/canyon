@@ -248,6 +248,48 @@ func TestAFailedFlushKeepsItsCounts(t *testing.T) {
 	}
 }
 
+// The minute's writes stop with the collector, and it waits for one on its way: a write that fails as the collector
+// stops puts its counts back before the last flush, so they're written then.
+func TestTheLastFlushWaitsForTheMinutes(t *testing.T) {
+	c, f, _ := testCollector(t)
+	c.drops.add(notJSON)
+	blocked, release := make(chan struct{}), make(chan struct{})
+	slow := &slowStore{fakeStore: f, blocked: blocked, release: release}
+	ctx, stop := context.WithCancel(t.Context())
+	done := c.drops.flushing(ctx, slow, time.Millisecond, func(error) {})
+	<-blocked // the minute's write is on its way
+	stop()
+	select {
+	case <-done:
+		t.Fatal("the writes stopped before the one on its way returned")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release) // it fails, and puts its counts back
+	<-done
+	if err := c.drops.flush(t.Context(), f); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.drops[dropped{time.Now().UTC().Format(time.DateOnly), notJSON}]; got != 1 {
+		t.Errorf("the last flush wrote %d, want the count the failed write put back", got)
+	}
+}
+
+// slowStore's first drop waits to be released, then fails.
+type slowStore struct {
+	*fakeStore
+	blocked, release chan struct{}
+	once             sync.Once
+}
+
+func (s *slowStore) drop(context.Context, map[dropped]int64) error {
+	first := false
+	s.once.Do(func() { first = true; close(s.blocked) })
+	if first {
+		<-s.release
+	}
+	return errors.New("the database is down")
+}
+
 // The sender's address is the limiter's alone: it is never in what is stored and never in a log line, the store's
 // failure included, whether it came as the peer or as the TLS front's X-Forwarded-For.
 func TestTheAddressNeverReachesTheStoreOrALog(t *testing.T) {

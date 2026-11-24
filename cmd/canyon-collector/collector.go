@@ -102,7 +102,8 @@ func (d *drops) add(reason string) {
 	d.n[dropped{now().UTC().Format(time.DateOnly), reason}]++
 }
 
-// flush writes the counts; one that fails to write keeps them for the next.
+// flush writes the counts; one that fails to write keeps them for the next. A write whose outcome isn't known, as one
+// that times out after the database committed it, is counted again: the counts may run high, never low.
 func (d *drops) flush(ctx context.Context, s store) error {
 	d.mu.Lock()
 	n := d.n
@@ -124,6 +125,30 @@ func (d *drops) flush(ctx context.Context, s store) error {
 		d.n[key] += count
 	}
 	return err
+}
+
+// flushing writes the counts every period until ctx is done, handing a failed write to failed, and closes the channel
+// it answers once its last write has returned: a final flush after it never misses counts a late failed write put back.
+func (d *drops) flushing(ctx context.Context, s store, every time.Duration, failed func(error)) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				write, cancel := context.WithTimeout(ctx, writeLimit)
+				if err := d.flush(write, s); err != nil {
+					failed(err)
+				}
+				cancel()
+			}
+		}
+	}()
+	return done
 }
 
 // collector is the HTTP side: the schema every report is held to, the limiter, the store and the read key.
@@ -196,7 +221,7 @@ func (c *collector) report(w http.ResponseWriter, r *http.Request) {
 		c.drops.add(why)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), writeLimit)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), writeLimit) // a sender that hangs up loses nothing it sent whole
 	defer cancel()
 	switch kept, err := c.store.save(ctx, body); {
 	case err != nil:

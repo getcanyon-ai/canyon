@@ -52,7 +52,7 @@ func (a *app) appSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name, _ := sessionCookieOf(a.public)
-	signed, _, _, signedIn := a.sessionOf(ctx, r, name)
+	signed, _, _, signedIn, _ := a.sessionOf(ctx, r, name) // one it cannot read signs in again
 	if !signedIn {
 		toName, secure := appToCookieOf(a.public)
 		http.SetCookie(w, &http.Cookie{Name: toName, Value: neturl.Values{"to": {to}, "flow": {flow}}.Encode(), Path: "/", MaxAge: int(signInWindow.Seconds()), HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure}) //nolint:gosec // Secure follows the public URL's scheme, as the session cookie's does

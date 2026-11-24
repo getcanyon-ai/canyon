@@ -31,6 +31,7 @@ const VIEWS = [
 export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
   const { org, viewer, admin, needs = 0 } = useContext(RailContext);
   const [open, setOpen] = useState(false);
+  const [unsigned, setUnsigned] = useState(false); // a sign-out the server could not make (#153)
   return (
     <nav aria-label="Canyon" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} className="sticky top-0 flex h-screen w-[224px] min-w-[224px] flex-col gap-5 overflow-y-auto border-r border-border bg-surface px-3 py-4 max-[860px]:static max-[860px]:h-auto max-[860px]:w-auto max-[860px]:min-w-0 max-[860px]:gap-0 max-[860px]:border-r-0 max-[860px]:border-b max-[860px]:px-4 max-[860px]:py-3">
       <div className="flex items-center justify-between">
@@ -72,8 +73,9 @@ export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
             <div className="grid min-w-0 leading-snug">
               <span className="truncate text-md font-semibold">{viewer.display}</span>
               <span className="text-sm text-text-faint">
-                {AUTH.role[viewer.role]} · <button type="button" className="-my-2 py-2 text-link hover:underline max-[860px]:-my-3 max-[860px]:py-3" onClick={() => void signOut()}>{AUTH.signOut}</button>
+                {AUTH.role[viewer.role]} · <button type="button" className="-my-2 py-2 text-link hover:underline max-[860px]:-my-3 max-[860px]:py-3" onClick={() => { setUnsigned(false); signOut().catch(() => setUnsigned(true)); }}>{AUTH.signOut}</button>
               </span>
+              {unsigned && <span role="alert" className="text-sm text-critical">{AUTH.signOutFailed}</span>}
               {viewer.github_logins.length > 0 ? (
                 <span className="truncate text-sm text-text-faint">{AUTH.githubLinked.replace("<logins>", viewer.github_logins.join(", "))}</span>
               ) : viewer.github_link && (

@@ -256,10 +256,12 @@ export function version(id: string, label?: string): string {
 
 // A non-2xx answer keeps the server's error body: a refused promotion carries its receipt there.
 // The message names the route and not the query: a query carries the words the screens do not say
-// (D6), and a hand-typed one would put them on screen through the failure line.
+// (D6), and a hand-typed one would put them on screen through the failure line. A session the host couldn't read is
+// every route's answer alike, so it is said in the host's own sentence wherever a failed read is (#153).
 export class ApiError extends Error {
   constructor(method: string, path: string, readonly status: number, readonly body: unknown) {
-    super(`${method} /api/v1${path.split("?")[0]} answered ${status}`);
+    const unread = (body as { error?: unknown; message?: unknown } | null)?.error === "session_unread" ? (body as { message?: unknown }).message : undefined;
+    super(typeof unread === "string" ? unread : `${method} /api/v1${path.split("?")[0]} answered ${status}`);
   }
 }
 

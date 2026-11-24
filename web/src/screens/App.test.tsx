@@ -836,7 +836,8 @@ describe("the app page", () => {
         cleanup();
         continue;
       }
-      fireEvent.click(within(await screen.findByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Approve with a reason" }));
+      // the button waits on the run read, which can answer after the receipt's rows are drawn
+      fireEvent.click(await within(await screen.findByRole("complementary", { name: "Promote" })).findByRole("button", { name: "Approve with a reason" }));
       override(page.approve.reason, page.approve.expires_at.slice(0, 10));
       await waitFor(() => expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${BUILT} ${JSON.stringify({ fingerprints, ...approveSent })}`]));
       cleanup();

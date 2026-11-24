@@ -283,6 +283,33 @@ describe("the shell", () => {
     expect(sent().length).toBeGreaterThan(0);
   });
 
+  // A sign-out the server couldn't make (500) leaves the session live and its cookie held: the page stays, and says so (#153).
+  // A host that couldn't read the session says so with a 503 (contracts/routes.md; #153): its sentence is shown, and the
+  // person is never sent to sign in, since the session may well live.
+  it("says the host couldn't check the sign-in, and never asks for a sign-in", async () => {
+    window.location.hash = "#/fleet";
+    const unread = { error: "session_unread", message: "Canyon couldn't check your sign-in just now. Try again in a moment." };
+    server(prefs, () => answer(503, unread));
+    render(<Shell />);
+    expect(await screen.findByText(unread.message)).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Sign in to Canyon" })).toBeNull();
+    expect(window.location.hash).toBe("#/fleet");
+  });
+
+  it("a sign-out the server couldn't make keeps the page and says it failed", async () => {
+    window.location.hash = "#/audit?range=7d";
+    server(prefs, () => answer(200, signedIn));
+    render(<Shell />);
+    const button = await screen.findByRole("button", { name: AUTH.signOut });
+    const before = fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (init?.method === "DELETE" ? answer(500, { error: "internal", message: "internal error" }) : before(url, init))));
+    fireEvent.click(button);
+    expect((await screen.findByRole("alert")).textContent).toBe(AUTH.signOutFailed);
+    expect(screen.queryByText("You're signed out of Canyon")).toBeNull();
+    expect(window.location.hash).toBe("#/audit?range=7d");
+    expect(screen.getByRole("button", { name: AUTH.signOut })).toBeDefined(); // to try again
+  });
+
   it("a sign-out on a step of signing in stays on it, to be come back to", async () => {
     window.location.hash = "#/device?code=K7QP-4RXM";
     server(prefs, () => answer(200, signedIn));

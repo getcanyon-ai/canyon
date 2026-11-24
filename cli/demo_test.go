@@ -56,6 +56,7 @@ type demoMachine struct {
 	project  []string            // the containers of the demo's compose project
 	hangs    bool                // the deployer's log never ends
 	imaged   bool                // every image the demo's compose file names is here
+	cleanEnv int                 // compose config --images asked without the shell's CANYON_IMAGE_* variables
 }
 
 // A machine with everything the demo needs: Docker 28 with Compose, 8 CPUs, 8 GB, 57 GB free, port free.
@@ -119,6 +120,9 @@ func demoOn(t *testing.T) *demoMachine {
 			if answer, err, ok := m.docker(line); ok {
 				return answer, err
 			}
+		}
+		if line == compose("config --images") && ctx.Value(demoNoImageEnv{}) != nil {
+			m.cleanEnv++ // asked without the shell's CANYON_IMAGE_* variables
 		}
 		if strings.Contains(line, "--filter since=e1e2e3e4e5e6") && !m.up { // Docker answers a since= that names a removed container with an error
 			return "", errors.New("exit status 1: Error response from daemon: No such container: e1e2e3e4e5e6")
@@ -733,6 +737,85 @@ func TestDemoDownPurgeKeepsAnImageSomethingElseHolds(t *testing.T) {
 	}
 	if left := slices.Sorted(maps.Keys(m.refs)); !slices.Equal(left, []string{"docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd"}) {
 		t.Errorf("purge left %q, want the two something else holds", left)
+	}
+}
+
+// The images purge removes are the ones the compose file named when up started the demo, as up kept them: a
+// CANYON_IMAGE_* in the shell at purge time points purge nowhere else. A demo whose up kept none reads the file's own
+// pins, without the shell's CANYON_IMAGE_* variables (#170).
+func TestDemoDownPurgeRemovesTheImagesUpStartedWith(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	m.docker = func(line string) (string, error, bool) { // the shell now names another holder
+		if line == compose("config --images") {
+			return "mirror.example/holder@sha256:ee", nil, true
+		}
+		return "", nil, false
+	}
+	m.refs["mirror.example/holder@sha256:ee"] = true
+	if _, errs, code := m.run("down", "--purge"); code != exitOK {
+		t.Fatalf("down --purge: exit %d, %s", code, errs)
+	}
+	if !m.refs["mirror.example/holder@sha256:ee"] || m.refs["docker.io/library/busybox@sha256:cc"] {
+		t.Errorf("purge followed the shell's images, not the ones up started with: %v", slices.Sorted(maps.Keys(m.refs)))
+	}
+
+	m = demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	must(t, os.Remove(demoImagesKept(filepath.Join(m.home, ".canyon", "demo"))))
+	if _, errs, code := m.run("down", "--purge"); code != exitOK || m.cleanEnv == 0 {
+		t.Errorf("a demo up kept no images for: exit %d, %s, the compose file read without CANYON_IMAGE_* %d times", code, errs, m.cleanEnv)
+	}
+	env := demoWithoutImageEnv([]string{"PATH=/bin", "CANYON_IMAGE_EGRESS_HOLDER=mirror.example/holder@sha256:ee", "CANYON_IMAGE_BUSYBOX=x", "HOME=/h"})
+	if !slices.Equal(env, []string{"PATH=/bin", "HOME=/h"}) {
+		t.Errorf("the environment without CANYON_IMAGE_*: %q", env)
+	}
+}
+
+// Only Docker's "No such image" says an image the demo pulled is gone: any other error reading it fails down closed,
+// never "The demo is gone" while it may remain (#170).
+func TestDemoDownPurgeFailsClosedOnAnImageItCannotRead(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	asked := 0
+	m.docker = func(line string) (string, error, bool) {
+		if line == "image inspect --format {{.Id}} ghcr.io/getcanyon-ai/canyon-server@sha256:aa" {
+			if asked++; asked > 1 { // the listing after the removal
+				return "", errors.New("exit status 1: Cannot connect to the Docker daemon"), true
+			}
+		}
+		return "", nil, false
+	}
+	out, errs, code := m.run("down", "--purge")
+	if code != exitError || strings.Contains(out, "The demo is gone") || !strings.Contains(errs, "Cannot connect to the Docker daemon") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
+// With no server answering and no list of its apps, down names everything of the demo's it found left, its images
+// among them, never only the containers (#170).
+func TestDemoDownWithNoServerAndNoListNamesWhatIsLeft(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	must(t, os.Remove(demoAppsKept(filepath.Join(m.home, ".canyon", "demo"))))
+	m.answers = false
+	m.docker = func(line string) (string, error, bool) {
+		if strings.HasPrefix(line, "image rm ") {
+			return "", errors.New("exit status 1: Error response from daemon: conflict"), true // the images stay
+		}
+		return "", nil, false
+	}
+	out, errs, code := m.run("down", "--purge")
+	if code != exitError || !strings.Contains(errs, "These may be the demo's:\n    container claims-portal-preview\n    container witty-wren-preview\n") || !strings.Contains(errs, "    image ghcr.io/getcanyon-ai/canyon-server@sha256:aa\n") {
+		t.Fatalf("exit %d, stdout %q, stderr\n%s", code, out, errs)
 	}
 }
 

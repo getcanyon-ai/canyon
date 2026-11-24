@@ -28,6 +28,9 @@ var (
 	demoDocker = func(ctx context.Context, dir string, out io.Writer, args ...string) (string, error) {
 		cmd := exec.CommandContext(ctx, "docker", args...) //nolint:gosec // docker by name, with this file's own arguments
 		cmd.Dir = dir
+		if ctx.Value(demoNoImageEnv{}) != nil {
+			cmd.Env = demoWithoutImageEnv(os.Environ())
+		}
 		var answer, said bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &answer, &said
 		if out != nil {
@@ -43,6 +46,15 @@ var (
 	demoURL      = defaultHost      // the demo's address, which compose publishes
 	demoPort     = "127.0.0.1:7777" // the same, as a program holding it is found
 )
+
+// demoNoImageEnv, as a context's value, has demoDocker run docker without the shell's CANYON_IMAGE_* variables: the
+// compose file then names its own pins, never an image this shell names (#170).
+type demoNoImageEnv struct{}
+
+// demoWithoutImageEnv is environ without any CANYON_IMAGE_* variable.
+func demoWithoutImageEnv(environ []string) []string {
+	return slices.DeleteFunc(slices.Clone(environ), func(kv string) bool { return strings.HasPrefix(kv, "CANYON_IMAGE_") })
+}
 
 // The compose file's profile for the sample apps, and the service that deploys them and exits.
 const (
@@ -336,14 +348,17 @@ func demoMade(ctx context.Context, stack string, apps, transit []string, purge b
 		// executor pulls for its scans, and the lifecycle pack pulls by its platform's digest. Each is looked for, and
 		// removed, by its own reference (#170), unless something else on this Docker still holds it (demoHeld).
 		pulled := func() error {
-			refs, err := demoListed(ctx, stack, demoCompose("config", "--images")...)
+			refs, err := demoComposeImages(ctx, stack)
 			if err != nil {
 				return fmt.Errorf("could not list the demo's images: %w", err)
 			}
 			for _, ref := range slices.Concat(refs, names.PulledImages, names.LifecyclePlatforms) {
 				id, err := demoDocker(ctx, "", nil, "image", "inspect", "--format", "{{.Id}}", ref)
-				if err != nil {
-					continue // not on this Docker
+				switch {
+				case err != nil && strings.Contains(err.Error(), "No such image"):
+					continue // not on this Docker: Docker's own answer, and no other, says so
+				case err != nil:
+					return fmt.Errorf("could not read the demo's image %s: %w", ref, err)
 				}
 				why, err := demoHeld(ctx, ref, id, refs)
 				switch {
@@ -376,6 +391,19 @@ func demoMade(ctx context.Context, stack string, apps, transit []string, purge b
 		}
 	}
 	return made, kept, nil
+}
+
+// demoImagesKept is the file that keeps the images the demo's compose file named when up started it, one a line, as
+// the shell's CANYON_IMAGE_* variables made them then: purge removes those, whatever this shell sets (#170).
+func demoImagesKept(dir string) string { return filepath.Join(dir, "images") }
+
+// demoComposeImages is what up kept of the compose file's images, else the file's own pins, read without this shell's
+// CANYON_IMAGE_* variables (a demo an older CLI started kept none).
+func demoComposeImages(ctx context.Context, stack string) ([]string, error) {
+	if b, err := os.ReadFile(demoImagesKept(filepath.Dir(stack))); err == nil { //nolint:gosec // this CLI's own file, under ~/.canyon
+		return strings.Fields(string(b)), nil
+	}
+	return demoListed(context.WithValue(ctx, demoNoImageEnv{}, true), stack, demoCompose("config", "--images")...)
 }
 
 // demoHeld is why an image the demo pulled by digest stays: on Docker's containerd image store, removing that reference
@@ -552,6 +580,9 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		a.errf("\n  %s The demo's server didn't answer, so no app was removed. These may be the demo's:\n", a.render.glyph(stateFail))
 		for _, name := range others {
 			a.errf("    container %s\n", name)
+		}
+		for _, t := range made { // and what of the demo's own is left
+			a.errf("    %s %s\n", t.kind, t.name)
 		}
 		a.errf("\n  Start the demo again and run canyon %s, or remove them with docker rm -f.\n", a.form)
 		return exitError

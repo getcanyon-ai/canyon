@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -69,6 +70,13 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 		return a.demoFailed("The demo could not be downloaded", err)
 	}
 	a.demoStep("Downloading Canyon's images")
+	if refs, err := demoListed(ctx, stack, demoCompose("config", "--images")...); err == nil { // what purge removes, as this shell named them (#170)
+		kept, _ := os.ReadFile(demoImagesKept(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
+		all := slices.Compact(slices.Sorted(slices.Values(append(strings.Fields(string(kept)), refs...))))
+		if err := atomicWrite(demoImagesKept(dir), []byte(strings.Join(all, "\n")+"\n"), true); err != nil {
+			a.errf("\n  %s Couldn't save which images are the demo's (~/.canyon/demo/images): %s\n", a.render.glyph(stateWarn), plainly(err))
+		}
+	}
 	if err := demoRetry(ctx, func() error {
 		_, err := demoDocker(ctx, stack, nil, demoCompose("pull", "--quiet")...)
 		return err

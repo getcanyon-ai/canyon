@@ -1189,6 +1189,12 @@ def seam3_hold():
     for code in ("responder_required", "person_required", "dashboard_required", '"held"'):
         if code not in text.partition("### The hold")[2].partition("\n### ")[0]:
             errors.append(f"routes: *The hold* does not name {code}")
+    # Whether a stop happened is the row's to say (#156): the hold's row and the undeploy's name `stop` and its values.
+    undeploy = next((line for line in text.splitlines() if line.startswith("| `DELETE /api/v1/projects/:id/envs/:env` |")), "")
+    for where, said in (("*The hold*", text.partition("### The hold")[2].partition("\n### ")[0]), ("the undeploy row", undeploy)):
+        for word in ("`stop`", "`stopped`", "`remove_sent`", "`nothing`") + (("`failed`",) if where == "*The hold*" else ()):
+            if word not in said:
+                errors.append(f"routes: {where} does not name {word}, which says whether a stop happened")
     for action in ("stop app", "lift hold"):
         if audit_categories().get(action, "governance") != "governance":
             errors.append(f"routes: {action} is not governance; a stop and a lift are the production change record")

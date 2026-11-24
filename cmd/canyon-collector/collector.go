@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
 	"github.com/getcanyon-ai/canyon/contracts"
 )
@@ -32,6 +33,8 @@ import (
 const (
 	reportMost   = 64 << 10          // a report is a few hundred bytes; past this it is not one
 	keep         = "13 months"       // how long a report is kept
+	again        = "20 hours"        // an instance's next report is at least this long after its last: a sender waits 23, so one sooner is a resend
+	flushEvery   = time.Minute       // how often the counts of dropped reports are written
 	perWindow    = 30                // reports one address may send a window: one server sends one a day, many may share a NAT
 	window       = time.Hour         // the limiter's window
 	sendersMost  = 100000            // the addresses the limiter holds a window: past them a new sender waits for the next
@@ -48,19 +51,79 @@ const (
 	flushLimit   = 30 * time.Second  // shutdown
 	tableSQL     = `CREATE TABLE IF NOT EXISTS reports (id bigserial PRIMARY KEY, received_at timestamptz NOT NULL DEFAULT now(), report jsonb NOT NULL);
 		CREATE INDEX IF NOT EXISTS reports_received_at ON reports (received_at);
-		CREATE UNIQUE INDEX IF NOT EXISTS reports_one_a_day ON reports ((report->>'instance_id'), ((received_at AT TIME ZONE 'UTC')::date));
+		DROP INDEX IF EXISTS reports_one_a_day;
 		ALTER TABLE reports ADD COLUMN IF NOT EXISTS instance_id text GENERATED ALWAYS AS (report->>'instance_id') STORED;
 		ALTER TABLE reports ADD COLUMN IF NOT EXISTS day date GENERATED ALWAYS AS ((received_at AT TIME ZONE 'UTC')::date) STORED;
 		ALTER TABLE reports ADD COLUMN IF NOT EXISTS version text GENERATED ALWAYS AS (report->>'version') STORED;
 		ALTER TABLE reports ADD COLUMN IF NOT EXISTS install_mode text GENERATED ALWAYS AS (report->>'install_mode') STORED;
 		ALTER TABLE reports ADD COLUMN IF NOT EXISTS demo boolean GENERATED ALWAYS AS (coalesce(report->'demo' = 'true'::jsonb, false)) STORED;
-		CREATE INDEX IF NOT EXISTS reports_instance_day ON reports (instance_id, day)`
+		CREATE INDEX IF NOT EXISTS reports_instance_day ON reports (instance_id, day);
+		CREATE INDEX IF NOT EXISTS reports_instance_at ON reports (instance_id, received_at);
+		CREATE TABLE IF NOT EXISTS dropped (day date NOT NULL, reason text NOT NULL, n bigint NOT NULL, PRIMARY KEY (day, reason))`
 )
+
+// Why a report is dropped, the only words kept of one: never its body, its sender, its id or a name in it.
+const (
+	overLimit    = "limited"       // past its sender's limit
+	tooBig       = "too_big"       // over reportMost, or a body that couldn't be read
+	notJSON      = "not_json"      // no JSON document
+	unknownField = "unknown_field" // the schema's but for names it lacks: most likely a newer Canyon than this collector
+	notSchema    = "not_schema"    // anything else the schema refuses, or a count not spelled as a whole number
+	duplicate    = "duplicate"     // its instance's last report arrived under again ago
+)
+
+// dropped is how many reports were dropped on a day, UTC, for a reason.
+type dropped struct{ day, reason string }
 
 // store is where reports go: Postgres, and a test's own.
 type store interface {
-	save(ctx context.Context, report []byte) error
+	save(ctx context.Context, report []byte) (kept bool, err error)
+	drop(ctx context.Context, counts map[dropped]int64) error
 	weekly(ctx context.Context, weeks int) ([]week, error)
+}
+
+// drops counts dropped reports in memory, a few words a day, until flush writes them.
+type drops struct {
+	mu  sync.Mutex
+	now func() time.Time // nil is time.Now
+	n   map[dropped]int64
+}
+
+func (d *drops) add(reason string) {
+	now := time.Now
+	if d.now != nil {
+		now = d.now
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.n == nil {
+		d.n = map[dropped]int64{}
+	}
+	d.n[dropped{now().UTC().Format(time.DateOnly), reason}]++
+}
+
+// flush writes the counts; one that fails to write keeps them for the next.
+func (d *drops) flush(ctx context.Context, s store) error {
+	d.mu.Lock()
+	n := d.n
+	d.n = nil
+	d.mu.Unlock()
+	if len(n) == 0 {
+		return nil
+	}
+	err := s.drop(ctx, n)
+	if err == nil {
+		return nil
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.n == nil {
+		d.n = map[dropped]int64{}
+	}
+	for key, count := range n {
+		d.n[key] += count
+	}
+	return err
 }
 
 // collector is the HTTP side: the schema every report is held to, the limiter, the store and the read key.
@@ -69,6 +132,7 @@ type collector struct {
 	limit   *limiter
 	store   store
 	readKey string
+	drops   drops       // the reports dropped, counted by why
 	proxied bool        // behind the compose file's TLS front: the address is the last X-Forwarded-For entry it appended
 	log     *log.Logger // errors only, never an address or a report
 }
@@ -110,25 +174,61 @@ func (c *collector) address(r *http.Request) string {
 }
 
 // report takes one report: 204 whatever happens, so a sender learns nothing from the answer, and nothing is echoed.
-// A body over the size, not JSON, or not the schema's is dropped; so is one past the sender's limit.
+// A body over the size, not JSON, or not the schema's is dropped; so is one past the sender's limit. A dropped one is
+// counted by why, alone.
 func (c *collector) report(w http.ResponseWriter, r *http.Request) {
 	defer w.WriteHeader(http.StatusNoContent)
 	if !c.limit.allow(c.address(r)) {
+		c.drops.add(overLimit)
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, reportMost+1))
 	if err != nil || len(body) > reportMost {
+		c.drops.add(tooBig)
 		return
 	}
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(body))
-	if err != nil || c.schema.Validate(doc) != nil || !wholeNumbers(doc) {
+	if err != nil {
+		c.drops.add(notJSON)
+		return
+	}
+	if why := c.refused(doc); why != "" {
+		c.drops.add(why)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), writeLimit)
 	defer cancel()
-	if err := c.store.save(ctx, body); err != nil {
+	switch kept, err := c.store.save(ctx, body); {
+	case err != nil:
 		c.log.Printf("canyon-collector: storing a report: %v", err) // the error alone: never the address or the report
+	case !kept:
+		c.drops.add(duplicate)
 	}
+}
+
+// refused is why the schema doesn't take doc, "" for a report it takes.
+func (c *collector) refused(doc any) string {
+	if !wholeNumbers(doc) {
+		return notSchema
+	}
+	var invalid *jsonschema.ValidationError
+	switch err := c.schema.Validate(doc); {
+	case err == nil:
+		return ""
+	case errors.As(err, &invalid) && onlyUnknown(invalid):
+		return unknownField
+	}
+	return notSchema
+}
+
+// onlyUnknown reports whether all that e refuses is names the schema doesn't have: a field, or a rule's, a failure's or
+// a stack's.
+func onlyUnknown(e *jsonschema.ValidationError) bool {
+	switch e.ErrorKind.(type) {
+	case *kind.AdditionalProperties, *kind.PropertyNames:
+		return true
+	}
+	return len(e.Causes) > 0 && !slices.ContainsFunc(e.Causes, func(cause *jsonschema.ValidationError) bool { return !onlyUnknown(cause) })
 }
 
 // wholeNumbers reports whether every number in doc is spelled as a whole number, digits alone: JSON Schema reads 1.0
@@ -285,15 +385,39 @@ type named struct {
 // pgStore is Postgres.
 type pgStore struct{ pool *pgxpool.Pool }
 
-func (s pgStore) save(ctx context.Context, report []byte) error {
-	// one report an instance a UTC day, the first: a resent or replayed one would count its sums twice
-	_, err := s.pool.Exec(ctx, "INSERT INTO reports (report) VALUES ($1) ON CONFLICT DO NOTHING", report)
+// save keeps report unless its instance's last arrived under again ago: a resent or replayed one would count its sums
+// twice. A UTC day is no measure of that: a sender's 23 hours put two of its reports, hours apart, on one.
+func (s pgStore) save(ctx context.Context, report []byte) (kept bool, err error) {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1::jsonb->>'instance_id', 0))", report); err != nil { // one of an instance's at a time
+			return err
+		}
+		done, err := tx.Exec(ctx, `INSERT INTO reports (report) SELECT $1::jsonb WHERE NOT EXISTS
+			(SELECT 1 FROM reports WHERE instance_id = $1::jsonb->>'instance_id' AND received_at > now() - interval '`+again+`')`, report)
+		kept = done.RowsAffected() == 1
+		return err
+	})
+	return kept, err
+}
+
+// drop adds counts to the days' rows.
+func (s pgStore) drop(ctx context.Context, counts map[dropped]int64) error {
+	var days, reasons []string
+	var n []int64
+	for key, count := range counts {
+		days, reasons, n = append(days, key.day), append(reasons, key.reason), append(n, count)
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO dropped (day, reason, n) SELECT * FROM unnest($1::text[]::date[], $2::text[], $3::bigint[])
+		ON CONFLICT (day, reason) DO UPDATE SET n = dropped.n + excluded.n`, days, reasons, n)
 	return err
 }
 
-// prune deletes the reports older than keep.
+// prune deletes the reports, and the counts of dropped ones, older than keep.
 func (s pgStore) prune(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, "DELETE FROM reports WHERE received_at < now() - interval '"+keep+"'")
+	if err == nil {
+		_, err = s.pool.Exec(ctx, "DELETE FROM dropped WHERE day < (now() AT TIME ZONE 'UTC')::date - interval '"+keep+"'")
+	}
 	return err
 }
 

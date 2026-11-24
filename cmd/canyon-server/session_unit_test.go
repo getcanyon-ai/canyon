@@ -20,7 +20,7 @@ func TestAnUnreadableSessionIs500AndASignOutsUnknownSessionClearsItsCookie(t *te
 	ask := func(method, path, cookie string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, nil)
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
-		req.AddCookie(&http.Cookie{Name: name, Value: cookie})
+		req.Header.Set("Cookie", name+"="+cookie) // what a browser sends: a name and a value
 		rec := httptest.NewRecorder()
 		stage.ServeHTTP(rec, req)
 		return rec

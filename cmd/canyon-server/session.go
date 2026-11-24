@@ -317,7 +317,7 @@ func (a *app) session(next http.Handler) http.Handler {
 		}
 		if err != nil && a.auth == authOIDC { // the database didn't answer: the session may live, so never the 401 that says it ended (#153); with sign-in off every caller is the anonymous admin, as below
 			a.log.Printf("canyon-server: session: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
+			writeErr(w, http.StatusServiceUnavailable, "session_unread", "Canyon couldn't check your sign-in just now. Try again in a moment.", nil)
 			return
 		}
 		if a.auth == authOIDC {

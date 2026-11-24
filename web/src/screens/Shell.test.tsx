@@ -284,6 +284,18 @@ describe("the shell", () => {
   });
 
   // A sign-out the server couldn't make (500) leaves the session live and its cookie held: the page stays, and says so (#153).
+  // A host that couldn't read the session says so with a 503 (contracts/routes.md; #153): its sentence is shown, and the
+  // person is never sent to sign in, since the session may well live.
+  it("says the host couldn't check the sign-in, and never asks for a sign-in", async () => {
+    window.location.hash = "#/fleet";
+    const unread = { error: "session_unread", message: "Canyon couldn't check your sign-in just now. Try again in a moment." };
+    server(prefs, () => answer(503, unread));
+    render(<Shell />);
+    expect(await screen.findByText(unread.message)).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Sign in to Canyon" })).toBeNull();
+    expect(window.location.hash).toBe("#/fleet");
+  });
+
   it("a sign-out the server couldn't make keeps the page and says it failed", async () => {
     window.location.hash = "#/audit?range=7d";
     server(prefs, () => answer(200, signedIn));

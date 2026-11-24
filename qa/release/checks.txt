@@ -8,7 +8,7 @@
 
 upgrade       | before | always db/** vault/** cmd/canyon-executor-kube/** deploy/k8s/** Dockerfile.executor-kube go.mod go.sum Makefile .dockerignore
 rollback      | before | always db/** vault/**
-agents        | before | cli/** cmd/canyon/** cmd/canyon-server/** runs/** gate/** ingest/** contracts/** events/** qa/agent/** internal/mcptools/** internal/names/**
+agents        | before | cli/** cmd/canyon/** cmd/canyon-server/** runs/** gate/** ingest/** contracts/** events/** qa/agent/** internal/mcptools/** internal/names/** internal/trivy/**
 sign-in       | before | cmd/canyon-server/** cli/** qa/agent/hand-checks.md
 windows       | before | cmd/canyon-server/** cli/**
 connector     | before | cmd/canyon-server/** internal/mcptools/**
@@ -43,5 +43,5 @@ nothing | e2e/** internal/executortest/** internal/gitopstest/** internal/pgtest
 nothing | ee/tools/** | signs licences: Canyon's makers' tool, in no release
 nothing | internal/tools/** scripts/** | the repository's own tools: the release's are what the rehearsal runs
 nothing | qa/release/** | this checklist
-nothing | AGENTS.md CLAUDE.md CONTRIBUTING.md CODE_OF_CONDUCT.md CLA.md CCLA.md SECURITY.md RELEASING.md README.md Logo.png | the project's own pages: no Canyon runs them
+nothing | AGENTS.md CLAUDE.md CONTRIBUTING.md CODE_OF_CONDUCT.md CLA.md CCLA.md SECURITY.md RELEASING.md README.md | the project's own pages: no Canyon runs them
 nothing | LICENSE NOTICE THIRD_PARTY_NOTICES | the release checks every archive carries them (scripts/release-archives-check.sh)

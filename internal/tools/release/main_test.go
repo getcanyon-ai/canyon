@@ -6,12 +6,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // Every file the repository tracks is a check's, by its paths or an always check's covers, or on a nothing line that
-// says why: a new file can't arrive without one.
+// says why: a new file can't arrive without one. Every path the file names matches a file, so none is a typo.
 func TestEveryFileHasACheckOrSaysWhyNot(t *testing.T) {
 	t.Chdir("../../..")
 	text, err := os.ReadFile("qa/release/checks.txt")
@@ -35,20 +36,25 @@ func TestEveryFileHasACheckOrSaysWhyNot(t *testing.T) {
 		for _, p := range strings.Fields(spec) {
 			args = append(args, ":(glob)"+p)
 		}
-		files, err := git(args...)
+		for _, p := range strings.Fields(spec) {
+			if one, err := git("ls-files", "--", ":(glob)"+p); err != nil || one == "" {
+				t.Errorf("%s in qa/release/checks.txt matches no file (%v)", p, err)
+			}
+		}
+		files, err := git(append(args[:1], append([]string{"-z"}, args[1:]...)...)...)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, f := range strings.Fields(files) {
+		for _, f := range strings.Split(files, "\x00") {
 			covered[f] = true
 		}
 	}
-	files, err := git("ls-files")
+	files, err := git("ls-files", "-z")
 	if err != nil {
 		t.Fatal(err)
 	}
 	gaps := map[string]int{}
-	for _, f := range strings.Fields(files) {
+	for _, f := range strings.Split(files, "\x00") {
 		if !covered[f] {
 			gaps[unit(f)]++
 		}
@@ -87,31 +93,6 @@ func TestAResultsFileIsReadStrictly(t *testing.T) {
 	} {
 		if _, err := parseResults(line, checks); (err == nil) != ok {
 			t.Errorf("%q: %v, want taken %v", line, err, ok)
-		}
-	}
-}
-
-// Only a check run that is done and good passes, the asking run's own aside; an answer that can't be read, or holds none
-// but the asker's, refuses.
-func TestOnlyGoodCheckRunsPass(t *testing.T) {
-	run := func(conclusion, status, id string) string {
-		return `{"name":"x","status":"` + status + `","conclusion":"` + conclusion + `","details_url":"https://github.com/o/r/actions/runs/` + id + `/job/1"}`
-	}
-	for name, c := range map[string]struct {
-		raw string
-		ok  bool
-	}{
-		"good":                {`[{"total_count":3,"check_runs":[` + run("success", "completed", "1") + `,` + run("skipped", "completed", "1") + `,` + run("", "in_progress", "9") + `]}]`, true},
-		"failed":              {`[{"total_count":1,"check_runs":[` + run("failure", "completed", "1") + `]}]`, false},
-		"cancelled":           {`[{"total_count":1,"check_runs":[` + run("cancelled", "completed", "1") + `]}]`, false},
-		"pending":             {`[{"total_count":1,"check_runs":[` + run("", "in_progress", "1") + `]}]`, false},
-		"none":                {`[{"total_count":0,"check_runs":[]}]`, false},
-		"the asker's alone":   {`[{"total_count":1,"check_runs":[` + run("", "in_progress", "9") + `]}]`, false},
-		"a page short":        {`[{"total_count":2,"check_runs":[` + run("success", "completed", "1") + `]}]`, false},
-		"not GitHub's answer": {`{"message":"Bad credentials"}`, false},
-	} {
-		if bad := badRuns([]byte(c.raw), "9"); (len(bad) == 0) != c.ok {
-			t.Errorf("%s: %v, want passed %v", name, bad, c.ok)
 		}
 	}
 }
@@ -198,25 +179,51 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 	}
 }
 
-// A workflow run of the commit that isn't done and good refuses, though it has no check run to show it: one that never
-// started, or waits on its concurrency group. The asking run is its own.
-func TestEveryWorkflowRunMustBeDoneAndGood(t *testing.T) {
-	run := func(id, status, conclusion string) string {
-		return `{"id":` + id + `,"name":"CI","status":"` + status + `","conclusion":` + conclusion + `,"html_url":"https://github.com/o/r/actions/runs/` + id + `"}`
+// Only main's own runs count, a push's, a schedule's or one run by hand, the newest of each workflow; check runs count
+// through them. A stranger's comment run, failed, on the commit passes; a cancelled nightly with a newer green one passes;
+// a newest still pending refuses; a check run of no listed run refuses. The asking run is its own.
+func TestOnlyMainsNewestRunsCount(t *testing.T) {
+	type wf struct{ id, workflow, event, status, conclusion, created string }
+	runs := func(rs ...wf) string {
+		var out []string
+		for _, r := range rs {
+			c := "null"
+			if r.conclusion != "" {
+				c = `"` + r.conclusion + `"`
+			}
+			out = append(out, `{"id":`+r.id+`,"workflow_id":`+r.workflow+`,"name":"w`+r.workflow+`","event":"`+r.event+`","status":"`+r.status+`","conclusion":`+c+`,"created_at":"`+r.created+`","html_url":"https://github.com/o/r/actions/runs/`+r.id+`"}`)
+		}
+		return `[{"total_count":` + strconv.Itoa(len(rs)) + `,"workflow_runs":[` + strings.Join(out, ",") + `]}]`
 	}
+	check := func(run, conclusion string) string {
+		return `{"name":"c","status":"completed","conclusion":"` + conclusion + `","details_url":"https://github.com/o/r/actions/runs/` + run + `/job/1"}`
+	}
+	checks := func(cs ...string) string {
+		return `[{"total_count":` + strconv.Itoa(len(cs)) + `,"check_runs":[` + strings.Join(cs, ",") + `]}]`
+	}
+	ci := wf{"1", "10", "push", "completed", "success", "2026-11-24T10:00:00Z"}
+	self := wf{"9", "90", "push", "in_progress", "", "2026-11-24T12:00:00Z"}
 	for name, c := range map[string]struct {
-		raw string
-		ok  bool
+		runs, checks string
+		ok           bool
 	}{
-		"good":                      {`[{"total_count":3,"workflow_runs":[` + run("1", "completed", `"success"`) + `,` + run("2", "completed", `"skipped"`) + `,` + run("9", "in_progress", "null") + `]}]`, true},
-		"pending, no jobs yet":      {`[{"total_count":1,"workflow_runs":[` + run("1", "pending", "null") + `]}]`, false},
-		"queued behind its group":   {`[{"total_count":1,"workflow_runs":[` + run("1", "queued", "null") + `]}]`, false},
-		"never started":             {`[{"total_count":1,"workflow_runs":[` + run("1", "completed", `"startup_failure"`) + `]}]`, false},
-		"cancelled by a newer main": {`[{"total_count":1,"workflow_runs":[` + run("1", "completed", `"cancelled"`) + `]}]`, false},
-		"a page short":              {`[{"total_count":2,"workflow_runs":[` + run("1", "completed", `"success"`) + `]}]`, false},
-		"not GitHub's answer":       {`{"message":"Bad credentials"}`, false},
+		"good": {runs(ci, self), checks(check("1", "success"), check("9", "")), true},
+		"a stranger's failed cla comment run": {runs(ci, self, wf{"2", "20", "issue_comment", "completed", "failure", "2026-11-24T11:00:00Z"}),
+			checks(check("1", "success"), check("2", "failure")), true},
+		"a cancelled nightly, a newer green one": {runs(ci, self, wf{"3", "30", "schedule", "completed", "cancelled", "2026-11-23T03:00:00Z"}, wf{"4", "30", "schedule", "completed", "success", "2026-11-24T03:00:00Z"}),
+			checks(check("1", "success"), check("3", "cancelled"), check("4", "success")), true},
+		"the newest pending": {runs(ci, self, wf{"3", "30", "schedule", "completed", "success", "2026-11-23T03:00:00Z"}, wf{"4", "30", "schedule", "in_progress", "", "2026-11-24T03:00:00Z"}),
+			checks(check("1", "success")), false},
+		"a pending run with no jobs":   {runs(ci, self, wf{"5", "50", "push", "pending", "", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
+		"a startup_failure":            {runs(ci, self, wf{"5", "50", "push", "completed", "startup_failure", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
+		"a failed check run of main's": {runs(ci, self), checks(check("1", "failure")), false},
+		"a check run of no listed run": {runs(ci, self), checks(check("1", "success"), check("77", "success")), false},
+		"a check run naming no run":    {runs(ci, self), checks(`{"name":"app","status":"completed","conclusion":"success","details_url":"https://example.test/x"}`), false},
+		"no run but self":              {runs(self), checks(check("9", "")), false},
+		"a page short":                 {`[{"total_count":3,"workflow_runs":[` + strings.TrimSuffix(strings.TrimPrefix(runs(ci, self), `[{"total_count":2,"workflow_runs":[`), `]}]`) + `]}]`, checks(check("1", "success")), false},
+		"not GitHub's answer":          {`{"message":"Bad credentials"}`, checks(check("1", "success")), false},
 	} {
-		if bad := badWorkflows([]byte(c.raw), "9"); (len(bad) == 0) != c.ok {
+		if bad := badRuns([]byte(c.checks), []byte(c.runs), "9"); (len(bad) == 0) != c.ok {
 			t.Errorf("%s: %v, want passed %v", name, bad, c.ok)
 		}
 	}

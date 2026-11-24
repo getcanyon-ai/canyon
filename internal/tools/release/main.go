@@ -223,61 +223,87 @@ func missing(checks []check, when, tag, from, to string) (problems []string, err
 	return problems, nil
 }
 
-// badRuns are the commit's check runs that aren't done and good, the workflow run that asks aside. An answer that
-// doesn't parse, that holds no run or not all of them is bad.
-func badRuns(raw []byte, self string) (problems []string) {
-	var pages []struct {
+// good are the conclusions a run passes with; a run not done has none.
+var good = []string{"success", "skipped", "neutral"}
+
+// runID is the workflow run a check run's details_url names.
+var runID = regexp.MustCompile(`/actions/runs/([0-9]+)/`)
+
+// badRuns are the commit's runs that aren't done and good. Of its workflow runs, only main's own count, a push's, a
+// schedule's or one run by hand (a stranger's comment starts a run on main's head too), and of those the newest of each
+// workflow, so a later run passes for an earlier one that failed; a newest that hasn't finished refuses. A check run
+// counts through its workflow run; one whose run isn't among the commit's refuses. self, the run that asks, is aside.
+// An answer that doesn't parse, or holds less than it says, refuses, and so does one with no run but self.
+func badRuns(checkRuns, workflowRuns []byte, self string) (problems []string) {
+	runs, err := pages[struct {
+		Total int `json:"total_count"`
+		Runs  []struct {
+			ID                       int64
+			WorkflowID               int64 `json:"workflow_id"`
+			Name, Status, Conclusion string
+			Event                    string
+			Created                  string `json:"created_at"` // RFC 3339 in UTC, so it sorts as text
+			URL                      string `json:"html_url"`
+		} `json:"workflow_runs"`
+	}](workflowRuns)
+	checks, cerr := pages[struct {
 		Total int `json:"total_count"`
 		Runs  []struct {
 			Name, Status, Conclusion string
 			URL                      string `json:"details_url"`
 		} `json:"check_runs"`
+	}](checkRuns)
+	if err = errors.Join(err, cerr); err != nil {
+		return []string{"the commit's runs: " + err.Error()}
 	}
-	if err := json.Unmarshal(raw, &pages); err != nil || len(pages) == 0 {
-		return []string{fmt.Sprintf("GitHub's answer for the commit's check runs can't be read (%v)", err)}
-	}
-	total, others := 0, 0
-	for _, p := range pages {
+	listed, newest := map[string]bool{}, map[int64]int{} // every run's id; each workflow's newest of main's own, by index
+	type run struct{ id, line, conclusion, created string }
+	var all []run
+	total := 0
+	for _, p := range runs {
 		for _, r := range p.Runs {
 			total++
-			if strings.Contains(r.URL, "/actions/runs/"+self+"/") {
+			id := strconv.FormatInt(r.ID, 10)
+			listed[id] = true
+			if !slices.Contains([]string{"push", "schedule", "workflow_dispatch"}, r.Event) {
 				continue
 			}
-			if others++; !slices.Contains([]string{"success", "skipped", "neutral"}, r.Conclusion) { // a run not done has none
-				problems = append(problems, fmt.Sprintf("check run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL))
+			all = append(all, run{id, fmt.Sprintf("workflow run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL), r.Conclusion, r.Created})
+			if at, seen := newest[r.WorkflowID]; !seen || r.Created > all[at].created {
+				newest[r.WorkflowID] = len(all) - 1
 			}
 		}
 	}
-	if total != pages[0].Total || others == 0 {
-		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d check runs, %d of them not this run's", total, pages[0].Total, others))
+	if total != runs[0].Total {
+		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d workflow runs", total, runs[0].Total))
 	}
-	return problems
-}
-
-// badWorkflows are the commit's workflow runs that aren't done and good, the one that asks aside: one that never
-// started, or waits on its concurrency group, has no check run to show it.
-func badWorkflows(raw []byte, self string) (problems []string) {
-	all, err := pages[struct {
-		Total int `json:"total_count"`
-		Runs  []struct {
-			ID                       int64
-			Name, Status, Conclusion string
-			URL                      string `json:"html_url"`
-		} `json:"workflow_runs"`
-	}](raw)
-	if err != nil {
-		return []string{"the commit's workflow runs: " + err.Error()}
-	}
-	total := 0
-	for _, p := range all {
-		for _, r := range p.Runs {
-			if total++; strconv.FormatInt(r.ID, 10) != self && !slices.Contains([]string{"success", "skipped", "neutral"}, r.Conclusion) {
-				problems = append(problems, fmt.Sprintf("workflow run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL))
+	counted := map[string]bool{}
+	for _, at := range newest {
+		if r := all[at]; r.id != self {
+			counted[r.id] = true
+			if !slices.Contains(good, r.conclusion) {
+				problems = append(problems, r.line)
 			}
 		}
 	}
-	if total != all[0].Total {
-		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d workflow runs", total, all[0].Total))
+	if len(counted) == 0 {
+		problems = append(problems, "the commit has no run of main's own but this one")
+	}
+	total = 0
+	for _, p := range checks {
+		for _, c := range p.Runs {
+			total++
+			m := runID.FindStringSubmatch(c.URL)
+			switch {
+			case m == nil || !listed[m[1]]:
+				problems = append(problems, fmt.Sprintf("check run %s belongs to no workflow run of the commit's: %s", c.Name, c.URL))
+			case counted[m[1]] && !slices.Contains(good, c.Conclusion):
+				problems = append(problems, fmt.Sprintf("check run %s: %s %s %s", c.Name, c.Status, c.Conclusion, c.URL))
+			}
+		}
+	}
+	if total != checks[0].Total {
+		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d check runs", total, checks[0].Total))
 	}
 	return problems
 }
@@ -384,7 +410,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		problems = append(append(append(problems, badRuns(raw[1], args[3])...), badWorkflows(raw[2], args[3])...), openCI(raw[3])...)
+		problems = append(append(problems, badRuns(raw[1], raw[2], args[3])...), openCI(raw[3])...)
 		if len(problems) > 0 {
 			return fmt.Errorf("%s is refused (qa/release/README.md):\n  %s", args[1], strings.Join(problems, "\n  "))
 		}

@@ -384,6 +384,7 @@ describe("the values Canyon shows once", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
       await act(async () => answer({ body }));
       const dialog = screen.getByRole("dialog", { name: S.revealTitle });
+      expect(dialog.parentElement?.className).toContain("bg-scrim"); // the design system's scrim: bg-black/40 drew nothing (#118)
       expect(within(dialog).getByLabelText(label)).toHaveProperty("value", Object.values(body)[0]);
       expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
       expect(within(dialog).getByText(S.revealAskOne)).toBeDefined();

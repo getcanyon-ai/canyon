@@ -44,7 +44,10 @@ func (a *app) putTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, _, _, _, err = telemetryRow(ctx, tx); err == nil {
-		_, err = tx.Exec(ctx, "UPDATE telemetry SET off_because = CASE WHEN $1 THEN NULL ELSE 'admin' END WHERE one", *body.Enabled)
+		// On again where no report has ever reached the collector starts the tries afresh (contracts/routes.md, Sending).
+		_, err = tx.Exec(ctx, `UPDATE telemetry SET off_because = CASE WHEN $1 THEN NULL ELSE 'admin' END,
+			claimed_at = CASE WHEN $1 AND off_because IS NOT NULL AND sent_at IS NULL THEN NULL ELSE claimed_at END,
+			tried_since = CASE WHEN $1 AND off_because IS NOT NULL THEN NULL ELSE tried_since END WHERE one`, *body.Enabled)
 	}
 	if err == nil {
 		err = events.AuditTx(ctx, tx, actorOf(ctx), action(r), "", "", map[string]bool{"enabled": *body.Enabled})

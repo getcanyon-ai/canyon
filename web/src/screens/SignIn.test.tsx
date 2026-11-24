@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SignIn } from "./SignIn";
+import { SignIn, takeReturn } from "./SignIn";
 
 const config = () => {
   const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ canyon: true, auth: "oidc", org: "Meridian Insurance", device: true }) }) as unknown as Response);
@@ -106,9 +106,12 @@ describe("the sign-in screen", () => {
     expect(sessionStorage.getItem("canyon_return")).toBe("#/device?code=K7QP-4RXM");
   });
 
-  it("keeps no page but the device page, the production approval page and an app's no-access page", async () => {
+  // A link someone was sent opens what it names once they sign in (the expert review), as the device page always did.
+  it("keeps the page a link names, with its query, and no other", async () => {
     config();
-    for (const [hash, kept] of [["#/no-access/claims-portal", "#/no-access/claims-portal"], ["#/approve?code=QX7M-2KPD", "#/approve?code=QX7M-2KPD"], ["#/apps/claims-portal", null], ["", null]] as const) {
+    for (const [hash, kept] of [...["#/no-access/claims-portal", "#/approve?code=QX7M-2KPD", "#/apps/claims-portal", "#/apps/claims-portal?run=gr_8f2a", "#/apps/claims-portal/outbound",
+      "#/apps/claims-portal/secrets?name=STRIPE_KEY&env=prod", "#/audit?question=production&range=7d", "#/audit?since=2026-11-01T00%3A00%3A00Z", "#/guardrails/policies?rule=sql.string-concat", "#/settings", "#/settings/people"].map((one) => [one, one] as const),
+      ["#/fleet?q=claims", null], ["", null]] as const) {
       sessionStorage.clear();
       window.location.hash = hash;
       const { unmount } = render(<SignIn />);
@@ -118,5 +121,40 @@ describe("the sign-in screen", () => {
       expect(sessionStorage.getItem("canyon_return")).toBe(kept);
       unmount();
     }
+  });
+
+  // Only ever an address of this dashboard's own pages: whatever is in the tab's storage or the address bar is not taken.
+  it("takes back nothing that is not one of those pages", () => {
+    const long = `#/audit?q=${"a".repeat(600)}`;
+    for (const hash of ["https://evil.example/", "//evil.example", "/\\evil.example", "javascript:alert(1)", "#javascript:alert(1)", "#//evil.example", "#/\\evil.example", "#/apps//evil.example", "#/apps/../settings", "#/apps/%2e%2e/settings",
+      "#/apps/Claims", "#/apps/claims-portal/", "#/apps/claims-portal/delete", "#/apps/claims-portal#/settings", "#/apps/claims-portal\n", "#/apps/claims-portal?run=<img src=x>", "#/apps/claims-portal?run=a b", "#/audit?x=\u202egnp",
+      "#/auditor", "#/settings/../apps", "#/settings/people/x/y", "#/settings//evil.example", "#/guardrails\t", "#/signin", "#/setup-required", "#/fleet", "x#/audit", " #/audit", "#/AUDIT", long, ""]) {
+      sessionStorage.setItem("canyon_return", hash);
+      expect(takeReturn(), hash.slice(0, 60)).toBeNull();
+      expect(sessionStorage.getItem("canyon_return")).toBeNull();
+    }
+  });
+
+  // A page kept by a sign-in that was given up must not come back after another, begun somewhere else.
+  it("forgets the page an earlier, unfinished sign-in began on", async () => {
+    config();
+    for (const [reason, left] of [[undefined, null], ["signed-out", null], ["failed", "#/apps/claims-portal"]] as const) {
+      sessionStorage.setItem("canyon_return", "#/apps/claims-portal");
+      window.location.hash = reason === "failed" ? "#/signin" : "#/fleet";
+      const { unmount } = render(<SignIn reason={reason} />);
+      fireEvent.click(await screen.findByRole("link", { name: /sign-in|Try again/ }));
+      expect(sessionStorage.getItem("canyon_return"), String(reason)).toBe(left);
+      unmount();
+    }
+  });
+
+  // Signing out was chosen, and the next person to sign in here may be another: they start on the fleet.
+  it("keeps no page after a sign-out the person chose", async () => {
+    config();
+    sessionStorage.clear();
+    window.location.hash = "#/apps/claims-portal";
+    render(<SignIn reason="signed-out" />);
+    fireEvent.click(await screen.findByRole("link", { name: /sign-in/ }));
+    expect(sessionStorage.getItem("canyon_return")).toBeNull();
   });
 });

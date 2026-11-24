@@ -19,8 +19,11 @@ const fits = async (page: Page, who: string) => {
   await page.goto(`/#/apps/${env("NARROW_APP")}`);
   await expect(page.getByRole("heading", { name: /^What blocks/ })).toBeVisible();
   await page.screenshot({ path: `.work/walk/narrow-${who}.png`, fullPage: true });
-  const [scroll, width] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
-  expect(scroll, `the page is ${scroll}px wide in a ${width}px window: it scrolls sideways`).toBeLessThanOrEqual(width);
+  for (const width of [390, 360]) { // the two common phone widths: the finding's path alone made the page 362px wide (#107)
+    await page.setViewportSize({ width, height: 844 });
+    const scroll = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scroll, `the page is ${scroll}px wide in a ${width}px window: it scrolls sideways`).toBeLessThanOrEqual(width);
+  }
 };
 
 test("the app page on a phone as contributor", async ({ page }) => { await fits(page, "contributor"); });

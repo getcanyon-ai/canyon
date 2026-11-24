@@ -1,7 +1,7 @@
 
   canyon dev · claims-portal preview → prod · localhost:7777
 
-  Promoting v1.3 (passed review) from preview to production. Nothing runs in production yet.
+  Promoting v1.3 (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
 
   Meridian requires a passing review to reach production.

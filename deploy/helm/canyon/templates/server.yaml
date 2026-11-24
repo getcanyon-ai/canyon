@@ -32,9 +32,6 @@ CANYON_GROUPS_CLAIM: {{ . | quote }}
 CANYON_ORG: {{ . | quote }}
 {{- end }}
 CANYON_INSTALL_MODE: "helm_one_node"
-{{- if not .Values.telemetry.enabled }}
-CANYON_TELEMETRY: "0"
-{{- end }}
 {{- if .Values.canyon.appDatabase.enabled }}
 CANYON_APP_DATABASE_URL: {{ required "canyon.appDatabase.url is required without infra.appPostgres" (include "canyon.appDatabaseURL" .) | quote }}
 {{- if .Values.canyon.appDatabase.caConfigMap }}
@@ -107,6 +104,9 @@ spec:
           image: {{ include "canyon.image" (dict "root" . "name" "server") }}
           env:
             - {name: CANYON_AUTH, value: oidc} # here, not in the Secret: env wins over envFrom, so no Secret, existingSecret included, starts it without sign-in
+            {{- if ne (toString .Values.telemetry.enabled) "true" }}
+            - {name: CANYON_TELEMETRY, value: "0"} # here as CANYON_AUTH is: off holds with existingSecret too. On sets nothing, so a Secret's own CANYON_TELEMETRY=0 stands
+            {{- end }}
             - {name: CANYON_ADDR, value: ":7777"}
             - {name: CANYON_RUNTIME, value: kubernetes}
             - {name: CANYON_SCAN_CONCURRENCY, value: {{ $c.scanConcurrency | toString | quote }}}

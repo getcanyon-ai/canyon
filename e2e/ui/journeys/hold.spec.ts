@@ -1,5 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { journey } from "../harness/factory";
+import { opensInside } from "../harness/menu";
 import { api, appId, deploy, promote, review, upload } from "../harness/seed";
 
 type Finding = { partialFingerprints: Record<string, string>; properties: { canyon: { blocks: boolean } } };
@@ -9,12 +10,45 @@ type Finding = { partialFingerprints: Record<string, string>; properties: { cany
 // stopped: #2723), and lifts the hold from the fleet, starting what production ran again (design/OPERATIONS.md §3.8). On Docker nobody signs in and every caller is the anonymous admin,
 // who holds and lifts: a responder's session needs a sign-in, which only the test cluster has.
 const fleetRow = (page: Page, app: string) => page.goto(`/#/fleet?q=${app}`);
-// The rows, a table or the phone's cards: Needs you above them offers the same Lift on a held production (D15).
+// The rows, a table or the phone's cards; on a desktop a row's side pane is in the same group.
 const rows = (page: Page) => page.locator("[aria-label='Apps']");
+const wide = (page: Page) => (page.viewportSize()?.width ?? 1440) > 700;
+// A team row's side pane, on a desktop: Stop production and Lift the hold are there, never on the row (the UX review).
+const pane = async (page: Page, app: string) => { if (wide(page)) await page.getByRole("button", { name: `Details for ${app}` }).click(); };
+// Stop production where a person finds it: the pane on a desktop; on a phone, whose cards offer no stop, the app page's
+// ⋯ menu (#102), and back to the fleet.
+const stop = async (page: Page, app: string, reason: string) => {
+  await fleetRow(page, app);
+  if (wide(page)) {
+    await pane(page, app);
+    await page.getByRole("button", { name: `Stop production of ${app}` }).click();
+  } else {
+    await rows(page).getByRole("link", { name: app, exact: true }).click();
+    const more = page.getByRole("button", { name: "More actions" });
+    await opensInside(page, more, page.getByRole("menu").getByRole("menuitem"));
+    await more.click();
+    await page.getByRole("menuitem", { name: "Stop production…" }).click();
+  }
+  const dialog = page.getByRole("dialog", { name: `Stop and hold ${app} in production?` });
+  await dialog.getByLabel("Reason").fill(reason);
+  await dialog.getByRole("button", { name: "Stop production" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  if (!wide(page)) await fleetRow(page, app);
+};
+// Lift the hold on the fleet: in the pane on a desktop, which offers it once, in Needs attention on a phone.
+const lift = (page: Page, app: string) => (wide(page) ? rows(page) : page.getByRole("main")).getByRole("button", { name: `Lift the hold on ${app}` });
+
+// A journey that failed part way leaves its app held, and the outbound journeys after it on the shard are then refused 409 held.
+let held = "";
+test.afterEach(async () => {
+  if (held === "") return;
+  const { project } = await api<{ project: { hold?: { at: string } } }>(null, "GET", `/api/v1/projects/${held}`);
+  if (project.hold !== undefined) await api(null, "DELETE", `/api/v1/projects/${held}/envs/prod/hold?held_at=${encodeURIComponent(project.hold.at)}`);
+});
 
 journey("stop production, read the banner, lift the hold", {
   given: async () => {
-    const app = appId("ux-hold");
+    const app = held = appId("ux-hold");
     const pkg = await upload(app, "f-core");
     const run = await review(app);
     const { run: read } = await api<{ run: { findings: Finding[] } }>(null, "GET", `/api/v1/gate-runs/${run}`);
@@ -28,17 +62,11 @@ journey("stop production, read the banner, lift the hold", {
   steps: [
     {
       name: "stop production from the fleet, with a reason",
-      do: async (page, { app }) => {
-        await fleetRow(page, app);
-        await page.getByRole("button", { name: `Stop production of ${app}` }).click();
-        const dialog = page.getByRole("dialog", { name: `Stop and hold ${app} in production?` });
-        await dialog.getByLabel("Reason").fill("UX journey: exports claimant data unauthenticated");
-        await dialog.getByRole("button", { name: "Stop production" }).click();
-      },
+      do: async (page, { app }) => stop(page, app, "UX journey: exports claimant data unauthenticated"),
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(page.getByRole("main").getByText("Held", { exact: true })).toBeVisible();
-        await expect(rows(page).getByRole("button", { name: `Lift the hold on ${app}` })).toBeVisible();
+        await expect(page.getByRole("main").getByText("Held", { exact: true }).first()).toBeVisible(); // the row's, and on a desktop its pane's too
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -64,8 +92,9 @@ journey("stop production, read the banner, lift the hold", {
       name: "lift the hold from the fleet, starting what production ran again",
       do: async (page, { app, version }) => {
         await fleetRow(page, app);
-        await rows(page).getByRole("button", { name: `Lift the hold on ${app}` }).click();
-        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: `Start ${version} again` }).click();
+        await pane(page, app);
+        await lift(page, app).click();
+        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: `Lift the hold and start ${version}` }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);
       },
@@ -87,16 +116,10 @@ journey("stop production, read the banner, lift the hold", {
     },
     {
       name: "stop production again from the fleet",
-      do: async (page, { app }) => {
-        await fleetRow(page, app);
-        await page.getByRole("button", { name: `Stop production of ${app}` }).click();
-        const dialog = page.getByRole("dialog", { name: `Stop and hold ${app} in production?` });
-        await dialog.getByLabel("Reason").fill("UX journey: held again, to lift it leaving production stopped");
-        await dialog.getByRole("button", { name: "Stop production" }).click();
-      },
+      do: async (page, { app }) => stop(page, app, "UX journey: held again, to lift it leaving production stopped"),
       see: async (page, { app }) => {
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(rows(page).getByRole("button", { name: `Lift the hold on ${app}` })).toBeVisible();
+        await expect(lift(page, app)).toBeVisible();
       },
       changes: {
         prod_holds: { added: 1 },
@@ -110,8 +133,8 @@ journey("stop production, read the banner, lift the hold", {
     {
       name: "lift the hold leaving production stopped: production is empty",
       do: async (page, { app }) => {
-        await rows(page).getByRole("button", { name: `Lift the hold on ${app}` }).click();
-        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: "Leave production stopped" }).click();
+        await lift(page, app).click();
+        await page.getByRole("dialog", { name: `Lift the hold on ${app}?` }).getByRole("button", { name: "Lift the hold, keep it stopped" }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.goto(`/#/apps/${app}`);
       },

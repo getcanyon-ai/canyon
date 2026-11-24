@@ -13,8 +13,8 @@ becomes a bar across the top with a menu button.
 
 The fleet is the list of every app in your org.
 
-<a class="dark:sl-hidden" href="/screens/fleet-light.webp"><img src="/screens/fleet-light.webp" alt="The fleet of the demo org Meridian: four counts, a Needs attention list with a leaked secret, two blocked apps and an app with no owner, and claims-portal's details panel open beside the list." width="1056" loading="lazy"></a>
-<a class="light:sl-hidden" href="/screens/fleet-dark.webp"><img src="/screens/fleet-dark.webp" alt="The fleet of the demo org Meridian: four counts, a Needs attention list with a leaked secret, two blocked apps and an app with no owner, and claims-portal's details panel open beside the list." width="1056" loading="lazy"></a>
+<a class="dark:sl-hidden" href="/screens/fleet-light.webp"><img src="/screens/fleet-light.webp" alt="The fleet of the demo org Meridian: four counts, a line saying to start with claims-portal, a Needs attention list with a leaked secret, a blocked app, and an app never reviewed and with no owner, and claims-portal's details panel open beside the list." width="1056" loading="lazy"></a>
+<a class="light:sl-hidden" href="/screens/fleet-dark.webp"><img src="/screens/fleet-dark.webp" alt="The fleet of the demo org Meridian: four counts, a line saying to start with claims-portal, a Needs attention list with a leaked secret, a blocked app, and an app never reviewed and with no owner, and claims-portal's details panel open beside the list." width="1056" loading="lazy"></a>
 
 An admin's counts and lists cover the whole org; a member's cover their own apps, and their list is
 called "Needs you" rather than "Needs attention". The list can say:
@@ -31,9 +31,10 @@ called "Needs you" rather than "Needs attention". The list can say:
 destination [refused on its outbound allowlist](/org/outbound/#on-an-apps-page) that nobody has allowed or dismissed.
 
 **The list.** Where people sign in, an Access column says who can open each app, and a filter picks
-by it. "Filter" also has "Only apps that need you". Security responders and admins see **Stop
-production** on each app's row, and **Lift the hold** on an app whose production is held
-([Stopping production](/org/who-can-do-what/#stopping-production)).
+by it. "Filter" also has "Only apps that need you". In an app's details
+panel, security responders and admins can stop its production, and admins can lift its hold
+([Stopping production](/org/who-can-do-what/#stopping-production)). For an app outside their teams, a
+responder does either on the app's row.
 
 **The details panel.** Click a row to open its panel beside the list. When something blocks the app,
 "Copy for your agent" copies the problem for a coding agent. "All activity" opens its audit trail. On
@@ -45,11 +46,12 @@ from the last 24 hours first. "Open audit" opens the [audit trail](/org/audit-tr
 
 ## An app's page
 
-<a class="dark:sl-hidden" href="/screens/app-blocked-light.webp"><img src="/screens/app-blocked-light.webp" alt="claims-portal's page: the newest version is blocked by one finding, the previous version keeps running in preview, and the go-live checks for that version all pass." width="1056" loading="lazy"></a>
-<a class="light:sl-hidden" href="/screens/app-blocked-dark.webp"><img src="/screens/app-blocked-dark.webp" alt="claims-portal's page: the newest version is blocked by one finding, the previous version keeps running in preview, and the go-live checks for that version all pass." width="1056" loading="lazy"></a>
+<a class="dark:sl-hidden" href="/screens/app-blocked-light.webp"><img src="/screens/app-blocked-light.webp" alt="claims-portal's page: its headline says the newest version is blocked by one finding, with the fix to copy for an agent. The previous version keeps running in preview, and its three go-live checks are met." width="1056" loading="lazy"></a>
+<a class="light:sl-hidden" href="/screens/app-blocked-dark.webp"><img src="/screens/app-blocked-dark.webp" alt="claims-portal's page: its headline says the newest version is blocked by one finding, with the fix to copy for an agent. The previous version keeps running in preview, and its three go-live checks are met." width="1056" loading="lazy"></a>
 
 The "⋯" button ("More actions") holds "Take preview offline", "Take production offline" and, for
-the app's owners and admins, "Rename…" and "Delete app…". Further down the page:
+the app's owners and admins, "Rename…" and "Delete app…". For security responders and admins it also
+holds "Stop production". Further down the page:
 
 - **Review**: what blocks comes first. What doesn't block waits behind "Doesn't block". See
   [Fix or approve a finding](/build/fix-or-approve/).
@@ -67,9 +69,9 @@ Someone without access to an app who opens its link sees "You don't have access 
 
 ## Settings
 
-Settings has a tab for each part of the organisation's set-up. A member doesn't see the tabs that are an admin's alone, such as **GitHub**.
+Settings has a tab for each part of the organization's set-up. A member doesn't see the tabs that are an admin's alone, such as **GitHub**.
 
-- **Organisation**: the organisation's name.
+- **Organization**: the organization's name.
 - **People & sign-in**: who may sign in, who administers Canyon, the groups claim, and the
   production approval switch. See [First boot and sign-in](/org/first-boot/).
 - **Agents**: how to connect a coding agent to Canyon, from a laptop or the cloud, and **Sessions**:

@@ -67,5 +67,12 @@
     "last_sent_at": null,
     "last_report": null
   },
+  "state_retrying": {
+    "enabled": true,
+    "next_try_at": "2026-11-24T21:04:00Z",
+    "gives_up_at": "2027-02-21T14:04:00Z",
+    "last_sent_at": null,
+    "last_report": null
+  },
   "set": { "enabled": false }
 }

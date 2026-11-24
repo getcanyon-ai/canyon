@@ -13,8 +13,8 @@ import (
 )
 
 // TestTheAppPageFitsAPhone is the app page at 390px, as a contributor and as a responder, on the team setup (#102): a
-// blocked version whose finding's line is far wider than a phone, and the page still never scrolls sideways — the
-// snippet scrolls in its own box. The walk is e2e/ui's narrow project, a screenshot of each kept in .work/walk.
+// blocked version whose finding's line and path are far wider than a phone, and the page still never scrolls sideways,
+// there or at 360px — the snippet scrolls in its own box and the path wraps. The walk is e2e/ui's narrow project, a screenshot of each kept in .work/walk.
 func TestTheAppPageFitsAPhone(t *testing.T) {
 	var config struct{ Auth string }
 	if code := get(t, &http.Client{Timeout: 10 * time.Second}, host+"/auth/config", &config); code != http.StatusOK || config.Auth != "oidc" {
@@ -32,7 +32,10 @@ func TestTheAppPageFitsAPhone(t *testing.T) {
 	// A search that builds its SQL from the request, on one line far wider than a phone: the review blocks it.
 	home, source := t.TempDir(), appSource(t, app)
 	wide := strings.Repeat(" ", 300)
-	must(t, os.WriteFile(filepath.Join(source, "server.js"), []byte(`const express = require("express");
+	path := filepath.Join(source, "apps", "web", "src", "app", "api", "admin", "policies", "server.js")
+	must(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	must(t, os.WriteFile(filepath.Join(source, "server.js"), []byte("require(\"./apps/web/src/app/api/admin/policies/server.js\");\n"), 0o600))
+	must(t, os.WriteFile(path, []byte(`const express = require("express");
 const { DatabaseSync } = require("node:sqlite");
 const db = new DatabaseSync(":memory:");
 const app = express();

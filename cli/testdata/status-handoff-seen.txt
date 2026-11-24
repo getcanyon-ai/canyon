@@ -3,8 +3,8 @@
 
   preview      —      nothing running
   production   v3.1   http://claims-archive.prod.localhost:7777   8d ago
-                      ! a pod still checked in 2m ago
-                      removing · waiting on your platform
+                      ! still running: your platform last reported it 2m ago
+                      being removed by your platform
   access       shared with 1 person and 1 group · you are an owner
   review       ✓ passed   0 blocking findings, 0 warnings   8d ago
 

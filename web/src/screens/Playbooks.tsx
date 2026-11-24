@@ -57,7 +57,11 @@ export function Playbooks() {
     <section aria-label="Playbooks">
       <h3 className={H3}>Playbooks</h3>
       <p className="mt-1 text-md text-text-dim">{S.playbooksIntro}</p>
-      {list?.some((one) => one.kind === "skill") === true && <p className="mt-1 text-sm text-text-faint">{S.playbookCountsMean}</p>}
+      {/* What the two kinds are, before anything about the counts (#118). */}
+      <ul className="mt-1.5 grid gap-0.5 text-md text-text-dim">
+        <li><span className="font-medium text-text">{S.playbookSkill}:</span> {S.playbookSkillMeans}</li>
+        <li><span className="font-medium text-text">{S.playbookNote}:</span> {S.playbookNoteMeans}</li>
+      </ul>
       {refusal !== null && <p className="mt-2.5 text-base text-critical">{refusal}</p>}
       {list !== null && list.length === 0 && open === null && <p className="mt-2.5 text-base text-text-dim">{S.playbooksNone}</p>}
       {list?.map((entry) => {
@@ -92,6 +96,8 @@ export function Playbooks() {
           </section>
         );
       })}
+      {/* Beside the counts it explains, under the list (#118). */}
+      {list?.some((one) => one.kind === "skill") === true && <p className="mt-2 text-sm text-text-faint">{S.playbookCountsMean}</p>}
       {list !== null && open?.mode === "new" && <Editor draft={open.draft} taken={list.map((one) => one.slug)} done={done} cancel={() => setOpen(null)} />}
       {list !== null && open?.mode === "import" && <Import use={(draft) => setOpen({ mode: "new", draft })} cancel={() => setOpen(null)} />}
       {list !== null && open?.mode !== "new" && open?.mode !== "import" && (

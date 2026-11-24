@@ -9,7 +9,7 @@ import { Settings } from "./Settings";
 import { TelemetrySettings } from "./Telemetry";
 
 // The contract's golden report and state (contracts/testdata/telemetry/report.json).
-const golden = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/telemetry/report.json"), "utf8")) as { report: unknown; state: Omit<TelemetryState, "report"> };
+const golden = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/telemetry/report.json"), "utf8")) as { report: unknown; state: Omit<TelemetryState, "report">; state_retrying: Omit<TelemetryState, "report"> };
 const fleet = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/fleet/page.json"), "utf8")) as FleetPage;
 const prefs = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/guardrails/preferences.json"), "utf8")) as { preferences_admin: Preferences; preferences_member: Preferences };
 const asSent = JSON.stringify(golden.report); // the server's compact bytes, as its read's string holds them
@@ -64,6 +64,14 @@ describe("Settings › Telemetry", () => {
     await screen.findByText(S.telemetryOn);
     fireEvent.click(screen.getByRole("button", { name: S.telemetryTurnOff }));
     await screen.findByText(S.telemetryOffAdmin);
+  });
+
+  it("says while no report has reached the collector that it still tries, when next and until when", async () => {
+    host({ ...golden.state_retrying, report: asSent, next_try_at: "2026-11-24T21:04:00", gives_up_at: "2027-02-21T14:04:00" }); // local times, whatever the machine's zone
+    render(<TelemetrySettings />);
+    await screen.findByText("Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after 24 Nov, 21:04, and gives up by 21 Feb.");
+    expect(screen.getByRole("button", { name: S.telemetryTurnOff })).toBeTruthy();
+    expect(screen.queryByText(S.telemetryOn)).toBeNull();
   });
 
   it("names the last report sent and when", async () => {

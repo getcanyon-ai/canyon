@@ -280,7 +280,7 @@ counted), sets another namespace, makes a cluster-scoped kind, collides with one
 fails its annotation: the route annotates `canyon.dev/address`, the app's https address, and each
 resource annotates `canyon.dev/endpoint`, where it is (§4's shapes), both read back from the committed
 bytes. Canyon checks no CRD's behaviour: a template that never makes `<app>-<env>-res-<name>` shows as
-*no pod has checked in*, never as live.
+*your platform reported v1.4 deployed, but not running*, never as live.
 
 **The commit.** Everything is rendered in memory before any git call. The commit is deterministic —
 its date the release's, its message `<version> · <app> · <env>` and the trailers `Canyon-Release`,
@@ -311,7 +311,7 @@ Canyon's directory is `refused`, its own `build.log` line, and so is a certifica
 `canyon.json` and `resources/`, so the data stays; a project delete's removes the directory. A pushed
 remove is `removed` at its push; one that needs a pull request is `removed` when it is merged, unedited,
 into production's branch from this repo's own branch, and `refused` when it is closed unmerged, the release-remove workflow asking once a minute for 30
-minutes, after which the environment reads *removing · waiting on your merge* and an undeploy or a delete
+minutes, after which the environment reads *being removed once you merge* and an undeploy or a delete
 asked again asks again. The pods admit nobody from the remove's commit in Canyon (§5, *A stopped release*),
 whatever git says.
 
@@ -391,13 +391,13 @@ reports for the org; a per-app token would be a tier with one example.
 
 Release states: `sent → accepted → deployed | failed | removed`, and `undelivered`, `refused`.
 The project read's `envs.<env>` gains `run_by` and, while a release is open, `pending:
-{release, event, sent_at, state}` so a screen can say *waiting on your platform since 10:00*; it
+{release, event, sent_at, state}` so a screen can say *sent to your platform at 10:00, not running yet*; it
 stays after `undelivered` or `refused` until the environment's next release, so the failure is
 never silently gone.
 
 **No word.** Three silences, each named: the webhook not accepted (§3, an hour), accepted and not
 reported (§3, 30 minutes, the run fails and the release stays open), and a `remove` not reported —
-undeploy answers `202 {release}` at once and the environment shows `removing · waiting on your
+undeploy answers `202 {release}` at once and the environment shows `being removed by your
 platform`; it leaves `envs` on `removed`. There is no timer on a remove: nothing runs one, and
 the state says exactly what is known.
 
@@ -487,11 +487,11 @@ Canyon's re-PUT of access files (`reput`) skips environments the org runs: the p
 was minted for, after the token check and apart from it, at most once per 30 seconds per release,
 best effort: a write that fails or would wait is skipped and the pull answers as before, so the
 check-in can never gate sign-in. The environment's `seen_at` is its live release's; every surface
-says *a pod checked in 2m ago*, or, in amber, *no pod has checked in since 15:04* after 5 minutes
-unseen, or *reported deployed, but no pod has checked in* once 10 minutes have passed since the
+says *your platform reported it running 2m ago*, or, in amber, *your platform hasn't reported v1.4 running
+since 15:04* after 5 minutes unseen, or *your platform reported v1.4 deployed, but not running* once 10 minutes have passed since the
 report with none (contracts/routes.md, `envs.<env>.seen_at`). While the environment is stopped — its
 `pending` a `remove`, which an undeploy, a hold and a delete each record at once — a fresh check-in is
-amber, *a pod still checked in 1m ago*: the pod pulls the deny-all, so the platform has not taken it
+amber, *still running: your platform last reported it 1m ago*: the pod pulls the deny-all, so the platform has not taken it
 down yet (#2450). It is Canyon's only view into the org's
 pods, independent of the pipeline's word, and it says less than `running`: the sidecar is a container
 of its own, so a check-in proves a pod is scheduled and reaches Canyon, not that the app answers.
@@ -535,13 +535,14 @@ platform refused the release: HTTP 422`. Previews are the same lines under `prev
 `delivery: repo` (§3b) the lines are the deploy repo's, D5's exactly: `committed v1.4 to preview · waiting
 for a pod to check in`, or for production `opened a pull request for v1.4: <url> · production goes live
 once it is merged and a pod checks in`, then `live at <address> · a pod checked in`; and the environment
-reads `waiting for a pod to check in since 10:00`, or `waiting on your merge since 10:00` with the pull
+reads `your platform hasn't reported it running since 10:00`, or `waiting on your merge since 10:00` with the pull
 request's link to its team.
 
 `canyon status`, the fleet and the app page show the environment's state from `envs.<env>`:
-`live · reported 2m ago`, `waiting on your platform since 10:00`, `removing · waiting on your
-platform`, `failed: <reason>`, and under a live one its pods' check-in (§5): `a pod checked in 2m ago`,
-`no pod has checked in since 15:04`, `reported deployed, but no pod has checked in`. The receipt's `prod.clean-gate` reads *nothing is running in
+`live · reported 2m ago`, `sent to your platform at 10:00, not running yet`, `being removed by your
+platform`, `failed: <reason>`, and under a live one its pods' check-in (§5): `your platform reported it
+running 2m ago`, `your platform hasn't reported v1.4 running since 15:04`, `your platform reported v1.4
+deployed, but not running`. The receipt's `prod.clean-gate` reads *nothing is running in
 preview* until the org reported preview live: a promotion binds to what runs, and what runs is
 what was reported.
 
@@ -643,7 +644,7 @@ consumer.
   deny-all only that its environment is stopped; the check-in it records (§5) tells the team a pod still
   runs while it waits on the platform.
 - **A faked check-in** (#2452): whoever holds a release's access token can pull, so a leaked token
-  makes an environment read *a pod checked in* while no pod runs. Under `delivery: webhook` it is shown,
+  makes an environment read *your platform reported it running* while no pod runs. Under `delivery: webhook` it is shown,
   never a gate, and the next release's report kills the token. **Under `delivery: repo` it is a gate
   threat** (amended 2026-10-24, #2470): a faked check-in could settle a deploy. It is bounded three ways:
   the token reaches the cluster only through the fetch-only token, which opens nothing but the token
@@ -673,7 +674,7 @@ consumer.
   `canyon.json` (deploy/gitops); under Flux, the generator that makes each app's Kustomization on its own
   environment's branch alone, held by the admission policy on its identity (the next bullet). Every template value is a scalar substituted after the YAML is parsed, so
   an app's name never becomes YAML. The reverse is a signal: a pod deployed without the sidecar
-  never checks in, and its environment reads *no pod has checked in*, which tells the team the app
+  never checks in, and its environment reads *your platform reported <version> deployed, but not running*, which tells the team the app
   is one nobody signs in to through Canyon.
 - **Write access to the deploy repo** (#2476): whoever can write it, Canyon's token or a person, controls
   the workloads in the `canyon-*` namespaces. Canyon's tree check verifies a release at go-live (§3b,

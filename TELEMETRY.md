@@ -66,8 +66,8 @@ field could identify a company or a person, it isn't sent. Custom rules are neve
 ## Turning it off
 
 - An admin runs `canyon telemetry off`, or turns it off in Settings › Telemetry, where an admin also turns it back on.
-- `CANYON_TELEMETRY=0` or `DO_NOT_TRACK=1` on the server, or `telemetry.enabled: false` in the Helm values.
-- It is off by itself when `CI` is set, and when the server can't reach the collector at its first send.
+- `CANYON_TELEMETRY=0` or `DO_NOT_TRACK=1` on the server (`CANYON_TELEMETRY` set to anything but `1`, `true`, `on` or `yes`, or `DO_NOT_TRACK` to anything but `0` or `false`, is off), or `telemetry.enabled: false` in the Helm values.
+- It is off by itself when `CI` is set, and when no report has reached the collector in 90 days of trying: at most 20 tries, from an hour apart to a week apart.
 - It's on by default. `canyon telemetry show` prints the next report exactly as it is sent.
 - It goes once a day, over HTTPS, to `https://usage.myagentcontrol.ai/v1/report`.
 

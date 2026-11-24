@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,9 +16,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unicode"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
 	gatepolicy "github.com/getcanyon-ai/canyon/gate/policy"
@@ -122,23 +129,44 @@ func TestTheCollectorIsReal(t *testing.T) {
 	}
 }
 
-// The environment turns telemetry off whatever an admin sets: CANYON_TELEMETRY=0, DO_NOT_TRACK=1, or CI set to
-// anything at all. An install mode the schema does not name refuses the boot.
+// The environment turns telemetry off whatever an admin sets: CANYON_TELEMETRY set to anything but 1, true, on or yes,
+// DO_NOT_TRACK to anything but 0 or false, or CI to anything at all. An install mode the schema does not name refuses the boot.
 func TestTelemetryConfigOf(t *testing.T) {
 	for _, c := range []struct {
 		env map[string]string
 		off bool
 	}{
 		{nil, false},
-		{map[string]string{"CANYON_TELEMETRY": "0"}, true},
+		{map[string]string{"CANYON_TELEMETRY": ""}, false},
 		{map[string]string{"CANYON_TELEMETRY": "1"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "true"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "TRUE"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "on"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "On"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "yes"}, false},
+		{map[string]string{"CANYON_TELEMETRY": "0"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "false"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "FALSE"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "no"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "off"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "disabled"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "enabled"}, true}, // not one of those that say on
+		{map[string]string{"CANYON_TELEMETRY": " "}, true},
+		{map[string]string{"DO_NOT_TRACK": ""}, false},
+		{map[string]string{"DO_NOT_TRACK": "0"}, false},
+		{map[string]string{"DO_NOT_TRACK": "false"}, false},
+		{map[string]string{"DO_NOT_TRACK": "FALSE"}, false},
 		{map[string]string{"DO_NOT_TRACK": "1"}, true},
+		{map[string]string{"DO_NOT_TRACK": "true"}, true},
+		{map[string]string{"DO_NOT_TRACK": "yes"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "1", "DO_NOT_TRACK": "true"}, true},
+		{map[string]string{"CANYON_TELEMETRY": "false", "DO_NOT_TRACK": "0"}, true},
 		{map[string]string{"CI": "true"}, true},
 		{map[string]string{"CI": "1"}, true},
 	} {
 		got, err := telemetryConfigOf(func(k string) string { return c.env[k] })
-		if err != nil || got.envOff != c.off || got.url != telemetryEndpoint {
-			t.Errorf("%v: off %v, url %q, %v; want off %v", c.env, got.envOff, got.url, err, c.off)
+		if err != nil || got.envOff != c.off || got.url != telemetryEndpoint || got.every != telemetryEvery {
+			t.Errorf("%v: off %v, url %q, every %v, %v; want off %v", c.env, got.envOff, got.url, got.every, err, c.off)
 		}
 	}
 	if c, err := telemetryConfigOf(func(k string) string { return map[string]string{"CANYON_INSTALL_MODE": "helm_one_node"}[k] }); err != nil || c.mode != "helm_one_node" {
@@ -147,6 +175,175 @@ func TestTelemetryConfigOf(t *testing.T) {
 	if _, err := telemetryConfigOf(func(k string) string { return map[string]string{"CANYON_INSTALL_MODE": "acme-prod-cluster"}[k] }); err == nil {
 		t.Error("an install mode the schema does not name booted")
 	}
+}
+
+// telemetryOffVars are the variables that turn telemetry off on a server.
+var telemetryOffVars = []string{"CANYON_TELEMETRY", "DO_NOT_TRACK", "CI"}
+
+// shippedEnv decodes a YAML file into v.
+func shippedEnv(t *testing.T, file string, v any) {
+	t.Helper()
+	raw, err := os.ReadFile(file) //nolint:gosec // test: the repository's own files
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(raw, v); err != nil {
+		t.Fatalf("%s: %v", file, err)
+	}
+}
+
+// composeServerEnv is the server's environment in a compose file, NAME=value each.
+func composeServerEnv(t *testing.T, file string) map[string]string {
+	t.Helper()
+	var compose struct {
+		Services map[string]struct {
+			Environment []string `yaml:"environment"`
+			EnvFile     any      `yaml:"env_file"`
+		} `yaml:"services"`
+	}
+	shippedEnv(t, file, &compose)
+	server := compose.Services["server"]
+	if len(server.Environment) == 0 || server.EnvFile != nil {
+		t.Fatalf("%s: the server has %d variables and env_file %v; want its environment in the file", file, len(server.Environment), server.EnvFile)
+	}
+	env := map[string]string{}
+	for _, kv := range server.Environment {
+		name, value, _ := strings.Cut(kv, "=")
+		env[name] = value
+	}
+	return env
+}
+
+// manifestServerEnv is the server container's own environment in deploy/k8s/server.yaml.
+func manifestServerEnv(t *testing.T) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile("../../deploy/k8s/server.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	for docs := yaml.NewDecoder(bytes.NewReader(raw)); ; {
+		var d struct {
+			Kind string `yaml:"kind"`
+			Spec struct {
+				Template struct {
+					Spec struct {
+						Containers []struct {
+							Env []struct{ Name, Value string } `yaml:"env"`
+						} `yaml:"containers"`
+					} `yaml:"spec"`
+				} `yaml:"template"`
+			} `yaml:"spec"`
+		}
+		if err := docs.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil && d.Kind == "Deployment" {
+			t.Fatal(err)
+		}
+		if d.Kind == "Deployment" {
+			for _, c := range d.Spec.Template.Spec.Containers {
+				for _, e := range c.Env {
+					env[e.Name] = e.Value
+				}
+			}
+		}
+	}
+	if len(env) == 0 {
+		t.Fatal("deploy/k8s/server.yaml: no server environment found")
+	}
+	return env
+}
+
+// Telemetry is on by default on every install Canyon ships (the owner's decision, 2026-11-12): the environment each
+// gives its server sets none of the variables that turn it off, reads as a sender that runs, and says how it was
+// installed. The chart's own render is deploy/helm/check-rendered.py's.
+func TestEveryShippedInstallSendsByDefault(t *testing.T) {
+	demo, team := composeServerEnv(t, "../../docker-compose.yml"), composeServerEnv(t, "../../deploy/docker/team.yml")
+	merged := maps.Clone(demo)
+	maps.Copy(merged, team) // as compose merges the two, each entry by its name
+	for install, s := range map[string]struct {
+		env  map[string]string
+		mode string
+	}{
+		"docker-compose.yml":     {demo, "laptop"},
+		"deploy/docker/team.yml": {merged, "one_server"},
+		"deploy/k8s/server.yaml": {manifestServerEnv(t), ""}, // the operator's Secret says it: the manifest's own env would win over it
+	} {
+		for _, name := range telemetryOffVars {
+			if v, set := s.env[name]; set {
+				t.Errorf("%s sets %s=%q on the server: telemetry is on by default", install, name, v)
+			}
+		}
+		c, err := telemetryConfigOf(func(k string) string { return s.env[k] })
+		if err != nil || c.envOff || c.url != telemetryEndpoint || c.every != telemetryEvery {
+			t.Errorf("%s: telemetry off %v, url %q, every %v, %v", install, c.envOff, c.url, c.every, err)
+		}
+		if c.mode != s.mode {
+			t.Errorf("%s says it was installed by %q, want %q", install, c.mode, s.mode)
+		}
+	}
+	var values struct {
+		Telemetry struct {
+			Enabled any `yaml:"enabled"`
+		} `yaml:"telemetry"`
+	}
+	if shippedEnv(t, "../../deploy/helm/canyon/values.yaml", &values); values.Telemetry.Enabled != true {
+		t.Errorf("the chart's telemetry.enabled is %v, want true", values.Telemetry.Enabled)
+	}
+	raw, err := os.ReadFile("../../Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(string(raw)) {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, word := range strings.FieldsFunc(line, func(r rune) bool { return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+			if slices.Contains(telemetryOffVars, word) {
+				t.Errorf("the image's Dockerfile names %s: %s", word, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
+// A server whose environment sets nothing sends its first report as it starts: serve runs the sender, at the interval
+// telemetryConfigOf gives it.
+func TestAServerSendsItsFirstReportAsItStarts(t *testing.T) {
+	got := &collector{}
+	srv := httptest.NewServer(got)
+	defer srv.Close()
+	c, err := telemetryConfigOf(func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.url = srv.URL
+	testTelemetry = c
+	t.Cleanup(func() { testTelemetry = telemetryConfig{} })
+	pool, _ := migrated(t)
+	start(t, pool, time.Hour)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		got.mu.Lock()
+		posts, body := got.posts, got.body
+		got.mu.Unlock()
+		if posts > 0 {
+			if err := contractSchema(t, "telemetry.schema.json").Validate(anyOf(t, body)); err != nil {
+				t.Errorf("the first report is not the schema's: %v\n%s", err, body)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("10 seconds after it started, the server has sent no report")
+		}
+	}
+}
+
+// anyOf is a JSON document, decoded.
+func anyOf(t *testing.T, raw []byte) (v any) {
+	t.Helper()
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
 
 // A built-in rule is counted by its own id, a rule that extends it by the built-in's, and every other rule, a custom
@@ -374,8 +571,8 @@ func (c *collector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // On by default: the first day's send goes with no admin having seen anything (the owner's decision, 2026-11-12), one
-// POST a day whose body is byte for byte the report an admin reads; the environment's off sends nothing; a first send
-// that reaches nothing turns it off and tries no more, until an admin turns it on (#2807).
+// POST a day whose body is byte for byte the report an admin reads; the environment's off sends nothing; a later day's
+// send that reaches nothing turns nothing off (#2807).
 func TestTelemetrySendsOnceADayAndOnlyWhatWasShown(t *testing.T) {
 	base, c := telemetryFixture(t)
 	a := appOf(t, base)
@@ -410,31 +607,348 @@ func TestTelemetrySendsOnceADayAndOnlyWhatWasShown(t *testing.T) {
 	if err := json.Unmarshal([]byte(lastBody), &after); err != nil || after.LastSentAt == nil || after.LastReport == nil || *after.LastReport != string(got.body) {
 		t.Errorf("the last report shown is not the one sent: %v\n%v\nsent %s", err, after.LastReport, got.body)
 	}
-	pool := poolOf(t, base)
-	if _, err := pool.Exec(ctx, "UPDATE telemetry SET claimed_at = NULL, sent_at = NULL"); err != nil { // a new install's first day
-		t.Fatal(err)
+	for _, on := range []string{`{"enabled":false}`, `{"enabled":true}`} { // off and on again the same day sends no second report
+		if code, _, _ := do(t, c, http.MethodPut, base+"/api/v1/telemetry", on); code != 200 {
+			t.Fatalf("%s: %d %s", on, code, lastBody)
+		}
 	}
-	srv.Close() // the collector is unreachable: an air-gapped install
+	if sent, _ := a.sendTelemetry(ctx); sent || got.posts != 1 {
+		t.Errorf("turned off and on after the day's send, it sent again: %d posts", got.posts)
+	}
+	srv.Close() // a later day's failure is that day's alone
+	clockOn(t, poolOf(t, base), 24*time.Hour)
 	if sent, err := a.sendTelemetry(ctx); !sent || err != nil {
-		t.Fatalf("the unreachable first send: %v %v", sent, err)
+		t.Fatalf("the next day's send, which reaches nothing: %v %v", sent, err)
 	}
-	var off string
-	if err := pool.QueryRow(ctx, "SELECT coalesce(off_because, '') FROM telemetry").Scan(&off); err != nil || off != "unreachable" {
-		t.Fatalf("after an unreachable first send, off_because %q %v", off, err)
+	if off, tried := telemetryOffAnd(t, poolOf(t, base)); off != "" || tried {
+		t.Errorf("after a later day's failure: off_because %q, trying again %v", off, tried)
 	}
-	if _, err := pool.Exec(ctx, "UPDATE telemetry SET claimed_at = NULL"); err != nil {
+}
+
+// clockOn is the fake clock: the database's clock d on, its row's times d back.
+func clockOn(t *testing.T, pool *pgxpool.Pool, d time.Duration) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(), "UPDATE telemetry SET claimed_at = claimed_at - $1::interval, tried_since = tried_since - $1::interval, sent_at = sent_at - $1::interval", d); err != nil {
 		t.Fatal(err)
 	}
-	if sent, _ := a.sendTelemetry(ctx); sent {
-		t.Error("an unreachable install tried again")
+}
+
+// telemetryOffAnd is why the row is off, "" for on, and whether it is trying for its first report.
+func telemetryOffAnd(t *testing.T, pool *pgxpool.Pool) (off string, tried bool) {
+	t.Helper()
+	if err := pool.QueryRow(t.Context(), "SELECT coalesce(off_because, ''), tried_since IS NOT NULL FROM telemetry").Scan(&off, &tried); err != nil {
+		t.Fatal(err)
 	}
-	if code, body, _ := do(t, c, http.MethodPut, base+"/api/v1/telemetry", `{"enabled":true}`); code != 200 || body["enabled"] != true {
-		t.Errorf("an admin turning it back on: %d %s", code, lastBody)
+	return off, tried
+}
+
+// unreached is a collector's URL that nothing answers.
+func unreached(t *testing.T) string {
+	t.Helper()
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	return gone.URL
+}
+
+// firstTries are the hours after the first at which a server that reaches nothing tries: doubling, at most a week
+// apart, for 90 days.
+var firstTries = []int{0, 1, 3, 7, 15, 31, 63, 127, 255, 423, 591, 759, 927, 1095, 1263, 1431, 1599, 1767, 1935, 2103}
+
+// The schedule (the owner, 2026-11-23): the waits double from an hour, stop at a week, and end 90 days after the first
+// try. A try that came late only waits longer, never less.
+func TestTelemetryNextDoublesToAWeekForNinetyDays(t *testing.T) {
+	first := time.Date(2026, 11, 23, 14, 4, 0, 0, time.UTC)
+	for _, late := range []time.Duration{0, time.Hour} {
+		var tries []int
+		for last := first; ; {
+			tries = append(tries, int(last.Sub(first)/time.Hour))
+			next, until := telemetryNext(first, last)
+			if until != first.Add(90*24*time.Hour) {
+				t.Fatalf("it ends %v after the first try, want 90 days", until.Sub(first))
+			}
+			if next.After(until) {
+				break
+			}
+			if wait := next.Sub(last); wait < time.Hour || wait > 7*24*time.Hour {
+				t.Fatalf("a wait of %v after the try at hour %d", wait, tries[len(tries)-1])
+			}
+			last = next.Add(late)
+		}
+		if late == 0 && !slices.Equal(tries, firstTries) {
+			t.Errorf("tries at hours %v, want %v", tries, firstTries)
+		}
+		if len(tries) > 20 {
+			t.Errorf("%d tries with each %v late, want at most 20", len(tries), late)
+		}
+	}
+}
+
+// A server that never reaches the collector tries for 90 days, then goes quiet by itself until an admin turns it on:
+// looked at again right after each look, as a restart or a second replica does, it makes exactly its 20 tries.
+func TestTelemetryTriesForNinetyDaysThenGoesQuiet(t *testing.T) {
+	base, c := telemetryFixture(t)
+	a, pool := appOf(t, base), poolOf(t, base)
+	a.telemetry.url = unreached(t)
+	// Looked at within an hour of each try, where a look could try early or late, and once a day between.
+	near := func(hour int) bool {
+		return hour%24 == 0 || slices.ContainsFunc(firstTries, func(try int) bool { return hour >= try-1 && hour <= try+1 })
+	}
+	var tries []int
+	for hour := range 91 * 24 {
+		if clockOn(t, pool, time.Hour); !near(hour) {
+			continue
+		}
+		for look := range 2 {
+			sent, err := a.sendTelemetry(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sent && look == 0 {
+				tries = append(tries, hour)
+			} else if sent {
+				t.Fatalf("a second look at hour %d tried again", hour)
+			}
+		}
+		if off, _ := telemetryOffAnd(t, pool); off != map[bool]string{false: "", true: "unreachable"}[hour >= firstTries[len(firstTries)-1]] {
+			t.Fatalf("at hour %d, off_because %q", hour, off)
+		}
+	}
+	if !slices.Equal(tries, firstTries) {
+		t.Errorf("tries at hours %v, want %v", tries, firstTries)
+	}
+	// An admin turning it on starts the same tries afresh; on while it is on already starts nothing.
+	for range 2 {
+		if code, body, _ := do(t, c, http.MethodPut, base+"/api/v1/telemetry", `{"enabled":true}`); code != 200 || body["enabled"] != true {
+			t.Fatalf("turning it on: %d %s", code, lastBody)
+		}
+	}
+	tries = nil
+	for hour := range 8 {
+		if sent, err := a.sendTelemetry(t.Context()); err != nil {
+			t.Fatal(err)
+		} else if sent {
+			tries = append(tries, hour)
+		}
+		if code, _, _ := do(t, c, http.MethodPut, base+"/api/v1/telemetry", `{"enabled":true}`); code != 200 {
+			t.Fatalf("turning it on while it tries: %d %s", code, lastBody)
+		}
+		if sent, _ := a.sendTelemetry(t.Context()); sent {
+			t.Fatalf("at hour %d, turning on what is on tried again", hour)
+		}
+		clockOn(t, pool, time.Hour)
+	}
+	if !slices.Equal(tries, []int{0, 1, 3, 7}) {
+		t.Errorf("after an admin turned it on, tries at hours %v, want 0, 1, 3, 7", tries)
+	}
+}
+
+// While no report has reached the collector, the state says when it tries next and when it gives up; a first report
+// that reaches it, whenever it comes, ends the tries: it counts from the first try, and it is daily from then on, where
+// a later failure turns nothing off.
+func TestTelemetryOutlivesASlowFirstBoot(t *testing.T) {
+	base, c := telemetryFixture(t)
+	a, pool := appOf(t, base), poolOf(t, base)
+	a.telemetry.url = unreached(t)
+	for _, wait := range []time.Duration{0, time.Hour, 2 * time.Hour} {
+		clockOn(t, pool, wait)
+		if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil {
+			t.Fatalf("a try %v after the one before: %v %v", wait, sent, err)
+		}
+	}
+	read := func() map[string]any {
+		t.Helper()
+		code, body, _ := do(t, c, http.MethodGet, base+"/api/v1/telemetry", "")
+		if code != 200 {
+			t.Fatalf("GET /telemetry: %d %s", code, lastBody)
+		}
+		if err := contractSchema(t, "telemetry.schema.json#/definitions/state").Validate(body); err != nil {
+			t.Errorf("the state is not the schema's: %v\n%s", err, lastBody)
+		}
+		return body
+	}
+	body := read()
+	next, err := time.Parse(time.RFC3339, fmt.Sprint(body["next_try_at"]))
+	until, err2 := time.Parse(time.RFC3339, fmt.Sprint(body["gives_up_at"]))
+	if err != nil || err2 != nil || body["enabled"] != true || time.Until(next).Round(time.Minute) != 4*time.Hour || time.Until(until).Round(time.Minute) != 90*24*time.Hour-3*time.Hour {
+		t.Errorf("after the third try, at hour 3: next try %v, gives up %v, enabled %v; want in 4 hours, 90 days from the first, on", body["next_try_at"], body["gives_up_at"], body["enabled"])
+	}
+	got := &collector{}
+	srv := httptest.NewServer(got)
+	a.telemetry.url = srv.URL
+	clockOn(t, pool, 4*time.Hour)
+	if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil || got.posts != 1 {
+		t.Fatalf("the try at hour 7: %v %v, %d reports reached the collector", sent, err, got.posts)
+	}
+	var report struct {
+		PeriodHours int `json:"period_hours"`
+	}
+	if err := json.Unmarshal(got.body, &report); err != nil || report.PeriodHours != 7 {
+		t.Errorf("the first report's period_hours %d (%v), want 7, from the first try", report.PeriodHours, err)
+	}
+	if body := read(); strings.Contains(lastBody, "next_try_at") || strings.Contains(lastBody, "gives_up_at") || body["last_sent_at"] == nil { // absent, never null
+		t.Errorf("after it reached the collector: %s", lastBody)
+	}
+	srv.Close()
+	for day := range 3 {
+		clockOn(t, pool, time.Hour)
+		if sent, _ := a.sendTelemetry(t.Context()); sent {
+			t.Fatalf("an hour after day %d's send it sent again", day)
+		}
+		clockOn(t, pool, 23*time.Hour)
+		if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil {
+			t.Fatalf("day %d's send: %v %v", day+1, sent, err)
+		}
+		if off, tried := telemetryOffAnd(t, pool); off != "" || tried {
+			t.Fatalf("day %d's failure: off_because %q, trying again %v", day+1, off, tried)
+		}
+	}
+}
+
+// Replicas that look at once make one try between them, the first and a later one alike.
+func TestTelemetryIsTriedByOneReplica(t *testing.T) {
+	base, _ := telemetryFixture(t)
+	a, pool := appOf(t, base), poolOf(t, base)
+	a.telemetry.url = unreached(t)
+	for _, wait := range []time.Duration{0, time.Hour, 2 * time.Hour} {
+		clockOn(t, pool, wait)
+		var tries atomic.Int32
+		var replicas sync.WaitGroup
+		for range 6 {
+			replicas.Go(func() {
+				if sent, err := a.sendTelemetry(t.Context()); err != nil {
+					t.Error(err)
+				} else if sent {
+					tries.Add(1)
+				}
+			})
+		}
+		if replicas.Wait(); tries.Load() != 1 {
+			t.Errorf("%v on, six replicas made %d tries, want 1", wait, tries.Load())
+		}
+	}
+}
+
+// A server that stopped mid-try never tries sooner for it, and one started after the 90 days turns it off and tries
+// nothing. A row off as unreachable, as an earlier release left it, stays off.
+func TestTelemetryKeepsTheScheduleAcrossRestarts(t *testing.T) {
+	base, c := telemetryFixture(t)
+	a, pool := appOf(t, base), poolOf(t, base)
+	got := &collector{}
+	srv := httptest.NewServer(got)
+	defer srv.Close()
+	a.telemetry.url = srv.URL
+	row := func(sql string) {
+		t.Helper()
+		if _, err := pool.Exec(t.Context(), sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, _, err := telemetryRow(t.Context(), pool); err != nil {
+		t.Fatal(err)
+	}
+	row("UPDATE telemetry SET claimed_at = now(), tried_since = now() - interval '3 hours'") // claimed at hour 3, and stopped before the POST
+	for _, wait := range []time.Duration{0, time.Minute, 3*time.Hour + 58*time.Minute} {
+		clockOn(t, pool, wait)
+		if sent, err := a.sendTelemetry(t.Context()); sent || err != nil {
+			t.Fatalf("started %v on, under its 4-hour wait, it tried: %v", wait, err)
+		}
+	}
+	row("UPDATE telemetry SET claimed_at = now() - interval '91 days', tried_since = now() - interval '91 days'")
+	if sent, err := a.sendTelemetry(t.Context()); sent || err != nil {
+		t.Fatalf("started after the 90 days, it tried: %v", err)
+	}
+	if off, _ := telemetryOffAnd(t, pool); off != "unreachable" {
+		t.Errorf("started after the 90 days: off_because %q", off)
+	}
+	row("UPDATE telemetry SET off_because = 'admin', claimed_at = now() - interval '100 days', tried_since = now() - interval '100 days'") // an admin's off, during the tries
+	if sent, _ := a.sendTelemetry(t.Context()); sent {
+		t.Error("an admin's off was tried")
+	}
+	if off, _ := telemetryOffAnd(t, pool); off != "admin" {
+		t.Errorf("100 days after an admin turned it off as it tried: off_because %q", off)
+	}
+	row("UPDATE telemetry SET off_because = 'unreachable', claimed_at = now() - interval '200 days', tried_since = NULL, sent_at = NULL") // as v0.11.0 left it
+	if sent, err := a.sendTelemetry(t.Context()); sent || err != nil || got.posts != 0 {
+		t.Errorf("a row off as unreachable: sent %v %v, %d posts", sent, err, got.posts)
+	}
+	// Rolled back to v0.11.0 as it tried, which sends daily and knows no tried_since, then upgraded: it has reported, so
+	// it is daily and no 90 days end it.
+	row("UPDATE telemetry SET off_because = NULL, claimed_at = now() - interval '24 hours', tried_since = now() - interval '91 days', sent_at = now() - interval '24 hours'")
+	if code, _, _ := do(t, c, http.MethodGet, base+"/api/v1/telemetry", ""); code != 200 || strings.Contains(lastBody, "next_try_at") {
+		t.Errorf("a row that has reported since its tries reads as trying: %d %s", code, lastBody)
+	}
+	if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil || got.posts != 1 {
+		t.Errorf("a row that has reported since its tries: sent %v %v, %d posts", sent, err, got.posts)
+	}
+	if off, tried := telemetryOffAnd(t, pool); off != "" || tried {
+		t.Errorf("a row that has reported since its tries, after a send: off_because %q, trying again %v", off, tried)
+	}
+}
+
+// A look may come half a minute short of a wait, so a tick a moment early skips no hour, and no more.
+func TestTelemetryLooksToTheHalfMinute(t *testing.T) {
+	base, _ := telemetryFixture(t)
+	a, pool := appOf(t, base), poolOf(t, base)
+	a.telemetry.url = unreached(t)
+	for _, c := range []struct {
+		wait time.Duration
+		due  bool
+	}{{0, true}, {59 * time.Minute, false}, {40 * time.Second, true}} { // an hour less 20 seconds, at the last
+		clockOn(t, pool, c.wait)
+		if sent, err := a.sendTelemetry(t.Context()); sent != c.due || err != nil {
+			t.Errorf("%v on: tried %v %v, want %v", c.wait, sent, err, c.due)
+		}
+	}
+}
+
+// What changes the row while the last try is on its way stands: a try that reaches the collector is on whatever another
+// replica gave up on meanwhile, and a failed one turns off neither an admin's off nor the tries an admin started afresh.
+func TestTelemetryKeepsWhatChangesDuringItsLastTry(t *testing.T) {
+	for name, c := range map[string]struct {
+		during string // what changes meanwhile; "" is another replica's look
+		status int
+		off    string
+	}{
+		"another replica gave up, and it reached": {"", http.StatusNoContent, ""},
+		"it failed":                           {"UPDATE telemetry SET instance_id = instance_id", http.StatusBadGateway, "unreachable"},
+		"an admin turned it off":              {"UPDATE telemetry SET off_because = 'admin'", http.StatusBadGateway, "admin"},
+		"an admin turned it off, and it sent": {"UPDATE telemetry SET off_because = 'admin'", http.StatusNoContent, "admin"},
+		"an admin started it afresh":          {"UPDATE telemetry SET claimed_at = NULL, tried_since = NULL", http.StatusBadGateway, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			base, _ := telemetryFixture(t)
+			a, pool := appOf(t, base), poolOf(t, base)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if c.during == "" {
+					if sent, err := a.sendTelemetry(context.Background()); sent || err != nil {
+						t.Errorf("the other replica's look: sent %v %v", sent, err)
+					}
+				} else if _, err := pool.Exec(context.Background(), c.during); err != nil {
+					t.Error(err)
+				}
+				w.WriteHeader(c.status)
+			}))
+			defer srv.Close()
+			a.telemetry.url = srv.URL
+			if _, _, _, _, err := telemetryRow(t.Context(), pool); err != nil {
+				t.Fatal(err)
+			}
+			// the last try is due: at hour 2103, its 168 hours since the one at 1935 over
+			if _, err := pool.Exec(t.Context(), "UPDATE telemetry SET tried_since = now() - interval '2103 hours', claimed_at = now() - interval '168 hours'"); err != nil {
+				t.Fatal(err)
+			}
+			if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil {
+				t.Fatalf("the last try: %v %v", sent, err)
+			}
+			if off, _ := telemetryOffAnd(t, pool); off != c.off {
+				t.Errorf("after it: off_because %q, want %q", off, c.off)
+			}
+		})
 	}
 }
 
 // Only a 2xx from the collector is a send that reached it: a proxy between the server and an unresolvable collector
-// answers 502 itself, and that first send is unreachable like a refused dial, never a report marked sent.
+// answers 502 itself, a failed try like a refused dial, tried again an hour later, never a report marked sent.
 func TestTelemetryCountsOnlyTheCollectorsYes(t *testing.T) {
 	base, _ := telemetryFixture(t)
 	a := appOf(t, base)
@@ -444,9 +958,16 @@ func TestTelemetryCountsOnlyTheCollectorsYes(t *testing.T) {
 	if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil {
 		t.Fatalf("the first send: %v %v", sent, err)
 	}
+	if sent, _ := a.sendTelemetry(t.Context()); sent {
+		t.Error("it tried again at once")
+	}
+	clockOn(t, poolOf(t, base), time.Hour)
+	if sent, err := a.sendTelemetry(t.Context()); !sent || err != nil {
+		t.Fatalf("the try an hour later: %v %v", sent, err)
+	}
 	var off string
-	var sent bool
-	if err := poolOf(t, base).QueryRow(t.Context(), "SELECT coalesce(off_because, ''), sent_at IS NOT NULL OR last_report IS NOT NULL FROM telemetry").Scan(&off, &sent); err != nil || off != "unreachable" || sent {
-		t.Errorf("a 502 first send: off_because %q, marked sent %v, %v", off, sent, err)
+	var sent, tried bool
+	if err := poolOf(t, base).QueryRow(t.Context(), "SELECT coalesce(off_because, ''), sent_at IS NOT NULL OR last_report IS NOT NULL, tried_since IS NOT NULL FROM telemetry").Scan(&off, &sent, &tried); err != nil || off != "" || sent || !tried {
+		t.Errorf("two 502s: off_because %q, marked sent %v, trying again %v, %v", off, sent, tried, err)
 	}
 }

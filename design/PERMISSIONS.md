@@ -58,7 +58,10 @@ Everyone else holds, per app, one **level**:
   and whose detail names the author. An approval within 10 minutes of its expiry no longer clears a
   deploy or a promotion, which judges it as it starts the container (`runs.ShipMargin`), though every
   read shows it until it expires. An approval stands when its approver later loses the role: a
-  demotion revokes none, and an admin who wants one gone files the finding's fix, or lets it expire.
+  demotion revokes none. One ends at its date, and the finding's fix doesn't end it: the same finding
+  back before then is covered again (corrected 2026-11-23, #145: it said a fix ends one). Turning sign-in
+  on voids those filed with it off. Another
+  approval of the finding, by someone who may approve it, replaces its date.
   A known-vulnerable package only the built app holds — what `deps.known-vuln` counts in the image before
   production, in no run's findings (design/PATCHING.md §3.6) — is approved as a blocking finding of the run
   the receipt is read for: by the same people, under the same rules, through the dependency's approve
@@ -524,7 +527,7 @@ else, an owner of every app included, who sees nothing of it. Reading the report
 CLI (`canyon telemetry show`, `canyon telemetry off`) or the dashboard alike. Turning it on starts the sends again,
 so it is a person's, in the dashboard, like every widening (decided 2026-11-12, #2807): on a host with
 sign-in, `403 dashboard_required` from any session but a browser's, and `403 person_required` to an agent. The
-server's environment (`CANYON_TELEMETRY=0`, `DO_NOT_TRACK=1`, `CI`) turns it off whatever an admin sets, and no
+server's environment (`CANYON_TELEMETRY`, `DO_NOT_TRACK`, `CI`; contracts/routes.md, *Telemetry*) turns it off whatever an admin sets, and no
 route turns it back on.
 
 ## MCP — what an agent's client may do

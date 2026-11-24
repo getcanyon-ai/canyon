@@ -9,8 +9,8 @@ description: "A promotion to production comes from a person's sign-in, or from a
 ## What it finds
 
 Who is promoting. When you run `canyon deploy --env prod`, the rule passes when the request comes
-from a person's sign-in, rather than from an automated caller. A coding agent using your CLI
-sign-in counts as you. On a Canyon without sign-in, as
+from a person's sign-in, rather than from an automated caller. A coding agent signed in as
+you counts as you. On a Canyon without sign-in, as
 in the laptop demo, every request counts as a person, so the rule always passes. Its line in the
 go-live checks says what that covers:
 

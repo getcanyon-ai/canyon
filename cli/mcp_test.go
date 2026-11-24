@@ -109,6 +109,12 @@ func mcpSession(t *testing.T, host string) (*mcp.ClientSession, map[string]strin
 // against host on clk.
 func mcpConnect(t *testing.T, host string, clk clock, opts *mcp.ClientOptions) (*mcp.ClientSession, map[string]string) {
 	t.Helper()
+	return mcpConnectOver(t, host, clk, opts, io.Discard)
+}
+
+// mcpConnectOver is mcpConnect with what the client sends and reads on the connection logged to wire.
+func mcpConnectOver(t *testing.T, host string, clk clock, opts *mcp.ClientOptions, wire io.Writer) (*mcp.ClientSession, map[string]string) {
+	t.Helper()
 	env := map[string]string{"CANYON_HOST": host, "XDG_CONFIG_HOME": t.TempDir(), "CANYON_ASCII": "1"}
 	a := &app{out: io.Discard, err: io.Discard, in: strings.NewReader(""), getenv: func(k string) string { return env[k] }, clock: clk}
 	ctx := context.Background()
@@ -116,7 +122,7 @@ func mcpConnect(t *testing.T, host string, clk clock, opts *mcp.ClientOptions) (
 	if _, err := a.mcpServer(ctx).Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, opts).Connect(ctx, ct, nil)
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, opts).Connect(ctx, &mcp.LoggingTransport{Transport: ct, Writer: wire}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +328,7 @@ func sameJSON(a, b []byte) bool {
 }
 
 // checkIn is a check's or a deploy's stub host, and the client of a server run in projectDir against it.
-func checkIn(t *testing.T, h *gateHost, opts *mcp.ClientOptions) (*mcp.ClientSession, string) {
+func checkIn(t *testing.T, h *gateHost, wire io.Writer) (*mcp.ClientSession, string) {
 	t.Helper()
 	if h.start.code == 0 {
 		h.start = reply{http.StatusAccepted, `{"run":{"id":"gr_8f2a","state":"pending"}}`}
@@ -333,8 +339,37 @@ func checkIn(t *testing.T, h *gateHost, opts *mcp.ClientOptions) (*mcp.ClientSes
 	server := httptest.NewServer(h)
 	t.Cleanup(server.Close)
 	t.Chdir(projectDir(t))
-	cs, _ := mcpConnect(t, server.URL, wallClock, opts)
+	cs, _ := mcpConnectOver(t, server.URL, wallClock, nil, wire)
 	return cs, server.URL
+}
+
+// progressed is the message of each progress notification the client read before the last answer it read. It is the
+// connection's order: the go-sdk's client hands a notification to its handler on a goroutine of its own, and the call
+// it belongs to can answer first (#101).
+func progressed(t *testing.T, wire *bytes.Buffer) []string {
+	t.Helper()
+	var told, before []string
+	for line := range strings.Lines(wire.String()) {
+		read, ok := strings.CutPrefix(line, "read: ")
+		if !ok {
+			continue
+		}
+		var msg struct {
+			Method string
+			Params struct{ Message string }
+			Result json.RawMessage
+		}
+		if err := json.Unmarshal([]byte(read), &msg); err != nil {
+			t.Fatalf("%q: %v", read, err)
+		}
+		if msg.Method == "notifications/progress" {
+			told = append(told, msg.Params.Message)
+		}
+		if msg.Result != nil {
+			before = told
+		}
+	}
+	return before
 }
 
 // canyon_check is canyon check --format ai as text, NEXT STEPS and all. A blocked review is a verdict, not a failed call.
@@ -345,7 +380,7 @@ func TestMCPCheckIsCanyonChecksVerdict(t *testing.T) {
 		t.Fatalf("canyon check exited %d", code)
 	}
 	h := &gateHost{run: aRun("blocked", 1, 1, blocker, advisory), sarif: sarif}
-	cs, host := checkIn(t, h, nil)
+	cs, host := checkIn(t, h, io.Discard)
 	res, text := callTool(t, cs, mcptools.Check, nil)
 	text = strings.NewReplacer(host, "http://localhost:7777", strings.TrimPrefix(host, "http://"), "localhost:7777").Replace(text)
 	if res.IsError || text != strings.TrimSpace(want) || !strings.Contains(text, "NEXT STEPS") {
@@ -359,19 +394,13 @@ func TestMCPCheckIsCanyonChecksVerdict(t *testing.T) {
 }
 
 // A deploy that went live carries its url, what the app answered and who can open it; each progress row is a
-// progress notification to a client that asked for them.
+// progress notification, sent before the answer, to a client that asked for them.
 func TestMCPDeployCarriesTheURLAndTheRunsProgress(t *testing.T) {
-	var mu sync.Mutex
-	var told []string
-	opts := &mcp.ClientOptions{ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
-		mu.Lock()
-		defer mu.Unlock()
-		told = append(told, req.Params.Message)
-	}}
+	var wire bytes.Buffer
 	page := strings.Replace(buildPage(t, []string{"building"}, true, "private · you are an owner"), `"rows":[`,
 		`"rows":[{"id":1,"ts":"2026-09-02T09:31:04Z","kind":"progress","data":{"step":"scan","tool":"trivy","status":"running"}},`, 1)
 	h := &gateHost{run: aRun("clean", 0, 0), sarif: string(contracts.GoldenLog), page: page}
-	cs, _ := checkIn(t, h, opts)
+	cs, _ := checkIn(t, h, &wire)
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: mcptools.Deploy, Meta: mcp.Meta{"progressToken": "p1"}})
 	if err != nil {
 		t.Fatal(err)
@@ -380,9 +409,7 @@ func TestMCPDeployCarriesTheURLAndTheRunsProgress(t *testing.T) {
 	if res.IsError || !strings.Contains(text, liveURL) || !strings.Contains(text, "you are an owner") {
 		t.Errorf("isError %v, text:\n%s", res.IsError, text)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if !slices.Contains(told, "scan trivy: running") {
+	if told := progressed(t, &wire); !slices.Contains(told, "scan trivy: running") {
 		t.Errorf("progress %q", told)
 	}
 }
@@ -465,7 +492,7 @@ func TestMCPPromoteAsksThePersonFirst(t *testing.T) {
 // it, is refused before anything is read or sent, so canyon_deploy can't package a home directory.
 func TestMCPDirStaysInsideTheServersDirectory(t *testing.T) {
 	h := &gateHost{run: aRun("clean", 0, 0), sarif: string(contracts.GoldenLog)}
-	cs, _ := checkIn(t, h, nil)
+	cs, _ := checkIn(t, h, io.Discard)
 	before := len(h.asked) // the instructions' manifest read
 	outside := t.TempDir()
 	writeFile(t, filepath.Join(outside, projectFile), "app = \"claims-portal\"\n")
@@ -519,17 +546,11 @@ func TestMCPPromoteAsksAgainWhenPreviewMoves(t *testing.T) {
 // What a host or an app wrote reaches the client as the terminal shows it: a control byte or an escape sequence in
 // a progress row, an access line or what the app answered is spelled out, never sent raw.
 func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
-	var mu sync.Mutex
-	var told []string
-	opts := &mcp.ClientOptions{ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
-		mu.Lock()
-		defer mu.Unlock()
-		told = append(told, req.Params.Message)
-	}}
+	var wire bytes.Buffer
 	page := strings.Replace(buildPage(t, []string{"building"}, true, "private\x1b[2J · you are an owner"), `"rows":[`,
 		`"rows":[{"id":1,"ts":"2026-09-02T09:31:04Z","kind":"progress","data":{"step":"scan","tool":"trivy\u001b]0;owned\u0007","status":"running"}},`, 1)
 	h := &gateHost{run: aRun("clean", 0, 0), sarif: string(contracts.GoldenLog), page: page}
-	cs, _ := checkIn(t, h, opts)
+	cs, _ := checkIn(t, h, &wire)
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: mcptools.Deploy, Meta: mcp.Meta{"progressToken": "p1"}})
 	if err != nil {
 		t.Fatal(err)
@@ -537,9 +558,7 @@ func TestMCPHandsOnNoControlByteRaw(t *testing.T) {
 	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "you are an owner") || strings.ContainsAny(text, "\x1b\x07") {
 		t.Errorf("text %q", text)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(told) != 1 || strings.ContainsAny(told[0], "\x1b\x07") || !strings.Contains(told[0], `trivy\x1b]0;owned\x07`) {
+	if told := progressed(t, &wire); len(told) != 1 || strings.ContainsAny(told[0], "\x1b\x07") || !strings.Contains(told[0], `trivy\x1b]0;owned\x07`) {
 		t.Errorf("progress %q", told)
 	}
 }
@@ -614,7 +633,7 @@ func TestMCPAClientThatPrefersStructuredContentReadsTheNextSteps(t *testing.T) {
 	h := &mcpHost{}
 	served := h.serve(t) // before the directory moves
 	sarif := string(contracts.GoldenLog)
-	cs, _ := checkIn(t, &gateHost{run: aRun("blocked", 1, 1, blocker, advisory), sarif: sarif}, nil)
+	cs, _ := checkIn(t, &gateHost{run: aRun("blocked", 1, 1, blocker, advisory), sarif: sarif}, io.Discard)
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: mcptools.Check})
 	if err != nil {
 		t.Fatal(err)

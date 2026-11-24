@@ -63,6 +63,42 @@ const DESIGN = golden.policies.policies.find((one) => one.id === "design.org-sys
 const prefs = (designSystem: unknown) => ({ [`GET /api/v1/preferences`]: { body: { design_system: designSystem } } });
 
 describe("Policies", () => {
+  // "Affects today" is drawn once a rule's preview keeps an app out (#118): a column that says no app is affected on
+  // every row is noise; one rule that does brings it back, with its apps.
+  it("shows Affects today only once a rule keeps an app out", async () => {
+    const nothing = Object.fromEntries(golden.policies.policies.map((one) => [`PUT ${POLICIES}/${one.id}`, { body: { would_block: [] } }]));
+    const sent = server({ ...routes, ...nothing });
+    render(<Policies />);
+    await screen.findByRole("region", { name: rule.name });
+    await waitFor(() => expect(sent().filter((one) => one.startsWith("PUT")).length).toBeGreaterThan(0));
+    await new Promise((done) => setTimeout(done, 50)); // every preview answered
+    expect(screen.queryByText("Affects today")).toBeNull();
+    expect(screen.queryByText("No app is affected today.")).toBeNull();
+    // The header and every row keep one grid, so the dials hold their place and line up with the rows below them. Its class
+    // is written out in the source: Tailwind makes no rule for a class put together at run time (#118).
+    const grid = (one: Element) => [...one.classList].find((name) => name.startsWith("grid-cols-"));
+    const table = screen.getByText("Policy").parentElement!;
+    const rows = [table, ...document.querySelectorAll('section[id^="rule-"]'), screen.getByRole("region", { name: "Files Canyon can't read" })];
+    expect(rows.length).toBeGreaterThan(3);
+    expect(new Set(rows.map(grid)).size).toBe(1);
+    expect(readFileSync(join(import.meta.dirname, "Policies.tsx"), "utf8")).toContain(`${grid(table)} `);
+    cleanup();
+    server(routes);
+    render(<Policies />);
+    expect(await screen.findByText("Affects today")).toBeDefined();
+  });
+
+  // Asking for one change moves no other row (#118): only a row with something to say, its own change, an app or a failed
+  // preview, draws its line. One "No app is affected today." on every row pushed the tapped control down a phone's screen.
+  it("says what a change affects on its own row alone", async () => {
+    const nothing = Object.fromEntries(golden.policies.policies.map((one) => [`PUT ${POLICIES}/${one.id}`, { body: { would_block: [] } }]));
+    server({ ...routes, ...nothing });
+    render(<Policies />);
+    await choose(rule.name, golden.preview.request.state);
+    expect(await row().findByText("No app is affected today.")).toBeDefined();
+    expect(screen.getAllByText("No app is affected today.")).toHaveLength(1);
+  });
+
   // The buildpacks "Approved stacks only" accepts are set on its own row (#99), each by its builder's name or else its
   // id, ticked when accepted, and saved as it is ticked, sorted by id.
   it("the Approved stacks only row sets the buildpacks it accepts", async () => {
@@ -201,7 +237,7 @@ describe("Policies", () => {
     server({ ...routes, [`PUT ${POLICIES}/${loose.id}`]: { body: { would_block: [] } } });
     render(<Policies />);
     await choose(loose.name, "off");
-    expect(await row(loose.name).findByText("No app is affected today.")).toBeDefined();
+    expect(await row(loose.name).findByText("Canyon doesn't check which apps this lets through.")).toBeDefined();
     expect(bar().getByText("Apps with these findings will be able to reach production.")).toBeDefined();
     expect(bar().queryByRole("button", { name: /tightening/ })).toBeNull();
   });
@@ -212,7 +248,7 @@ describe("Policies", () => {
     await change();
     await choose(loose.name, "off");
     expect(bar().getByText("2 changes:")).toBeDefined();
-    await row(loose.name).findByText("No app is affected today.");
+    await row(loose.name).findByText("Canyon doesn't check which apps this lets through.");
     fireEvent.click(bar().getByRole("button", { name: "Save" }));
     await waitFor(() => expect(applied(sent)).toEqual([
       `PUT ${RULE}?apply=true ${JSON.stringify(golden.apply.request)}`,

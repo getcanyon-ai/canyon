@@ -15,6 +15,10 @@ export const plainName = (producer: string) => PLAIN[producer] ?? (producer.star
 const FIELD = "rounded-lg border border-border bg-surface px-2.5 py-1.5 text-base";
 const LABEL = "mb-1 text-md font-medium text-text-dim"; // sentence case, as every form's label (#102)
 const day = (from: number) => new Date(Date.now() + from * 86_400_000).toISOString().slice(0, 10);
+// An approval ends with the day picked, UTC, as every screen says its date; the server takes one at most 90 days ahead
+// (contracts/routes.md, the approve row), so the last day whose end it takes at any time of day is the 89th.
+const LAST = 89;
+const onDay = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export type ApproveBody = { reason: string; expires_at: string };
 // One dependency's blocking findings, approved together (design/specs/screens.md, The approval).
@@ -32,13 +36,14 @@ export function ApproveForm({ id: of, group, org, secret = false, send, close }:
     if (sending.current) return;
     sending.current = true;
     try {
-      await send({ reason: reason.trim(), expires_at: `${expires}T00:00:00Z` });
+      await send({ reason: reason.trim(), expires_at: `${expires}T23:59:59Z` });
     } catch (err) {
       setFailure(said(err));
     }
     sending.current = false;
   };
   const id = `${group === undefined ? "" : "all-"}${of}`;
+  const outside = expires < day(1) || expires > day(LAST); // ISO dates, so their order is the calendar's
   const approve = group === undefined ? "Approve" : `Approve all ${group.titles.length}`;
   return (
     <div className="mt-3 flex w-full flex-col gap-1.5">
@@ -51,14 +56,17 @@ export function ApproveForm({ id: of, group, org, secret = false, send, close }:
       <label className={LABEL} htmlFor={`reason-${id}`}>Reason</label>
       <textarea id={`reason-${id}`} className={FIELD} maxLength={1024} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
       <label className={LABEL} htmlFor={`expires-${id}`}>Approval expires</label>
-      <input id={`expires-${id}`} className={FIELD} type="date" min={day(1)} max={day(90)} value={expires} onChange={(event) => setExpires(event.target.value)} />
+      <input id={`expires-${id}`} className={FIELD} type="date" min={day(1)} max={day(LAST)} value={expires} onChange={(event) => setExpires(event.target.value)} />
+      {expires !== "" && (outside
+        ? <p role="alert" className="text-md text-critical">{S.approveDates.replace("<first>", onDay(day(1))).replace("<last>", onDay(day(LAST)))}</p>
+        : <p className="text-md text-text-dim">{(group === undefined ? S.approveCovers : S.approveCoversAll).replace("<date>", onDay(expires))}</p>)}
       <p className="text-md text-text-dim">{`After that date the ${group === undefined ? "problem comes" : "problems come"} back in the checklist.`}</p>
       <p className="text-md text-text-dim">{`Attributed to you · in the audit, visible to every ${org} admin`}</p>
       {failure !== null && <p className="text-base text-critical">{failure}</p>}
       {secret && <p className="text-md text-amber">{S.approveSecret}</p>}
       <span className="mt-1 flex flex-wrap items-start gap-2">
         {reason.trim() === "" ? <Button disabled reason="Needs a reason">{approve}</Button>
-          : expires === "" ? <Button disabled reason="Needs an expiry date">{approve}</Button>
+          : expires === "" || outside ? <Button disabled reason="Needs an expiry date">{approve}</Button>
           : <Button variant="primary" onClick={() => void submit()}>{approve}</Button>}
         <Button variant="ghost" onClick={close}>Cancel</Button>
       </span>
@@ -187,10 +195,10 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         {approval !== undefined
           ? <Chip tone="approved">{`approved by ${actorName(approval.approved_by)} until ${shortDate(approval.expires_at)}`}</Chip>
           : unread ? <Chip tone="blocks">couldn't finish</Chip>
-          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.stopsProduction}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
+          : blocks ? <Chip tone="blocks">blocks</Chip> : atProduction ? <Chip tone="blocks">{S.blocksLive}</Chip> : <Chip tone="advisory">{S.doesntBlock}</Chip>}
         {!unread && <Chip tone={severity}>{capital(severity)}</Chip>}
         {carried_from !== undefined && <Chip tone="advisory">{CARRIED}</Chip>}
-        <span className="text-lg font-semibold">{heading}</span>
+        <span className="text-lg font-semibold wrap-anywhere">{heading}</span>
       </div>
       {/* the short chip, the sentence under it: a chip that can't wrap stretched a phone's page (#102) */}
       {approval === undefined && !unread && !blocks && atProduction && <p className="mt-1.5 text-md text-text-dim">{S.blocksAtProduction}</p>}
@@ -200,7 +208,7 @@ export function Finding({ finding, also = [], app, approve, atProduction = false
         : finding.tool !== undefined && <p className="mt-1.5 text-base text-text-dim">{`Found by ${plainName(finding.tool)}`}</p>}
       {!unread && (
         <>
-          <p className="mt-1.5 font-mono text-sm text-text-faint">{artifactLocation.uri}:{region.startLine}</p>
+          <p className="mt-1.5 font-mono text-sm wrap-anywhere text-text-faint">{artifactLocation.uri}:{region.startLine}</p>
           <pre className="mt-1.5 overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm">
             {(pointed ? [line, `${" ".repeat(caret)}^`, ...rest] : [line, ...rest]).join("\n")}
           </pre>

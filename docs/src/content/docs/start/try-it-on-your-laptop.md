@@ -295,7 +295,7 @@ app. Most Node, Python, Go and Ruby apps need nothing more. To put it in product
 ```text
   canyon <version> · cheery-fox-gbz preview → prod · localhost:7777
 
-  Promoting 2b3d3b (passed review) from preview to production. Nothing runs in production yet.
+  Promoting 2b3d3b (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
 
   Promote

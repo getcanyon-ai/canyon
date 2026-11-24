@@ -56,14 +56,14 @@ export function DependencyCard({ findings, app, approve, approveAll, atProductio
   return (
     <article aria-label={head} className="mt-2.5 min-w-0 rounded-xl border border-border bg-surface px-3.5 py-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.stopsProduction : S.doesntBlock}</Chip>
+        {!blocks ? <Chip tone={atProduction ? "blocks" : "advisory"}>{atProduction ? S.blocksLive : S.doesntBlock}</Chip>
           : open ? <Chip tone="blocks">blocks</Chip> : <Chip tone="approved">approved</Chip>}
         <Chip tone={severity}>{capital(severity)}</Chip>
         <span className="text-lg font-semibold">{head}</span>
       </div>
       {!blocks && atProduction && <p className="mt-1.5 text-md text-text-dim">{S.blocksAtProduction}</p>}
       {first.tool !== undefined && <p className="mt-1.5 text-base text-text-dim">{`Found by ${plainName(first.tool)}`}</p>}
-      {[...new Set(findings.map(fileOf))].map((file) => <p key={file} className="mt-1.5 font-mono text-sm text-text-faint">{where(findings.find((other) => fileOf(other) === file)!)}</p>)}
+      {[...new Set(findings.map(fileOf))].map((file) => <p key={file} className="mt-1.5 font-mono text-sm wrap-anywhere text-text-faint">{where(findings.find((other) => fileOf(other) === file)!)}</p>)}
       <ul className="mt-2.5 grid gap-2">
         {findings.map((other) => (
           <li key={other.partialFingerprints["canyon/v1"]} className="grid gap-0.5">

@@ -64,7 +64,7 @@ func TestEndToEndTheNodeBuilderChoosesWhatTheFullBuilderWould(t *testing.T) {
 		for _, bp := range res.Buildpacks {
 			ids = append(ids, bp.ID)
 		}
-		return strings.Join(ids, ","), strings.Contains(log.String(), "This app builds on Canyon's full build image")
+		return strings.Join(ids, ","), strings.Contains(log.String(), "This app needs Canyon's full build image")
 	}
 	for _, name := range slices.Sorted(func(yield func(string) bool) {
 		for k := range dirs {

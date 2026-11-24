@@ -93,6 +93,7 @@ images-release: ## push each of the ten images for one PLATFORM (linux/amd64) to
 	set -e; if [ "$(PUSH)" = true ]; then ref=$(REPO)/canyon-builder-node:$(VERSION)-$$(uname -m); \
 	  docker tag canyon-builder-node:release $$ref && docker push -q $$ref >/dev/null; \
 	  docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $$ref | grep -m1 "^$(REPO)/canyon-builder-node@" | cut -d@ -f2 > bin/images/canyon-builder-node; \
+	  [ -s bin/images/canyon-builder-node ] || { echo "$$ref was pushed but Docker names no digest for it in $(REPO)" >&2; exit 1; }; \
 	else docker image inspect --format '{{.Id}}' canyon-builder-node:release > bin/images/canyon-builder-node; fi # pack makes it in the daemon: the one image pushed by a tag
 
 images-load: ## build each of the ten images as images-release does, for this machine's platform, into the local Docker as canyon-load/<name>, and check what each carries: its licence label, LICENSE, NOTICE and THIRD_PARTY_NOTICES (this tree's) in Canyon's images, and ee/LICENSE (the Elastic License 2.0) in canyon-server, which links ee/, and Opengrep's licences and source pointer in canyon-opengrep; every image is checked, and every miss named, before it fails (CI's images job)

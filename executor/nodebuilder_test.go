@@ -179,7 +179,7 @@ func TestATreeTheNodeBuilderDetectsNothingInBuildsOnTheFullOne(t *testing.T) {
 	}
 	argv, _ := os.ReadFile(filepath.Join(dir, "pack-argv")) //nolint:gosec // test dir
 	if strings.Count(string(argv), "build\ncanyon/claims-portal:") != 2 || strings.Contains(out.String(), "node attempt") || !strings.Contains(out.String(), "full build") ||
-		!strings.Contains(out.String(), "This app builds on Canyon's full build image, which this Docker host doesn't have yet.") {
+		!strings.Contains(out.String(), "This app needs Canyon's full build image, which this Docker host doesn't have yet. Downloading it once: up to a 1.4 GB download, 3.3 GB on disk, about 7 minutes at 25 Mbit/s and longer on a slower line\n") {
 		t.Fatalf("pack argv %q\nlog %q", argv, out.String())
 	}
 }

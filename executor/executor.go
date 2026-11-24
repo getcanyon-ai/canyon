@@ -421,7 +421,10 @@ var builderImage = &scanImage{dockerfile: builderDockerfile, repo: "canyon-build
 	about: builderAbout, deadline: time.Hour}
 
 // builderAbout is what the log says of canyon-builder as its build starts.
-const builderAbout = ", Canyon's build image (once per Docker host, and again when a Canyon release changes it): up to a 1.4 GB download, 3.3 GB on disk, about 7 minutes at 25 Mbit/s and longer on a slower line"
+const builderAbout = ", Canyon's build image (once per Docker host, and again when a Canyon release changes it): " + builderSize
+
+// builderSize is canyon-builder's download, its size on disk and how long it takes.
+const builderSize = "up to a 1.4 GB download, 3.3 GB on disk, about 7 minutes at 25 Mbit/s and longer on a slower line"
 
 // sameStack refuses a builder on another stack than the run image's: pack 0.40.3 only warns on the
 // mismatch and builds onto the run image anyway (contracts/executor.md). A builder not on the daemon yet
@@ -644,7 +647,7 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 	case node:
 		builder, _, err = e.nodeBuilder(ctx)
 	case e.nodeOn() && !builderImage.on(ctx, e.docker()): // the first app on this host the Node builder doesn't build
-		_, _ = fmt.Fprintf(out, "This app builds on Canyon's full build image, which this Docker host doesn't have yet. Getting it once%s\n", builderAbout)
+		_, _ = fmt.Fprintf(out, "This app needs Canyon's full build image, which this Docker host doesn't have yet. Downloading it once: %s\n", builderSize)
 		fallthrough
 	default:
 		builder, err = e.builder(ctx)

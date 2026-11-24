@@ -118,9 +118,7 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: pack, the pinned release, checksum-verified, which makes canyon-builder-node
-        run: make pack-install
-        env:
-          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
+        run: make pack-install # no GH_TOKEN: this job's token carries packages: write, and pack's release is public
       - name: log in to ghcr.io with this job's own token
         if: env.REHEARSAL != 'true'
         env:

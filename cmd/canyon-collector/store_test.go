@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -139,30 +142,107 @@ func TestTheWeeklyNumbersFromAFixture(t *testing.T) {
 	}
 }
 
-// An instance counts once a UTC day: a report resent or replayed that day is dropped and the first kept, so the
-// week's sums count it once; the next day's is kept (#2808's review).
-func TestOneReportAnInstanceADay(t *testing.T) {
+// An instance's report is kept unless its last arrived under 20 hours ago: one resent or replayed is dropped and the
+// first kept, so the week's sums count it once (#2808's review). A sender's two, 23 hours apart, are both kept, on one
+// UTC day too; another instance's own is never dropped for them.
+func TestAnInstancesReportIsKeptAgainAfterTwentyHours(t *testing.T) {
 	s, ctx := stored(t)
 	first := with(golden(t), func(m map[string]any) { m["unsupported"] = map[string]int{"language_unrecognised": 2} })
 	again := with(golden(t), func(m map[string]any) { m["unsupported"] = map[string]int{"language_unrecognised": 5} })
-	for _, body := range [][]byte{first, again, first} {
-		if err := s.save(ctx, body); err != nil {
+	other := with(golden(t), func(m map[string]any) { m["instance_id"] = "11111111-1111-4111-8111-111111111111" })
+	for i, step := range []struct {
+		later time.Duration // since the step before
+		body  []byte
+		kept  bool
+	}{{0, first, true}, {0, again, false}, {0, first, false}, {0, other, true}, {19*time.Hour + 59*time.Minute, again, false}, {3*time.Hour + time.Minute, again, true}, {23 * time.Hour, first, true}, {time.Hour, first, false}} {
+		if _, err := s.pool.Exec(ctx, "UPDATE reports SET received_at = received_at - $1::interval", step.later); err != nil {
+			t.Fatal(err)
+		}
+		if kept, err := s.save(ctx, step.body); err != nil || kept != step.kept {
+			t.Fatalf("step %d: kept %v (%v), want %v", i, kept, err, step.kept)
+		}
+	}
+	// the first two 23 hours apart, as a UTC day's 00:30 and 23:30
+	if _, err := s.pool.Exec(ctx, `UPDATE reports SET received_at = '2026-06-01T00:30:00Z'::timestamptz + (n - 1) * interval '23 hours'
+		FROM (SELECT id, row_number() OVER (ORDER BY received_at) AS n FROM reports WHERE instance_id <> '11111111-1111-4111-8111-111111111111') o WHERE o.id = reports.id AND n <= 2`); err != nil {
+		t.Fatalf("two reports of one instance on one UTC day: %v", err)
+	}
+	var sum int
+	if err := s.pool.QueryRow(ctx, "SELECT sum((report->'unsupported'->>'language_unrecognised')::int) FROM reports WHERE day = '2026-06-01'").Scan(&sum); err != nil || sum != 7 {
+		t.Errorf("that day's sum over the two: %d %v, want 7", sum, err)
+	}
+	if n := countRows(t, ctx, s); n != 4 {
+		t.Errorf("%d reports kept, want 4", n)
+	}
+}
+
+// Reports of one instance that arrive at once keep one between them, whichever instance's.
+func TestReportsAtOnceKeepOne(t *testing.T) {
+	s, ctx := stored(t)
+	for n := range 10 {
+		body := with(golden(t), func(m map[string]any) { m["instance_id"] = fmt.Sprintf("1111111%d-1111-4111-8111-111111111111", n) })
+		var kept atomic.Int32
+		var senders sync.WaitGroup
+		start := make(chan struct{})
+		for range 4 {
+			senders.Go(func() {
+				<-start
+				if ok, err := s.save(ctx, body); err != nil {
+					t.Error(err)
+				} else if ok {
+					kept.Add(1)
+				}
+			})
+		}
+		close(start)
+		if senders.Wait(); kept.Load() != 1 || countRows(t, ctx, s) != n+1 {
+			t.Fatalf("four at once from instance %d: %d kept, %d stored, want 1 and %d", n, kept.Load(), countRows(t, ctx, s), n+1)
+		}
+	}
+}
+
+// The dropped table holds days, reasons and counts, nothing of a report or its sender; a later flush adds to its day's
+// row, and the rows past 13 months go as the reports do. A collector that had the unique index starts over it.
+func TestTheDroppedTableHoldsCountsAlone(t *testing.T) {
+	s, ctx := stored(t)
+	c, _, logged := testCollector(t)
+	c.store = s
+	for range 2 {
+		post(c, []byte(`{"hostname": "db.internal", "instance_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"}`), "198.51.100.9")
+		post(c, []byte("STRIPE_KEY=hunter2"), "198.51.100.9")
+		if err := c.drops.flush(ctx, s); err != nil {
 			t.Fatal(err)
 		}
 	}
-	var kept int
-	var unsupported string
-	if err := s.pool.QueryRow(ctx, "SELECT count(*), max(report->'unsupported'->>'language_unrecognised') FROM reports").Scan(&kept, &unsupported); err != nil || kept != 1 || unsupported != "2" {
-		t.Fatalf("%d reports kept from one instance in a day, the kept one's count %s: %v", kept, unsupported, err)
-	}
-	if _, err := s.pool.Exec(ctx, "UPDATE reports SET received_at = received_at - interval '1 day'"); err != nil {
+	var columns, rows string
+	if err := s.pool.QueryRow(ctx, `SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = 'dropped' AND table_schema = current_schema()`).Scan(&columns); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.save(ctx, again); err != nil {
+	read := func() string {
+		t.Helper()
+		if err := s.pool.QueryRow(ctx, `SELECT coalesce(string_agg(concat_ws(' ', (now() AT TIME ZONE 'UTC')::date - day, reason, n), ',' ORDER BY reason), '') FROM dropped`).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	if got := read(); columns != "day,reason,n" || got != "0 not_json 2,0 not_schema 2" || logged.Len() != 0 {
+		t.Errorf("columns %q, rows %q, logged %q", columns, got, logged.String())
+	}
+	if _, err := s.pool.Exec(ctx, "UPDATE dropped SET day = day - 500 WHERE reason = 'not_json'"); err != nil {
 		t.Fatal(err)
 	}
-	if n := countRows(t, ctx, s); n != 2 {
-		t.Errorf("the next day's report: %d kept, want 2", n)
+	if err := s.prune(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); got != "0 not_schema 2" {
+		t.Errorf("after the prune: %q", got)
+	}
+	if _, err := s.pool.Exec(ctx, `CREATE UNIQUE INDEX reports_one_a_day ON reports ((report->>'instance_id'), ((received_at AT TIME ZONE 'UTC')::date)); `+tableSQL); err != nil {
+		t.Fatal(err)
+	}
+	var old bool
+	if err := s.pool.QueryRow(ctx, "SELECT to_regclass('reports_one_a_day') IS NOT NULL").Scan(&old); err != nil || old {
+		t.Errorf("the collector before's unique index is still there: %v %v", old, err)
 	}
 }
 

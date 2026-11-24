@@ -133,7 +133,7 @@ jobs:
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.egress == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The stack's egress tests in two parts, each on a stack of its own: together they passed the package's 30-minute
     # -timeout on #2850's run, and a part nearing it gets another part, never a longer -timeout, which would only hide a
-    # hang (as the server's shards, ci.yml). Each part lists and runs its own tests alone.
+    # hang. Each part lists and runs its own tests alone.
     name: egress (${{ matrix.part.name }})
     strategy:
       fail-fast: false # one part's red never cancels the other's run

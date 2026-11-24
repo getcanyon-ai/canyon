@@ -1296,6 +1296,23 @@ there, or cut off — ends on its reason instead of silently. Both executors wri
 `docker logs` also writes its own error into the stream before it (**amended 2026-09-30**,
 `canyonv2-qlsd`).
 
+**A container that isn't running** (**amended 2026-11-24**, #184: a crash's lines are what a person
+needs, and they are the run that ended). On Docker an exited container is read as a running one is:
+`docker logs` answers every run since `/run` made it, its restarts' included, and a `follow` ends with
+the body. On Kubernetes, when the newest pod's `app` container isn't running, the executor reads its
+last run: that run's log (`previous`) while the container waits to start again, its own log once it has
+ended for good, and `follow` as `false`, since nothing runs to follow. Where the kubelet no longer holds
+that log — the read is refused, as it is once the run's log is gone — the executor writes the run's
+termination message, the tail of its log the pod's status keeps (`FallbackToLogsOnError`, *On
+Kubernetes*), then one line of its own:
+
+```
+canyon: the cluster kept only the end of the app's last run
+```
+
+A container that isn't running and never ended — waiting for its image, say — is read as today: its log
+is empty, or the read fails on its reason.
+
 ## `POST /scan`
 
 ```jsonc

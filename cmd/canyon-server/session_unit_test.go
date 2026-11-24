@@ -25,7 +25,15 @@ func TestAnUnreadableSessionIs500AndASignOutsUnknownSessionClearsItsCookie(t *te
 		stage.ServeHTTP(rec, req)
 		return rec
 	}
-	ours := strings.Repeat("a", 2*tokenBytes) // a cookie of a session's length, which the stage reads the database for
+	ours := strings.Repeat("a", 2*tokenBytes)                                      // a cookie of a session's length, which the stage reads the database for
+	off := &app{pool: unreachable(t), auth: authOff, public: a.public, log: a.log} // sign-in off: every caller is the anonymous admin
+	req := httptest.NewRequest(http.MethodGet, "/fleet", nil)
+	req.Header.Set("Cookie", name+"="+strings.Repeat("a", 2*tokenBytes))
+	off.session(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { served = true })).ServeHTTP(httptest.NewRecorder(), req)
+	if !served {
+		t.Fatal("with sign-in off, a cookie the database can't read is still the anonymous admin's request")
+	}
+	served = false
 	for _, c := range []struct {
 		method, path, cookie string
 		code                 int

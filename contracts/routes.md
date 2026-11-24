@@ -6,8 +6,8 @@ requires a session, and a request without a valid one — a session minted throu
 than `CANYON_OIDC_ISSUER` is not valid (amended 2026-10-17, #2306) — is
 `401 {error:"unauthenticated", message:"sign in to Canyon"}` before the handler runs, with no
 session row and no audit row, including a path under `/api/v1` that no route serves: the session
-stage answers before the catch-all. A session the stage can't read, the database answering an error
-rather than no row, is `500 {error:"internal"}` instead, the same way: never a `401`, which would
+stage answers before the catch-all. With sign-in on, a session the stage can't read, the database
+answering an error rather than no row, is `500 {error:"internal"}` instead, the same way: never a `401`, which would
 tell a person whose session lives that it ended (amended 2026-11-24, #153). A session acts on an app only as far as its **level** on that
 app allows (*App teams*, below); the org-wide writes are admin-only, registering this host's GitHub App and setting its front door among them. Sessions are minted only by the flows in the Open group below. A
 host running `CANYON_AUTH=off` or `demo` serves a caller without a session as actor

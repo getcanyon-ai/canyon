@@ -281,7 +281,8 @@ have. Canyon speaks OIDC to the customer's identity provider directly.
 
 1. The browser loads the dashboard and calls `GET /api/v1/fleet`.
 2. No session cookie, so the session stage answers `401 {error:"unauthenticated"}` and writes
-   nothing: no session row, no audit row, one log line.
+   nothing: no session row, no audit row, one log line. A session the stage can't read, the database
+   answering an error, is `500` instead: never a `401` to a person whose session lives (#153).
 3. The dashboard renders the sign-in page, whole screen, one button.
 4. The button navigates to `GET /auth/start`. Canyon generates a PKCE verifier, a state value and
    a **nonce**, all three from `crypto/rand`, and puts all three in one short-lived cookie built by
@@ -748,7 +749,9 @@ wants the act to happen in Canyon turns on the setting in §4.5.
   `/auth/start?prompt=select_account` (§4.1, step 5): the provider's session outlives Canyon's, and
   without it the next click signs the same person straight back in, with no way to choose another
   account. The company session itself is left alone; signing somebody out of their whole SSO is
-  not Canyon's to do.
+  not Canyon's to do. A sign-out answered `401` (the session had already ended) clears the cookie and shows the
+  sign-in page as any sign-out does; one answered `500` leaves the person signed in, and the rail
+  says `Canyon couldn't sign you out, so you're still signed in. Try again.` under the button (#153).
 - **Expiry.** Any 401 mid-session does the same thing. There is no countdown and no warning modal.
 - **The honesty banner's fate.** `S.bannerLoopback` and `S.bannerExposed` (`web/src/strings.ts:11`)
   survive unchanged and are shown only when `CANYON_AUTH` is off, which the fleet read already

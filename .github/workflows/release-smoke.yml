@@ -38,6 +38,7 @@ jobs:
             scripts/release-smoke.sh
             scripts/release-archives-check.sh
             scripts/telemetry-off-check.sh
+            scripts/docs-live.sh
             e2e/compose.telemetry-off.yml
             .github/fetch.sh
           sparse-checkout-cone-mode: false
@@ -54,3 +55,7 @@ jobs:
       - run: scripts/release-smoke.sh "$TAG"
         env:
           TAG: ${{ inputs.tag || 'latest' }}
+      - name: the public docs name the latest release, from 24 hours after it was published
+        run: scripts/docs-live.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

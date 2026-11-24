@@ -6,7 +6,10 @@ requires a session, and a request without a valid one — a session minted throu
 than `CANYON_OIDC_ISSUER` is not valid (amended 2026-10-17, #2306) — is
 `401 {error:"unauthenticated", message:"sign in to Canyon"}` before the handler runs, with no
 session row and no audit row, including a path under `/api/v1` that no route serves: the session
-stage answers before the catch-all. A session acts on an app only as far as its **level** on that
+stage answers before the catch-all. With sign-in on, a session the stage can't read, the database
+answering an error rather than no row, is `503 {error:"session_unread", message:"Canyon couldn't check your sign-in
+just now. Try again in a moment."}` instead, the same way: never a `401`, which would
+tell a person whose session lives that it ended (amended 2026-11-24, #153). A session acts on an app only as far as its **level** on that
 app allows (*App teams*, below); the org-wide writes are admin-only, registering this host's GitHub App and setting its front door among them. Sessions are minted only by the flows in the Open group below. A
 host running `CANYON_AUTH=off` or `demo` serves a caller without a session as actor
 `person / anonymous` instead, storing no session and setting no cookie, and is the only configuration in
@@ -1614,7 +1617,7 @@ group; `granted_by` the actor triple · `roles[]` every app role a package of th
 
 | Route | Response |
 |---|---|
-| `DELETE /api/v1/sessions?subject=` | `204` — without `subject`, signs the caller out by revoking their own session. With `subject`, revokes every session whose actor subject **or email** matches, and is `403 {error:"admin_required"}` for a member. A `subject` matching no session is still `204`. One audit row either way: the act is recorded, not the count. |
+| `DELETE /api/v1/sessions?subject=` | `204` — without `subject`, signs the caller out by revoking their own session, and clears its cookie; a sign-out the session stage answers `401` clears the cookie too, with its own attributes, and one it answers `503 session_unread` clears nothing (amended 2026-11-24, #153). With `subject`, revokes every session whose actor subject **or email** matches, and is `403 {error:"admin_required"}` for a member. A `subject` matching no session is still `204`. One audit row either way: the act is recorded, not the count. |
 | `GET /api/v1/sessions` | `200 {sessions: [{id, flow, client?, created_at, last_seen_at, expires_at, current, person?}]}`, newest first (**added 2026-11-20**, design/specs/mcp.md §2.2): the caller's own live sessions, and every live session to an admin, with `person` `{display, email}` on each · `id` the session's digest, `ses_` and the first 16 hex of the sha256 of its secret, never the secret · `client` an `oauth` session's client's name · `current` the caller's own · `last_seen_at` `null` before its first request |
 | `DELETE /api/v1/sessions/:id` | `204`: ends the live session whose digest `:id` is: the caller's own, or anyone's to an admin, an OAuth session's refresh token with it · a person's, in a browser: `403 {error:"person_required"}` to an `agent` or `canyon` actor, `403 {error:"dashboard_required"}` from any session but a browser's, each one `denied` row · `404 {error:"not_found"}` for another person's (a member's) or none · one audit row, `disconnect agent` for an `oauth` session and `revoke session` for any other, `detail{session, flow, client?, subject?}`, `subject` when an admin ends another person's |
 | `GET /api/v1/oauth/requests/:id` | **the consent page** (design/AUTH.md §4.7): `200 {client: {name, host, verified}, redirect_host, scopes, host, requested_at, expires_at, account: {display, email}}` for a request waiting for consent, `requested_at` when the authorization made it, `account` the caller, `verified` whether a document at the client's own URL named it, `host` that URL's host or, for a registration, its redirect's · `404 {error:"not_found"}` for one expired, allowed or denied · a browser session's alone, `403 dashboard_required` from any other · every answer `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY` |

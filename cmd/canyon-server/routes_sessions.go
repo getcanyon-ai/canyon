@@ -128,7 +128,7 @@ func (a *app) deleteSessions(w http.ResponseWriter, r *http.Request) {
 		a.adminRequired(w, r, "")
 		return
 	}
-	name, secure := sessionCookieOf(a.public)
+	name, _ := sessionCookieOf(a.public)
 	tx, err := a.mutation(ctx)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
@@ -158,7 +158,7 @@ func (a *app) deleteSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if subject == "" {
-		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure}) //nolint:gosec // the session cookie's own attributes, as the callback clears its sign-in cookie
+		clearSession(w, a.public)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

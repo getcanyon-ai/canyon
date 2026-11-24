@@ -64,6 +64,8 @@ func run(logger *log.Logger) error {
 		}
 	}()
 	c := &collector{schema: schema, limit: newLimiter(time.Now), store: s, readKey: key, proxied: os.Getenv("CANYON_COLLECTOR_PROXIED") == "1", log: logger}
+	failed := func(err error) { logger.Printf("canyon-collector: counting dropped reports: %v", err) }
+	flushed := c.drops.flushing(ctx, s, flushEvery, failed)
 	addr := os.Getenv("CANYON_COLLECTOR_ADDR")
 	if addr == "" {
 		addr = ":8080"
@@ -79,5 +81,10 @@ func run(logger *log.Logger) error {
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), flushLimit)
 	defer cancel()
-	return srv.Shutdown(shutdown)
+	err = srv.Shutdown(shutdown)
+	<-flushed                                            // the minute's write, if one is on its way, has returned and put back what it failed to write
+	if ferr := c.drops.flush(shutdown, s); ferr != nil { // the last counts, once no request is left to add to them
+		failed(ferr)
+	}
+	return err
 }

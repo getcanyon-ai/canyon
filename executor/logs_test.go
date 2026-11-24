@@ -55,6 +55,18 @@ func TestLogsArgvIsTheTailOfOneContainerAndCarriesNoEnv(t *testing.T) { // contr
 	}
 }
 
+// An exited container's log is read as a running one's (contracts/executor.md, A container that isn't running):
+// docker logs answers every run since /run made it, past its restarts.
+func TestLogsReadAnExitedContainer(t *testing.T) {
+	e, dir := fakes(t)
+	script := "#!/bin/sh\ncase \"$1\" in container) [ \"$2\" = ls ] && { echo \"claims-portal-prod exited sha256:deadbeefcafe\"; exit 0; }; echo exited 10 sha256:deadbeefcafe; exit 0;; logs) printf 'run 1\\nTypeError: x is undefined\\n';; esac\n"
+	must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o700)) //nolint:gosec // test fake
+	var out bytes.Buffer
+	if err := e.Logs(context.Background(), "claims-portal", "prod", 200, true, &out, nil); err != nil || out.String() != "run 1\nTypeError: x is undefined\n" {
+		t.Fatalf("an exited container: %v, %q", err, out.String())
+	}
+}
+
 func TestLogsEndsCleanlyWhenTheContextEnds(t *testing.T) {
 	e, dir := fakes(t)
 	started := filepath.Join(dir, "started")

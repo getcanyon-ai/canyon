@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -72,13 +73,37 @@ func (e *Executor) Logs(ctx context.Context, app, target string, tail int, follo
 		ready()
 	}
 	lines := int64(tail)
-	stream, err := e.Client.CoreV1().Pods(Namespace).GetLogs(newest.Name, &corev1.PodLogOptions{Container: "app", Follow: follow, TailLines: &lines}).Stream(ctx)
+	opts := &corev1.PodLogOptions{Container: "app", Follow: follow, TailLines: &lines}
+	last := lastRun(newest, opts) // a crashed app's lines are its last run's (contracts/executor.md, A container that isn't running)
+	stream, err := e.Client.CoreV1().Pods(Namespace).GetLogs(newest.Name, opts).Stream(ctx)
+	if err != nil && last != nil && last.Message != "" { // that run's log is gone: the tail its status keeps
+		_, err = io.WriteString(out, strings.TrimSuffix(last.Message, "\n")+"\ncanyon: the cluster kept only the end of the app's last run\n")
+		return err
+	}
 	if err != nil {
 		return fmt.Errorf("logs of %s: %w", newest.Name, err)
 	}
 	defer func() { _ = stream.Close() }()
 	if _, err := io.Copy(out, stream); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("logs of %s: %w", newest.Name, err)
+	}
+	return nil
+}
+
+// lastRun points opts at the app container's last run when it isn't running and has ended: the run before while it
+// waits to start again, its own once it has ended for good, never followed. It answers how that run ended, nil
+// for a running container, or one that never ended.
+func lastRun(p *corev1.Pod, opts *corev1.PodLogOptions) *corev1.ContainerStateTerminated {
+	for _, cs := range p.Status.ContainerStatuses {
+		switch {
+		case cs.Name != "app" || cs.State.Running != nil:
+		case cs.State.Terminated != nil:
+			opts.Follow = false
+			return cs.State.Terminated
+		case cs.LastTerminationState.Terminated != nil:
+			opts.Follow, opts.Previous = false, true
+			return cs.LastTerminationState.Terminated
+		}
 	}
 	return nil
 }

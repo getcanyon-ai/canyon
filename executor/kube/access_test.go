@@ -160,6 +160,54 @@ func TestLogsReadTheAppContainerAlone(t *testing.T) {
 	}
 }
 
+// A crashed app's log is its last run (contracts/executor.md, A container that isn't running): the run before
+// while its container waits to start again, its own once it has ended for good, never followed; where the kubelet
+// has lost that run's log, the tail the pod's status keeps and the executor's line. A running one is read as
+// asked, and so is one waiting that never ended.
+func TestLogsReadACrashedAppsLastRun(t *testing.T) {
+	ended := &corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error", Message: "TypeError: x is undefined\n"}
+	for name, c := range map[string]struct {
+		status   corev1.ContainerStatus
+		refused  bool
+		previous bool
+		follow   bool
+		want     string
+	}{
+		"running":               {corev1.ContainerStatus{Name: "app", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}, false, false, true, "line 1\n"},
+		"waiting after a crash": {corev1.ContainerStatus{Name: "app", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}, LastTerminationState: corev1.ContainerState{Terminated: ended}}, false, true, false, "line 1\n"},
+		"ended for good":        {corev1.ContainerStatus{Name: "app", State: corev1.ContainerState{Terminated: ended}}, false, false, false, "line 1\n"},
+		"its log gone":          {corev1.ContainerStatus{Name: "app", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}, LastTerminationState: corev1.ContainerState{Terminated: ended}}, true, true, false, "TypeError: x is undefined\ncanyon: the cluster kept only the end of the app's last run\n"},
+		"waiting, never ended":  {corev1.ContainerStatus{Name: "app", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}}}, false, false, true, "line 1\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, req, _ := fixture(t)
+			k := cluster(t, e, healthy)
+			pod := readyPod("claims-portal-preview", "newer")
+			pod.Labels = labels(req.App, req.Target)
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "canyon-identity", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}, c.status}
+			if err := k.Tracker().Add(pod); err != nil {
+				t.Fatal(err)
+			}
+			var asked []corev1.PodLogOptions
+			k.PrependReactor("get", "pods/log", func(a k8stesting.Action) (bool, runtime.Object, error) {
+				o := *a.(k8stesting.GenericAction).GetValue().(*corev1.PodLogOptions)
+				asked = append(asked, o)
+				if c.refused {
+					return true, nil, apierrors.NewBadRequest(`previous terminated container "app" in pod "newer" not found`)
+				}
+				return true, &runtime.Unknown{Raw: []byte("line 1\n")}, nil
+			})
+			var out bytes.Buffer
+			if err := e.Logs(t.Context(), req.App, req.Target, 5, true, &out, nil); err != nil {
+				t.Fatal(err)
+			}
+			if len(asked) != 1 || asked[0].Container != "app" || asked[0].Previous != c.previous || asked[0].Follow != c.follow || out.String() != c.want {
+				t.Errorf("asked %+v, wrote %q; want previous %v, follow %v, %q", asked, out.String(), c.previous, c.follow, c.want)
+			}
+		})
+	}
+}
+
 // A log request the API refuses once the caller has its 200 — the app container still starting —
 // ends that 200's body on the API's reason (contracts/executor.md, GET /logs).
 func TestALogRequestRefusedAfterReadyEndsOnItsReason(t *testing.T) {

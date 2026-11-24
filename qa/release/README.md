@@ -3,11 +3,13 @@
 CI runs what it can. These are the checks by hand, and what a release must have passed before its tag
 ([RELEASING.md](../../RELEASING.md)).
 
-- **`checks.txt`**: each check, and the paths whose change calls for it. An `always` check names the directories it
-  answers for; `nothing` lines name the directories with nothing to check by hand, and why.
+- **`checks.txt`**: each check, and the paths whose change calls for it. An `always` check names the paths it answers
+  for; `nothing` lines name the paths with nothing to check by hand, and why. Every tracked file is in one.
 - **`results/<tag>.txt`**: what was done for a release, a line each: `pass | <id> | <commit> | <note>` or
   `skip | <id> | <commit> | <why>`. `<commit>` is the whole id of the commit on main it was done at. A skip says why.
-- **`go run ./internal/tools/release needs`** lists what the changes since the last release call for.
+- **`go run ./internal/tools/release needs <releases.json>`** lists what the changes since the last published release
+  call for, from `gh api repos/getcanyon-ai/canyon-releases/releases --paginate --slurp > releases.json`; `needs <from>
+  <to>` for any range.
 
 The release refuses its tag when a check its changes call for has no line, or when the check's paths changed after its
 commit. An `always` check is stale after any change but to `docs/`, `qa/release/` and `design/`. So commit the results
@@ -22,8 +24,8 @@ A fix CI can't test adds its check here in the same pull request.
 
 ### upgrade
 
-A real cluster on the release before, with an app in preview and production: upgrade as the docs say. Both apps answer
-throughout, then the unchanged app deploys and is promoted.
+On a real cluster installed from the release before with the Kubernetes manifests, and on one with the Helm chart, an
+app in preview and production: upgrade as the docs say. Both answer throughout, then deploy and promote it unchanged.
 
 ### rollback
 
@@ -85,6 +87,11 @@ An app's calls: allowed and recorded, refused, then allowed by an admin and sent
 ### patching
 
 A running app moves onto a newer run image, and one that fails is put back.
+
+### helm
+
+Install the chart by hand on a fresh cluster, then upgrade it from the release before; `telemetry.enabled: false`
+leaves the server's environment with `CANYON_TELEMETRY=0`, with `canyon.existingSecret` too.
 
 ### docker-demo
 

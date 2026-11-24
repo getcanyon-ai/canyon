@@ -44,6 +44,8 @@ jobs:
     permissions:
       contents: read
       checks: read # the commit's check runs
+      actions: read # its workflow runs: one that never started, or waits, has no check run
+      issues: read # the open ci issues
     steps:
       - name: the tag is a version, before anything runs on it
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
@@ -55,16 +57,21 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: the checks the changes since the last release call for
-        run: go run ./internal/tools/release needs
-      - name: each has a result at this commit, and the commit's check runs are done and good
-        if: env.REHEARSAL != 'true'
+      - name: what GitHub says of the releases published, and of this commit's runs and the open ci issues
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100" --paginate --slurp > "$RUNNER_TEMP/runs.json"
-          go run ./internal/tools/release check "$TAG" "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_ID"
+          d=$RUNNER_TEMP/answers && mkdir -p "$d"
+          gh api "repos/getcanyon-ai/canyon-releases/releases?per_page=100" --paginate --slurp > "$d/releases.json"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100" --paginate --slurp > "$d/check-runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" --paginate --slurp > "$d/runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/issues?labels=ci&state=open&per_page=100" --paginate --slurp > "$d/issues.json"
+      - name: the checks the changes since the last release call for
+        run: go run ./internal/tools/release needs "$RUNNER_TEMP/answers/releases.json"
+      - name: each has a result at this commit, its runs are done and good, and no ci issue is open
+        if: env.REHEARSAL != 'true'
+        run: go run ./internal/tools/release check "$TAG" "$RUNNER_TEMP/answers" "$GITHUB_RUN_ID"
 
   release:
     needs: checklist

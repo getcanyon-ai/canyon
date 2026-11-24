@@ -1,9 +1,13 @@
 // Command release holds a release to its checks by hand (qa/release/README.md):
 //
-//	release needs [FROM TO]        the checks FROM..TO calls for; the last release to HEAD without them
-//	release check TAG RUNS RUN_ID  refuses HEAD as TAG: a check with no result or a stale one, the last release's after
-//	                               checks unticked, or a check run in RUNS (gh api --paginate --slurp of the commit's
-//	                               check-runs) that isn't done and good; RUN_ID is the workflow run that asks
+//	release needs FROM TO | RELEASES  the checks FROM..TO calls for, or the last release's to HEAD
+//	release check TAG DIR RUN_ID      refuses HEAD as TAG: a check with no result or a stale one, the last release's
+//	                                  after checks unticked, a run of the commit that isn't done and good, or an open
+//	                                  ci issue. RUN_ID is the workflow run that asks.
+//
+// GitHub's answers are files, each `gh api --paginate --slurp`: RELEASES (and DIR/releases.json) of
+// repos/getcanyon-ai/canyon-releases/releases, and in DIR check-runs.json and runs.json of the commit's
+// check-runs?filter=latest and actions/runs?head_sha=, and issues.json of issues?labels=ci&state=open.
 package main
 
 import (
@@ -12,8 +16,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -23,7 +29,7 @@ const unheld = "v0.11.1"
 type check struct {
 	id, when string
 	paths    []string // nil is always
-	covers   []string // an always check's: the directories it answers for
+	covers   []string // an always check's: the paths it answers for
 }
 
 type result struct{ id, commit string }
@@ -64,7 +70,7 @@ func lines(text string) (out [][]string) {
 	return out
 }
 
-// parseChecks reads checks.txt: the checks, and the directories with nothing to check and why.
+// parseChecks reads checks.txt: the checks, and the paths with nothing to check, each line's pathspecs by why.
 func parseChecks(text string) (checks []check, nothing map[string]string, err error) {
 	nothing = map[string]string{}
 	seen := map[string]bool{}
@@ -143,9 +149,43 @@ func needed(checks []check, when, from, to string) (out []check, err error) {
 	return out, nil
 }
 
-// last is the release before commit, release candidates aside.
-func last(commit string) (string, error) {
-	return git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*", commit+"^")
+// last is the release before commit: the nearest tag published on getcanyon-ai/canyon-releases, so a tag refused, or
+// one whose release never went out, never shortens the next one's range.
+func last(commit string, published []string) (string, error) {
+	if len(published) == 0 {
+		return "", errors.New("no published release is named")
+	}
+	args := []string{"describe", "--tags", "--abbrev=0"}
+	for _, tag := range published {
+		args = append(args, "--match", tag)
+	}
+	return git(append(args, commit+"^")...)
+}
+
+// pages decodes a gh api --paginate --slurp answer: a list of pages, each list or object a T.
+func pages[T any](raw []byte) ([]T, error) {
+	var out []T
+	if err := json.Unmarshal(raw, &out); err != nil || len(out) == 0 {
+		return nil, fmt.Errorf("GitHub's answer can't be read (%v)", err)
+	}
+	return out, nil
+}
+
+// releasesOf are the published releases' tags, release candidates aside.
+func releasesOf(raw []byte) ([]string, error) {
+	all, err := pages[[]struct {
+		Tag               string `json:"tag_name"`
+		Draft, Prerelease bool
+	}](raw)
+	var tags []string
+	for _, page := range all {
+		for _, r := range page {
+			if !r.Draft && !r.Prerelease && !strings.Contains(r.Tag, "-") {
+				tags = append(tags, r.Tag)
+			}
+		}
+	}
+	return tags, err
 }
 
 // missing is what from..to calls for and tag's results, as HEAD has them, don't hold.
@@ -161,7 +201,7 @@ func missing(checks []check, when, tag, from, to string) (problems []string, err
 	}
 	for id, r := range results { // every line's commit, called for or not
 		if on, err := yes("merge-base", "--is-ancestor", r.commit, "HEAD"); err != nil || !on {
-			problems = append(problems, fmt.Sprintf("%s: %s's commit %s isn't on main", file, id, r.commit))
+			problems = append(problems, fmt.Sprintf("%s: %s's commit %s isn't in the tagged commit's history", file, id, r.commit))
 		}
 	}
 	need, err := needed(checks, when, from, to)
@@ -214,6 +254,55 @@ func badRuns(raw []byte, self string) (problems []string) {
 	return problems
 }
 
+// badWorkflows are the commit's workflow runs that aren't done and good, the one that asks aside: one that never
+// started, or waits on its concurrency group, has no check run to show it.
+func badWorkflows(raw []byte, self string) (problems []string) {
+	all, err := pages[struct {
+		Total int `json:"total_count"`
+		Runs  []struct {
+			ID                       int64
+			Name, Status, Conclusion string
+			URL                      string `json:"html_url"`
+		} `json:"workflow_runs"`
+	}](raw)
+	if err != nil {
+		return []string{"the commit's workflow runs: " + err.Error()}
+	}
+	total := 0
+	for _, p := range all {
+		for _, r := range p.Runs {
+			if total++; strconv.FormatInt(r.ID, 10) != self && !slices.Contains([]string{"success", "skipped", "neutral"}, r.Conclusion) {
+				problems = append(problems, fmt.Sprintf("workflow run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL))
+			}
+		}
+	}
+	if total != all[0].Total {
+		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d workflow runs", total, all[0].Total))
+	}
+	return problems
+}
+
+// openCI are the open issues labelled ci, which main-health opens for a red run on main: one earlier in the range
+// isn't the tagged commit's own.
+func openCI(raw []byte) (problems []string) {
+	all, err := pages[[]struct {
+		Number int
+		Title  string
+		PR     any `json:"pull_request"`
+	}](raw)
+	if err != nil {
+		return []string{"the open ci issues: " + err.Error()}
+	}
+	for _, page := range all {
+		for _, i := range page {
+			if i.PR == nil {
+				problems = append(problems, fmt.Sprintf("open ci issue #%d: %s", i.Number, i.Title))
+			}
+		}
+	}
+	return problems
+}
+
 func readChecks(ref string) ([]check, error) {
 	text, err := git("show", ref+":qa/release/checks.txt")
 	if err != nil {
@@ -223,41 +312,50 @@ func readChecks(ref string) ([]check, error) {
 	return checks, err
 }
 
-func refuse(tag string, runs []byte, self string) (problems []string, err error) {
+// held is what the results files hold against tag: this release's before checks, and the last release's after ones.
+func held(tag string, published []string) (problems []string, err error) {
 	checks, err := readChecks("HEAD")
 	if err != nil {
 		return nil, err
 	}
-	before, err := last("HEAD")
+	before, err := last("HEAD", published)
 	if err != nil {
 		return nil, err
 	}
-	if problems, err = missing(checks, "before", tag, before, "HEAD"); err != nil {
+	if problems, err = missing(checks, "before", tag, before, "HEAD"); err != nil || before == unheld {
+		return problems, err
+	}
+	older, err := last(before, published)
+	if err != nil {
 		return nil, err
 	}
-	if before != unheld {
-		older, err := last(before)
-		if err != nil {
-			return nil, err
-		}
-		after, err := missing(checks, "after", before, older, before)
-		if err != nil {
-			return nil, err
-		}
-		problems = append(problems, after...)
-	}
-	return append(problems, badRuns(runs, self)...), nil
+	after, err := missing(checks, "after", before, older, before)
+	return append(problems, after...), err
+}
+
+// read is a file of DIR's.
+func read(dir, name string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(dir, name)) //nolint:gosec // the files the workflow wrote, in the directory named on the command line
 }
 
 func run(args []string) error {
 	switch {
-	case len(args) == 1 && args[0] == "needs" || len(args) == 3 && args[0] == "needs":
+	case len(args) == 2 && args[0] == "needs" || len(args) == 3 && args[0] == "needs":
 		from, to := "", "HEAD"
-		var err error
 		if len(args) == 3 {
 			from, to = args[1], args[2]
-		} else if from, err = last(to); err != nil {
-			return err
+		} else {
+			raw, err := os.ReadFile(args[1]) //nolint:gosec // named on the command line
+			if err != nil {
+				return err
+			}
+			published, err := releasesOf(raw)
+			if err == nil {
+				from, err = last(to, published)
+			}
+			if err != nil {
+				return err
+			}
 		}
 		checks, err := readChecks("HEAD")
 		for _, when := range []string{"before", "after"} {
@@ -271,17 +369,28 @@ func run(args []string) error {
 		}
 		return err
 	case len(args) == 4 && args[0] == "check":
-		runs, err := os.ReadFile(args[2]) //nolint:gosec // the file the workflow wrote, named on the command line
+		var raw [4][]byte
+		for i, name := range []string{"releases.json", "check-runs.json", "runs.json", "issues.json"} {
+			var err error
+			if raw[i], err = read(args[2], name); err != nil {
+				return err
+			}
+		}
+		published, err := releasesOf(raw[0])
 		if err != nil {
 			return err
 		}
-		problems, err := refuse(args[1], runs, args[3])
-		if err == nil && len(problems) > 0 {
-			err = fmt.Errorf("%s is refused (qa/release/README.md):\n  %s", args[1], strings.Join(problems, "\n  "))
+		problems, err := held(args[1], published)
+		if err != nil {
+			return err
 		}
-		return err
+		problems = append(append(append(problems, badRuns(raw[1], args[3])...), badWorkflows(raw[2], args[3])...), openCI(raw[3])...)
+		if len(problems) > 0 {
+			return fmt.Errorf("%s is refused (qa/release/README.md):\n  %s", args[1], strings.Join(problems, "\n  "))
+		}
+		return nil
 	}
-	return errors.New("usage: release needs [FROM TO] | release check TAG RUNS RUN_ID")
+	return errors.New("usage: release needs FROM TO | release needs RELEASES | release check TAG DIR RUN_ID")
 }
 
 func main() {

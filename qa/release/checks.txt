@@ -1,42 +1,47 @@
 # The checks by hand a release needs (README.md here; internal/tools/release reads this). One a line:
 #   <id> | before | <paths>      done before the tag
-#   <id> | before | always <dirs> called for by every release; <dirs> are the directories it answers for
+#   <id> | before | always <paths> called for by every release; <paths> are the files it answers for
 #   <id> | after  | <paths>      done after it: the next release's tag waits for it
-#   nothing | <directory> | <why>
+#   nothing | <paths> | <why>
 # <paths> is always, or git :(glob) pathspecs, as .github/suites has them: the release's change to one calls for the
 # check. Each id has its own heading in README.md. No host, account, person or path of anyone's is in this directory.
 
-upgrade       | before | always db/** vault/** cmd/canyon-executor-kube/**
+upgrade       | before | always db/** vault/** cmd/canyon-executor-kube/** deploy/k8s/** Dockerfile.executor-kube go.mod go.sum Makefile .dockerignore
 rollback      | before | always db/** vault/**
-agents        | before | cli/** cmd/canyon/** cmd/canyon-server/** runs/** gate/** ingest/** contracts/** events/** qa/agent/** internal/mcptools/**
+agents        | before | cli/** cmd/canyon/** cmd/canyon-server/** runs/** gate/** ingest/** contracts/** events/** qa/agent/** internal/mcptools/** internal/names/**
 sign-in       | before | cmd/canyon-server/** cli/** qa/agent/hand-checks.md
 windows       | before | cmd/canyon-server/** cli/**
 connector     | before | cmd/canyon-server/** internal/mcptools/**
 dashboard     | before | web/** designsystem/** cmd/canyon-server/**
 screens       | before | web/** designsystem/**
 responder     | before | web/** cmd/canyon-server/** design/PERMISSIONS.md
-app-sign-in   | before | identity/** cmd/canyon-identity/** deploy/k8s/router.yaml cmd/canyon-server/*front_door*.go
-github        | before | github-app/** cmd/canyon-server/*github*.go
-hand-off      | before | gitops/** webhook/** deploy/gitops/** cmd/canyon-server/*platform*.go
-licence       | before | ee/licence/** cmd/canyon-server/*licence*.go
+app-sign-in   | before | identity/** cmd/canyon-identity/** Dockerfile.identity internal/answered/** deploy/k8s/router.yaml cmd/canyon-server/*front_door*.go
+github        | before | github-app/** internal/gitpush/** cmd/canyon-server/*github*.go
+hand-off      | before | gitops/** webhook/** deploy/gitops/** internal/gitpush/** internal/place/** cmd/canyon-server/*platform*.go
+licence       | before | ee/licence/** ee/LICENSE internal/enterprise/** cmd/canyon-server/*licence*.go
 group-sync    | before | ee/groupsync/** cmd/canyon-server/*groupsync*.go
-outbound      | before | deploy/egress/** ee/outboundkeys/** internal/egresscontrol/** internal/destination/** cmd/canyon-server/egress*.go
-patching      | before | ee/patching/** runs/** executor/run.Dockerfile
+outbound      | before | deploy/egress/** ee/outboundkeys/** internal/subjecthash/** internal/egresscontrol/** internal/destination/** cmd/canyon-server/egress*.go
+patching      | before | ee/patching/** runs/** executor/run.Dockerfile internal/trivy/**
+helm          | before | deploy/helm/**
 docker-demo   | before | docker-compose.yml Dockerfile Dockerfile.executor demo/** deploy/egress/** executor/** cmd/canyon-executor/** cli/cmd_demo*.go
 docker-team   | before | docker-compose.yml Dockerfile Dockerfile.executor deploy/docker/** deploy/egress/** executor/** cmd/canyon-executor/** provisioners/**
-runtime-node  | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-python | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-go    | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-java  | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-ruby  | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-php   | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-dotnet | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-runtime-static | before | executor/*.Dockerfile executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
-telemetry     | before | cmd/canyon-collector/** deploy/collector/** contracts/schema/telemetry.schema.json cmd/canyon-server/telemetry*.go
+runtime-node  | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-python | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-go    | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-java  | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-ruby  | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-php   | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-dotnet | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+runtime-static | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
+telemetry     | before | cmd/canyon-collector/** deploy/collector/** contracts/schema/telemetry.schema.json cmd/canyon-server/telemetry*.go TELEMETRY.md
 first-report  | after  | always
 
-nothing | .github | CI's own: the tagged commit's check runs are read, and a rehearsal runs the release workflow
-nothing | docs | sources of the site; a nightly run fails while the public docs name an older release (release-smoke.yml)
-nothing | e2e | tests alone
-nothing | ee/tools | signs licences: Canyon's makers' tool, in no release
-nothing | scripts | the repository's own tools: the release's are what the rehearsal runs
+nothing | .github/** .golangci.yml .gitleaks.toml .gitleaksignore .gitignore | CI's own: the tagged commit's runs are read, and a rehearsal runs the release workflow
+nothing | design/** | the design, which code and the docs say to people; each check reads it where it needs to
+nothing | docs/** | sources of the site; a nightly run fails while the public docs name an older release (release-smoke.yml)
+nothing | e2e/** internal/executortest/** internal/gitopstest/** internal/pgtest/** | tests and their helpers alone
+nothing | ee/tools/** | signs licences: Canyon's makers' tool, in no release
+nothing | internal/tools/** scripts/** | the repository's own tools: the release's are what the rehearsal runs
+nothing | qa/release/** | this checklist
+nothing | AGENTS.md CLAUDE.md CONTRIBUTING.md CODE_OF_CONDUCT.md CLA.md CCLA.md SECURITY.md RELEASING.md README.md Logo.png | the project's own pages: no Canyon runs them
+nothing | LICENSE NOTICE THIRD_PARTY_NOTICES | the release checks every archive carries them (scripts/release-archives-check.sh)

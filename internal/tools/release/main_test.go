@@ -1,16 +1,18 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// Every top-level directory, and each under cmd/, deploy/ and ee/, is a check's or has nothing to check and why: a new
-// area can't arrive without one. An always check covers nothing here, or this would hold for any directory.
-func TestEveryDirectoryHasACheckOrSaysWhyNot(t *testing.T) {
+// Every file the repository tracks is a check's, by its paths or an always check's covers, or on a nothing line that
+// says why: a new file can't arrive without one.
+func TestEveryFileHasACheckOrSaysWhyNot(t *testing.T) {
 	t.Chdir("../../..")
 	text, err := os.ReadFile("qa/release/checks.txt")
 	if err != nil {
@@ -20,48 +22,50 @@ func TestEveryDirectoryHasACheckOrSaysWhyNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	covered := map[string]bool{}
+	specs := slices.Collect(maps.Keys(nothing))
 	for _, c := range checks {
-		args := []string{"ls-files", "--"}
-		for _, p := range append(c.paths, c.covers...) { // an always check covers what it names, never everything
-			args = append(args, ":(glob)"+p)
-		}
-		if len(args) == 2 {
+		specs = append(specs, strings.Join(append(c.paths, c.covers...), " "))
+	}
+	covered := map[string]bool{}
+	for _, spec := range specs {
+		if spec == "" {
 			continue
+		}
+		args := []string{"ls-files", "--"}
+		for _, p := range strings.Fields(spec) {
+			args = append(args, ":(glob)"+p)
 		}
 		files, err := git(args...)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, f := range strings.Fields(files) {
-			covered[unit(f)] = true
+			covered[f] = true
 		}
 	}
 	files, err := git("ls-files")
 	if err != nil {
 		t.Fatal(err)
 	}
+	gaps := map[string]int{}
 	for _, f := range strings.Fields(files) {
-		if u := unit(f); u != "" && !covered[u] && nothing[u] == "" {
-			t.Errorf("%s has no check in qa/release/checks.txt and no nothing line saying why", u)
-			covered[u] = true
+		if !covered[f] {
+			gaps[unit(f)]++
 		}
 	}
-	for dir := range nothing {
-		if covered[dir] {
-			t.Errorf("%s has a check and a nothing line", dir)
-		}
+	for _, u := range slices.Sorted(maps.Keys(gaps)) {
+		t.Errorf("%s: %d files with no check in qa/release/checks.txt and no nothing line saying why", u, gaps[u])
 	}
 }
 
-// unit is the directory a path is held to: its top-level one, or the one under cmd/, deploy/ or ee/; "" for a file
-// beside those directories.
+// unit names a file's place for the message: its top-level directory, the one under cmd/, deploy/, ee/ or internal/,
+// or the file itself at the top.
 func unit(path string) string {
 	parts := strings.SplitN(path, "/", 3)
 	switch {
-	case len(parts) == 1, len(parts) == 2 && (parts[0] == "cmd" || parts[0] == "deploy" || parts[0] == "ee"):
-		return "" // a file, not a directory
-	case len(parts) == 3 && (parts[0] == "cmd" || parts[0] == "deploy" || parts[0] == "ee"):
+	case len(parts) == 1:
+		return path
+	case len(parts) == 3 && slices.Contains([]string{"cmd", "deploy", "ee", "internal"}, parts[0]):
 		return parts[0] + "/" + parts[1]
 	}
 	return parts[0]
@@ -140,27 +144,12 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 		g("add", path)
 		g("commit", "-qm", path)
 	}
+	published := []string{unheld, "v0.11.2"}
 	refused := func(tag string) []string {
 		t.Helper()
-		checks, err := readChecks("HEAD")
+		problems, err := held(tag, published)
 		if err != nil {
 			t.Fatal(err)
-		}
-		before, err := last("HEAD")
-		if err != nil {
-			t.Fatal(err)
-		}
-		problems, err := missing(checks, "before", tag, before, "HEAD")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if before != unheld {
-			older, _ := last(before)
-			after, err := missing(checks, "after", before, older, before)
-			if err != nil {
-				t.Fatal(err)
-			}
-			problems = append(problems, after...)
 		}
 		return problems
 	}
@@ -184,7 +173,7 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 		t.Errorf("a code change after the round: %v", p)
 	}
 	write("qa/release/results/v0.11.2.txt", "pass | code | "+strings.Repeat("b", 40)+" | done\npass | round | "+strings.Repeat("b", 40)+" | done\n")
-	if p := refused("v0.11.2"); len(p) != 2 || !strings.Contains(p[0], "isn't on main") {
+	if p := refused("v0.11.2"); len(p) != 2 || !strings.Contains(p[0], "isn't in the tagged commit's history") {
 		t.Errorf("a commit that isn't on main: %v", p)
 	}
 	again := g("rev-parse", "HEAD~1")
@@ -200,5 +189,64 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 	write("qa/release/results/v0.11.2.txt", "pass | code | "+again+" | done again\npass | round | "+again+" | done again\npass | first-report | "+tagged+" | arrived\n")
 	if p := refused("v0.11.3"); len(p) != 0 {
 		t.Errorf("the last release's after check ticked: %v", p)
+	}
+	// v0.11.3 refused and never published: v0.11.4's range starts at v0.11.2, so the code v0.11.3 changed is asked for
+	g("tag", "v0.11.3")
+	write("qa/release/results/v0.11.4.txt", "pass | round | "+g("rev-parse", "HEAD")+" | done\n")
+	if p := refused("v0.11.4"); len(p) != 1 || !strings.Contains(p[0], "v0.11.4.txt: no line for code") {
+		t.Errorf("a tag between that was never published: %v", p)
+	}
+}
+
+// A workflow run of the commit that isn't done and good refuses, though it has no check run to show it: one that never
+// started, or waits on its concurrency group. The asking run is its own.
+func TestEveryWorkflowRunMustBeDoneAndGood(t *testing.T) {
+	run := func(id, status, conclusion string) string {
+		return `{"id":` + id + `,"name":"CI","status":"` + status + `","conclusion":` + conclusion + `,"html_url":"https://github.com/o/r/actions/runs/` + id + `"}`
+	}
+	for name, c := range map[string]struct {
+		raw string
+		ok  bool
+	}{
+		"good":                      {`[{"total_count":3,"workflow_runs":[` + run("1", "completed", `"success"`) + `,` + run("2", "completed", `"skipped"`) + `,` + run("9", "in_progress", "null") + `]}]`, true},
+		"pending, no jobs yet":      {`[{"total_count":1,"workflow_runs":[` + run("1", "pending", "null") + `]}]`, false},
+		"queued behind its group":   {`[{"total_count":1,"workflow_runs":[` + run("1", "queued", "null") + `]}]`, false},
+		"never started":             {`[{"total_count":1,"workflow_runs":[` + run("1", "completed", `"startup_failure"`) + `]}]`, false},
+		"cancelled by a newer main": {`[{"total_count":1,"workflow_runs":[` + run("1", "completed", `"cancelled"`) + `]}]`, false},
+		"a page short":              {`[{"total_count":2,"workflow_runs":[` + run("1", "completed", `"success"`) + `]}]`, false},
+		"not GitHub's answer":       {`{"message":"Bad credentials"}`, false},
+	} {
+		if bad := badWorkflows([]byte(c.raw), "9"); (len(bad) == 0) != c.ok {
+			t.Errorf("%s: %v, want passed %v", name, bad, c.ok)
+		}
+	}
+}
+
+// An open issue labelled ci refuses, and is named; a pull request with the label isn't one.
+func TestAnOpenCIIssueRefuses(t *testing.T) {
+	for name, c := range map[string]struct {
+		raw  string
+		want []string
+	}{
+		"none":           {`[[]]`, nil},
+		"one":            {`[[{"number":124,"title":"ci: server shards time out"}]]`, []string{"open ci issue #124: ci: server shards time out"}},
+		"a pull request": {`[[{"number":125,"title":"ci: a longer timeout","pull_request":{"url":"x"}}]]`, nil},
+		"unreadable":     {`{"message":"Not Found"}`, []string{"the open ci issues: GitHub's answer can't be read (json: cannot unmarshal object into Go value of type []main.page)"}},
+	} {
+		got := openCI([]byte(c.raw))
+		if len(got) != len(c.want) || (len(got) > 0 && name != "unreadable" && got[0] != c.want[0]) {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+// Only published releases, candidates aside, are the last release.
+func TestTheLastReleaseIsAPublishedOne(t *testing.T) {
+	got, err := releasesOf([]byte(`[[{"tag_name":"v0.11.2","draft":false,"prerelease":false},{"tag_name":"v0.11.3-rc.1","draft":false,"prerelease":true},{"tag_name":"v0.11.3","draft":true,"prerelease":false}],[{"tag_name":"v0.11.1"}]]`))
+	if err != nil || !slices.Equal(got, []string{"v0.11.2", "v0.11.1"}) {
+		t.Errorf("published: %v %v", got, err)
+	}
+	if _, err := releasesOf([]byte(`{"message":"rate limited"}`)); err == nil {
+		t.Error("an answer that isn't a list was read")
 	}
 }

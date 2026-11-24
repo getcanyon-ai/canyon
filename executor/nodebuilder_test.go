@@ -73,7 +73,7 @@ func TestTheNodeBuilderIsChosenOnlyWhenNoEarlierGroupCouldPass(t *testing.T) {
 	for name, c := range full {
 		dir := t.TempDir()
 		for p, body := range c.tree {
-			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755))
+			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o750))
 			must(t, os.WriteFile(filepath.Join(dir, p), []byte(body), 0o600))
 		}
 		if why := e.fullBuilderFor(context.Background(), dir, c.values); why == "" {
@@ -91,7 +91,7 @@ func TestTheNodeBuilderIsChosenOnlyWhenNoEarlierGroupCouldPass(t *testing.T) {
 	for name, tree := range nodeTrees {
 		dir := t.TempDir()
 		for p, body := range tree {
-			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755))
+			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o750))
 			must(t, os.WriteFile(filepath.Join(dir, p), []byte(body), 0o600))
 		}
 		if why := e.fullBuilderFor(context.Background(), dir, map[string]string{"NEXT_PUBLIC_API_URL": "https://api.example"}); why != "" {

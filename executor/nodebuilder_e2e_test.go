@@ -40,11 +40,11 @@ func TestEndToEndTheNodeBuilderChoosesWhatTheFullBuilderWould(t *testing.T) {
 		"node-nginx-conf":         {"package.json": pkg, "server.js": server, "nginx.conf": "events {}\nhttp { server { listen 8080; } }\n"},
 		"node-one-bin-script":     {"package.json": pkg, "server.js": server, "docker/bin/entrypoint.sh": "#!/bin/sh\nexec node server.js\n"},
 	}
-	dirs := map[string]string{"demo-claims-portal": "../demo/apps/claims-portal", "tour-app": "../cli/testdata/tour/app"}
+	dirs := map[string]string{"demo-claims-portal": "../demo/apps/claims-portal", "tour-app": "../cli/testdata/tour/app", "next16-stock": filepath.Join("testdata", "apps", "next16-stock")}
 	for name, files := range trees {
 		dir := t.TempDir()
 		for p, body := range files {
-			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755))
+			must(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o750))
 			must(t, os.WriteFile(filepath.Join(dir, p), []byte(body), 0o600))
 		}
 		dirs[name] = dir

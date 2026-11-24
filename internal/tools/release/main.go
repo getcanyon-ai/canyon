@@ -23,6 +23,7 @@ const unheld = "v0.11.1"
 type check struct {
 	id, when string
 	paths    []string // nil is always
+	covers   []string // an always check's: the directories it answers for
 }
 
 type result struct{ id, commit string }
@@ -40,7 +41,7 @@ func git(args ...string) (string, error) {
 
 // yes is a git command that answers by its exit: 0 yes, 1 no, anything else an error.
 func yes(args ...string) (bool, error) {
-	err := exec.Command("git", args...).Run() //nolint:gosec // as git's
+	err := exec.Command("git", args...).Run() //nolint:gosec // this repository's own refs and paths
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && exit.ExitCode() == 1 {
 		return false, nil
@@ -77,8 +78,10 @@ func parseChecks(text string) (checks []check, nothing map[string]string, err er
 			return nil, nil, fmt.Errorf("checks.txt: %q is no before or after, or a second %s", l, l[0])
 		default:
 			c := check{id: l[0], when: l[1]}
-			if l[2] != "always" {
-				c.paths = strings.Fields(l[2])
+			if f := strings.Fields(l[2]); f[0] == "always" {
+				c.covers = f[1:]
+			} else {
+				c.paths = f
 			}
 			checks, seen[c.id] = append(checks, c), true
 		}
@@ -200,7 +203,7 @@ func badRuns(raw []byte, self string) (problems []string) {
 			if strings.Contains(r.URL, "/actions/runs/"+self+"/") {
 				continue
 			}
-			if others++; r.Status != "completed" || !slices.Contains([]string{"success", "skipped", "neutral"}, r.Conclusion) {
+			if others++; !slices.Contains([]string{"success", "skipped", "neutral"}, r.Conclusion) { // a run not done has none
 				problems = append(problems, fmt.Sprintf("check run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL))
 			}
 		}
@@ -258,17 +261,17 @@ func run(args []string) error {
 		}
 		checks, err := readChecks("HEAD")
 		for _, when := range []string{"before", "after"} {
-			need, nerr := needed(checks, when, from, to)
-			if err = errors.Join(err, nerr); err != nil {
-				return err
+			var need []check
+			if err == nil {
+				need, err = needed(checks, when, from, to)
 			}
 			for _, c := range need {
 				fmt.Printf("%s the tag: %s\n", when, c.id)
 			}
 		}
-		return nil
+		return err
 	case len(args) == 4 && args[0] == "check":
-		runs, err := os.ReadFile(args[2])
+		runs, err := os.ReadFile(args[2]) //nolint:gosec // the file the workflow wrote, named on the command line
 		if err != nil {
 			return err
 		}

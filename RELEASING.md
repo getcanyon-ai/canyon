@@ -18,6 +18,14 @@ linux/amd64 and linux/arm64 (each built to its digest and pushed nowhere), and t
 Opengrep's source. Each file is packed and checked as for a release, under the version `v0.0.0-rehearsal`. Tag only
 once it's green.
 
+## The checks a release needs
+
+[qa/release](qa/release/README.md) lists the checks by hand and what calls for each. `go run ./internal/tools/release
+needs` lists what the changes since the last release call for. Each goes in `qa/release/results/<tag>.txt`, a pass or a
+written skip with the commit it was done at; commit that file last and tag that commit. The tag is refused before
+anything is built while one has no line, or its paths changed after its commit, or while one of the commit's check runs
+failed or is still running. A fix CI can't test adds its check there in the same pull request.
+
 ## Tag
 
 ```sh

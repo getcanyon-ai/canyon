@@ -23,10 +23,10 @@ func TestEveryDirectoryHasACheckOrSaysWhyNot(t *testing.T) {
 	covered := map[string]bool{}
 	for _, c := range checks {
 		args := []string{"ls-files", "--"}
-		for _, p := range c.paths {
+		for _, p := range append(c.paths, c.covers...) { // an always check covers what it names, never everything
 			args = append(args, ":(glob)"+p)
 		}
-		if c.paths == nil {
+		if len(args) == 2 {
 			continue
 		}
 		files, err := git(args...)
@@ -121,7 +121,7 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	g := func(args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", args...) //nolint:gosec // test: git, in its own temporary repository
 		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.test", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.test")
 		out, err := cmd.Output()
 		if err != nil {
@@ -165,12 +165,12 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 		return problems
 	}
 	g("init", "-q", "-b", "main")
-	write("qa/release/checks.txt", "code | before | src/**\nfirst-report | after | always\n")
+	write("qa/release/checks.txt", "code | before | src/**\nround | before | always\nfirst-report | after | always\n")
 	write("src/a.go", "1")
 	g("tag", unheld)
 	write("src/a.go", "2")
 	round := g("rev-parse", "HEAD")
-	results := "pass | code | " + round + " | done\n"
+	results := "pass | code | " + round + " | done\npass | round | " + round + " | done\n"
 	if p := refused("v0.11.2"); len(p) != 1 || !strings.Contains(p[0], "isn't in the tagged commit") {
 		t.Errorf("no results file: %v", p)
 	}
@@ -180,22 +180,24 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 		t.Errorf("a docs-only change after the round: %v", p)
 	}
 	write("src/a.go", "3")
-	if p := refused("v0.11.2"); len(p) != 1 || !strings.Contains(p[0], "changed after") {
+	if p := refused("v0.11.2"); len(p) != 2 || !strings.Contains(p[0], "changed after") || !strings.Contains(p[1], "changed after") {
 		t.Errorf("a code change after the round: %v", p)
 	}
-	write("qa/release/results/v0.11.2.txt", "pass | code | "+strings.Repeat("b", 40)+" | done\n")
-	if p := refused("v0.11.2"); len(p) != 1 || !strings.Contains(p[0], "isn't on main") {
+	write("qa/release/results/v0.11.2.txt", "pass | code | "+strings.Repeat("b", 40)+" | done\npass | round | "+strings.Repeat("b", 40)+" | done\n")
+	if p := refused("v0.11.2"); len(p) != 2 || !strings.Contains(p[0], "isn't on main") {
 		t.Errorf("a commit that isn't on main: %v", p)
 	}
-	write("qa/release/results/v0.11.2.txt", "pass | code | "+g("rev-parse", "HEAD~1")+" | done again\n")
+	again := g("rev-parse", "HEAD~1")
+	write("qa/release/results/v0.11.2.txt", "pass | code | "+again+" | done again\npass | round | "+again+" | done again\n")
 	g("tag", "v0.11.2")
 	tagged := g("rev-parse", "HEAD")
 	write("src/a.go", "4")
-	write("qa/release/results/v0.11.3.txt", "pass | code | "+g("rev-parse", "HEAD")+" | done\n")
+	now := g("rev-parse", "HEAD")
+	write("qa/release/results/v0.11.3.txt", "pass | code | "+now+" | done\npass | round | "+now+" | done\n")
 	if p := refused("v0.11.3"); len(p) != 1 || !strings.Contains(p[0], "v0.11.2.txt: no line for first-report") {
 		t.Errorf("the last release's after check unticked: %v", p)
 	}
-	write("qa/release/results/v0.11.2.txt", "pass | code | "+g("rev-parse", "v0.11.2~1")+" | done again\npass | first-report | "+tagged+" | arrived\n")
+	write("qa/release/results/v0.11.2.txt", "pass | code | "+again+" | done again\npass | round | "+again+" | done again\npass | first-report | "+tagged+" | arrived\n")
 	if p := refused("v0.11.3"); len(p) != 0 {
 		t.Errorf("the last release's after check ticked: %v", p)
 	}

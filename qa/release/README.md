@@ -3,7 +3,8 @@
 CI runs what it can. These are the checks by hand, and what a release must have passed before its tag
 ([RELEASING.md](../../RELEASING.md)).
 
-- **`checks.txt`**: each check, and the paths whose change calls for it.
+- **`checks.txt`**: each check, and the paths whose change calls for it. An `always` check names the directories it
+  answers for; `nothing` lines name the directories with nothing to check by hand, and why.
 - **`results/<tag>.txt`**: what was done for a release, a line each: `pass | <id> | <commit> | <note>` or
   `skip | <id> | <commit> | <why>`. `<commit>` is the whole id of the commit on main it was done at. A skip says why.
 - **`go run ./internal/tools/release needs`** lists what the changes since the last release call for.
@@ -56,6 +57,26 @@ Those screens in dark mode and at phone width.
 ### responder
 
 A security responder on a real Canyon stops production, holds it and lifts it.
+
+### app-sign-in
+
+An app behind Canyon's front door signs a person in on a real Canyon; someone without access is refused.
+
+### github
+
+Connect GitHub on a real Canyon: a push to a linked repository is reviewed, and the review shows on the pull request.
+
+### hand-off
+
+A release handed off to a real platform, through a deploy repository and through a webhook: it runs, and Canyon sees it.
+
+### licence
+
+A valid licence unlocks its features in Settings; a bad or expired one is refused, and what was set keeps working.
+
+### group-sync
+
+A person signs in through a provider that sends groups: a group's grant lets them in, and leaving the group takes it away.
 
 ### outbound
 

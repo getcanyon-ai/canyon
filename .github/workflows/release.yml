@@ -35,7 +35,39 @@ env:
   REHEARSAL: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
+  # The checks a release needs (qa/release/README.md): a tag is refused before anything is built while one its changes
+  # call for has no result, or a stale one, or a check run of the commit isn't done and good. A rehearsal lists them, and
+  # fails, as the release would, where no release tag comes before it. A process gate: the tagged tree holds its own rules.
+  checklist:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read # the commit's check runs
+    steps:
+      - name: the tag is a version, before anything runs on it
+        run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the tags and history the checks are measured by
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: the checks the changes since the last release call for
+        run: go run ./internal/tools/release needs
+      - name: each has a result at this commit, and the commit's check runs are done and good
+        if: env.REHEARSAL != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100" --paginate --slurp > "$RUNNER_TEMP/runs.json"
+          go run ./internal/tools/release check "$TAG" "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_ID"
+
   release:
+    needs: checklist
     runs-on: ubuntu-24.04-arm # arm64 minutes cost 5/8 of x64's; the CLI is pure Go and cross-compiles to every platform
     timeout-minutes: 15
     permissions:
@@ -93,6 +125,7 @@ jobs:
         include:
           - {arch: amd64, runner: ubuntu-24.04}
           - {arch: arm64, runner: ubuntu-24.04-arm}
+    needs: checklist
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     permissions:

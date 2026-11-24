@@ -139,6 +139,10 @@ export const S = {
     "No auth in demo mode. Anyone who can reach this port is an admin — bound to localhost only.",
   bannerExposed: "This Canyon is reachable from the network and has no authentication.",
   promoteConfirm: "Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.",
+  // What the promotion's question says first: the app, its version, and what that replaces (#145).
+  promoteReplaces: "Promotes <app> <version>, replacing <old>.",
+  promoteFirst: "Promotes <app> <version>. Nothing runs in production.",
+  promoteAnyway: "Promote <version> anyway",
   inProduction: "<version> is in production.",
   promoted: "Promotion of <app> started. Production shows the new version here once it is live.",
   // Putting an earlier version back in production (design/OPERATIONS.md §1.7). The code line names two
@@ -146,7 +150,7 @@ export const S = {
   putBackReviewing: "Reviewing <version> again under today's rules. Preview is not touched.",
   putBack: "Putting <version> back in production.",
   putBackReplaces: "It replaces <version>.",
-  putBackNothing: "Nothing runs in production yet.",
+  putBackNothing: "Nothing runs in production.",
   putBackNotThat: "<version>'s review doesn't name the image production ran, so nothing was promoted",
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
@@ -216,6 +220,8 @@ export const S = {
   // The lift's two answers, wherever the hold is lifted: the app page, the fleet and its pane (#102).
   liftKeepStopped: "Lift the hold, keep it stopped",
   liftAndStart: "Lift the hold and start <version>",
+  // A stop whose answer never came, the network's failure and not the server's (#145).
+  stopUnknown: "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again stops it if it runs.",
   holdChanged: "production's hold changed since you read it: read it again",
   // The same hold where production runs nothing (#2696): nothing stops, so the row, its question and its
   // confirm say a hold, and a hold of a production that ran nothing says held, never stopped.
@@ -680,14 +686,19 @@ export const S = {
   copyFix: "Copy the fix for your agent",
   // What blocks the newest version, said to a reader whose read names it no version (#102).
   whatBlocksNewest: "What blocks the newest version",
-  // A finding's chip where it lets preview go ahead and stops production (the run read's blocks_production; #102).
-  blocksAtProduction: "Doesn't stop preview. Stops production until fixed or approved.",
-  // The review's two lists after what blocks (#102): what stops production alone, and what doesn't block, its chip too.
-  stopsProduction: "Stops production",
+  // A finding's chip where it lets preview go ahead and blocks production (the run read's blocks_production; #102): never
+  // Stops production, which beside the button of that name reads as one (#145).
+  blocksAtProduction: "Doesn't block preview. Blocks going live until it's fixed or approved.",
+  // The review's two lists after what blocks (#102): what blocks production alone, and what doesn't block, its chip too.
+  blocksLive: "Blocks going live",
   doesntBlock: "Doesn't block",
   // A secret's finding by where it is: its scanner's own sentence is its Why (#102).
   secretIn: "A secret is in <file>:<line>",
   // Approving a secret's finding, said above its Approve (#102).
+  // What an approval covers, said above its Approve: a fix doesn't end one before its date (design/PERMISSIONS.md; #145).
+  approveCovers: "Covers this problem in every version of the app until the end of <date> (UTC), production included, even if it's fixed and comes back.",
+  approveCoversAll: "Covers these problems in every version of the app until the end of <date> (UTC), production included, even if they're fixed and come back.",
+  approveDates: "Pick a date from <first> to <last>.",
   approveSecret: "Approving lets this version run with the key in its code. Rotate the key anyway.",
   // A runtime secret preview has and production lacks, said in the promotion's question with the way to set it (#102).
   prodLacks: "<name> is set for preview but not production.",
@@ -1118,6 +1129,7 @@ export const SECRETS = {
   replaces: "Setting a name that's already set replaces its value.",
   setPreview: "Set <name> for preview. It takes effect at the next deploy.",
   setProd: "Set <name> for production. It takes effect at the next promotion.",
+  keepsOld: "Production keeps the old value until a version is promoted again.",
   replace: "Replace",
   remove: "Remove",
   askPreview: "Remove <name> from preview?",
@@ -1245,7 +1257,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "POST /api/v1/projects": "created the app",
   "PUT /api/v1/projects/{id}/owner": "claimed the app",
   "DELETE /api/v1/projects/{id}": "deleted the app",
-  "DELETE /api/v1/projects/{id}/envs/{env}": "stopped the app in <env>, keeping its data",
+  "DELETE /api/v1/projects/{id}/envs/{env}": "took <env> offline, keeping its data",
   "request undeploy": "asked to take <env> offline while a run was writing it",
   "send remove again": "asked your platform again to remove <env>: it had started what was taken offline",
   "declare resource": "declared the resource <name>",
@@ -1294,7 +1306,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "egress.ca.rotate": "replaced the root of Canyon's credential certificates",
   // The hold (design/OPERATIONS.md §3.9): a responder's or an admin's stop of production, and its lift.
   "stop app": "held production: <reason>",
-  "lift hold": "let production run again",
+  "lift hold": "lifted the hold without starting production",
   // An app's own guardrail (contracts/routes.md, the app policies row), as the Audit page's verb says it (#2603).
   "app_policy.set": "changed the app's guardrail <rule>",
   "app_policy.remove": "removed the app's guardrail <rule>",
@@ -1312,7 +1324,10 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "patching off at start": "turned patching off: it needs Canyon Enterprise, and this new install has no licence",
 };
 // lift hold when it started production again (detail.started), naming the version it started.
-export const AUDIT_LIFT_STARTED = "let production run again and started <version>";
+export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
+// A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
+// platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
+export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";
 // egress.networks.recreate when its row's failed names the step that failed (#2563).
 export const AUDIT_RECREATE_FAILED = "tried to recreate the app's network, but it failed";
 // egress.route.set when its row names the secret it moved (detail.secret), and egress.ca.rotate onto an admin's sub-CA

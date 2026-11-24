@@ -126,7 +126,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const backToPromote = () => {
     const box = document.getElementById("promote");
     box?.scrollIntoView?.({ block: "center" });
-    (box?.querySelector<HTMLElement>("button:not([disabled])") ?? box)?.focus();
+    const buttons = [...(box?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])];
+    (buttons.find((one) => one.textContent === "Cancel") ?? buttons[0] ?? box)?.focus(); // the question's safe answer, while it's open (#145)
   };
   const [run, setRun] = useState<RunRead | Error | null>(null);
   const [seen, setSeen] = useState<RunRead | null>(null);
@@ -541,7 +542,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
       case "open": return prod === null ? null : <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={prod.url} target="_blank" rel="noreferrer">Open production<Icon name="external" size={14} /></a>;
       case "copy": return broke === null || broke instanceof Error || band === null ? null : <CopyForAgent key={one} app={id} title={band.title} text={band.text} broke={broke} />;
       case "outbound": return <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={`#/apps/${id}/outbound`}>{S.openOutbound}</a>;
-      case "promote": return <Promote key={one} id={id} pullRequest={preview?.pull_request !== undefined} shown={preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={false} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />;
+      case "promote": return <Promote key={one} id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview?.pull_request !== undefined} shown={preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={false} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />;
     }
   };
   // Lift the hold, on the banner that says it, to whoever the fleet's row offers it (#2723): an admin, or a responder off
@@ -802,8 +803,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 {whoApproves}
                 {shown(fix).map(card)}
                 {stopsProd.length > 0 && (
-                  <section aria-label={S.stopsProduction} className="grid grid-cols-[minmax(0,1fr)] gap-3">
-                    <h3 className={H2}>{S.stopsProduction}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(stopsProd).length}</span></h3>
+                  <section aria-label={S.blocksLive} className="grid grid-cols-[minmax(0,1fr)] gap-3">
+                    <h3 className={H2}>{S.blocksLive}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(stopsProd).length}</span></h3>
                     {shown(stopsProd).map(card)}
                   </section>
                 )}
@@ -838,7 +839,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     {status.hold !== undefined && status.hold.version === version(preview.package, preview.label)
                       ? <p className="text-md text-text-dim">{S.heldVersion.replace("<version>", () => status.hold!.version!)}</p>
                       : (preview.package !== project.latest.package || status.receipt.held !== undefined) && (
-                      <Promote id={id} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
+                      <Promote id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
                         quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)}
                         setSecret={(name) => setSettingFor({ name, env: "prod" })} secretsSet={secretsSet} />
                     )}
@@ -857,7 +858,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {/* What Canyon adds under the app, as its known-vulnerable check reads it: a contributor's and up (design/PERMISSIONS.md). */}
             <SystemLibraries id={id} envs={status.envs} />
             {/* The app's secrets by name, and the form that sets one: a contributor's and up (design/specs/mcp.md §10.1). */}
-            <Secrets id={id} asked={secret ?? settingFor ?? undefined} saved={() => setSecretsSet((n) => n + 1)}
+            <Secrets id={id} live={prod !== null} asked={secret ?? settingFor ?? undefined} saved={() => setSecretsSet((n) => n + 1)}
               back={settingFor === null || preview === null ? undefined : { label: S.backToPromote.replace("<version>", () => version(preview.package, preview.label)), go: backToPromote }} />
             <AppSections project={project} envs={status.envs} refreshed={() => void tick.current()} />
           </>

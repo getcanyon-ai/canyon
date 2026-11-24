@@ -36,8 +36,12 @@ and how to fix them.
 ## Change a rule, see what it would block
 
 Moving a rule's control saves nothing yet. Canyon first works out what the change would block today,
-from each app's latest review, and shows it beside the rule: "No app is affected today.", or how many
-apps could not promote and which.
+from each app's latest review, and shows it beside the rule: how many apps could not promote and
+which, or "No app is affected today."
+
+Some changes it can't work out, and it says so. While a rule is Off, reviews may not check it. Canyon
+checks some rules when an app is promoted, such as "Every app has an owner", so it can't say which
+apps they affect. It doesn't check which apps a looser rule lets through.
 
 Changes collect in one bar at the foot of the page. It says what each change does, then offers
 "Discard" and "Save". When a change makes a rule stricter, the bar also offers "Save, tightening in 14

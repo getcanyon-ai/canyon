@@ -27,7 +27,7 @@ steps:
       - label: The code is right as it is
         tone: person
         steps:
-          - {who: An admin or a security responder, icon: person, tone: person, what: "Approves the finding, with a reason", more: "And an expiry, 30 days unless they change it, at most 90. Never on a deploy they started."}
+          - {who: An admin or a security responder, icon: person, tone: person, what: "Approves the finding, with a reason", more: "And an expiry, 30 days unless they change it, at most 89. Never on a deploy they started."}
   - {who: Your coding agent, icon: agent, what: "`canyon deploy` again"}
   - {who: Passed, icon: passed, tone: passed, what: Running in preview, more: Nothing blocking.}
 ```
@@ -125,7 +125,7 @@ finding of a deploy they started, so whoever deployed it asks one of them to:
 1. Open the `Open in Canyon` link from the output.
 2. On the blocking finding, click **Approve with a reason**.
 3. Write the **Reason**, and pick when the **Approval expires**: 30 days out unless you change it,
-   at most 90.
+   at most 89. It lasts to the end of that day, UTC.
 4. Click **Approve**.
 
 Then deploy again:
@@ -168,8 +168,9 @@ marks the lines left out. The demo runs without sign-in, so the approver reads `
 - **It is on the record.** The approval carries the approver's name, the reason and the date. It
   goes into the [audit trail](/org/audit-trail/), which every admin can read, with who started the
   deploy. The finding stays on the page, marked approved until that date.
-- **It covers the same finding on later deploys**, until it expires. After that date the finding
-  blocks again.
+- **It covers the same finding on later deploys**, production included, until it expires. Fixing the
+  finding doesn't end the approval: if the same finding comes back before that date, it's still
+  covered. After that date the finding blocks again.
 - **Some findings block only production.** A rule can be placed to block before production instead
   of before preview. Its finding reads **advisory before preview · blocks before production**: the
   version reaches preview, and the finding must be fixed or approved the same way before the app

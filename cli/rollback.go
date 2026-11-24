@@ -213,7 +213,7 @@ func (a *app) rollback(ctx context.Context, client *Client, at, name string, rea
 		return a.fail(errors.New(back.version + "'s review doesn't name the image production ran, so nothing was promoted"))
 	}
 	shipping := cell(r.Ships.Version)
-	replaces, replaced := "Nothing runs in production yet.", "nothing, production runs nothing now"
+	replaces, replaced := "Nothing runs in production.", "nothing, production runs nothing now"
 	left := "."
 	if back.replaces != "" {
 		replaces, replaced = "It replaces "+back.replaces+".", back.replaces

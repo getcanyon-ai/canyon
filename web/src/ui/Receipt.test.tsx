@@ -260,7 +260,7 @@ describe("the go-live checklist", () => {
       fireEvent.click(within(screen.getByText("lodash 4.17.20").closest("li")!).getByRole("button", { name: "Approve with a reason" }));
       fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "  the SDK's own fixture  " } });
       fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-      await vi.waitFor(() => expect(sent).toEqual([{ fingerprints: [`f_${"a".repeat(64)}`, `f_${"b".repeat(64)}`], reason: "the SDK's own fixture", expires_at: "2026-12-02T00:00:00Z" }]));
+      await vi.waitFor(() => expect(sent).toEqual([{ fingerprints: [`f_${"a".repeat(64)}`, `f_${"b".repeat(64)}`], reason: "the SDK's own fixture", expires_at: "2026-12-02T23:59:59Z" }]));
       cleanup();
     }
     vi.useRealTimers();

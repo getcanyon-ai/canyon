@@ -2565,7 +2565,7 @@ end produced it. `cli/testdata/deploy-prod-blocked.txt` and `deploy-prod-409.txt
 
 **Clean, with confirmation.** The first line says what ships: the version preview runs, that its
 review cleared it — never the run's id (amended 2026-10-01, `canyonv2-5r11.12`) — and what it replaces — `It replaces v1.3.`, or
-`Nothing runs in production yet.` when prod runs nothing — the cue a person confirming production
+`Nothing runs in production.` when prod runs nothing — the cue a person confirming production
 wants. It takes the place of promote's version line (`Promoting v1.4 to prod, replacing v1.3.`).
 
 ```
@@ -2728,7 +2728,7 @@ Exit code `2`, the app's page under the sentence. The sentence is the promotions
 same rule from the same answer, and a `409 preview_answered` the host answers after the status read
 (preview was deployed again in between) prints the host's `message` the same way, its `version` and
 `answered` filling the ai block's lines. A person
-overrides it on the app's page in the dashboard (`Promote anyway`); the terminal has no override.
+overrides it on the app's page in the dashboard (`Promote <version> anyway`); the terminal has no override.
 Where the org has a person approve production nothing is refused here: the line `! Preview answered
 400 Bad Request at /; check the app before promoting.` prints under the version lines, the approval
 is asked for, and the approval page shows the answer to the person who decides. Under ai that line

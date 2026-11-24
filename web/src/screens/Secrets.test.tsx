@@ -82,6 +82,23 @@ describe("the app page's Secrets section", () => {
     expect(await section().findByText(T.none)).toBeDefined();
   });
 
+  // Replacing what a running production reads changes nothing there until a promotion (contracts/routes.md, the secrets row).
+  it("says production keeps the old value, where production runs and had one", async () => {
+    const had = { ...listed.secrets[0]!, name: "STRIPE_KEY", env: "prod", where: "runtime", origin: "user" } as Secret;
+    for (const [live, rows, says] of [[true, [had], true], [false, [had], false], [true, [], false], [true, [{ ...had, env: "preview" } as Secret], false]] as const) {
+      server({ [LIST]: { body: { secrets: rows } }, "PUT /api/v1/projects/claims-portal/secrets/STRIPE_KEY": { status: 204, body: null } });
+      const { unmount } = render(<Secrets id="claims-portal" live={live} />);
+      await waitFor(() => expect(screen.queryByText(T.none) !== null || screen.queryByText("STRIPE_KEY") !== null).toBe(true));
+      fill("STRIPE_KEY", VALUE);
+      fireEvent.change(form().getByLabelText(T.env), { target: { value: "prod" } });
+      fireEvent.click(form().getByRole("button", { name: T.set }));
+      const status = (await section().findByRole("status")).textContent!;
+      expect(status).toContain("Set STRIPE_KEY for production. It takes effect at the next promotion.");
+      expect(status.includes("Production keeps the old value until a version is promoted again."), `${live} ${rows.length}`).toBe(says);
+      unmount();
+    }
+  });
+
   it("sets a value once, as typed, empties the name and the value, says where it takes effect, and never shows it back", async () => {
     let rows = listed.secrets;
     const PUT = "PUT /api/v1/projects/claims-portal/secrets/STRIPE_WEBHOOK_SECRET";

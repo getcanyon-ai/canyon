@@ -66,7 +66,7 @@ answer a prompt, as in a coding agent or CI, it refuses until you add `--yes`:
 ```text
   canyon · amber-gecko-w4g preview → prod · localhost:7777
 
-  Promoting e87c28 (passed review) from preview to production. Nothing runs in production yet.
+  Promoting e87c28 (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
   ! GREETING is set for preview but not production. Set it with: canyon secret set GREETING --env prod
 
@@ -83,7 +83,7 @@ canyon deploy --env prod --yes
 ```text
   canyon · amber-gecko-w4g preview → prod · localhost:7777
 
-  Promoting e87c28 (passed review) from preview to production. Nothing runs in production yet.
+  Promoting e87c28 (passed review) from preview to production. Nothing runs in production.
   Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.
 
   Promote
@@ -111,7 +111,7 @@ canyon deploy --env prod --yes
   secrets production lacks before you confirm.
 - **Preview answering with an error:** when the version in preview answers its address with an
   error, the CLI won't promote it, with or without `--yes`. A person can still promote it from the
-  app's page in the dashboard, with **Promote anyway**.
+  app's page in the dashboard, with **Promote _version_ anyway**.
 - **A pull request's version** can run in preview but is never promoted. Merge it, then deploy the
   default branch ([GitHub](/build/github/)).
 - **Taking production offline:** `canyon undeploy --env prod` asks first (`--yes` in CI). The app's

@@ -237,7 +237,7 @@ describe("Policies", () => {
     server({ ...routes, [`PUT ${POLICIES}/${loose.id}`]: { body: { would_block: [] } } });
     render(<Policies />);
     await choose(loose.name, "off");
-    expect(await row(loose.name).findByText("No app is affected today.")).toBeDefined();
+    expect(await row(loose.name).findByText("Canyon doesn't check which apps this lets through.")).toBeDefined();
     expect(bar().getByText("Apps with these findings will be able to reach production.")).toBeDefined();
     expect(bar().queryByRole("button", { name: /tightening/ })).toBeNull();
   });
@@ -248,7 +248,7 @@ describe("Policies", () => {
     await change();
     await choose(loose.name, "off");
     expect(bar().getByText("2 changes:")).toBeDefined();
-    await row(loose.name).findByText("No app is affected today.");
+    await row(loose.name).findByText("Canyon doesn't check which apps this lets through.");
     fireEvent.click(bar().getByRole("button", { name: "Save" }));
     await waitFor(() => expect(applied(sent)).toEqual([
       `PUT ${RULE}?apply=true ${JSON.stringify(golden.apply.request)}`,

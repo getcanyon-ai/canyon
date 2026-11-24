@@ -136,8 +136,9 @@ export function FleetPanel({ app, display, org, close, viewer, signedIn, lift, a
           {" · "}<span className="whitespace-nowrap">{FLEET.updated.replace("<age>", ago(app.latest.since))}</span>{/* the table's Updated, which it drops beside the pane and below 1360px */}
         </p>
         {app.owners.length === 0 && !needs.some((need) => need.kind === "unowned") && <Claim app={app} display={display} />}{/* else its need's line carries it */}
-        {/* Stop production, Hold production or Lift the hold, where the reader may: the row's peek holds them, never every row */}
-        <span className="w-full"><HoldCell app={app} role={viewer.role} act={act}>{null}</HoldCell></span>
+        {/* Stop production, Hold production or Lift the hold, where the reader may: the row's peek holds them, never every row.
+            While Needs you lists the hold, its line carries the Lift (#145). */}
+        {!top.needs.some((need) => need.kind === "held" && need.you) && <span className="w-full"><HoldCell app={app} role={viewer.role} act={act}>{null}</HoldCell></span>}
       </div>
       {status instanceof Error && <p className="text-base text-critical">{status.message}</p>}
       {run instanceof Error && <p className="text-base text-critical">{run.message}</p>}

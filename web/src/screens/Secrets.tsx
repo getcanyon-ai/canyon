@@ -29,8 +29,8 @@ const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 // the form opens on that secret, scrolled to with its value's field ready. Only a name a secret may have and an
 // environment there is are taken; a value never comes from a link.
 // back is the way back to what sent the reader here, offered once the secret is set (#102: promote's missing secret);
-// saved is told each time one is set.
-export function Secrets({ id, asked, back, saved }: { id: string; asked?: { name: string | null; env: string | null }; back?: { label: string; go: () => void }; saved?: () => void }) {
+// saved is told each time one is set. live: production runs, so a value it had is the one it keeps until a promotion (#145).
+export function Secrets({ id, asked, back, saved, live = false }: { id: string; asked?: { name: string | null; env: string | null }; back?: { label: string; go: () => void }; saved?: () => void; live?: boolean }) {
   const [rows, setRows] = useState<Secret[] | null>(null);
   const [unread, setUnread] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
@@ -66,12 +66,13 @@ export function Secrets({ id, asked, back, saved }: { id: string; asked?: { name
     setBusy(true);
     setSaid(null);
     setRefusal(null);
+    const had = live && env === "prod" && rows?.some((row) => row.name === name && row.env === "prod") === true;
     try {
       await setSecret(id, name, { value: value.current?.value ?? "", env, where });
       if (value.current !== null) value.current.value = ""; // taken: the field holds it no longer
       setTyped(false);
       setName(""); // a name left in the field would invite the next value to overwrite the same secret
-      setSaid(named(env === "prod" ? T.setProd : T.setPreview, name));
+      setSaid(`${named(env === "prod" ? T.setProd : T.setPreview, name)}${had ? ` ${T.keepsOld}` : ""}`);
       setOpen(false);
       saved?.();
       setReads((n) => n + 1);

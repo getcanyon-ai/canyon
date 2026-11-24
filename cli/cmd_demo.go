@@ -444,11 +444,6 @@ func demoHeld(ctx context.Context, ref, id string) (string, error) {
 	return "", nil
 }
 
-// demoShort is a reference as docker image ls writes it: Docker Hub's registry, and its library/, left out.
-func demoShort(ref string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(ref, "docker.io/"), "library/")
-}
-
 // demoTransit is the builds and scans the demo's executor started, labelled but naming no app: the
 // canyon.build and canyon.scan containers made since its own container was. It is read before the
 // demo stops, because Docker refuses a since= that names a container it has removed.

@@ -78,6 +78,9 @@ jobs:
     # ./cmd/canyon-server's tests, most of the suite's time, split by name across the matrix (make
     # test-shards): each shard first checks that every test the package lists is in exactly one
     # shard, so a test in none fails here. On main and on a pull request alike: never affected-only.
+    # They passed in 296 to 482 s, and a runner 2.65 times slow took one that passes in 340 s past go test's own 10
+    # minutes, so test-shards gives a shard 25 (Makefile; #124), inside this job's 30. Not more shards: hosted
+    # runners take the jobs, and each shard is one more to queue.
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 30
     strategy:
@@ -190,8 +193,8 @@ jobs:
   runs-shard:
     # ./runs' tests, ~16 minutes in one go test process under -race (#2232), split by name as server-shard's,
     # with the same exactly-once check. Two shards ran 421 s and 535 s of tests on #2727's head, close to go
-    # test's 10-minute timeout (#2733); three ran 343 s, 309 s and 324 s on #2734's. A shard nearing the
-    # timeout gets another shard, never a longer -timeout, which would only hide a hang.
+    # test's own 10-minute timeout (#2733); three ran 343 s, 309 s and 324 s on #2734's. test-shards gives a
+    # shard 25 minutes, as server-shard's.
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 30
     strategy:

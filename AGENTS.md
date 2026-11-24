@@ -32,9 +32,9 @@ the code. One doc that can drift, not two.
 ## Commands
 
 Every command is a `Makefile` target and CI runs the same targets: the table is in
-[CONTRIBUTING.md](CONTRIBUTING.md#set-up). CI runs on Canyon's own runners (`runs-on` label
-`canyon-arm`, on spot; the jobs of 7 minutes or more ask for `canyon-arm-ondemand`), so a push is
-cheap: **push and let CI run the checks** — every one your change's
+[CONTRIBUTING.md](CONTRIBUTING.md#set-up). CI runs on GitHub's hosted runners, where jobs queue, unless
+the repository's `CANYON_RUNNERS` is `self-hosted`: then on Canyon's own (`runs-on` label `canyon-arm`, on spot; the
+jobs of 7 minutes or more ask for `canyon-arm-ondemand`). **Push and let CI run the checks** — every one your change's
 paths call for (the race and database tests, lint, the stack, e2e-ui, kind); the journeys,
 e2e-ui and the tour run nightly on `main` when it moved since the last green nightly, or by hand, and a red
 run on `main` opens or comments on one issue labelled ci. In the public repository a fork's pull request runs

@@ -76,14 +76,14 @@ type readToken struct {
 // its sign-in ended (#179). The stage's verifier, mcpToken, then answers what was read.
 func (a *app) mcpRead(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "bearer") {
-			info, err := a.mcpTokenOf(r.Context(), strings.TrimSpace(token))
+		if fields := strings.Fields(r.Header.Get("Authorization")); len(fields) == 2 && strings.EqualFold(fields[0], "bearer") { // the SDK's own reading of the header
+			info, err := a.mcpTokenOf(r.Context(), fields[1])
 			if errors.Is(err, errUnread) {
 				a.log.Printf("canyon-server: mcp: %v", err)
 				sessionUnread(w)
 				return
 			}
-			r = r.WithContext(context.WithValue(r.Context(), tokenRead{}, readToken{token: strings.TrimSpace(token), info: info, err: err}))
+			r = r.WithContext(context.WithValue(r.Context(), tokenRead{}, readToken{token: fields[1], info: info, err: err}))
 		}
 		next.ServeHTTP(w, r)
 	})

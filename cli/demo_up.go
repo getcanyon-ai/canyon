@@ -138,8 +138,7 @@ func (a *app) demoRunning(ctx context.Context, stack string) bool {
 	if _, err := os.Stat(filepath.Join(stack, "docker-compose.yml")); err != nil {
 		return false
 	}
-	running, err := demoListed(ctx, "", "ps", "-q", "--filter", "name=^canyon-server$")
-	if err != nil || len(running) == 0 {
+	if !demoServing(ctx) {
 		return false
 	}
 	project, _, _, err := demoServer(ctx)
@@ -166,7 +165,7 @@ func (a *app) demoReady(ctx context.Context, dir string) int {
 	if code := runLogin(ctx, a, []string{demoURL}); code != exitOK {
 		return code
 	}
-	if project, _, found, err := demoServer(ctx); err == nil && found && project == demoProject { // only the demo's own server is asked
+	if project, _, found, err := demoServer(ctx); err == nil && found && project == demoProject && demoServing(ctx) { // only the demo's own server, running, is asked
 		if apps, err := demoApps(ctx); err == nil { // kept for down, which may run when the server no longer can answer (#170)
 			a.demoKeep(dir, apps)
 		}

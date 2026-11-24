@@ -3908,13 +3908,13 @@ exits 1.
 
 **Which apps are the demo's, when its server is gone** (**amended 2026-11-24**, #170). `up` keeps the ids its server
 lists in `~/.canyon/demo/apps`, and each `down` whose server answers adds the ones it lists; only the server of the
-compose project `canyon-demo` is ever asked. A `down` whose server does not answer, as one after an earlier `down`,
+compose project `canyon-demo` is ever asked, and only while its container runs. A `down` whose server does not answer, as one after an earlier `down`,
 takes the apps from that file; only with neither does it remove no app and name the `canyon.app` containers as above.
 
 **An image something else holds stays** (**amended 2026-11-24**, #170). On Docker's containerd image store, removing
 a reference by digest takes every tag of its repository at that digest with it. So `--purge` keeps an image it pulled
-by digest when a container outside `canyon-demo` uses it, running or stopped, or when it carries a tag the demo's
-compose file doesn't name, and names each, `image <reference> (<why>)`, after the line that says the demo is gone.
+by digest when a container outside `canyon-demo` uses it, running or stopped, or when it carries any tag, even one
+the compose file writes before the digest (the demo's pull by digest makes none), and names each, `image <reference> (<why>)`, after the line that says the demo is gone.
 
 **The host up replaces.** `up` signs this machine in to the demo, which makes the demo the host every `canyon` command
 reaches. When it replaces another, `up` says so, and keeps that host in `~/.canyon/demo/host-before` for `down` to

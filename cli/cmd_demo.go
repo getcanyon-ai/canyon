@@ -179,6 +179,13 @@ func demoListed(ctx context.Context, dir string, args ...string) ([]string, erro
 // demoServer is the Compose project, and its folder, of the container named canyon-server: every
 // Canyon started from docker-compose.yml runs one by that name, so two cannot run on one Docker.
 // found is false when there is none.
+// demoServing is whether the container named canyon-server is running: only then is what answers on the demo's port
+// its server (#170). A Docker that can't say is taken as no.
+func demoServing(ctx context.Context) bool {
+	running, err := demoListed(ctx, "", "ps", "-q", "--filter", "name=^canyon-server$")
+	return err == nil && len(running) > 0
+}
+
 func demoServer(ctx context.Context) (project, dir string, found bool, err error) {
 	ids, err := demoListed(ctx, "", "ps", "-aq", "--filter", "name=^canyon-server$")
 	if err != nil || len(ids) == 0 {
@@ -360,7 +367,7 @@ func demoMade(ctx context.Context, stack string, apps, transit []string, purge b
 				case err != nil:
 					return fmt.Errorf("could not read the demo's image %s: %w", ref, err)
 				}
-				why, err := demoHeld(ctx, ref, id, refs)
+				why, err := demoHeld(ctx, ref, id)
 				switch {
 				case err != nil:
 					return err
@@ -408,9 +415,8 @@ func demoComposeImages(ctx context.Context, stack string) ([]string, error) {
 
 // demoHeld is why an image the demo pulled by digest stays: on Docker's containerd image store, removing that reference
 // takes every tag of its repository at that digest with it (#170). So it stays when a container outside the demo's
-// compose project uses it, running or stopped, or when it carries a tag the demo's compose file, refs, doesn't name.
-// "" removes it.
-func demoHeld(ctx context.Context, ref, id string, refs []string) (string, error) {
+// compose project uses it, running or stopped, or when it carries a tag. "" removes it.
+func demoHeld(ctx context.Context, ref, id string) (string, error) {
 	users, err := demoListed(ctx, "", "ps", "-a", "--filter", "ancestor="+id, "--format", `{{.Names}} {{.Label "com.docker.compose.project"}}`)
 	if err != nil {
 		return "", fmt.Errorf("could not list what uses the demo's images: %w", err)
@@ -428,17 +434,10 @@ func demoHeld(ctx context.Context, ref, id string, refs []string) (string, error
 	if err := json.Unmarshal([]byte(out), &tags); err != nil {
 		return "", fmt.Errorf("docker answered the tags of %s as Canyon cannot read: %w", ref, err)
 	}
-	named := map[string]bool{}
-	for _, r := range refs { // a compose image written <name>:<tag>@<digest> names that tag
-		if name, _, ok := strings.Cut(r, "@"); ok && strings.Contains(name[strings.LastIndex(name, "/")+1:], ":") {
-			named[demoShort(name)] = true
-		}
-	}
 	for _, tag := range tags {
-		if strings.Contains(tag, "@") { // the containerd store names an image pulled by digest by that very reference: no tag
-			continue
-		}
-		if !named[demoShort(tag)] {
+		// the containerd store names an image pulled by digest by that very reference: no tag. Any other is someone's,
+		// even one the compose file writes before its digest: the demo's pull by digest makes none.
+		if !strings.Contains(tag, "@") {
 			return "it is also tagged " + tag, nil
 		}
 	}
@@ -522,7 +521,7 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 	}
 	before, _ := os.ReadFile(demoHostBefore(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
 	apps, asked := []string(nil), errors.New("no container named canyon-server")
-	if found { // the demo's own, project canyon-demo: what answers on its port is its server, read before it stops
+	if found && demoServing(ctx) { // the demo's own, project canyon-demo, running: what answers on its port is its server, read before it stops
 		apps, asked = demoApps(ctx)
 	}
 	if asked == nil {

@@ -717,7 +717,7 @@ func TestDemoDownNeverActsOnAnotherCanyonWhileTheDemosFilesAreHere(t *testing.T)
 
 // On Docker's containerd image store, removing a reference by digest takes every tag of its repository at that digest
 // with it (#170): purge keeps an image the demo pulled when a container outside the demo uses it, running or stopped,
-// or when it carries a tag the demo's compose file doesn't name, and says which and why.
+// or when it carries a tag, and says which and why.
 func TestDemoDownPurgeKeepsAnImageSomethingElseHolds(t *testing.T) {
 	m := demoOn(t)
 	if _, errs, code := m.run("up"); code != exitOK {
@@ -739,6 +739,39 @@ func TestDemoDownPurgeKeepsAnImageSomethingElseHolds(t *testing.T) {
 	}
 	if left := slices.Sorted(maps.Keys(m.refs)); !slices.Equal(left, []string{"docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd"}) {
 		t.Errorf("purge left %q, want the two something else holds", left)
+	}
+}
+
+// A plain tag on an image the compose file names as <name>:<tag>@<digest> is a person's own, even that very tag: the
+// demo's pull by digest makes no plain tag on the containerd store, where removing the digest would take it (#170).
+func TestDemoDownPurgeKeepsAPersonsTagTheComposeFileAlsoWrites(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	m.tags["postgres:16-alpine@sha256:dd"] = []string{"postgres:16-alpine"} // the person's own, no container on it
+	out, errs, code := m.run("down", "--purge")
+	if code != exitOK || !strings.Contains(out, "    image postgres:16-alpine@sha256:dd (it is also tagged postgres:16-alpine)\n") || !m.refs["postgres:16-alpine@sha256:dd"] {
+		t.Fatalf("exit %d, stderr %q\n%s", code, errs, out)
+	}
+}
+
+// Only a running canyon-server of the demo's is asked which apps are its own: with it stopped, whatever answers on the
+// demo's port is something else, and down takes the apps as up kept them (#170).
+func TestDemoDownAsksNoServerWhileTheDemosIsStopped(t *testing.T) {
+	m := demoOn(t)
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	m.up = false                  // canyon-server is there, stopped
+	m.apps = []string{"stranger"} // what answers on the port now
+	m.ctrs["stranger-preview"] = "stranger"
+	if _, errs, code := m.run("down"); code != exitOK {
+		t.Fatalf("down: exit %d, %s", code, errs)
+	}
+	kept, _ := demoKept(filepath.Join(m.home, ".canyon", "demo"))
+	if _, there := m.ctrs["stranger-preview"]; !there || slices.Contains(kept, "stranger") {
+		t.Fatalf("down took what answers on the port as the demo's: containers %v, kept %v", m.ctrs, kept)
 	}
 }
 

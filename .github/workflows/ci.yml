@@ -404,7 +404,7 @@ jobs:
         run: make demo-check
 
 
-  images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
+  images: # the ten release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image is multi-arch
     timeout-minutes: 40
     steps:
@@ -412,7 +412,16 @@ jobs:
         with:
           fetch-depth: 2 # the merge commit and its base, which the next step diffs
       - id: images
-        run: git diff --quiet HEAD^1 HEAD -- 'Dockerfile*' 'executor/*.Dockerfile' Makefile LICENSE NOTICE THIRD_PARTY_NOTICES || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+        run: git diff --quiet HEAD^1 HEAD -- 'Dockerfile*' 'executor/*.Dockerfile' Makefile LICENSE NOTICE THIRD_PARTY_NOTICES scripts/builder-node.sh deploy/k8s/builds.yaml internal/tools/paketobump || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change; builds.yaml pins the Node builder's buildpack
+      - if: steps.images.outputs.changed == 'true'
+        uses: actions/setup-go@v5 # canyon-builder-node reads its nodejs pin with this tree's own tool
+        with:
+          go-version-file: go.mod
+          cache: false
+      - if: steps.images.outputs.changed == 'true'
+        run: make pack-install # pack makes canyon-builder-node
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - if: steps.images.outputs.changed == 'true'
         run: make images-load
 
@@ -425,7 +434,16 @@ jobs:
           fetch-depth: 2 # the merge commit and its base, which the next steps diff
       - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - id: bundle
-        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile scripts/builder-node.sh deploy/k8s/builds.yaml || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+      - if: steps.bundle.outputs.changed == 'true'
+        uses: actions/setup-go@v5 # the Node builder the bundle names reads its nodejs pin with this tree's own tool
+        with:
+          go-version-file: go.mod
+          cache: false
+      - if: steps.bundle.outputs.changed == 'true'
+        run: make pack-install # pack makes that builder
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - if: steps.bundle.outputs.changed == 'true'
         run: make deploy-bundle-check
       - id: source

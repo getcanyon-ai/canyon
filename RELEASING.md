@@ -13,7 +13,7 @@ Before the first release, and after any change to the release workflow or its sc
 gh workflow run release.yml -R getcanyon-ai/canyon --ref main
 ```
 
-It builds what a release builds and publishes nothing. That covers the CLI for every platform, all nine images for
+It builds what a release builds and publishes nothing. That covers the CLI for every platform, all ten images for
 linux/amd64 and linux/arm64 (each built to its digest and pushed nowhere), and the Helm chart, the deploy bundle and
 Opengrep's source. Each file is packed and checked as for a release, under the version `v0.0.0-rehearsal`. Tag only
 once it's green.
@@ -34,8 +34,10 @@ Every job first checks that the tagged commit is on `main`, and refuses it other
 released.
 
 1. The CLI for every platform, with `SHA256SUMS` and `install.sh`, goes to a draft release of the tag here.
-2. The nine images are built for linux/amd64 and linux/arm64, pushed to `ghcr.io/getcanyon-ai` by digest, joined
-   into one multi-architecture image each and tagged with the version. Their digests go to `images.txt` on the
+2. The ten images are built for linux/amd64 and linux/arm64, pushed to `ghcr.io/getcanyon-ai` by digest, joined
+   into one multi-architecture image each and tagged with the version. `canyon-builder-node` is made by
+   `pack builder create` in the daemon, not by a Dockerfile, so it is pushed by a tag of its own,
+   `<version>-<arch>`, before the join. Their digests go to `images.txt` on the
    draft. Every base image they're built from is pinned by digest.
 3. Every image in `images.txt` is pulled on both architectures, with no login, and only then is the release
    published.
@@ -51,9 +53,12 @@ released.
 ## The tokens
 
 - **The images push with each job's own `GITHUB_TOKEN`** (`packages: write`), which lasts only as long as the job.
-  This needs a one-time setting on each of the nine packages, `ghcr.io/getcanyon-ai/canyon-*`: under **Package
+  This needs a one-time setting on each of the ten packages, `ghcr.io/getcanyon-ai/canyon-*`: under **Package
   settings › Manage Actions access**, add `getcanyon-ai/canyon` with the **Write** role. Without it the push is
   refused, because those packages were created outside this repository.
+- **A new package starts private.** The first release that pushes one creates it, and its pull check fails until
+  an owner of the organisation makes it public, under its **Package settings › Danger Zone**. Then run the
+  release again. `canyon-builder-node` was new in v0.11.2.
 - **Publishing on canyon-releases takes one secret, `CANYON_RELEASES_TOKEN`:** a fine-grained token with
   **Contents: read and write** on `getcanyon-ai/canyon-releases` and nothing else. It can't push to this
   repository or create its tags.

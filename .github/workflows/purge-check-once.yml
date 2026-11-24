@@ -1,0 +1,27 @@
+# Temporary, on this branch alone: the CLI built from this tree runs the published demo up, down, then down --purge,
+# and every image the demo made must be gone. The branch's last commit deletes it.
+name: purge-check-once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/demo-purge-170'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/hosted-docker
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: .github/purge-check/run.sh

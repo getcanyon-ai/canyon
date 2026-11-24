@@ -2625,7 +2625,7 @@ describe("taking an environment offline and deleting the app", () => {
     const ask = screen.getByRole("dialog", { name: "Delete claims-portal" });
     expect(ask.getAttribute("aria-modal")).toBe("true");
     expect(within(ask).getByText("Production is live at http://claims-portal.prod.localhost:7777, and goes offline with it.")).toBeDefined();
-    expect(document.activeElement).toBe(within(ask).getByLabelText("Type claims-portal to enable this button."));
+    await waitFor(() => expect(document.activeElement).toBe(within(ask).getByLabelText("Type claims-portal to enable this button."))); // focus lands once the listing has, an effect after the field appears (#168)
     fireEvent.keyDown(ask, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     await askOffline();

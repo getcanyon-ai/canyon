@@ -726,6 +726,8 @@ func TestDemoDownPurgeKeepsAnImageSomethingElseHolds(t *testing.T) {
 	m.tags["docker.io/library/busybox@sha256:cc"] = []string{"busybox:1.37"}        // the person's own tag, at the demo's digest
 	m.users["postgres:16-alpine@sha256:dd"] = []string{"team-postgres canyon-team"} // a stopped team Canyon's database
 	m.users[names.CheckovImage] = []string{"canyon-demo-scan-1 " + demoProject}     // the demo's own: no reason to keep it
+	// the containerd store names an image pulled by digest by that reference: no tag of anyone's
+	m.tags["ghcr.io/getcanyon-ai/canyon-server@sha256:aa"] = []string{"ghcr.io/getcanyon-ai/canyon-server@sha256:aa"}
 	if _, errs, code := m.run("down"); code != exitOK {
 		t.Fatalf("down: exit %d, %s", code, errs)
 	}

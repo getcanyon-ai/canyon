@@ -435,6 +435,9 @@ func demoHeld(ctx context.Context, ref, id string, refs []string) (string, error
 		}
 	}
 	for _, tag := range tags {
+		if strings.Contains(tag, "@") { // the containerd store names an image pulled by digest by that very reference: no tag
+			continue
+		}
 		if !named[demoShort(tag)] {
 			return "it is also tagged " + tag, nil
 		}

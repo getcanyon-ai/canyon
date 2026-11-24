@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AuditPage, Env, FleetPage, FleetRow, Receipt, RunRead } from "../api";
+import type { AuditPage, Env, FleetPage, FleetRow, Receipt, RunRead, Need } from "../api";
 import { S } from "../strings";
 import { Fleet } from "./Fleet";
 
@@ -79,6 +79,18 @@ describe("the fleet's side panel", () => {
     expect(await band("quote-engine")).toContain("2b6d hasn't been reviewed");
     expect(inPanel("quote-engine").getByRole("link", { name: "Open review" }).getAttribute("href")).toBe("#/apps/quote-engine");
     expect(inPanel("quote-engine").getByRole("link", { name: "Open app →" }).getAttribute("href")).toBe("#/apps/quote-engine");
+  });
+
+  // The table drops Updated below 1360px and while the pane is open, so the pane says it, in the table's words.
+  it("says when the app last moved, as the table's Updated column does", async () => {
+    server(() => golden);
+    render(<Fleet org="Meridian Insurance" />);
+    const row = (await screen.findByRole("link", { name: "premium-ledger" })).closest("tr")!;
+    const heads = screen.getAllByRole("columnheader").map((one) => one.textContent);
+    const updated = row.cells[heads.indexOf("Updated")]!.textContent!;
+    expect(updated).toMatch(/ ago$/);
+    openPanel("premium-ledger");
+    expect(inPanel("premium-ledger").getByText(`Updated ${updated}`)).toBeDefined();
   });
 
   // A failed build's band offers Copy for your agent on the app page: the pane's step opens it there.
@@ -405,14 +417,14 @@ describe("the fleet's side panel", () => {
   });
 
   // Beside the pane the table keeps what is read down the list; the pane says the rest for its row.
-  it("folds the version, owner and access columns away while the pane is open", async () => {
+  it("folds the version, owner, updated and access columns away while the pane is open", async () => {
     server(() => ({ ...golden, banner: "none", viewer: { display: "Dana Whitfield", role: "admin", github_logins: [], github_link: false } }));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findByText("premium-ledger");
     const heads = () => screen.getAllByRole("columnheader").map((one) => one.textContent);
     expect(heads()).toEqual(["App", "Version", "Review", "Preview", "Production", "Owner", "Updated", "Access", ""]);
     openPanel("claims-portal");
-    expect(heads()).toEqual(["App", "Review", "Preview", "Production", "Updated", ""]);
+    expect(heads()).toEqual(["App", "Review", "Preview", "Production", ""]); // Updated too: at 1280 the row's way into its pane was cut off (the UX review)
     fireEvent.click(inPanel("claims-portal").getByRole("button", { name: "Close" }));
     expect(heads()).toHaveLength(9);
   });
@@ -598,5 +610,23 @@ describe("what needs a person, in the side pane", () => {
     openPanel(await screen.findByText("quote-engine").then(() => "quote-engine"));
     await inPanel("quote-engine").findByText("quote-engine has no owner.");
     expect(inPanel("quote-engine").getAllByRole("button", { name: "Claim quote-engine" })).toHaveLength(1);
+  });
+
+  // A held app's Lift is offered once: by its Needs you while that lists the hold (its run unread, or unreadable), and by the
+  // pane's head once the band says the hold, which takes the need off the list (#145).
+  it("offers a held app's Lift once, whether the run was read or not", async () => {
+    const hold = { by: { kind: "person" as const, subject: "rhea@meridian.example", display: "Rhea Okafor" }, at: "2026-11-08T09:00:00Z", reason: "why", version: "v1.3" };
+    const held = { kind: "held", env: "prod", rank: 1, since: hold.at, you: true, ask: [] } as Need;
+    for (const read of [true, false]) {
+      server(() => ({ ...swap("claims-portal", { hold, needs: [held] }), viewer: { ...golden.viewer, role: "admin" } }), read ? {} : { ok: false, status: 500, body: { error: "internal", message: "no" } });
+      const { unmount } = render(<Fleet org="Meridian Insurance" />);
+      await screen.findByText("premium-ledger");
+      openPanel("claims-portal");
+      if (read) expect(await band("claims-portal")).toMatch(/^Production is held/);
+      else await inPanel("claims-portal").findByRole("region", { name: "Needs you" });
+      expect(inPanel("claims-portal").queryAllByRole("region", { name: "Needs you" })).toHaveLength(read ? 0 : 1);
+      expect(inPanel("claims-portal").getAllByRole("button", { name: "Lift the hold on claims-portal" }), String(read)).toHaveLength(1);
+      unmount();
+    }
   });
 });

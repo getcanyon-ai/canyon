@@ -45,7 +45,7 @@ the rule on. While the rule is Off, the default, Canyon lists and checks no imag
 
 ## Your own image scanner as an added source
 
-If your organisation already scans images with its own tool (Wiz, Prisma Cloud, Snyk, Amazon Inspector),
+If your organization already scans images with its own tool (Wiz, Prisma Cloud, Snyk, Amazon Inspector),
 an admin can add that tool's reports to what this rule reads. First add the tool under Guardrails, then pick
 it as the rule's source. Canyon's own scan always counts as well: the rule counts what either finds, and a
 report that finds nothing never hides what Canyon found. Canyon also uses its own scan to tell which part

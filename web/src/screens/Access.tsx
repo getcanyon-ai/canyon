@@ -5,6 +5,7 @@ import { Actor } from "../ui/Actor";
 import { Age } from "../ui/Age";
 import { Button } from "../ui/Button";
 import { EnterpriseLine, unlocks, useLicence } from "../ui/Enterprise";
+import { useMedia } from "../ui/media";
 import { CELL, Table, TableWrap } from "../ui/Table";
 
 const H2 = "text-base font-semibold";
@@ -93,6 +94,7 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
   // lead, #2881), and a group already added keeps its access whatever the licence.
   const licence = useLicence();
   const groupsUnlocked = unlocks(licence, "group_sync");
+  const phone = useMedia("(max-width: 719px)"); // the table's 640px and the page's gutters
   const sending = useRef(false);
   // The page's poll carries the counts; when one moves, a grant or a request changed elsewhere.
   const moved = `${access.everyone} ${access.people} ${access.groups} ${access.requests}`;
@@ -147,6 +149,18 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
     ...(read.everyone === null ? [] : [{ kind: "everyone" as const, grantee: "everyone", display: `Everyone at ${org}`, level: "viewer" as const, roles: read.everyone.roles }]),
     ...read.entries,
   ];
+  // A grant's parts, the same in the table and in a phone's card: who, the access to change, and its Remove.
+  const nameOf = (row: Row) => (row.kind === "group" ? S.groupNamed.replace("<group>", () => row.grantee) : row.display);
+  const whoOf = (row: Row) => (
+    <>{row.kind === "group" ? <span>{row.grantee}</span> : row.display}{row.kind === "group" && <span className="ml-2 text-sm text-text-faint">{S.group}</span>}{row.kind === "email" && row.display !== row.grantee && <span className="ml-2 font-mono text-sm break-all text-text-faint">{row.grantee}</span>}</>
+  );
+  const levelOf = (row: Row) => (row.kind === "everyone" ? WORD[row.level] : (
+    <select aria-label={`Access for ${nameOf(row)}`} className={FIELD} value={row.level}
+      onChange={(event) => void change(() => share(id, row.kind, row.grantee, { level: event.target.value as Level, roles: row.roles }))}>
+      {LEVELS.filter(([key]) => row.kind !== "group" || groupsUnlocked || RANK[key] <= RANK[row.level]).map(([key, word]) => <option key={key} value={key}>{word}</option>)}
+    </select>
+  ));
+  const remover = (row: Row) => <button type="button" className="text-base text-link" aria-label={`Remove ${nameOf(row)}`} onClick={() => void change(() => unshare(id, row.kind, row.grantee), true)}>Remove</button>;
   return (
     <section ref={section} aria-label="Access">
       {/* Closed until asked for, its line on the summary; open while access requests wait on its owners. */}
@@ -155,28 +169,36 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
       {failure !== null && <p className="mt-2 text-base text-critical">{failure}</p>}
       {read !== null && (
         <>
-          <TableWrap minWidth={640}>
-            <Table columns={COLUMNS} rows={rows} renderRow={(row) => {
-              const name = row.kind === "group" ? S.groupNamed.replace("<group>", () => row.grantee) : row.display;
-              return (
+          {/* on a phone each grant is a card, as each secret is: the table's selects and Remove start past its edge (#126) */}
+          {phone ? (
+            <ul className="mt-2.5 grid gap-2.5">
+              {rows.map((row) => (
+                <li key={`${row.kind}/${row.grantee}`} className="grid gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
+                  <span className="break-words">{whoOf(row)}</span>
+                  <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-md">
+                    <dt className="text-text-faint">Access</dt><dd>{levelOf(row)}</dd>
+                    <dt className="text-text-faint">Roles</dt><dd>{row.roles.join(", ") || "—"}</dd>
+                    <dt className="text-text-faint">Added by</dt><dd><Actor actor={row.granted_by ?? null} /></dd>
+                    <dt className="text-text-faint">When</dt><dd><Age at={row.granted_at ?? null} /></dd>
+                  </dl>
+                  <span>{remover(row)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <TableWrap minWidth={640}>
+              <Table columns={COLUMNS} rows={rows} renderRow={(row) => (
                 <tr key={`${row.kind}/${row.grantee}`}>
-                  <td className={CELL}>{row.kind === "group" ? <span>{row.grantee}</span> : name}{row.kind === "group" && <span className="ml-2 text-sm text-text-faint">{S.group}</span>}{row.kind === "email" && row.display !== row.grantee && <span className="ml-2 font-mono text-sm text-text-faint">{row.grantee}</span>}</td>
-                  <td className={CELL}>
-                    {row.kind === "everyone" ? WORD[row.level] : (
-                      <select aria-label={`Access for ${name}`} className={FIELD} value={row.level}
-                        onChange={(event) => void change(() => share(id, row.kind, row.grantee, { level: event.target.value as Level, roles: row.roles }))}>
-                        {LEVELS.filter(([key]) => row.kind !== "group" || groupsUnlocked || RANK[key] <= RANK[row.level]).map(([key, word]) => <option key={key} value={key}>{word}</option>)}
-                      </select>
-                    )}
-                  </td>
+                  <td className={CELL}>{whoOf(row)}</td>
+                  <td className={CELL}>{levelOf(row)}</td>
                   <td className={CELL}>{row.roles.join(", ") || "—"}</td>
                   <td className={CELL}><Actor actor={row.granted_by ?? null} /></td>
                   <td className={CELL}><Age at={row.granted_at ?? null} /></td>
-                  <td className={CELL}><button type="button" className="text-base text-link" aria-label={`Remove ${name}`} onClick={() => void change(() => unshare(id, row.kind, row.grantee), true)}>Remove</button></td>
+                  <td className={CELL}>{remover(row)}</td>
                 </tr>
-              );
-            }} />
-          </TableWrap>
+              )} />
+            </TableWrap>
+          )}
           {/* the box on its own line, and the access and Share under it, so the button's reason sits under it and never floats (#102) */}
           <form onSubmit={(event) => void add(event)} className="mt-3 grid max-w-[640px] gap-2">
             <input ref={box} aria-label="Share with" list="share-with" className={`${FIELD} min-w-0`} value={who}

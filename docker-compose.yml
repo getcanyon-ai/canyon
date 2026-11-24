@@ -39,6 +39,9 @@ services:
       # `make demo` shows a fleet; a company's own host leaves this unset and starts empty. An edit to
       # an existing service, called out against the append-only rule: only this one boots the server.
       - CANYON_DEMO_SEED=1
+      # How Canyon was installed, which the daily report says; team.yml sets its own. An edit to an existing service,
+      # called out against the append-only rule.
+      - CANYON_INSTALL_MODE=laptop
       # app-postgres below: a database and login per app and env when a deploy declares postgres; unset, none. An edit to an
       # existing service, called out against the append-only rule, as are depends_on and the pinned address pg_hba admits.
       - CANYON_APP_DATABASE_URL=postgres://canyon:canyon@app-postgres:5432/canyon?sslmode=disable

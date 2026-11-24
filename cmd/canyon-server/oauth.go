@@ -42,6 +42,7 @@ const (
 	// client never got, and rotated again, rather than taken as a second holder's and the session ended: once, and
 	// only while the pair the rotation issued has served nothing (sessions.rotated_unused)
 	oauthRetryGrace = 10 * time.Second
+	oauthEndTimeout = 10 * time.Second // what ending a session at refresh may take, its client gone or not
 	// oauthUnusedPerSource is how many registrations no code has redeemed Canyon holds from one source (registrationSource):
 	// each new one evicts that source's oldest past it, young ones too, but for one whose sign-in a person approved, so a
 	// source only ever evicts its own
@@ -551,7 +552,7 @@ func (p *approver) dest() []any {
 	return []any{&p.act.Kind, &p.act.Subject, &p.act.Display, &p.issuer, &p.email, &p.verified, &p.claimedAdmin, &p.claimedResponder, &p.hd, &p.groups, &p.groupsRead}
 }
 
-// oauthActor is Canyon, as the trail names it when it ends a session whose refresh token came back after it rotated.
+// oauthActor is Canyon, as the trail names it when a refresh ends a session (endOAuthSession).
 var oauthActor = actor{Kind: "canyon", Subject: "oauth", Display: "Canyon"}
 
 // oauthToken redeems a code into a session of the client's own, one row per consent (RFC 6749 §4.1.3), or rotates a
@@ -672,17 +673,10 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			tokenError(w, "invalid_grant", "the refresh token was issued to another client")
 			return
 		case !current && !retried: // a rotated token came back past the grace: one of its two holders isn't the client, so neither keeps the session
-			if _, err := tx.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE id = $1", id); err != nil {
+			if err := a.endOAuthSession(r, tx, id, p.act.Subject, "refresh token reused"); err != nil {
 				internal(err)
 				return
 			}
-			ended := events.WithProvenance(ctx, events.Provenance{Session: sessionDigest(id)})
-			if err := events.AuditTx(ended, tx, oauthActor, "disconnect agent", "", "", map[string]any{"reason": "refresh token reused", "subject": p.act.Subject}); err != nil {
-				internal(err)
-				return
-			}
-			_ = tx.Commit(ctx)
-			a.log.Printf("canyon-server: oauth session %s ended: its refresh token was used again", sessionDigest(id))
 			tokenError(w, "invalid_grant", "the refresh token was already used, so Canyon ended the session")
 			return
 		}
@@ -691,11 +685,10 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				internal(err)
 				return
 			}
-			if _, err := tx.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE id = $1", id); err != nil {
+			if err := a.endOAuthSession(r, tx, id, p.act.Subject, "no longer allowed to sign in"); err != nil {
 				internal(err)
 				return
 			}
-			_ = tx.Commit(ctx)
 			tokenError(w, "invalid_grant", "the person who allowed it can no longer sign in to Canyon")
 			return
 		}
@@ -722,6 +715,26 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": int(oauthAccessLife.Seconds()),
 		"refresh_token": refresh, "scope": strings.Join(scopes, " ")})
+}
+
+// endOAuthSession ends the OAuth session id, subject's, for reason, with one audit row by Canyon, and commits tx: once
+// the revoke has begun, the client hanging up doesn't undo it; before it, at the lock or the lookup, it does. An error is a session
+// that may not have ended, which no answer says it has (contracts/routes.md, POST /oauth/token).
+func (a *app) endOAuthSession(r *http.Request, tx pgx.Tx, id, subject, reason string) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), oauthEndTimeout)
+	defer cancel()
+	if _, err := tx.Exec(ctx, "UPDATE sessions SET revoked_at = now() WHERE id = $1", id); err != nil {
+		return err
+	}
+	ended := events.WithProvenance(ctx, events.Provenance{Via: "canyon", Session: sessionDigest(id), Source: a.proxies.source(r)})
+	if err := events.AuditTx(ended, tx, oauthActor, "disconnect agent", "", "", map[string]any{"reason": reason, "subject": subject}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	a.log.Printf("canyon-server: oauth session %s ended: %s", sessionDigest(id), reason)
+	return nil
 }
 
 // stillMember is whether the person whose session a token copies can still sign in to Canyon.

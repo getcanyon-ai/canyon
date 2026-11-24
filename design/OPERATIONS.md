@@ -415,7 +415,7 @@ what stand between them and a wrong-host write. cli.md §8.2 and §8.4 are the d
    (amended 2026-10-13, the owner; #2204; design/PERMISSIONS.md wins). Nothing else of any app: no logs,
    preview, earlier versions or who deployed.
 3. **Stopping.** A responder stops an app's production with a reason, from the CLI (`canyon undeploy
-   --app <app> --env prod --hold --reason "…"`) or from the fleet row's *Stop production*. In one
+   --app <app> --env prod --hold --reason "…"`) or from the fleet's *Stop production* (in a team row's side pane, or on a responder's reduced row, its phone card too; otherwise on a phone, from the app page). In one
    transaction under the ledger lock, the hold is written; every pending or running run that would
    write production is cancelled, PATCHING's watch included; open production approvals turn
    `outdated`. Then the container stops (Canyon) or a `remove` release goes out (org).
@@ -423,8 +423,8 @@ what stand between them and a wrong-host write. cli.md §8.2 and §8.4 are the d
    check in `cancelled(…, deploy=true)`, and the shared production writer. The receipt carries `held`,
    so the CLI, status and the disabled Promote button say why with no per-route code. Preview,
    checks and secrets go on: the team ships its fix to preview and rotates what leaked.
-5. **Lifting.** A responder or an admin lifts the hold, in the dashboard only. They choose *Leave
-   production stopped* or *Start v1.4 again*: a `/run` of the held image's exact bytes, which were
+5. **Lifting.** A responder or an admin lifts the hold, in the dashboard only. They choose *Lift the hold, keep it
+   stopped* or *Lift the hold and start v1.4*: a `/run` of the held image's exact bytes, which were
    kept while held.
 
 ```
@@ -534,8 +534,8 @@ admin**, a person:
 - **Hand-off**: the stop sends `remove` for production (`runs.SendRemoveTx`), superseding any open
   production `deploy` release. A `deployed` report arriving while held — late or raced — goes through
   the shared writer, is answered `409 {error:"held"}`, writes nothing, and Canyon sends another
-  `remove`, so the org's platform takes down what it just started. The hold reads *removing · waiting
-  on your platform* until the org reports `removed`.
+  `remove`, so the org's platform takes down what it just started. The hold reads *being removed by your
+  platform* until the org reports `removed`.
 - **Kubernetes**: app Deployments get `revisionHistoryLimit: 0` (an executor change, PR 4), so no
   earlier ReplicaSet is left to `kubectl rollout undo` past the hold and the gate. A Deployment created
   before this executor keeps its old ReplicaSets until that target's next `/run`.
@@ -569,7 +569,7 @@ production and approve its blocking findings. They never deploy, promote or chan
 `DELETE /api/v1/projects/:id/envs/prod/hold?held_at=<the hold read>[&start=true]` (`held_at` amended 2026-10-14: a lift from a stale read lifts nothing, `409 hold_changed`):
 
 a responder or an admin, from a **browser session only** (any other session `403
-{error:"dashboard_required"}`, as production approvals; on a host with sign-in off any session), from the fleet row's *Lift the hold* — a
+{error:"dashboard_required"}`, as production approvals; on a host with sign-in off any session), from the fleet's *Lift the hold* (a team row's side pane, a reduced row, Needs attention) — a
 responder cannot open an app not shared with them. Anyone on the app's team — an owner or
 contributor grant, directly or through a group, now or as the hold recorded it when production was
 held (design/PERMISSIONS.md) — and a responder too, is `403 {error:"responder_required", admins[]}`
@@ -620,7 +620,7 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   Exit `2`.
 - **Dashboard**: the fleet's Held filter and, for responders and admins, *Stop production* on each
   row; the app page's banner and Promote disabled with its sentence (D6); for responders and admins,
-  *Lift the hold* on the fleet row, with `Leave production stopped` · `Start v1.4 again`, offered to
+  *Lift the hold* in the fleet (a team row's side pane, a reduced row), with `Lift the hold, keep it stopped` · `Lift the hold and start v1.4`, offered to
   no one holding a grant on the app but an admin (§3.6); Settings › People & sign-in, the responders
   list and the claim.
 
@@ -642,8 +642,9 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   line (the pending-stop lines land with the brake seam, PR 2). Schemas — `role` in `access`, `app-page`, `fleet`,
   `guardrails`; `hold` in `app-page` and `fleet`.
 - **Audit** (both `governance`): `stop app` `{env, package?, image?, reason, cancelled[]}`, written
-  when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244): `held
-  production: <reason>` · `let production run again` · `let production run again and started
+  when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244, amended
+  by #145): `held production: <reason>`, or `held production, but Canyon couldn't stop it: <reason>`
+  (`stopped: false`) · `lifted the hold without starting production` · `lifted the hold and started
   <version>`.
 
 ### 3.10 Testing

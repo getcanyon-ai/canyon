@@ -319,7 +319,7 @@ func TestAPromotionShipsTheRunItNamedAndNamesTheRunItStarted(t *testing.T) {
 		want string
 	}{
 		{promoted, "(passed review) from preview to production. It replaces v1.2.\n"},
-		{map[string]any{"run_by": "org", "pending": map[string]any{"event": "deploy", "sent_at": "2026-09-02T10:00:00Z", "state": "accepted"}}, "(passed review) from preview to production. Nothing runs in production yet.\n"},
+		{map[string]any{"run_by": "org", "pending": map[string]any{"event": "deploy", "sent_at": "2026-09-02T10:00:00Z", "state": "accepted"}}, "(passed review) from preview to production. Nothing runs in production.\n"},
 	} {
 		again := clean(t, whole, http.StatusAccepted, started)
 		again.status = mutate(t, again.status, func(read map[string]any) { read["envs"].(map[string]any)["prod"] = c.prod })

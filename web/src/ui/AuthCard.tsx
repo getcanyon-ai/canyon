@@ -18,7 +18,7 @@ export function AuthCard({ org, wide = false, children }: { org: string | null; 
           {org !== null && <span aria-hidden="true" className="grid size-10 flex-none place-items-center rounded-xl bg-accent-dim font-semibold text-accent">{initials(org)}</span>}
           <div className="min-w-0">
             {org !== null && <p className="leading-snug font-semibold">{org}</p>}
-            <p className="flex items-center gap-1.5 font-mono text-sm text-text-faint"><Icon name="locked" size={14} />{window.location.host}</p>
+            <p className="flex items-center gap-1.5 font-mono text-sm text-text-faint">{window.location.protocol === "https:" && <Icon name="locked" size={14} />}{window.location.host}</p>
           </div>
         </div>
         {children}

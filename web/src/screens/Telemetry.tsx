@@ -14,7 +14,13 @@ const OFF: Record<NonNullable<TelemetryState["off_because"]>, string> = {
   env: S.telemetryOffEnv, admin: S.telemetryOffAdmin, unreachable: S.telemetryOffUnreachable,
 };
 
-export const statusLine = (s: TelemetryState) => (s.enabled ? S.telemetryOn : s.off_because === undefined ? S.telemetryOffDone : OFF[s.off_because]);
+const day = (at: string, more: Intl.DateTimeFormatOptions = {}) => new Date(at).toLocaleString("en-GB", { day: "numeric", month: "short", ...more });
+
+// retrying is the line while no report has reached the collector: the next try and the last day, in the reader's time.
+const retrying = (next: string, until: string) =>
+  S.telemetryRetrying.replace("<when>", () => day(next, { hour: "2-digit", minute: "2-digit" })).replace("<day>", () => day(until));
+
+export const statusLine = (s: TelemetryState) => (s.enabled ? (s.next_try_at && s.gives_up_at ? retrying(s.next_try_at, s.gives_up_at) : S.telemetryOn) : s.off_because === undefined ? S.telemetryOffDone : OFF[s.off_because]);
 
 // Report is a report exactly as the host's string holds the send's bytes, as canyon telemetry show prints it.
 function Report({ sent }: { sent: string }) {

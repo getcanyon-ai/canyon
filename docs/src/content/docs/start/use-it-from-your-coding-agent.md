@@ -117,13 +117,13 @@ needs: your Canyon reachable from the internet, Canyon's GitHub App, and your Gi
 
 Add Canyon as a **custom connector in claude.ai**, with `https://<canyon>/mcp` as its address:
 
-1. **An admin adds it once for the organisation:** *Organization settings › Connectors*
+1. **An admin adds it once for the organization:** *Organization settings › Connectors*
    (claude.ai/admin-settings/connectors), then *Add › Custom › Web*. On a Team plan only Owners and
    Primary Owners can; on Enterprise, also a custom role with *Manage access to Libraries*.
 2. **Each person connects it with their own account** in claude.ai, and Canyon asks them in the
    browser to allow it.
 
-Claude Code's cloud sessions get the organisation's connectors, with that same permission, and need
+Claude Code's cloud sessions get the organization's connectors, with that same permission, and need
 no network rule for them. Their calls reach Canyon from Anthropic's servers, which is why your
 Canyon must be reachable from the internet.
 

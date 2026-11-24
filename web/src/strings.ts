@@ -17,9 +17,10 @@ export const S = {
   telemetryTurnOn: "Turn on",
   telemetryOn: "Telemetry is on: Canyon sends one report a day.",
   telemetryOffDone: "Telemetry is off: Canyon sends nothing.",
-  telemetryOffEnv: "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).",
+  telemetryOffEnv: "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).",
   telemetryOffAdmin: "Telemetry is off: an admin turned it off.",
-  telemetryOffUnreachable: "Telemetry is off: its first send couldn't reach Canyon's collector.",
+  telemetryOffUnreachable: "Telemetry is off: it couldn't reach Canyon's collector.",
+  telemetryRetrying: "Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after <when>, and gives up by <day>.",
   telemetryNext: "The next report, exactly as it is sent:",
   telemetryLast: "The last report sent, <when>:",
   telemetryNotSent: "Nothing has been sent yet.",
@@ -138,6 +139,10 @@ export const S = {
     "No auth in demo mode. Anyone who can reach this port is an admin — bound to localhost only.",
   bannerExposed: "This Canyon is reachable from the network and has no authentication.",
   promoteConfirm: "Production runs the same image as preview, with production's own secrets. Nothing is rebuilt.",
+  // What the promotion's question says first: the app, its version, and what that replaces (#145).
+  promoteReplaces: "Promotes <app> <version>, replacing <old>.",
+  promoteFirst: "Promotes <app> <version>. Nothing runs in production.",
+  promoteAnyway: "Promote <version> anyway",
   inProduction: "<version> is in production.",
   promoted: "Promotion of <app> started. Production shows the new version here once it is live.",
   // Putting an earlier version back in production (design/OPERATIONS.md §1.7). The code line names two
@@ -145,7 +150,7 @@ export const S = {
   putBackReviewing: "Reviewing <version> again under today's rules. Preview is not touched.",
   putBack: "Putting <version> back in production.",
   putBackReplaces: "It replaces <version>.",
-  putBackNothing: "Nothing runs in production yet.",
+  putBackNothing: "Nothing runs in production.",
   putBackNotThat: "<version>'s review doesn't name the image production ran, so nothing was promoted",
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
@@ -163,7 +168,7 @@ export const S = {
   skipBlinds: "A skipped path is never scanned: a pattern like ** skips everything, and the tool finds nothing.",
   bundledRules: "Canyon's open-source security rules (GitLab's sast-rules) and its own SQL rule always run, beside any rules repo named here.",
   rulesFolders: "Only the rules files in these folders of the repo are read; none, and every rules file is.",
-  communityRules: "The community rules add Ruby, PHP and Java SQL injection. They carry the Commons Clause, so whether your organisation may use them is its decision; Canyon does not ship them.",
+  communityRules: "The community rules add Ruby, PHP and Java SQL injection. They carry the Commons Clause, so whether your organization may use them is its decision; Canyon does not ship them.",
   credentialAsk: "A private rules repo is read with the username and token set here. Canyon never shows the token again.",
   credentialSet: "A credential is set for <repo>.",
   // Who can open an app (design/PERMISSIONS.md). `…` is what follows "Shared with" in the shared line.
@@ -212,11 +217,11 @@ export const S = {
   offlineOrStop: "To stop it and block every promotion during an incident, use Stop production.",
   liftHold: "Lift the hold",
   liftAsk: "Lift the hold on <app>?",
-  leaveStopped: "Leave production stopped",
-  // The lift's two answers as the app page's question says them (#102); the fleet's says the two above until it uses it.
+  // The lift's two answers, wherever the hold is lifted: the app page, the fleet and its pane (#102).
   liftKeepStopped: "Lift the hold, keep it stopped",
-  startAgain: "Start <version> again",
   liftAndStart: "Lift the hold and start <version>",
+  // A stop whose answer never came, the network's failure and not the server's (#145).
+  stopUnknown: "Canyon's answer didn't arrive, so whether production stopped isn't known. Asking again stops it if it runs.",
   holdChanged: "production's hold changed since you read it: read it again",
   // The same hold where production runs nothing (#2696): nothing stops, so the row, its question and its
   // confirm say a hold, and a hold of a production that ran nothing says held, never stopped.
@@ -439,6 +444,9 @@ export const S = {
   offStillThroughAsk: "Outbound is Off, but this app's calls still go through Canyon until its network is recreated. Ask an admin to recreate it.",
   outboundOffNote: "Outbound is Off",
   prodRefuses: "Preview connected to these in the last 30 days, and production doesn't allow them:",
+  // Settings › Outbound's fold over the limits, the gateway replicas and the certificates (#118).
+  advanced: "Advanced",
+  advancedWhat: "Limits, gateway replicas and credential certificates",
   replicasHeading: "Gateway replicas",
   replicasNote: "A replica with an old policy has stopped, or can't reach Canyon and is refusing every call.",
   replicaCurrent: "policy up to date",
@@ -492,7 +500,9 @@ export const S = {
   keysKeyNote: "Canyon never shows the key again.",
   keysSaved: "Saved. Apps trust it from their next deploy or promotion.",
   frontDoorNone: "No front door is set, so no app can run on this Canyon yet.",
-  hostFirewall: "The rule is in deploy/k8s/README.md, under Host firewall.",
+  // Beside a front door saved with the probe's warning (#118): the dashboard's plain line, and the docs a link away.
+  reachesNode: "Apps on this cluster can reach the server they run on.",
+  reachesNodeHow: "How your cluster admin closes this",
   handOffNeeds: "To hand apps off to your platform, Canyon's server still needs:",
   gateway: "Your gateway signs people in",
   gatewayNote: "Canyon checks who your gateway says it signed in: a standard OIDC ID token, or the token an AWS load balancer signs.",
@@ -614,10 +624,26 @@ export const S = {
   teamCopied: "<file> copied",
   teamChart: "Into your platform repo, under <path>",
   // The environment's pending line under delivery: repo (design/EXPERIENCE.md).
-  pendingPod: "waiting for a pod to check in since <time>",
+  pendingPod: "Your platform hasn't reported it running since <time>",
   pendingMerge: "waiting on your merge since <time>",
   pendingPR: "Pull request #<n>",
-  removingMerge: "removing · waiting on your merge",
+  removingMerge: "Being removed once you merge",
+  removingPlatform: "Being removed by your platform",
+  pendingPlatform: "Sent to your platform at <time>, not running yet",
+  // What the platform says of an environment the org runs (EXPERIENCE.md D5): <version> is "it" where the reader has none.
+  reported: "Your platform reported it running <ago>",
+  reportedStill: "Still running: your platform last reported it <ago>",
+  notReportedSince: "Your platform hasn't reported <version> running since <time>",
+  reportedNotRunning: "Your platform reported <version> deployed, but not running",
+  // The same, short, in the fleet's cells and a phone's cards, which stay a line or two (the UX review); the side pane
+  // and the app page say them whole.
+  pendingShort: "Sent <time> · not running yet",
+  committedShort: "Committed <time> · not running yet",
+  removingShort: "Being removed",
+  removingMergeShort: "Removed once merged",
+  notReportedShort: "not reported since <time>",
+  notRunningShort: "deployed, not running",
+  running: "Running",
   repoUndelivered: "Canyon couldn't commit the release",
   repoRefused: "Your deploy repo refused the release",
   // The two gates' lines on Guardrails › Pipeline (D14).
@@ -660,14 +686,19 @@ export const S = {
   copyFix: "Copy the fix for your agent",
   // What blocks the newest version, said to a reader whose read names it no version (#102).
   whatBlocksNewest: "What blocks the newest version",
-  // A finding's chip where it lets preview go ahead and stops production (the run read's blocks_production; #102).
-  blocksAtProduction: "Doesn't stop preview. Stops production until fixed or approved.",
-  // The review's two lists after what blocks (#102): what stops production alone, and what doesn't block, its chip too.
-  stopsProduction: "Stops production",
+  // A finding's chip where it lets preview go ahead and blocks production (the run read's blocks_production; #102): never
+  // Stops production, which beside the button of that name reads as one (#145).
+  blocksAtProduction: "Doesn't block preview. Blocks going live until it's fixed or approved.",
+  // The review's two lists after what blocks (#102): what blocks production alone, and what doesn't block, its chip too.
+  blocksLive: "Blocks going live",
   doesntBlock: "Doesn't block",
   // A secret's finding by where it is: its scanner's own sentence is its Why (#102).
   secretIn: "A secret is in <file>:<line>",
   // Approving a secret's finding, said above its Approve (#102).
+  // What an approval covers, said above its Approve: a fix doesn't end one before its date (design/PERMISSIONS.md; #145).
+  approveCovers: "Covers this problem in every version of the app until the end of <date> (UTC), production included, even if it's fixed and comes back.",
+  approveCoversAll: "Covers these problems in every version of the app until the end of <date> (UTC), production included, even if they're fixed and come back.",
+  approveDates: "Pick a date from <first> to <last>.",
   approveSecret: "Approving lets this version run with the key in its code. Rotate the key anyway.",
   // A runtime secret preview has and production lacks, said in the promotion's question with the way to set it (#102).
   prodLacks: "<name> is set for preview but not production.",
@@ -777,6 +808,33 @@ export const S = {
 // The sign-in screen's and the header's copy (design/specs/screens.md §A0, design/AUTH.md §8):
 // not D5's, so not in S and not held to EXPERIENCE.md. The button never names the provider.
 // A box's title and its line are two keys, `<key>` and `<key>Line`.
+// The fleet and first run (the dashboard UX review, 2026-11-23): the empty fleet's two ways in, setup's intro, the
+// Access column's one line, a row the reader can't open whole, and the counts' scope.
+export const FLEET = {
+  emptyTitle: "No apps yet",
+  emptyLead: "Add your first app in one of two ways:",
+  emptyCli: "From your machine: install the CLI and run `canyon deploy` in the app's folder, or have your coding agent do it.",
+  emptyCliLink: "Connect an agent →",
+  emptyGitHubAdmin: "From GitHub: connect your organization's repositories, then make an app from one.",
+  emptyGitHubLink: "Connect GitHub →",
+  emptyGitHubMember: "From GitHub: an admin connects your organization's repositories in Settings.",
+  emptyRules: "Every app is checked against your org's rules.",
+  emptyRulesLink: "See them in Guardrails →",
+  setupIntro: "Canyon reviews every deploy your coding agents make and runs the apps that pass. Four steps: name your organization, choose who can sign in, choose its admins, then check and finish.",
+  owner: "Owner",
+  contributor: "Contributor",
+  private: "private",
+  sharedEveryone: "shared with everyone",
+  sharedWith: "shared with <n>",
+  sharedWithAdmin: "Shared with <n>",
+  updated: "Updated <age>",
+  readOnly: "Read-only",
+  noAccess: "No access",
+  askToJoin: "Ask to join",
+  asked: "Asked",
+  allScopeMember: "Every app in the org. Counts are for your apps.",
+} as const;
+
 export const AUTH = {
   signIn: "Sign in to Canyon",
   signInLine: "Use your <org> company account. You'll come straight back here.",
@@ -798,7 +856,6 @@ export const AUTH = {
   githubLinked: "GitHub: <logins>",
   githubLink: "Link GitHub account",
   // The rail's way to the device approval page, its code field empty (#2564): never a pending request.
-  approveCli: "Approve a CLI sign-in",
   // The device approval screen (design/specs/screens.md, "The device approval screen").
   deviceTitle: "Sign in to the Canyon CLI",
   deviceEnter: "Enter the code shown in your terminal.",
@@ -945,7 +1002,15 @@ export const PATCHING = {
   behindOne: "1 app waits for newer system libraries: <apps>",
   current: "No app waits for newer system libraries",
   unknown: "Canyon can't tell which system libraries it uses now, or whether apps wait for newer ones.",
-  runImage: "System libraries image",
+  // A card's name in plain words (#118): the system libraries or build tools in use are the newest, older ones earlier, each with when it was planned;
+  // a sentence in the card names them these, and the 12 hex sits folded in the card as its image.
+  newestLibraries: "Newest system libraries",
+  earlierLibraries: "Earlier system libraries, planned <date>",
+  newestTools: "Newest build tools",
+  earlierTools: "Earlier build tools, planned <date>",
+  theseLibraries: "these system libraries",
+  theseTools: "these build tools",
+  imageHex: "Image <hex>",
   paused: "Canyon paused patching with <image>: <n> apps reverted after the patch.",
   pausedOne: "Canyon paused patching with <image>: 1 app reverted after the patch.",
   stalled: "Canyon is holding the next wave of patches with <image>: <app> reverted after the patch.",
@@ -953,19 +1018,20 @@ export const PATCHING = {
   approveAll: "Approve for every app",
   approveAllAsk: "Approve <image> for production on every app?",
   approved: "Approved for every app by <name>, <date>: <reason>",
-  wave: ["first app", "next 5 apps", "next 25 apps", "the rest"],
+  wave: ["Step 1 of 4: the first app", "Step 2 of 4: the next 5 apps", "Step 3 of 4: the next 25 apps", "Step 4 of 4: the rest"],
+  askedOne: "1 app waits for a person's approval",
   noApps: "No app to patch with these system libraries",
   noRebuildApps: "No app to rebuild with these build tools",
   earlier: "<n> earlier fixes, nothing left to do",
   earlierOne: "1 earlier fix, nothing left to do",
-  counts: { planned: "planned", patched_preview: "patched in preview", asked: "waiting for approval", patched: "patched in production", reverted: "reverted", held: "held", denied: "turned down for production" },
+  counts: { planned: "planned", patched_preview: "patched in preview", asked: "apps wait for a person's approval", patched: "patched in production", reverted: "reverted", held: "held", denied: "turned down for production" },
   // What Canyon's last check said (#2588; contracts/routes.md, the identities row's plan), beside the system libraries
   // it checked against: why it checked no app, or each app it checked under its one cause, in this order. A cause the
   // page does not know reads `unknown`, never nothing to do.
   lastCheck: "Canyon's last check, <ago>",
   checkedNone: {
     server_off: "Patching is off on this Canyon server",
-    org_off: "Patching is off for this organisation",
+    org_off: "Patching is off for this organization",
     not_wired: "This Canyon server isn't set up to patch apps",
     no_preview: "No app has a preview to patch",
     rule_off: "The known-vulnerable packages check is off on every app",
@@ -1063,6 +1129,7 @@ export const SECRETS = {
   replaces: "Setting a name that's already set replaces its value.",
   setPreview: "Set <name> for preview. It takes effect at the next deploy.",
   setProd: "Set <name> for production. It takes effect at the next promotion.",
+  keepsOld: "Production keeps the old value until a version is promoted again.",
   replace: "Replace",
   remove: "Remove",
   askPreview: "Remove <name> from preview?",
@@ -1190,7 +1257,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "POST /api/v1/projects": "created the app",
   "PUT /api/v1/projects/{id}/owner": "claimed the app",
   "DELETE /api/v1/projects/{id}": "deleted the app",
-  "DELETE /api/v1/projects/{id}/envs/{env}": "stopped the app in <env>, keeping its data",
+  "DELETE /api/v1/projects/{id}/envs/{env}": "took <env> offline, keeping its data",
   "request undeploy": "asked to take <env> offline while a run was writing it",
   "send remove again": "asked your platform again to remove <env>: it had started what was taken offline",
   "declare resource": "declared the resource <name>",
@@ -1239,7 +1306,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "egress.ca.rotate": "replaced the root of Canyon's credential certificates",
   // The hold (design/OPERATIONS.md §3.9): a responder's or an admin's stop of production, and its lift.
   "stop app": "held production: <reason>",
-  "lift hold": "let production run again",
+  "lift hold": "lifted the hold without starting production",
   // An app's own guardrail (contracts/routes.md, the app policies row), as the Audit page's verb says it (#2603).
   "app_policy.set": "changed the app's guardrail <rule>",
   "app_policy.remove": "removed the app's guardrail <rule>",
@@ -1257,7 +1324,10 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   "patching off at start": "turned patching off: it needs Canyon Enterprise, and this new install has no licence",
 };
 // lift hold when it started production again (detail.started), naming the version it started.
-export const AUDIT_LIFT_STARTED = "let production run again and started <version>";
+export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
+// A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
+// platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
+export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";
 // egress.networks.recreate when its row's failed names the step that failed (#2563).
 export const AUDIT_RECREATE_FAILED = "tried to recreate the app's network, but it failed";
 // egress.route.set when its row names the secret it moved (detail.secret), and egress.ca.rotate onto an admin's sub-CA

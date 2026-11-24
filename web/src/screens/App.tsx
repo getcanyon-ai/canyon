@@ -10,6 +10,7 @@ import { EnvCard } from "../ui/EnvCards";
 import { down } from "../ui/EnvLink";
 import { DependencyCard } from "../ui/DependencyCard";
 import { CopyFix, Finding, type ApproveBody } from "../ui/Finding";
+import { useInWindow } from "../ui/media";
 import { Modal } from "../ui/Modal";
 import { goLive, Headline, headline, heldBand, LastLines, leads, viewerBand, type Act } from "../ui/Headline";
 import { NeedsBand } from "../ui/Need";
@@ -125,7 +126,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const backToPromote = () => {
     const box = document.getElementById("promote");
     box?.scrollIntoView?.({ block: "center" });
-    (box?.querySelector<HTMLElement>("button:not([disabled])") ?? box)?.focus();
+    const buttons = [...(box?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])];
+    (buttons.find((one) => one.textContent === "Cancel") ?? buttons[0] ?? box)?.focus(); // the question's safe answer, while it's open (#145)
   };
   const [run, setRun] = useState<RunRead | Error | null>(null);
   const [seen, setSeen] = useState<RunRead | null>(null);
@@ -540,7 +542,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
       case "open": return prod === null ? null : <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={prod.url} target="_blank" rel="noreferrer">Open production<Icon name="external" size={14} /></a>;
       case "copy": return broke === null || broke instanceof Error || band === null ? null : <CopyForAgent key={one} app={id} title={band.title} text={band.text} broke={broke} />;
       case "outbound": return <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={`#/apps/${id}/outbound`}>{S.openOutbound}</a>;
-      case "promote": return <Promote key={one} id={id} pullRequest={preview?.pull_request !== undefined} shown={preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={false} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />;
+      case "promote": return <Promote key={one} id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview?.pull_request !== undefined} shown={preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={false} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />;
     }
   };
   // Lift the hold, on the banner that says it, to whoever the fleet's row offers it (#2723): an admin, or a responder off
@@ -617,12 +619,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-md text-text-faint">
             <a className="text-text-faint no-underline hover:underline" href="#/fleet">Fleet</a>
             <Icon name="chevron" size={14} />
-            <span aria-current="page">{project?.name ?? id}</span>
+            <span aria-current="page" className="min-w-0 wrap-anywhere">{project?.name ?? id}</span>
           </nav>
           {/* the actions stay top-right whatever grows under the title; only a phone stacks them */}
           <div className="flex items-start justify-between gap-3 max-[860px]:flex-wrap">
             <div className="grid min-w-0 flex-1 gap-1">
-              <h1 className="text-title font-semibold tracking-tight"><AppName app={project ?? { id, name: id }} /></h1>
+              <h1 className="text-title font-semibold tracking-tight wrap-anywhere"><AppName app={project ?? { id, name: id }} /></h1>
               {project !== null && (
                 <p className="text-md text-text-dim">
                   {[project.summary || S.noDescription, reduced(project) ? null : project.stack].filter(Boolean).join(" · ")}
@@ -801,8 +803,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 {whoApproves}
                 {shown(fix).map(card)}
                 {stopsProd.length > 0 && (
-                  <section aria-label={S.stopsProduction} className="grid grid-cols-[minmax(0,1fr)] gap-3">
-                    <h3 className={H2}>{S.stopsProduction}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(stopsProd).length}</span></h3>
+                  <section aria-label={S.blocksLive} className="grid grid-cols-[minmax(0,1fr)] gap-3">
+                    <h3 className={H2}>{S.blocksLive}<span className="ml-2 inline-flex min-w-5 justify-center rounded-full bg-surface-2 px-1.5 align-middle text-sm font-medium text-text-dim">{shown(stopsProd).length}</span></h3>
                     {shown(stopsProd).map(card)}
                   </section>
                 )}
@@ -837,7 +839,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     {status.hold !== undefined && status.hold.version === version(preview.package, preview.label)
                       ? <p className="text-md text-text-dim">{S.heldVersion.replace("<version>", () => status.hold!.version!)}</p>
                       : (preview.package !== project.latest.package || status.receipt.held !== undefined) && (
-                      <Promote id={id} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
+                      <Promote id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
                         quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)}
                         setSecret={(name) => setSettingFor({ name, env: "prod" })} secretsSet={secretsSet} />
                     )}
@@ -856,7 +858,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             {/* What Canyon adds under the app, as its known-vulnerable check reads it: a contributor's and up (design/PERMISSIONS.md). */}
             <SystemLibraries id={id} envs={status.envs} />
             {/* The app's secrets by name, and the form that sets one: a contributor's and up (design/specs/mcp.md §10.1). */}
-            <Secrets id={id} asked={secret ?? settingFor ?? undefined} saved={() => setSecretsSet((n) => n + 1)}
+            <Secrets id={id} live={prod !== null} asked={secret ?? settingFor ?? undefined} saved={() => setSecretsSet((n) => n + 1)}
               back={settingFor === null || preview === null ? undefined : { label: S.backToPromote.replace("<version>", () => version(preview.package, preview.label)), go: backToPromote }} />
             <AppSections project={project} envs={status.envs} refreshed={() => void tick.current()} />
           </>
@@ -873,6 +875,8 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const renaming = useRef<HTMLDivElement>(null);
+  useInWindow(renaming, env === "rename");
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
   if (!preview && !prod && !manage && stop === undefined) return null;
@@ -884,7 +888,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         <Icon name="more" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] max-[520px]:right-auto max-[520px]:left-0 rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
+        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
           {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
           {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}
@@ -901,7 +905,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         </Modal>
       )}
       {env === "rename" && (
-        <div className="absolute right-0 z-10 mt-1.5 w-[360px] rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:fixed max-[520px]:inset-x-4 max-[520px]:w-auto">
+        <div ref={renaming} className="absolute right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}

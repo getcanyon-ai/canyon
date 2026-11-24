@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // telemetryState is GET and PUT /api/v1/telemetry's answer (contracts/schema/telemetry.schema.json, state): report is
@@ -15,14 +16,16 @@ import (
 type telemetryState struct {
 	Enabled    bool   `json:"enabled"`
 	OffBecause string `json:"off_because"`
+	NextTryAt  string `json:"next_try_at"` // with GivesUpAt, while no report has reached the collector
+	GivesUpAt  string `json:"gives_up_at"`
 	Report     string `json:"report"` // the send's exact bytes, printed as they are
 }
 
 // telemetryOff is why the report is not sent, as show says it.
 var telemetryOff = map[string]string{
-	"env":         "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY=0, DO_NOT_TRACK=1 or CI).",
+	"env":         "Telemetry is off: this server's environment turns it off (CANYON_TELEMETRY, DO_NOT_TRACK or CI).",
 	"admin":       "Telemetry is off: an admin turned it off.",
-	"unreachable": "Telemetry is off: its first send couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry.",
+	"unreachable": "Telemetry is off: it couldn't reach Canyon's collector. An admin turns it back on in Canyon's dashboard: Settings › Telemetry.",
 }
 
 // runTelemetry is canyon telemetry's three forms (cli.md §6.12; #2807): show prints the next report exactly as it
@@ -77,7 +80,12 @@ func runTelemetry(ctx context.Context, a *app, args []string) int {
 	ok := a.render.paint(ansiGreen, a.render.glyph(statePass))
 	switch {
 	case form == "show":
-		if s.Enabled {
+		next, nextErr := time.Parse(time.RFC3339, s.NextTryAt)
+		until, untilErr := time.Parse(time.RFC3339, s.GivesUpAt)
+		if s.Enabled && nextErr == nil && untilErr == nil {
+			a.printf("Telemetry is on, but no report has reached Canyon's collector yet. Canyon tries again after %s and gives up by %s. It would send:\n%s\n",
+				next.Local().Format("2 Jan 15:04"), until.Local().Format("2 Jan"), s.Report)
+		} else if s.Enabled {
 			a.printf("Telemetry is on. Canyon sends this report once a day, exactly as it reads here:\n%s\n", s.Report)
 		} else {
 			a.printf("%s It would send:\n%s\n", a.offLine(s.OffBecause), s.Report)

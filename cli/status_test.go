@@ -367,8 +367,8 @@ func TestAnEnvironmentWaitingOnItsFirstReleaseIsSaidByItsRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ event, state, line string }{
-		{"deploy", "accepted", "waiting on your platform since " + at.Local().Format("15:04")},
-		{"remove", "accepted", "removing · waiting on your platform"},
+		{"deploy", "accepted", "sent to your platform at " + at.Local().Format("15:04") + ", not running yet"},
+		{"remove", "accepted", "being removed by your platform"},
 		{"deploy", "undelivered", "Your platform did not accept the release"},
 		{"deploy", "refused", "Your platform refused the release"},
 	} {
@@ -423,7 +423,7 @@ func TestARunningEnvironmentSaysTheReleaseItWaitsOn(t *testing.T) {
 	prod.Pending = &pending{Event: "remove", SentAt: "2026-09-02T11:30:00Z", State: "accepted"}
 	s.Envs["prod"] = &prod
 	out := rendered(t, s, latest)
-	if !strings.Contains(out, prod.URL) || !strings.Contains(out, "removing · waiting on your platform") {
+	if !strings.Contains(out, prod.URL) || !strings.Contains(out, "being removed by your platform") {
 		t.Errorf("a running prod whose removal waits on the platform rendered\n%s", out)
 	}
 }

@@ -62,6 +62,7 @@ func patchableAfter(t *testing.T, before func(ctx context.Context, p *pgxpool.Po
 	if state, reason := waitEnded(t, ctx, p, run.ID); state != "clean" {
 		t.Fatalf("dana's deploy: %s %s", state, reasonOf(reason))
 	}
+	endedToo(t, run.ID, imageScanID(project, executortest.Digest, run.ID))
 	matchedRunImage(t, ctx, p, fakeRunImage)
 	// the patched image's scan and its layers' matches, on one database: a patch run compares the two images'
 	// matched layers, and with none matched there is no comparison (oneDatabase). Its database is newer than the
@@ -113,6 +114,22 @@ func holdsAt(t *testing.T, f *executortest.Fake, name, version string) {
 	f.ImageAnswer.Store(&res)
 }
 
+// endedToo waits for each of the workflows named, where it was started, to have ended, past its run's row. A run's end
+// is a step of its workflow: it commits before the workflow returns, and DBOS records the workflow's own end after
+// that, so for a moment a run that reads ended has its workflow under way (settled; #113).
+func endedToo(t *testing.T, ids ...string) {
+	t.Helper()
+	started, err := dbos.ListWorkflows(durable, dbos.WithFilterWorkflowIDs(ids...), dbos.WithFilterLoadInput(false), dbos.WithFilterLoadOutput(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range started {
+		if st := settled(t, w.ID); st == dbos.WorkflowStatusPending || st == dbos.WorkflowStatusEnqueued {
+			t.Fatalf("%s is still %s though its run ended", w.ID, st)
+		}
+	}
+}
+
 // patched plans claims-portal's patch and answers its run once it ended, with its state and failure reason.
 func patched(t *testing.T, ctx context.Context, p *pgxpool.Pool) (run, state, reason string) {
 	t.Helper()
@@ -124,6 +141,7 @@ func patched(t *testing.T, ctx context.Context, p *pgxpool.Pool) (run, state, re
 	// through that pool: every read the run and its watch made of a pipe field is ordered before the test sets it
 	// back, which -race checks (#2667)
 	s, r := waitEnded(t, ctx, p, run)
+	endedToo(t, run, watchID(run))
 	return run, s, reasonOf(r)
 }
 

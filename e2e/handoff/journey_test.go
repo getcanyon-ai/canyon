@@ -135,8 +135,8 @@ func TestHandOff(t *testing.T) {
 	}) {
 		t.Fatal("no pod checked in within three minutes: the status read carries no seen_at on preview")
 	}
-	if out, code := run(t, cli("status")); code != 0 || !strings.Contains(out, "a pod checked in") {
-		t.Fatalf("canyon status ended %d and does not say a pod checked in:\n%s", code, out)
+	if out, code := run(t, cli("status")); code != 0 || !strings.Contains(out, "your platform reported it running") {
+		t.Fatalf("canyon status ended %d and does not say the platform reported it running:\n%s", code, out)
 	}
 	settings(t, "H3", public, browser, "HANDOFF_APP="+app)
 
@@ -174,7 +174,7 @@ func TestHandOff(t *testing.T) {
 		t.Fatalf("before the undeploy the app does not answer alice: %d %.300s", code, body)
 	}
 	cutPipeline.Store(true)
-	if out, code := run(t, cli("undeploy", "--env", "preview")); code != 0 || !strings.Contains(out, "removing · waiting on your platform") {
+	if out, code := run(t, cli("undeploy", "--env", "preview")); code != 0 || !strings.Contains(out, "being removed by your platform") {
 		t.Fatalf("canyon undeploy under run_by: org ended %d, not waiting on the platform", code)
 	}
 	if !within(90*time.Second, func() bool { code, _ := open(target, token); return code == http.StatusFound }) {

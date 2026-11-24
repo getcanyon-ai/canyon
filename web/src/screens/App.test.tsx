@@ -35,9 +35,18 @@ const pages = page.packages;
 const secrets = golden<{ secrets: Secret[] }>("secrets/claims-portal.json");
 const first = findings.find(blocks) as Finding;
 const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+// A picked day is sent as its last second, UTC (#145); the goldens hold midnight.
+const lastSecond = (at: string) => `${at.slice(0, 10)}T23:59:59Z`;
+const approveSent = { ...page.approve, expires_at: lastSecond(page.approve.expires_at) };
+// The form takes a date from tomorrow to 89 days on, so the goldens' dates are picked on a day a month before them.
+const pick = (field: HTMLElement, expires: string) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.parse(expires) - 30 * 86_400_000);
+  fireEvent.change(field, { target: { value: expires } });
+};
 const override = (reason: string, expires: string) => {
   fireEvent.change(screen.getByLabelText("Reason"), { target: { value: reason } });
-  fireEvent.change(screen.getByLabelText("Approval expires"), { target: { value: expires } });
+  pick(screen.getByLabelText("Approval expires"), expires);
   fireEvent.click(screen.getByRole("button", { name: "Approve" }));
 };
 const why = (receipt: Receipt, id: string) => receipt.rules.find((rule) => rule.id === id)?.why ?? "";
@@ -84,6 +93,7 @@ function server(routes: Record<string, Answer | (() => Answer)>) {
 const reads = (status: () => Status) => ({
   "GET /api/v1/projects/claims-portal": { body: { project } },
   "GET /api/v1/projects/claims-portal/status": () => ({ body: status() }),
+  "GET /api/v1/projects/claims-portal/secrets": { body: { secrets: [] } },
   [RUN]: { body: { run } },
   [TIMELINE]: { body: { rows: [skipped], next: null } },
 });
@@ -168,7 +178,7 @@ describe("the app page", () => {
     });
     render(<App id="broker-portal" auth="oidc" />);
     const clock = new Date("2026-09-02T10:00:00Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    expect(within(await screen.findByRole("region", { name: "Preview" })).getByText(`waiting on your platform since ${clock}`)).toBeDefined();
+    expect(within(await screen.findByRole("region", { name: "Preview" })).getByText(`Sent to your platform at ${clock}, not running yet`)).toBeDefined();
     expect(region("Preview").queryByRole("link")).toBeNull();
     expect(screen.queryByRole("link", { name: "Open v1.3 in production" })).toBeNull();
   });
@@ -243,7 +253,7 @@ describe("the app page", () => {
     fireEvent.click(await approveOn(first));
     override(page.approve.reason, page.approve.expires_at.slice(0, 10));
     await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
-    expect(approving().filter((request) => request.startsWith("POST"))).toEqual([`${onOlder} ${JSON.stringify(page.approve)}`]);
+    expect(approving().filter((request) => request.startsWith("POST"))).toEqual([`${onOlder} ${JSON.stringify(approveSent)}`]);
     cleanup();
     const sent = server({ ...reads(() => open), ...pinned, [PROMOTE]: { body: page.promotion } });
     render(<App id="claims-portal" run="gr_6c12" auth="oidc" />);
@@ -765,7 +775,7 @@ describe("the app page", () => {
     expect(await screen.findByText(S.responderAccess)).toBeDefined();
     fireEvent.click(await approveOn(first));
     override(page.approve.reason, page.approve.expires_at.slice(0, 10));
-    await waitFor(() => expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(first)} ${JSON.stringify(page.approve)}`]));
+    await waitFor(() => expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(first)} ${JSON.stringify(approveSent)}`]));
     expect(window.location.hash).toBe("#/apps/claims-portal");
     expect(sent().some((request) => request.includes("/timeline") || request.includes("/packages"))).toBe(false);
     window.location.hash = "";
@@ -828,7 +838,7 @@ describe("the app page", () => {
       }
       fireEvent.click(within(await screen.findByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Approve with a reason" }));
       override(page.approve.reason, page.approve.expires_at.slice(0, 10));
-      await waitFor(() => expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${BUILT} ${JSON.stringify({ fingerprints, ...page.approve })}`]));
+      await waitFor(() => expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${BUILT} ${JSON.stringify({ fingerprints, ...approveSent })}`]));
       cleanup();
     }
     window.location.hash = "";
@@ -933,14 +943,14 @@ describe("the app page", () => {
 
   // A version whose preview answered an error is refused to the CLI; here the question says so and its
   // button is the person's override, sent as promote_anyway (contracts/routes.md, preview_answered).
-  it("a preview that answered an error asks for Promote anyway and sends the override", async () => {
+  it("a preview that answered an error asks for Promote v1.3 anyway and sends the override", async () => {
     const answered: Status = { ...open, envs: { ...open.envs, preview: { ...open.envs.preview!, answered: { status: 400, said: "" } } } };
     const sent = server({ ...reads(() => answered), [PROMOTE]: { status: 202, body: { run: { id: "gr_9c41", state: "pending" } } } });
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
     expect(screen.getByText("v1.3 answered 400 at / on preview. Check the app before promoting it.")).toBeDefined();
     expect(screen.queryByRole("button", { name: "Promote v1.3" })).toBeNull();
-    const anyway = await screen.findByRole("button", { name: "Promote anyway" });
+    const anyway = await screen.findByRole("button", { name: "Promote v1.3 anyway" });
     expect(anyway.className).not.toContain("bg-accent"); // the warning draws the eye, never the risky button
     fireEvent.click(anyway);
     await waitFor(() => expect(sent()).toContain(`${PROMOTE} {"gate_run":"${open.promote_run}","promote_anyway":true}`));
@@ -956,7 +966,7 @@ describe("the app page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
     await confirmPromote();
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
-    expect(await screen.findByRole("button", { name: "Promote anyway" })).toBeDefined();
+    expect(await screen.findByRole("button", { name: "Promote v1.3 anyway" })).toBeDefined();
     expect(screen.queryByText(/have a person promote it from the dashboard/)).toBeNull();
   });
 
@@ -966,6 +976,27 @@ describe("the app page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
     await confirmPromote();
     await waitFor(() => expect(sent()).toContain(`${PROMOTE} {"gate_run":"${open.promote_run}"}`));
+  });
+
+  it("the promote question names the app, the version and what it replaces", async () => {
+    server({ ...reads(() => open), [PROMOTE]: { body: page.promotion } });
+    const { unmount } = render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
+    expect(screen.getByText("Promotes claims-portal v1.3. Nothing runs in production.")).toBeDefined();
+    unmount();
+    const live = { ...open, envs: { ...open.envs, prod: { ...open.envs.preview!, package: "pkg_9e40", label: "v1.2", url: "http://claims-portal.prod.localhost:7777" } } } as Status;
+    server({ ...reads(() => live), [PROMOTE]: { body: page.promotion } });
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
+    expect(screen.getByText("Promotes claims-portal v1.3, replacing v1.2.")).toBeDefined();
+  });
+
+  it("a question that couldn't read production's secrets warns, and its button says anyway", async () => {
+    server({ ...reads(() => open), "GET /api/v1/projects/claims-portal/secrets": { status: 500, body: { error: "internal", message: "the vault is sealed" } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
+    expect((await screen.findByRole("button", { name: "Promote v1.3 anyway" })).className).not.toContain("bg-accent");
+    expect(screen.getByText(/^Couldn't check production's secrets: /)).toBeDefined();
   });
 
   it("promote asks before it sends", async () => {
@@ -1002,7 +1033,7 @@ describe("the app page", () => {
     await waitFor(() => expect(screen.queryByText(/is set for preview but not production/)).toBeNull()); // read again
     fireEvent.click(back);
     expect(screen.getByText(S.promoteConfirm)).toBeDefined(); // the question, still open
-    expect(within(screen.getByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Promote v1.3" })).toBe(document.activeElement);
+    expect(within(screen.getByRole("complementary", { name: "Promote" })).getByRole("button", { name: "Cancel" })).toBe(document.activeElement); // its safe answer, as when it opened
   });
 
   // Production runs preview's image with its own secrets (#1698): the question names each runtime value set
@@ -1018,7 +1049,10 @@ describe("the app page", () => {
     expect(await screen.findByText("STRIPE_KEY is set for preview but not production. Without it, v1.3 may fail to start in production.", { exact: false })).toBeDefined();
     expect(within(screen.getByRole("complementary", { name: "Promote" })).queryByText(/canyon secret set/)).toBeNull(); // the dashboard sets it, never the CLI's line (#102)
     expect(screen.getAllByText(/is set for preview but not production/)).toHaveLength(1);
-    await confirmPromote();
+    expect(screen.queryByRole("button", { name: "Promote v1.3" })).toBeNull(); // it warns, so its button says anyway, and isn't the main one
+    const anyway = screen.getByRole("button", { name: "Promote v1.3 anyway" });
+    expect(anyway.className).not.toContain("bg-accent");
+    fireEvent.click(anyway);
     await waitFor(() => expect(sent().some((request) => request.startsWith(PROMOTE))).toBe(true));
   });
 
@@ -1035,6 +1069,7 @@ describe("the app page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
     expect(await screen.findByText("Production will refuse example.com once v1.3 goes live.")).toBeDefined();
     expect(screen.getByText("Nobody can allow 1.1.1.1, example.com:8443: the code has to change.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Promote v1.3 anyway" })).toBeDefined();
     expect(within(screen.getByRole("region", { name: "Go-live checklist" })).getByText("Production doesn't allow example.com yet. Nobody can allow 1.1.1.1, example.com:8443: the code has to change.")).toBeDefined();
     expect(screen.queryByText(/a line the page never reads/)).toBeNull();
     unmount();
@@ -1139,13 +1174,13 @@ describe("the app page", () => {
   }
 
   // Clicking the button takes it off the screen, so the keyboard has nowhere to stand unless the
-  // confirmation catches it: the next Enter has to be the answer to the question just asked.
-  it("hands the keyboard to the confirmation", async () => {
+  // question catches it, on its safe answer: Enter on the button, and Enter again, promotes nothing.
+  it("hands the keyboard to the question, on Cancel", async () => {
     server({ ...reads(() => open), [PROMOTE]: { body: page.promotion } });
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await screen.findByRole("button", { name: "Promote v1.3 to production" }));
-    const confirm = await screen.findByRole("button", { name: "Promote v1.3" }); // once production's secrets are read
-    await waitFor(() => expect(document.activeElement).toBe(confirm));
+    await screen.findByRole("button", { name: "Promote v1.3" }); // once production's secrets are read
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
   });
 
   it("hands the keyboard back when the question is cancelled", async () => {
@@ -1256,7 +1291,7 @@ describe("the app page", () => {
     fireEvent.click(await approveOn(first));
     override(page.approve.reason, page.approve.expires_at.slice(0, 10));
     await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
-    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(first)} ${JSON.stringify(page.approve)}`]);
+    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(first)} ${JSON.stringify(approveSent)}`]);
     const after = sent().slice(sent().findIndex((request) => request.startsWith("POST")) + 1);
     expect(after).toContain(RUN); // the run again, so the card says approved and the verdict counts it
     expect(after).toContain("GET /api/v1/projects/claims-portal/status");
@@ -1280,7 +1315,7 @@ describe("the app page", () => {
     fireEvent.click(within(cards[0]!).getByRole("button", { name: "Approve with a reason" }));
     override(page.approve.reason, page.approve.expires_at.slice(0, 10));
     await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
-    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(one)} ${JSON.stringify(page.approve)}`, `${APPROVE(two)} ${JSON.stringify(page.approve)}`]);
+    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${APPROVE(one)} ${JSON.stringify(approveSent)}`, `${APPROVE(two)} ${JSON.stringify(approveSent)}`]);
   });
 
   // One dependency's blocking findings are one card (screens.md, The approval; #1848, #1875): the QA run's
@@ -1332,10 +1367,10 @@ describe("the app page", () => {
     expect(card.getByText("Approves these 5 blocking findings of lodash 4.17.4, found by trivy:")).toBeDefined();
     expect(card.getByText("After that date the problems come back in the checklist.")).toBeDefined();
     fireEvent.change(card.getByLabelText("Reason"), { target: { value: lodash.approve_findings.reason } });
-    fireEvent.change(card.getByLabelText("Approval expires"), { target: { value: lodash.approve_findings.expires_at.slice(0, 10) } });
+    pick(card.getByLabelText("Approval expires"), lodash.approve_findings.expires_at.slice(0, 10));
     fireEvent.click(card.getByRole("button", { name: "Approve all 5" }));
     await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
-    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${ALL} ${JSON.stringify(lodash.approve_findings)}`]);
+    expect(sent().filter((request) => request.startsWith("POST"))).toEqual([`${ALL} ${JSON.stringify({ ...lodash.approve_findings, expires_at: lastSecond(lodash.approve_findings.expires_at) })}`]);
     expect(sent().slice(sent().findIndex((request) => request.startsWith("POST")) + 1)).toContain(RUN); // the rows then say approved
   });
 
@@ -1407,9 +1442,9 @@ describe("the app page", () => {
     render(<App id="claims-portal" auth="oidc" />);
     fireEvent.click(await approveOn(first));
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: `  ${page.approve.reason}  ` } });
-    fireEvent.change(screen.getByLabelText("Approval expires"), { target: { value: page.approve.expires_at.slice(0, 10) } });
+    pick(screen.getByLabelText("Approval expires"), page.approve.expires_at.slice(0, 10));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Approve" })); fireEvent.click(screen.getByRole("button", { name: "Approve" })); });
-    expect(sent().filter((request) => request.includes("/approve"))).toEqual([`${APPROVE(first)} ${JSON.stringify(page.approve)}`]);
+    expect(sent().filter((request) => request.includes("/approve"))).toEqual([`${APPROVE(first)} ${JSON.stringify(approveSent)}`]);
     // Read the card each time: the run read after the approval draws it anew, and the one found before it is gone.
     const card = () => within(screen.getByRole("article", { name: cardName(first) }));
     await waitFor(() => expect(card().getByText(/^approved by /)).toBeDefined());
@@ -2014,7 +2049,7 @@ describe("the app page", () => {
     server({ ...reads(() => approved.status_approved), [RUN]: { body: approved.run_placed } });
     render(<App id="claims-portal" auth="oidc" />);
     const one = await card(other.properties.canyon.title);
-    expect(one.getByText("Doesn't stop preview. Stops production until fixed or approved.")).toBeTruthy();
+    expect(one.getByText("Doesn't block preview. Blocks going live until it's fixed or approved.")).toBeTruthy();
     expect(one.queryByText("Doesn't block")).toBeNull();
     expect(one.getByRole("button", { name: "Approve with a reason" })).toBeTruthy();
   });
@@ -2031,7 +2066,7 @@ describe("the app page", () => {
   it("lists what stops production alone under its own heading, never under Doesn't block", async () => {
     server({ ...reads(() => approved.status_approved), [RUN]: { body: approved.run_placed } });
     render(<App id="claims-portal" auth="oidc" />);
-    const stops = within(await screen.findByRole("region", { name: "Stops production" }));
+    const stops = within(await screen.findByRole("region", { name: "Blocks going live" }));
     expect(stops.getByRole("article", { name: other.properties.canyon.title })).toBeDefined();
     const doesnt = screen.queryByRole("heading", { name: /^Doesn't block/ })?.closest("details");
     expect(doesnt === null || doesnt === undefined || !doesnt.textContent?.includes(other.properties.canyon.title)).toBe(true);

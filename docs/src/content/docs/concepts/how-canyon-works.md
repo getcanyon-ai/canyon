@@ -200,8 +200,8 @@ flowchart TD
 
 - **Production runs the image preview ran**, with production's own secrets. Nothing is rebuilt.
 - **The version must be running in preview**, and two rules stand in front of it, both blocking by
-  default: its review passed, and a person promotes it, or an agent they ask with their own CLI
-  sign-in.
+  default: its review passed, and a person promotes it, or an agent they ask, signed in as
+  them.
 - **An org can require a person's approval in the dashboard** for every promotion. Then
   `canyon deploy --env prod` ends `WAITING FOR APPROVAL` with a link, and a person on the app's
   team approves or denies it there.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { S } from "../strings";
 import { Icon } from "../ui/Icon";
+import { useInWindow } from "../ui/media";
 import { STAGE_OPTIONS } from "../ui/Stage";
 import { fleetHref, freshQuery, hashQuery } from "./query";
 
@@ -73,10 +74,12 @@ function Typed({ name, sent, send, type, placeholder, label, className }: { name
 // filters or counts. Every change goes back to the first page: page 4 of one view is no page of
 // another. There is no Apply: a choice is sent as it is made. `access` and "Your apps" are offered
 // only where people sign in, the one place an app is shared and a reader holds grants of their own.
-export function FleetFilters({ query, signedIn }: { query: string; signedIn: boolean }) {
+export function FleetFilters({ query, signedIn, scoped }: { query: string; signedIn: boolean; scoped: boolean }) { // scoped: Your apps / All apps, none for a responder on no team
   const params = new URLSearchParams(query);
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useInWindow(box, open);
   const toggle = useRef<HTMLButtonElement>(null);
   // The query is read from the address bar as the change happens, not from the render that drew the
   // control: two changes in quick succession must compose, not overwrite each other.
@@ -104,7 +107,7 @@ export function FleetFilters({ query, signedIn }: { query: string; signedIn: boo
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {signedIn && (
+      {scoped && (
         <div role="group" aria-label="Which apps" className="inline-flex h-[34px] rounded-[7px] border border-border-strong bg-surface p-0.5">
           {SCOPES.map(([value, word]) => (
             <button key={word} type="button" aria-pressed={params.get("scope") === value} onClick={() => go({ scope: value })}
@@ -123,7 +126,7 @@ export function FleetFilters({ query, signedIn }: { query: string; signedIn: boo
           className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium hover:bg-surface-2">
           <Icon name="filter" />Filter{chosen > 0 && <span className="tnum text-text-dim">({chosen})</span>}
         </button>
-        <div id="fleet-filter" hidden={!open} className="absolute right-0 z-10 mt-1.5 grid w-[280px] gap-3 rounded-[10px] border border-border bg-surface p-3.5 shadow-overlay max-[520px]:fixed max-[520px]:inset-x-4 max-[520px]:w-auto">
+        <div id="fleet-filter" ref={box} hidden={!open} className="absolute right-0 z-10 mt-1.5 grid w-[280px] gap-3 overflow-y-auto rounded-[10px] border border-border bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           {select("stage", "Status", "Any status", STAGE_OPTIONS)}
           {select("running", "Deployed", "Anywhere", RUNNING)}
           {signedIn && select("access", "Access", "Anyone", ACCESS)}

@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTH, S } from "../strings";
@@ -54,23 +52,17 @@ describe("the rail", () => {
   // Guardrails is an admin's screen (design/specs/screens.md, A4b): a member's rail never offers it.
   it("offers a member no Guardrails, and an admin all four views", () => {
     const { unmount } = render(<RailContext value={{ org: null, viewer: { display: "Sam Reyes", role: "member", github_logins: [], github_link: false }, admin: false }}><Rail current="fleet" /></RailContext>);
-    expect(screen.getAllByRole("link").map((one) => one.textContent)).toEqual(["Fleet", "Audit", "Settings", AUTH.approveCli, S.sourceCode]);
+    expect(screen.getAllByRole("link").map((one) => one.textContent)).toEqual(["Fleet", "Audit", "Settings", S.sourceCode]);
     unmount();
     signedIn("fleet");
-    expect(screen.getAllByRole("link").map((one) => one.textContent)).toEqual(["Fleet", "Guardrails", "Audit", "Settings", AUTH.approveCli, S.sourceCode]);
+    expect(screen.getAllByRole("link").map((one) => one.textContent)).toEqual(["Fleet", "Guardrails", "Audit", "Settings", S.sourceCode]);
   });
 
-  // The CLI's approval page from the dashboard (#2564): every signed-in person's, at the foot, the page alone —
-  // no code, no count, nothing pending named. A host with no one signed in has no foot and no entry.
-  it("offers Approve a CLI sign-in at its foot, to the approval page alone", () => {
-    const { unmount } = render(<RailContext value={{ org: null, viewer: { display: "Sam Reyes", role: "member", github_logins: [], github_link: false }, admin: false }}><Rail current="fleet" /></RailContext>);
-    const entry = screen.getByRole("link", { name: AUTH.approveCli });
-    expect(entry.getAttribute("href")).toBe("#/device");
-    expect(entry.textContent).toBe(AUTH.approveCli);
-    expect(readFileSync(join(import.meta.dirname, "../../../design/EXPERIENCE.md"), "utf8")).toContain(`| \`${AUTH.approveCli}\` |`); // D5's, byte for byte
-    unmount();
-    render(<Rail current="fleet" />);
-    expect(screen.queryByRole("link", { name: AUTH.approveCli })).toBeNull();
+  // The CLI's approval page is reached from the link the CLI prints and from Settings, never from every page's rail
+  // (the UX review: a link in every footer for a step a person takes once a week).
+  it("offers no Approve a CLI sign-in at its foot", () => {
+    render(<RailContext value={{ org: null, viewer: { display: "Sam Reyes", role: "member", github_logins: [], github_link: false }, admin: false }}><Rail current="fleet" /></RailContext>);
+    expect(screen.queryByRole("link", { name: "Approve a CLI sign-in" })).toBeNull();
   });
 
   it("draws at most two initials, each a whole character", () => {

@@ -57,7 +57,7 @@ sequenceDiagram
 
 Approving gives that machine your access for 7 days. Anything running there acts as you, including
 a coding agent and its deploys. Only approve a code you started yourself. The CLI then says it is
-signed in, and names you and your organisation. `canyon login --token` is not available: a person
+signed in, and names you and your organization. `canyon login --token` is not available: a person
 signs in, and every CLI session is that person's.
 
 If the code expires and the CLI says Canyon is still being set up, nobody can approve a sign-in

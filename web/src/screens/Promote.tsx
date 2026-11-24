@@ -97,8 +97,10 @@ export function PromotionProgress({ run, ended }: { run: string; ended: () => vo
 
 const PROGRESS_MS = 1000; // clients poll about once a second while a run is going (contracts/events.md)
 
-export function Promote({ id, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses, quiet = false, setSecret, secretsSet = 0 }: {
+export function Promote({ id, name = id, replaces, shown, live, receipt, hold, answered, gateRun, send, ended, pullRequest = false, refuses, quiet = false, setSecret, secretsSet = 0 }: {
   id: string;
+  name?: string; // the app as a person knows it
+  replaces: string | null; // the version production runs, null while it runs none
   // The page's own read of a hold (the status read's), which says whether production ran anything when it was held.
   hold?: Hold;
   // The version preview runs, which is what a promotion ships: the button names it.
@@ -129,7 +131,7 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
   // null while it is read: the question is not answered before what it names has been said.
   const [lacks, setLacks] = useState<string[] | Error | null>(null);
   const goLive = useRef<HTMLButtonElement>(null);
-  const confirming = useRef<HTMLButtonElement>(null);
+  const cancelling = useRef<HTMLButtonElement>(null);
   // What production lacks, read when the question is asked and again whenever a secret is set beside it.
   const readLacks = () => {
     setLacks(null);
@@ -157,15 +159,22 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
 
   // The question replaces the button that asked it, so the keyboard follows the question, and
   // comes back to the button when the question closes. Without this the focus falls to the
-  // document body and the next Enter does nothing. `asked` keeps a first render from taking it.
+  // document body and the next Enter does nothing. It lands on Cancel, the safe answer: Enter on Promote, and Enter again,
+  // promotes nothing. `asked` keeps a first render from taking it.
   const asked = useRef(false);
   useEffect(() => {
-    if (asking) { asked.current = true; confirming.current?.focus(); } // again once the confirm appears, after the secrets read
+    if (asking) { asked.current = true; cancelling.current?.focus(); }
     else if (asked.current) { asked.current = false; goLive.current?.focus(); }
-  }, [asking, lacks === null]);
+  }, [asking]);
 
   const label = shown === null ? "Promote to production" : `Promote ${shown} to production`;
   const odd = oddAnswer(answered);
+  const refuse = refusing(refuses, S.willRefuse.replace("<version>", () => shown ?? "this version"));
+  // It warns: of what preview answered, what production will refuse, or a secret it lacks or could not read. Its button
+  // then says anyway and is never the main one; only what preview answered is an override the server is sent.
+  const warns = odd !== null || refuse.length > 0 || lacks instanceof Error || (lacks ?? []).length > 0;
+  const says = (replaces === null ? S.promoteFirst : S.promoteReplaces.replace("<old>", () => replaces))
+    .replace("<app>", () => name).replace("<version>", () => shown ?? "this version");
   // Holding the reason that has just gone is why the line doesn't blink blank for 160ms.
   const why = blocked ?? held;
   const ask = async () => {
@@ -184,9 +193,10 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
         : asking
           ? (
             <div className="flex flex-col items-start gap-1.5">
+              <p className="text-md text-text">{says}</p>
               <p className="text-md text-text-dim">{S.promoteConfirm}</p>
               {odd !== null && <p className="text-md text-amber">{`${shown ?? "This version"} ${odd} on preview. Check the app before promoting it.`}</p>}
-              {refusing(refuses, S.willRefuse.replace("<version>", () => shown ?? "this version")).map((line) => <p key={line} className="text-md text-amber">{line}</p>)}
+              {refuse.map((line) => <p key={line} className="text-md text-amber">{line}</p>)}
               {lacks instanceof Error ? <p className="text-md text-amber">{`Couldn't check production's secrets: ${lacks.message}`}</p>
                 : (lacks ?? []).map((name) => (
                   <p key={name} className="text-md text-amber">
@@ -198,8 +208,8 @@ export function Promote({ id, shown, live, receipt, hold, answered, gateRun, sen
                 ))}
               <span className="flex flex-wrap gap-2">
                 {lacks === null ? <span className="text-md text-text-dim">Checking production's secrets…</span>
-                  : <Button ref={confirming} variant={odd !== null ? "secondary" : "primary"} onClick={() => void ask()}>{odd !== null ? "Promote anyway" : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
-                <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+                  : <Button variant={warns ? "secondary" : "primary"} onClick={() => void ask()}>{warns ? S.promoteAnyway.replace("<version> ", () => (shown === null ? "" : `${shown} `)) : shown === null ? "Promote" : `Promote ${shown}`}</Button>}
+                <Button ref={cancelling} variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
               </span>
             </div>
           )

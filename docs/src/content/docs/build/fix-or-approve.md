@@ -160,7 +160,7 @@ marks the lines left out. The demo runs without sign-in, so the approver reads `
 ```
 
 - **Who can approve:** a Canyon admin or a security responder, on any app. Never on a deploy they
-  started themselves, including one a coding agent started with their CLI sign-in. The app's owners
+  started themselves, including one a coding agent started, signed in as them. The app's owners
   and contributors can't approve a blocking finding; the page says who can instead. See
   [Who can do what](/org/who-can-do-what/).
 - **The CLI has no approve command.** A blocking finding is approved on the app's page, in a

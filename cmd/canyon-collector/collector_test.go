@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,14 +57,34 @@ type fakeStore struct {
 	mu    sync.Mutex
 	saved [][]byte
 	fail  bool
+	dup   bool
+	drops map[dropped]int64
 }
 
-func (f *fakeStore) save(_ context.Context, report []byte) error {
+func (f *fakeStore) save(_ context.Context, report []byte) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.dup {
+		return false, nil
+	}
 	f.saved = append(f.saved, report)
 	if f.fail {
+		return false, errors.New("the database is down")
+	}
+	return true, nil
+}
+
+func (f *fakeStore) drop(_ context.Context, counts map[dropped]int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
 		return errors.New("the database is down")
+	}
+	if f.drops == nil {
+		f.drops = map[dropped]int64{}
+	}
+	for key, n := range counts {
+		f.drops[key] += n
 	}
 	return nil
 }
@@ -146,6 +167,127 @@ func TestOnlyTheSchemasReportIsKept(t *testing.T) {
 			t.Errorf("%s: %d %q, kept %v, want kept %v", c2.name, code, body, len(f.saved) > before, c2.kept)
 		}
 	}
+}
+
+// A dropped report is counted by why, once, and never otherwise kept: unknown_field only for a report the schema would
+// take but for names it lacks, a newer Canyon's. A kept report, and one the database refused, count nothing.
+func TestADroppedReportIsCountedByWhy(t *testing.T) {
+	report, v2 := golden(t), goldenV2(t)
+	for _, c := range []struct {
+		name, why string
+		body      []byte
+		set       func(*collector, *fakeStore)
+	}{
+		{"the golden report", "", with(report, func(map[string]any) {}), nil},
+		{"the second-version golden report", "", with(v2, func(map[string]any) {}), nil},
+		{"a new field", unknownField, with(v2, func(m map[string]any) { m["new_count"] = 3 }), nil},
+		{"a new field inside another", unknownField, with(v2, func(m map[string]any) { m["checks"].(map[string]any)["skipped"] = 1 }), nil},
+		{"a new rule", unknownField, with(v2, func(m map[string]any) { m["rules_fired"].(map[string]any)["new.rule"] = 1 }), nil},
+		{"a new field and a new rule", unknownField, with(v2, func(m map[string]any) {
+			m["new_count"] = 3
+			m["rules_fired"].(map[string]any)["new.rule"] = 1
+		}), nil},
+		{"a new field and a bad version", notSchema, with(v2, func(m map[string]any) { m["new_count"], m["version"] = 3, "a b" }), nil},
+		{"a new rule with no count", notSchema, with(v2, func(m map[string]any) { m["rules_fired"].(map[string]any)["new.rule"] = "x" }), nil},
+		{"a field missing", notSchema, with(v2, func(m map[string]any) { delete(m, "demo") }), nil},
+		{"a new field in an empty object", notSchema, []byte(`{"new_count":3}`), nil},
+		{"empty", notSchema, []byte(`{}`), nil},
+		{"a list", notSchema, []byte(`[1]`), nil},
+		{"a count spelled 1.0", notSchema, spelled(report, "1.0"), nil},
+		{"not JSON", notJSON, []byte("STRIPE_KEY=hunter2"), nil},
+		{"no body", notJSON, nil, nil},
+		{"over 64 KiB", tooBig, bytes.Repeat([]byte(" "), 65<<10), nil},
+		{"past the limit", overLimit, with(report, func(map[string]any) {}), func(c *collector, _ *fakeStore) {
+			for range perWindow {
+				c.limit.allow("198.51.100.9")
+			}
+		}},
+		{"a duplicate", duplicate, with(report, func(map[string]any) {}), func(_ *collector, f *fakeStore) { f.dup = true }},
+		{"a database that refuses", "", with(report, func(map[string]any) {}), func(_ *collector, f *fakeStore) { f.fail = true }},
+	} {
+		one, f, _ := testCollector(t)
+		one.drops.now = func() time.Time { return time.Date(2026, 11, 24, 0, 30, 0, 0, time.FixedZone("", 3600)) } // 23:30 UTC the day before
+		if c.set != nil {
+			c.set(one, f)
+		}
+		code, answered := post(one, c.body, "198.51.100.9")
+		f.fail = false
+		if err := one.drops.flush(t.Context(), f); err != nil {
+			t.Fatal(err)
+		}
+		want := map[dropped]int64{}
+		if c.why != "" {
+			want[dropped{"2026-11-23", c.why}] = 1
+		}
+		if code != http.StatusNoContent || answered != "" || !maps.Equal(f.drops, want) || (c.why != "" && len(f.saved) != 0) {
+			t.Errorf("%s: %d %q, counted %v, saved %d; want %v", c.name, code, answered, f.drops, len(f.saved), want)
+		}
+	}
+}
+
+// A flush adds to what is written and starts again from nothing; one that fails keeps its counts, and those that came
+// meanwhile, for the next.
+func TestAFailedFlushKeepsItsCounts(t *testing.T) {
+	c, f, _ := testCollector(t)
+	day := time.Now().UTC().Format(time.DateOnly)
+	for i, step := range []struct {
+		add  int
+		fail bool
+		want int64
+	}{{2, false, 2}, {0, false, 2}, {3, true, 2}, {1, false, 6}, {1, false, 7}} {
+		for range step.add {
+			c.drops.add(notJSON)
+		}
+		f.fail = step.fail
+		if err := c.drops.flush(t.Context(), f); (err != nil) != step.fail {
+			t.Fatalf("flush %d: %v", i, err)
+		}
+		if got := f.drops[dropped{day, notJSON}]; got != step.want {
+			t.Fatalf("after flush %d: %d written, want %d", i, got, step.want)
+		}
+	}
+}
+
+// The minute's writes stop with the collector, and it waits for one on its way: a write that fails as the collector
+// stops puts its counts back before the last flush, so they're written then.
+func TestTheLastFlushWaitsForTheMinutes(t *testing.T) {
+	c, f, _ := testCollector(t)
+	c.drops.add(notJSON)
+	blocked, release := make(chan struct{}), make(chan struct{})
+	slow := &slowStore{fakeStore: f, blocked: blocked, release: release}
+	ctx, stop := context.WithCancel(t.Context())
+	done := c.drops.flushing(ctx, slow, time.Millisecond, func(error) {})
+	<-blocked // the minute's write is on its way
+	stop()
+	select {
+	case <-done:
+		t.Fatal("the writes stopped before the one on its way returned")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release) // it fails, and puts its counts back
+	<-done
+	if err := c.drops.flush(t.Context(), f); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.drops[dropped{time.Now().UTC().Format(time.DateOnly), notJSON}]; got != 1 {
+		t.Errorf("the last flush wrote %d, want the count the failed write put back", got)
+	}
+}
+
+// slowStore's first drop waits to be released, then fails.
+type slowStore struct {
+	*fakeStore
+	blocked, release chan struct{}
+	once             sync.Once
+}
+
+func (s *slowStore) drop(context.Context, map[dropped]int64) error {
+	first := false
+	s.once.Do(func() { first = true; close(s.blocked) })
+	if first {
+		<-s.release
+	}
+	return errors.New("the database is down")
 }
 
 // The sender's address is the limiter's alone: it is never in what is stored and never in a log line, the store's

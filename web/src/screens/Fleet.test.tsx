@@ -723,7 +723,7 @@ describe("what needs a person, on the fleet", () => {
     render(<Fleet org="Meridian Insurance" />);
     await screen.findByRole("region", { name: /^Needs (attention|you)$/ });
     await waitFor(() => expect(items()).toEqual([
-      "claims-archive is down in production. canyon logs --env prod says why. Fix the cause, deploy to preview, then promote.Open the app",
+      "claims-archive is down in production. Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.Open the app",
       "claims-portal has a secret in its code. Rotate the key, then upload a fix.Open review",
       "commission-calc has a secret in its code. Rotate the key, then upload a fix.Open review",
       "quote-engine has never been reviewed. Deploy or check it so Canyon reviews it.Open the app",
@@ -733,9 +733,8 @@ describe("what needs a person, on the fleet", () => {
     expect(box().getByRole("link", { name: "Open review: claims-portal" }).getAttribute("href")).toBe("#/apps/claims-portal?run=gr_8f2a");
   });
 
-  // A restarting environment's last log lines are on its page (#2744), so its need points there; a stopped one's, and
-  // anything else down, point at canyon logs, which the page doesn't show for them (#2774).
-  it("points a restarting environment at its page's log lines, and a stopped one at canyon logs", async () => {
+  // A down environment's last log lines are on its page, stopped or restarting (#2744, #188), so its need points there.
+  it("points a down environment at its page's log lines, stopped or restarting", async () => {
     host(() => ({ ...golden, tiles: { ...none, needs_you: 4 }, apps: [
       app("alpha", [{ kind: "down", env: "preview", rank: 7, since: null, you: true, ask: [], state: "restarting" }]),
       app("beta", [{ kind: "down", env: "prod", rank: 2, since: null, you: true, ask: [], state: "restarting" }]),
@@ -747,8 +746,8 @@ describe("what needs a person, on the fleet", () => {
     const line = (title: string) => box().getByText(title).closest("li")!.textContent;
     expect((await box().findByText("alpha keeps restarting in preview.")).closest("li")!.textContent).toContain("Its last log lines, on its page, say why. Fix the cause, then deploy again.");
     expect(line("beta keeps restarting in production.")).toContain("Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.");
-    expect(line("gamma is down in preview.")).toContain("canyon logs --env preview says why. Fix the cause, then deploy again.");
-    expect(line("delta is down in production.")).toContain("canyon logs --env prod says why. Fix the cause, deploy to preview, then promote.");
+    expect(line("gamma is down in preview.")).toContain("Its last log lines, on its page, say why. Fix the cause, then deploy again.");
+    expect(line("delta is down in production.")).toContain("Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.");
   });
 
   // Each kind's fix where it is: preview's own, a port named with its host, the network a recreation leaves, and the row's
@@ -763,8 +762,7 @@ describe("what needs a person, on the fleet", () => {
     ] }));
     render(<Fleet org="Meridian Insurance" />);
     await screen.findByRole("region", { name: /^Needs (attention|you)$/ });
-    // what is true today: the page shows no log lines for a stopped app, so the need points at canyon logs (#2774)
-    expect((await box().findByText("alpha is down in preview.")).closest("li")!.textContent).toContain("canyon logs --env preview says why. Fix the cause, then deploy again.");
+    expect((await box().findByText("alpha is down in preview.")).closest("li")!.textContent).toContain(S.needDownFixPreview);
     expect(box().getByText("beta can't reach db.internal:5432 in production, and nobody can allow it.")).toBeDefined();
     expect(box().getByText(/what network gamma is on/).closest("li")!.textContent).toContain(S.needRecreateUnknownStopped);
     expect(box().getByRole("link", { name: `${S.openSettingsOutbound}: gamma` }).getAttribute("href")).toBe("#/settings/outbound");

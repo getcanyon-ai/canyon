@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, cancelRun, getRun, getStatus, promote, putBack, said, version, type Earlier, type Env, type Hold, type Receipt as ReceiptRead, type RunRead } from "../api";
-import { S } from "../strings";
+import { APPROVAL, S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Button } from "../ui/Button";
 import { shortDate, TONE, verdict } from "../ui/Verdict";
@@ -15,7 +15,7 @@ const SPENT = new Set(["outdated", "nothing_to_ship"]);
 // reviews that package under today's rules, preview untouched; once the review passes, the card offers to
 // promote it with the confirm's lines, and the promotion ships the exact image production ran. The status
 // read that answers earlier[] is a contributor's and above, so a reader below never reaches this card.
-export function EarlierVersions({ id, earlier, prod, hold, ended }: { id: string; earlier: Earlier[]; prod: Env | null; hold?: Hold; ended: () => void }) {
+export function EarlierVersions({ id, name, earlier, prod, hold, ended }: { id: string; name: string; earlier: Earlier[]; prod: Env | null; hold?: Hold; ended: () => void }) {
   const [asked, setAsked] = useState<{ row: Earlier; run: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [unread, setUnread] = useState<string | null>(null); // a read of the review that failed; the next one is asked anyway
@@ -27,10 +27,14 @@ export function EarlierVersions({ id, earlier, prod, hold, ended }: { id: string
   const asking = useRef(false); // one request at a time: a double click is never a second run
   const generation = useRef(0); // which Put back is on screen: an answer for an earlier one is dropped, even before the screen redraws
   const progress = useRef<HTMLDivElement>(null);
+  const [confirming, setConfirming] = useState(false); // the question before production changes is open (#157)
+  const asker = useRef<HTMLButtonElement>(null);
+  const cancelling = useRef<HTMLButtonElement>(null);
 
   const show = (next: { row: Earlier; run: string } | null) => {
     generation.current += 1;
     setAsked(next);
+    setConfirming(false);
   };
 
   const once = async (what: string, ask: () => Promise<void>) => {
@@ -104,6 +108,14 @@ export function EarlierVersions({ id, earlier, prod, hold, ended }: { id: string
     }
   });
 
+  // The question replaces the button that asked it, as Promote's does: the keyboard lands on Cancel, the safe answer, so
+  // Enter twice promotes nothing, and comes back to the button when the question closes.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (confirming) { opened.current = true; cancelling.current?.focus(); }
+    else if (opened.current) { opened.current = false; asker.current?.focus(); }
+  }, [confirming]);
+
   // The keyboard follows the promotion, as Promote's question does: the button it pressed is gone.
   useEffect(() => { if (following !== null) progress.current?.focus(); }, [following]);
 
@@ -171,7 +183,16 @@ export function EarlierVersions({ id, earlier, prod, hold, ended }: { id: string
                 {/* the first <version> is what goes back, the second what it replaces */}
                 <p>{replaces === null ? S.putBackCodeBare : S.putBackCode.replace("<version>", () => ships.version).replace("<version>", () => replaces)}</p>
                 {refuses !== undefined && <p className="text-amber">{refuses.why}</p>}
-                <span><Button variant="primary" onClick={() => void send()}>{busy === "promote" ? `Promoting ${ships.version}…` : `Promote ${ships.version}`}</Button></span>
+                {confirming ? (
+                  <>
+                    <p className="text-text">{(replaces === null ? APPROVAL.titlePutBackNothing : APPROVAL.titlePutBack.replace("<replaces>", () => replaces))
+                      .replace("<app>", () => name).replace("<version>", () => ships.version)}</p>
+                    <span className="flex flex-wrap gap-2">
+                      <Button variant="primary" onClick={() => void send()}>{busy === "promote" ? `Promoting ${ships.version}…` : `Promote ${ships.version}`}</Button>
+                      <Button ref={cancelling} variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+                    </span>
+                  </>
+                ) : <span><Button ref={asker} variant="primary" onClick={() => setConfirming(true)}>{`Promote ${ships.version}`}</Button></span>}
               </>
             )}
             {busy === null && following === null && (

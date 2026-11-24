@@ -155,6 +155,9 @@ export const S = {
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
   putBackCodeBare: "Canyon puts back the code, not the data, the secrets or the outbound rules.",
+  // The headline of a production that's down (#188): the newest kept earlier version, or why none can go back.
+  putBackNamed: "Put <version> back",
+  putBackNone: "No earlier version can be put back as it ran: fix it, deploy to preview, then promote.",
   imageGone: "<version>'s image is no longer on this Canyon, so it can't be put back as it ran. Deploy <version> to preview and promote it if you want it rebuilt.",
   patched: "<version> · patched <date>",
   noDescription: "No description yet",
@@ -661,11 +664,9 @@ export const S = {
   needHeldWho: "An admin, or a security responder who isn't on its team, can lift it.",
   needDown: "<app> is down in <env>.",
   needRestarting: "<app> keeps restarting in <env>.",
-  needDownFixPreview: "canyon logs --env preview says why. Fix the cause, then deploy again.",
-  needDownFixProd: "canyon logs --env prod says why. Fix the cause, deploy to preview, then promote.",
-  // A restarting environment's fix: its page shows its last log lines, masked (#2744).
-  needRestartingFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
-  needRestartingFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
+  // A down environment's fix: its page shows its last log lines, masked, stopped or restarting (#2744, #188).
+  needDownFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
+  needDownFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
   needRefused: "<app> can't reach <destination> in <env>.",
   needRefusedWhy: "Nobody has allowed it for <env> yet, so Canyon refused <calls>, the last <age>.",
   needRefusedOther: "<other> tried to reach it <times> in the last 30 days.",

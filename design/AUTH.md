@@ -750,8 +750,8 @@ wants the act to happen in Canyon turns on the setting in §4.5.
   without it the next click signs the same person straight back in, with no way to choose another
   account. The company session itself is left alone; signing somebody out of their whole SSO is
   not Canyon's to do. A sign-out answered `401` (the session had already ended) clears the cookie and shows the
-  sign-in page as any sign-out does; one answered `500` leaves the person signed in, and the rail
-  says `Canyon couldn't sign you out, so you're still signed in. Try again.` under the button (#153).
+  sign-in page as any sign-out does; one answered `500`, or never answered, leaves the page as it is,
+  and the rail says `Canyon couldn't sign you out. Try again.` under the button (#153).
 - **Expiry.** Any 401 mid-session does the same thing. There is no countdown and no warning modal.
 - **The honesty banner's fate.** `S.bannerLoopback` and `S.bannerExposed` (`web/src/strings.ts:11`)
   survive unchanged and are shown only when `CANYON_AUTH` is off, which the fleet read already

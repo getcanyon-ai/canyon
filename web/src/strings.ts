@@ -851,8 +851,8 @@ export const AUTH = {
   cliStep: "Canyon CLI · Step <n> of 2",
   setupRequired: "Canyon isn't set up yet. Ask the person who installed it to finish setup.",
   signOut: "Sign out",
-  // A sign-out the server couldn't make: the session lives, so the person is still signed in (#153).
-  signOutFailed: "Canyon couldn't sign you out, so you're still signed in. Try again.",
+  // A sign-out the server couldn't make, or whose answer never came: whether the session ended isn't known (#153).
+  signOutFailed: "Canyon couldn't sign you out. Try again.",
   role: { admin: "Admin", responder: "Security responder", member: "Member" },
   // The GitHub accounts the reader linked, at the rail's foot, or the link to link one (#2228).
   githubLinked: "GitHub: <logins>",

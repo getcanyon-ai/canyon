@@ -31,7 +31,7 @@ const VIEWS = [
 export function Rail({ current }: { current: (typeof VIEWS)[number][0] }) {
   const { org, viewer, admin, needs = 0 } = useContext(RailContext);
   const [open, setOpen] = useState(false);
-  const [unsigned, setUnsigned] = useState(false); // a sign-out the server could not make: still signed in (#153)
+  const [unsigned, setUnsigned] = useState(false); // a sign-out the server could not make (#153)
   return (
     <nav aria-label="Canyon" onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} className="sticky top-0 flex h-screen w-[224px] min-w-[224px] flex-col gap-5 overflow-y-auto border-r border-border bg-surface px-3 py-4 max-[860px]:static max-[860px]:h-auto max-[860px]:w-auto max-[860px]:min-w-0 max-[860px]:gap-0 max-[860px]:border-r-0 max-[860px]:border-b max-[860px]:px-4 max-[860px]:py-3">
       <div className="flex items-center justify-between">

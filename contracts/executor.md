@@ -1311,9 +1311,13 @@ canyon: the cluster kept only the end of the app's last run
 ```
 
 The kubelet no longer holds it when the read is refused, or when it answers `200` with exactly its own
-sentence `unable to retrieve container logs for <containerID>`, naming that run's container, as it does
-once the dead container is gone from the node (amended 2026-11-24, #185's review: kubelet v1.33.0,
-`kuberuntime_container.go`); that sentence is never passed on as the app's. A run the kubelet lost track
+sentence `unable to retrieve container logs for <containerID>`, naming that run's container, as it can
+once the dead container is gone from the node, before its status sees it gone (amended 2026-11-24, #185's
+review: kubelet v1.33.0, `kuberuntime_container.go`; it refuses after that, as kind's v1.34.11 did); that
+sentence is never passed on as the app's. A container that is still running can have its log file missing
+on the node: the kubelet then answers `200` with the same sentence naming that container, and the executor
+passes it on as written, since no run has ended and there is no kept end to fall back to. It is the
+kubelet's line, not the app's. A run the kubelet lost track
 of (`reason` `ContainerStatusUnknown`) carries the kubelet's message, not the app's, and a run whose
 status kept nothing has none: for either the executor writes only
 

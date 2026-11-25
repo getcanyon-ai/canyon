@@ -343,7 +343,8 @@ var runningWithin = 2 * time.Second
 // sayRunning sets state on every environment Canyon runs among each project's envs, by id
 // (contracts/routes.md, envs.<env>.state), from one executor call for every 400 of them, never one per app:
 // running when the executor names it, restarting when it says the app has been started again since its
-// deploy (and how often, counted: the status read's and the promotion's alone), stopped when it names neither, unknown when it could not be asked
+// deploy (and how often, counted: the status read's and the promotion's alone), starting when it says a /run is starting
+// it (#230), stopped when it names none of these, unknown when it could not be asked
 // in time — so a read that could not ask never says running. Asked why — the status read alone — it
 // answers how those that have exited last exited, stopped or restarting, as the executor said it, raw,
 // for sayWhy to mask.
@@ -391,10 +392,16 @@ func (a *app) sayRunning(ctx context.Context, envs map[string]map[string]any, wh
 			continue
 		}
 		runs.Running, runs.Restarting, runs.Stopped = append(runs.Running, answers[i].Running...), append(runs.Restarting, answers[i].Restarting...), append(runs.Stopped, answers[i].Stopped...)
+		runs.Starting = append(runs.Starting, answers[i].Starting...)
 	}
 	for _, c := range runs.Running {
 		if m, ok := envs[c.App][c.Target].(map[string]any); ok { // only what was asked: an executor naming more is not believed
 			m["state"] = "running"
+		}
+	}
+	for _, s := range runs.Starting { // a /run's switch, never down (#230): after running, so an executor naming both is read as starting
+		if m, ok := envs[s.App][s.Target].(map[string]any); ok {
+			m["state"] = "starting"
 		}
 	}
 	for _, r := range runs.Restarting { // after running: an executor naming both is read as restarting, which fails closed

@@ -48,6 +48,10 @@ setup=false
 if [ "${1:-}" = --setup ]; then setup=true; shift; fi
 suite=${1:?usage: scripts/ci-suite.sh [--setup] <suite>}
 export PATH="$HOME/.local/bin:$PATH"
+# a module download the proxy cuts short is asked again, as go-cache has the public jobs' Go commands do (#2533): no action
+# sets it for the private runners, and a cut-short download in an image's build failed #197's backup suite
+[ -n "${GOPROXY:-}" ] || GOPROXY=$(.github/actions/go-cache/goproxy.sh https://proxy.golang.org)
+export GOPROXY
 tmp=${RUNNER_TEMP:-$(mktemp -d)}
 compose=(docker compose -f docker-compose.yml -f e2e/compose.e2e.yml)
 dbs="$HOME/.cache/canyon-scandb"

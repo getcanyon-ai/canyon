@@ -18,7 +18,7 @@ import { Icon } from "../ui/Icon";
 import type { Tone } from "../ui/Pill";
 import { Rail, RailContext } from "../ui/Rail";
 import { Receipt } from "../ui/Receipt";
-import { reviewOf } from "../ui/Stage";
+import { reviewOf, type StageKey } from "../ui/Stage";
 import { approved, blockingEntries, failedAfterReview, TONE, verdict } from "../ui/Verdict";
 import { Access, sharedLine, type Asked } from "./Access";
 import { empty, HoldDialog, lifts, stops, type Acting } from "./HoldDialog";
@@ -44,6 +44,9 @@ const ended = (run: RunRead) => run.state !== "pending" && run.state !== "runnin
 const running = (env: Env | { pending: unknown } | undefined): Env | null => (env !== undefined && !waiting(env as Env) ? (env as Env) : null);
 const MARK: Record<Tone, Cell["mark"]> = { ok: "pass", critical: "stop", amber: "wait", neutral: "none" };
 const NONE: Cell = { mark: "none", text: "—" };
+// A newest version blocked, failed or not reviewed yet: promoting the older one preview runs is then never the page's main
+// step, so its Promote is drawn plain (#102).
+const UNSETTLED: StageKey[] = ["blocked", "failed", "awaiting_review", "reviewing"];
 // The step that broke after a review passed, where preview would be. A detect has no log to show: its
 // lines are each buildpack declining the app, so the verdict's "what this host builds" says it all.
 const STEP: Record<string, string> = { build: "Build failed", detect: "Can't build this kind of app", start: "Didn't stay up", no_room: "No room to build" };
@@ -854,7 +857,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                       ? <p className="text-md text-text-dim">{S.heldVersion.replace("<version>", () => status.hold!.version!)}</p>
                       : (preview.package !== project.latest.package || status.receipt.held !== undefined) && (
                       <Promote id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview.pull_request !== undefined} shown={preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={prod?.package === preview.package && !down(prod)} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()}
-                        quiet={project.latest.stage === "blocked" || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)}
+                        quiet={UNSETTLED.includes(project.latest.stage) || (newestRun !== null && newestRun.state === "blocked" && approved(newestRun) === null)}
                         setSecret={(name) => setSettingFor({ name, env: "prod" })} secretsSet={secretsSet} />
                     )}
                   </aside>

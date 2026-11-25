@@ -85,12 +85,19 @@ retry kubectl apply -f "$work/kpack.yaml" >/dev/null
 kubectl -n kpack scale deploy/kpack-controller --replicas=0
 [ "$1" = kindnet ] && kubectl -n kpack scale deploy/kpack-webhook --replicas=0
 
+# push runs in a command substitution, where -e is off: each step returns its failure, so a build that fails stops up.sh
+# instead of deploying an image the cluster can't pull (#197's backup run: a module download the proxy cut short)
 push() { # Dockerfile repository: built from this tree, pushed, answered by digest as the cluster sees it
-  docker build -q -f "$root/$1" ${GOPROXY:+--build-arg "GOPROXY=$GOPROXY"} -t localhost:5001/canyon-kind/$2:ci "$root" >/dev/null # go-cache's list (#2533)
-  docker push -q localhost:5001/canyon-kind/$2:ci >/dev/null
-  echo "$reg/canyon-kind/$2@$(docker inspect -f '{{index .RepoDigests 0}}' localhost:5001/canyon-kind/$2:ci | cut -d@ -f2)"
+  local digest
+  docker build -q -f "$root/$1" ${GOPROXY:+--build-arg "GOPROXY=$GOPROXY"} -t localhost:5001/canyon-kind/$2:ci "$root" >/dev/null || return # go-cache's list (#2533)
+  docker push -q localhost:5001/canyon-kind/$2:ci >/dev/null || return
+  digest=$(docker inspect -f '{{index .RepoDigests 0}}' localhost:5001/canyon-kind/$2:ci) || return
+  echo "$reg/canyon-kind/$2@${digest#*@}"
 }
-executor=$(push Dockerfile.executor-kube executor-kube) identity=$(push Dockerfile.identity identity) server=$(push Dockerfile server)
+# one assignment a line: a line of three fails on the last one's status alone
+executor=$(push Dockerfile.executor-kube executor-kube)
+identity=$(push Dockerfile.identity identity)
+server=$(push Dockerfile server)
 
 # This cluster's values over the base: the images, the executor's environment, where kpack pushes the
 # builder, the server's two databases, and the addresses the base cannot know: the API server on the

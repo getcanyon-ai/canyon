@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/internal/executortest"
 )
 
 const (
@@ -266,5 +268,49 @@ func TestTheMaskedReadIsBoundedBeforeItMasks(t *testing.T) {
 		strings.NewReader(strings.Repeat("x", 1<<20+1)))
 	if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), `"too_long_to_mask"`) || w.Header().Get("Canyon-Log-Redaction") != "" {
 		t.Errorf("a log over 1 MiB: %d %s", w.Code, w.Body)
+	}
+}
+
+// A security responder reads production's logs, masked, whatever their access to the app, each read audited (design/PERMISSIONS.md,
+// Security responders; the owner, 2026-11-25): never preview's, never a raw read; a member with no access reads none.
+func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
+	withOIDC(t)
+	pool, ctx := migrated(t)
+	base, _ := start(t, pool, time.Hour)
+	if _, err := pool.Exec(ctx, "UPDATE org_preferences SET responder_emails = $1", []string{"rex@meridian.example"}); err != nil {
+		t.Fatal(err)
+	}
+	olive := signedIn(t, ctx, pool, base, "sub-olive", "olive@meridian.example", false)
+	seedTeamApp(t, ctx, pool, base, olive)
+	if _, err := pool.Exec(ctx, `INSERT INTO deploys (project_id, env, package_id, image, url, gate_run, run_started_at) SELECT 'claims-portal', e, package_id, 'canyon/claims-portal@`+executortest.Digest+`', 'http://x', 'gr_seed', now() FROM runs, unnest(ARRAY['preview', 'prod']) e WHERE id = 'gr_seed'`); err != nil {
+		t.Fatal(err)
+	}
+	rex := signedIn(t, ctx, pool, base, "sub-rex", "rex@meridian.example", false)
+	nora := signedIn(t, ctx, pool, base, "sub-nora", "nora@meridian.example", false)
+	logs := base + "/api/v1/projects/claims-portal/logs"
+	if code, _, resp := do(t, rex, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 200 || resp.Header.Get("Canyon-Log-Redaction") != "masked" {
+		t.Fatalf("a responder's masked read of production: %d %s", code, lastBody)
+	}
+	var who, detail string
+	if err := pool.QueryRow(ctx, "SELECT actor_subject, detail::text FROM audit_events WHERE action = $1", logsRoute).Scan(&who, &detail); err != nil || who != "sub-rex" || detail != `{"env": "prod"}` {
+		t.Fatalf("the responder's read leaves its row: %q %q (%v)", who, detail, err)
+	}
+	asked := fake.Logs.Load()
+	for _, refused := range []struct {
+		who   string
+		c     *http.Client
+		query string
+	}{
+		{"a responder, on preview", rex, "?env=preview&redaction=masked"},
+		{"a responder, unmasked", rex, "?env=prod"},
+		{"a responder, unmasked by name", rex, "?env=prod&redaction=none&follow=false"},
+		{"a member with no access", nora, "?env=prod&redaction=masked"},
+	} {
+		if code, body, _ := do(t, refused.c, http.MethodGet, logs+refused.query, ""); code != 403 || body["error"] != "team_required" {
+			t.Errorf("%s: %d %s, want 403 team_required", refused.who, code, lastBody)
+		}
+	}
+	if fake.Logs.Load() != asked || count(t, ctx, pool, logsAudited) != 1 {
+		t.Fatalf("a refused read reached the executor or the trail")
 	}
 }

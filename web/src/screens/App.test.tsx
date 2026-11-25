@@ -2911,6 +2911,21 @@ describe("what needs a person, on the app page", () => {
     expect(promote.className).not.toContain("bg-accent");
   });
 
+  // Nor while the newest version failed, or isn't reviewed yet: what it will be is unknown, so the older one in preview isn't
+  // the page's main step either. Once the newest passed, the older one's Promote is as it was.
+  it("draws Promote for what preview runs as a plain button while the newest version failed or is in review", async () => {
+    for (const [stage, state, plain] of [["failed", "failed", true], ["reviewing", "running", true], ["awaiting_review", "pending", true], ["passed", "clean", false]] as const) {
+      const newest = { ...project, latest: { ...project.latest, stage } } as AppRead;
+      server({ ...reads(() => ({ ...page.status, needs: [] })), "GET /api/v1/projects/claims-portal": { body: { project: newest } },
+        [RUN]: { body: { run: { ...run, state, blocking: 0, findings: [], ...(state === "failed" ? { failure_reason: "build" } : {}) } } } });
+      const { unmount } = render(<App id="claims-portal" auth="oidc" />);
+      const box = await screen.findByRole("complementary", { name: "Promote" });
+      const promote = await within(box).findByRole("button", { name: /^Promote v1\.3/ });
+      expect(promote.className.includes("bg-accent"), stage).toBe(!plain);
+      unmount();
+    }
+  });
+
   // A secret of another version is no part of this headline: its line stays in the needs.
   it("keeps a secret of another version in the needs", async () => {
     server(reads(() => ({ ...page.status, needs: [{ ...secret, version: "v1.2" }] })));

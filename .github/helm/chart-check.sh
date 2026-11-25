@@ -121,6 +121,19 @@ for set in "canyon.egress.token=short" "canyon.egress.token=synthetic.egress.tok
   grep -E "canyon.egress.token must be 32 to 512|canyon.egress.token and canyon.egress.existingSecret: set one" <<<"$out" || { echo "--set $set failed for another reason: $out"; exit 1; }
 done
 )
+# canyon.auth.allowedEmails or allowedDomains beside canyon.existingSecret fails the render, naming the variable to put
+# in that Secret (must-fail, #149); without existingSecret each still lands in the chart's own Secret
+(
+set -eo pipefail
+for pair in "allowedEmails={dev@example.com}|CANYON_OIDC_ALLOWED_EMAILS" "allowedDomains={example.com}|CANYON_OIDC_ALLOWED_DOMAINS"; do
+  set=${pair%%|*} want=${pair#*|}
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "canyon.existingSecret=my-canyon-server,canyon.auth.$set" 2>&1); then
+    echo "existingSecret with $set rendered: it must fail"; exit 1
+  fi
+  grep -F "put $want in that Secret" <<<"$out" || { echo "existingSecret with $set failed for another reason: $out"; exit 1; }
+  helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "canyon.auth.$set" | grep -F "$want:" || { echo "$set without existingSecret: no $want in the chart's Secret"; exit 1; }
+done
+)
 # a canyon.auth.mode but oidc, existingSecret or not, fails the render (must-fail)
 (
 set -eo pipefail

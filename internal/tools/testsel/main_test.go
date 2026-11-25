@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,9 +208,16 @@ func TestTheGraphIsTheRunsBuildFlags(t *testing.T) {
 	}
 }
 
+// Built without Canyon Enterprise (the noee job deletes ee/), an ee/ directory a reader names is missing with ee/ itself,
+// and only then: with ee/ in place, each must be there.
 func TestEveryDeclaredReaderAndSourceExists(t *testing.T) {
+	_, err := os.Stat(filepath.Join("..", "..", "..", "ee"))
+	noEE := errors.Is(err, fs.ErrNotExist)
 	for reader, sources := range readers {
 		for _, dir := range append([]string{reader}, sources...) {
+			if noEE && strings.HasPrefix(dir, "ee/") {
+				continue
+			}
 			if fi, err := os.Stat(filepath.Join("..", "..", "..", dir)); err != nil || !fi.IsDir() {
 				t.Errorf("readers names %s, which is no directory of this repository: %v", dir, err)
 			}

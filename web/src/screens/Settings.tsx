@@ -23,7 +23,7 @@ import { EnterpriseLine, unlocks, useLicence } from "../ui/Enterprise";
 
 const LABEL = "mt-3 mb-1 block text-xs tracking-caps text-text-faint uppercase";
 const FIELD = "w-full max-w-[520px] rounded-lg border border-border bg-surface px-2.5 py-1.5 text-base";
-const NOTE = "mt-1 text-md text-text-dim";
+const NOTE = "mt-1 text-md text-text-dim wrap-anywhere"; // a note can name an address longer than a narrow window is wide (#129)
 const CARD = "mt-3 rounded-xl border border-border bg-surface-2 px-3.5 py-3";
 
 // The load balancer's own session cookie, which a PUT leaves out (contracts/routes.md, the front-door row).
@@ -297,7 +297,7 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
 
   return (
     <>
-      <fieldset disabled={checking} className="mt-3">
+      <fieldset disabled={checking} className="mt-3 min-w-0">{/* a fieldset is as wide as its content by default: at 320px it widened the page (#129) */}
         <legend className={LABEL}>Who signs people in</legend>
         {CHOICES.map(([value, word, note]) => (
           <div key={value} className="mt-2">
@@ -353,12 +353,12 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
           </div>
         )}
         {field("domain", "Domain")}
-        <fieldset className="mt-3">
+        <fieldset className="mt-3 min-w-0">
           <legend className={LABEL}>App addresses</legend>
           {FORMS.map((form) => (
             <label key={form} className="mt-1 flex items-center gap-2 font-mono text-base">
               <input type="radio" name="front-door-form" checked={draft.form === form} onChange={() => edit({ form })} />
-              {example(form, domain)}
+              <span className="min-w-0 wrap-anywhere">{example(form, domain)}</span>
             </label>
           ))}
         </fieldset>

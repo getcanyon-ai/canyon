@@ -604,7 +604,10 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 			return
 		case client != f.Get("client_id") || redirect != f.Get("redirect_uri") || challenge == "" || !pkceMatches(f.Get("code_verifier"), challenge) ||
 			f.Get("resource") != "" && !a.sameResource(f.Get("resource")):
-			_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
+			if err := tx.Commit(ctx); err != nil { // the code is spent whatever it was redeemed with, and unspent no refusal says so
+				internal(err)
+				return
+			}
 			tokenError(w, "invalid_grant", "the code was issued for another client, redirect, verifier or resource")
 			return
 		}
@@ -613,7 +616,10 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				internal(err)
 				return
 			}
-			_ = tx.Commit(ctx)
+			if err := tx.Commit(ctx); err != nil {
+				internal(err)
+				return
+			}
 			tokenError(w, "invalid_grant", "the person who allowed it can no longer sign in to Canyon")
 			return
 		}
@@ -629,7 +635,10 @@ func (a *app) oauthToken(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if used.RowsAffected() != 1 {
-				_ = tx.Commit(ctx) // the code is spent whatever it was redeemed with
+				if err := tx.Commit(ctx); err != nil { // the code is spent whatever it was redeemed with
+					internal(err)
+					return
+				}
 				tokenError(w, "invalid_client", "the client's registration is gone: register it again")
 				return
 			}

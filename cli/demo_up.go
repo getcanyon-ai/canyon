@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,8 +30,10 @@ const (
 	demoCPUs        = 4
 	demoMemoryGB    = 6
 	demoDiskGB      = 18
-	demoTries       = 3
-	demoTail        = 20 // lines of the deployer's log a failed start shows
+	// On Docker's containerd image store a cold up peaked at 22.1 GB, against 10.1 GB on overlay2 (#165): 12 GB more.
+	demoContainerdDiskGB = demoDiskGB + 12
+	demoTries            = 3
+	demoTail             = 20 // lines of the deployer's log a failed start shows
 )
 
 // demoProbe is the image the disk check runs df in: docker-compose.yml's own busybox pin, which the
@@ -201,8 +205,8 @@ func (a *app) demoPreflight(ctx context.Context, stack string) []gap {
 			gaps = append(gaps, gap{fmt.Sprintf("CANYON_HOST is set to %s, so canyon commands would go there instead of the demo.", cell(set)), "unset CANYON_HOST, then run canyon demo up again."})
 		}
 	}
-	info, err := demoDocker(ctx, "", nil, "info", "--format", "{{.ServerVersion}} {{.NCPU}} {{.MemTotal}} {{.Name}}")
-	engine := strings.Fields(info)
+	info, err := demoDocker(ctx, "", nil, "info", "--format", "{{.ServerVersion}} {{.NCPU}} {{.MemTotal}} {{.Name}} {{json .DriverStatus}}")
+	engine := strings.SplitN(info, " ", 5)                   // DriverStatus last, whole: its JSON has spaces
 	if err == nil && (len(engine) < 4 || engine[1] == "0") { // docker info exits 0 with no engine behind it, and answers an empty version and no CPUs
 		err = errors.New("docker info named no engine")
 	}
@@ -252,12 +256,10 @@ func (a *app) demoPreflight(ctx context.Context, stack string) []gap {
 	case err != nil || !ok:
 		gaps = append(gaps, gap{"Docker could not download and run a small image: " + cell(plainly(cmp.Or(err, errors.New("df answered nothing Canyon can read")))) + ".",
 			"check this machine's network connection and that Docker can reach docker.io."})
+	case demoContainerd(engine) && free < demoContainerdDiskGB:
+		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB where Docker stores its images with containerd, as this one does.", free, demoContainerdDiskGB), demoDiskFix(colima)})
 	case free < demoDiskGB:
-		fix := "free disk space, or give Docker's VM a larger disk in its settings."
-		if colima {
-			fix = "free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60"
-		}
-		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB.", free, demoDiskGB), fix})
+		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB.", free, demoDiskGB), demoDiskFix(colima)})
 	}
 	return append(gaps, a.demoNamesTaken(ctx)...)
 }
@@ -333,6 +335,27 @@ func (p *demoProgress) Write(b []byte) (int, error) {
 
 // demoSampleApps are the apps demo/apps/run.sh deploys, in its order.
 var demoSampleApps = []string{"claims-portal", "endorsement-hub", "claims-archive", "premium-ledger"}
+
+// demoDiskFix is the one fix for too little free disk. It never names the image store: that is the person's Docker.
+func demoDiskFix(colima bool) string {
+	if colima {
+		return "free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60"
+	}
+	return "free disk space, or give Docker's VM a larger disk in its settings."
+}
+
+// demoContainerd is whether this Docker stores its images with containerd (Docker Desktop's default on a new install
+// since 4.34, Colima's since 0.10), as docker info's DriverStatus, engine's fifth part, names its snapshotter. A status
+// Canyon can't read counts as containerd, the store that needs more disk.
+func demoContainerd(engine []string) bool {
+	var status [][]string
+	if len(engine) < 5 || json.Unmarshal([]byte(engine[4]), &status) != nil {
+		return true
+	}
+	return slices.ContainsFunc(status, func(kv []string) bool {
+		return len(kv) == 2 && kv[0] == "driver-type" && kv[1] == "io.containerd.snapshotter.v1"
+	})
+}
 
 // demoFreeGB reads df -k's second line: the kilobytes available on the filesystem.
 func demoFreeGB(df string) (int, bool) {

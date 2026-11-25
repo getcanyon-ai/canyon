@@ -50,13 +50,20 @@ type demoMachine struct {
 	project  []string          // the containers of the demo's compose project
 	hangs    bool              // the deployer's log never ends
 	imaged   bool              // every image the demo's compose file names is here
+	store    string            // docker info's DriverStatus, as JSON: overlay2's unless a case says otherwise
 }
+
+// docker info's DriverStatus on each of Docker's two image stores, as hosted runners answered it (#165).
+const (
+	overlay2Status   = `[["Backing Filesystem","extfs"],["Supports d_type","true"],["Using metacopy","false"],["Native Overlay Diff","false"],["userxattr","false"]]`
+	containerdStatus = `[["driver-type","io.containerd.snapshotter.v1"]]`
+)
 
 // A machine with everything the demo needs: Docker 28 with Compose, 8 CPUs, 8 GB, 57 GB free, port free.
 func demoOn(t *testing.T) *demoMachine {
 	t.Helper()
 	m := &demoMachine{t: t, home: t.TempDir(), deployer: "0", answers: true, apps: []string{"claims-portal", "witty-wren"},
-		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}}
+		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}, store: overlay2Status}
 	bundle := demoTar(t, map[string]string{"canyon/docker-compose.yml": "services: {}\n", "canyon/deploy/egress/floor.sh": "#!/bin/sh\n"})
 	release := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.fetched++
@@ -147,7 +154,7 @@ func (m *demoMachine) answer(line string) string {
 	fields := strings.Fields(line)
 	switch {
 	case strings.HasPrefix(line, "info "):
-		return "28.1.1 8 8323002368 docker-desktop"
+		return "28.1.1 8 8323002368 docker-desktop " + m.store
 	case line == "compose version --short":
 		return "2.35.0"
 	case strings.HasPrefix(line, "run --rm "+demoProbe+" df"):
@@ -334,6 +341,38 @@ func TestDemoUpReadsAnEngineThatDoesNotAnswer(t *testing.T) {
 	}
 }
 
+// The disk preflight asks for is the one this Docker's image store needs: more on the containerd store, which keeps an
+// image's layers twice (#174's decision 2). A store docker info doesn't name readably counts as containerd, the one
+// that needs more. The gap names the store as Docker does, and never tells anyone to switch.
+func TestDemoUpAsksTheDiskItsImageStoreNeeds(t *testing.T) {
+	for _, c := range []struct {
+		name, store, want string
+	}{
+		{"overlay2", overlay2Status, ""},
+		{"containerd", containerdStatus, "1. Docker has 20 GB of free disk, and the demo needs about 30 GB where Docker stores its images with containerd, as this one does."},
+		{"unread", `"not a list"`, "1. Docker has 20 GB of free disk, and the demo needs about 30 GB where Docker stores its images with containerd, as this one does."},
+		{"no status", "null", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := demoOn(t)
+			m.store = c.store
+			m.docker = func(line string) (string, error, bool) {
+				if strings.HasPrefix(line, "run ") {
+					return "Filesystem 1K-blocks Used Available Use% Mounted on\noverlay 61202244 40000000 20971520 66% /", nil, true // 20 GB free
+				}
+				return "", nil, false
+			}
+			_, errs, code := m.run("up")
+			if c.want == "" && (code != exitOK || strings.Contains(errs, "free disk")) {
+				t.Fatalf("20 GB on %s: exit %d, stderr %q", c.name, code, errs)
+			}
+			if c.want != "" && (code != exitError || !strings.Contains(errs, c.want) || strings.Contains(strings.ToLower(errs), "switch")) {
+				t.Fatalf("20 GB on %s: exit %d, stderr\n%s", c.name, code, errs)
+			}
+		})
+	}
+}
+
 // Every gap is in one list, each with its own fix, so a person fixes the machine in one round.
 func TestDemoUpListsEveryGapAtOnce(t *testing.T) {
 	m := demoOn(t)
@@ -344,7 +383,7 @@ func TestDemoUpListsEveryGapAtOnce(t *testing.T) {
 	m.docker = func(line string) (string, error, bool) {
 		switch {
 		case strings.HasPrefix(line, "info "):
-			return "27.5.1 2 2063007744 colima", nil, true
+			return "27.5.1 2 2063007744 colima " + overlay2Status, nil, true
 		case line == "compose version --short":
 			return "", errors.New("exit status 1: docker: 'compose' is not a docker command"), true
 		case strings.HasPrefix(line, "run "):
@@ -744,7 +783,7 @@ func TestDemoUpAsksNoDiskOrMemoryWhereTheDemoIsAlready(t *testing.T) {
 	m.docker = func(line string) (string, error, bool) {
 		switch {
 		case strings.HasPrefix(line, "info "):
-			return "28.1.1 2 2063007744 colima", nil, true
+			return "28.1.1 2 2063007744 colima " + overlay2Status, nil, true
 		case strings.HasPrefix(line, "run "):
 			return "Filesystem 1K-blocks Used Available Use% Mounted on\noverlay 61202244 49667908 1534336 98% /", nil, true
 		}

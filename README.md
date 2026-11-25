@@ -102,7 +102,7 @@ a passing review and a person's say-so, and every app keeps its review history a
 
 ## Quickstart
 
-**Run Canyon on your laptop** (Docker 28 or newer with Compose v2, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk):
+**Run Canyon on your laptop** (Docker 28 or newer with Compose v2, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk, 30 GB where Docker stores its images with containerd):
 
 ```sh
 curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh

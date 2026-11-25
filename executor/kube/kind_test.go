@@ -381,6 +381,12 @@ func apiCall(t *testing.T, base, method, path string, body any) (int, []byte) {
 // it by digest as the cluster sees it.
 func appImage(t *testing.T, app string) string {
 	t.Helper()
+	return appImageRunning(t, app, "echo canyon-kind-app $CANYON_KIND_APP; exec httpd -f -v -p 3000")
+}
+
+// appImageRunning is appImage running script with sh -c in place of its own.
+func appImageRunning(t *testing.T, app, script string) string {
+	t.Helper()
 	base, err := remote.Image(name.MustParseReference(probeImage), remote.WithPlatform(v1.Platform{OS: "linux", Architecture: goruntime.GOARCH}))
 	if err != nil {
 		t.Fatal(err)
@@ -389,7 +395,7 @@ func appImage(t *testing.T, app string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Config.Cmd = []string{"sh", "-c", "echo canyon-kind-app $CANYON_KIND_APP; exec httpd -f -v -p 3000"}
+	cfg.Config.Cmd = []string{"sh", "-c", script}
 	img, err := mutate.ConfigFile(base, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -781,6 +787,72 @@ func TestKindLogsReadTheAppContainerAlone(t *testing.T) {
 	if res.StatusCode != http.StatusOK || !strings.Contains(got.String(), "canyon-kind-app kind-a") || strings.Contains(got.String(), "canyon-identity") {
 		t.Errorf("/logs of %s: %d %q", a.pod.Name, res.StatusCode, got.String())
 	}
+}
+
+// TestKindLogsReadACrashedAppsLastRun: an app that crashes after it came up reads, while its container waits to start
+// again, what its last run printed before it ended (contracts/executor.md, A container that isn't running).
+func TestKindLogsReadACrashedAppsLastRun(t *testing.T) {
+	readCrashed(t, "kind-crash", false, "canyon-kind-crashed\n")
+}
+
+// TestKindLogsReadTheEndKeptOfAGoneRun: once the dead container is gone from the node, as the kubelet's garbage
+// collection removes it, the kubelet answers 200 with its own sentence; /logs reads the end its status kept instead.
+func TestKindLogsReadTheEndKeptOfAGoneRun(t *testing.T) {
+	readCrashed(t, "kind-crash-gone", true, "canyon-kind-crashed\ncanyon: the cluster kept only the end of the app's last run\n")
+}
+
+// readCrashed reads /logs of an app that crashes after it came up, while its container waits to start again, until the
+// body ends with want; gone removes the dead container from its node first.
+func readCrashed(t *testing.T, name string, gone bool, want string) {
+	t.Helper()
+	image := appImageRunning(t, name, "echo canyon-kind-app $CANYON_KIND_APP; httpd -p 3000; sleep 25; echo canyon-kind-crashed; exit 3")
+	status, out := call(t, http.MethodPost, "/run", map[string]any{
+		"app": name, "target": "preview", "image": image, "env": map[string]string{"CANYON_KIND_APP": name}, "network": "canyon-app-" + name,
+		"identity": map[string]string{"issuer": "https://canyon.kind.test", "audience": name, "jwks_url": jwksURL},
+		"access":   accessFile("2026-09-26T10:00:00Z"),
+		"front_door": map[string]any{"choice": 1, "gateway": "alb", "domain": "kind.test", "form": "app.env.domain",
+			"alb_arn": "arn:aws:elasticloadbalancing:eu-central-1:123456789012:loadbalancer/app/kind/0123456789abcdef"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("/run %s: %d %s", name, status, out)
+	}
+	t.Cleanup(func() { _, _ = call(t, http.MethodPost, "/stop", map[string]any{"app": name, "target": "preview"}) })
+	var got string
+	for deadline := time.Now().Add(3 * time.Minute); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		pods, err := kind.client.CoreV1().Pods(Namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "canyon.app=" + name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dead *corev1.ContainerStateTerminated
+		node := ""
+		for _, p := range pods.Items {
+			for _, cs := range p.Status.ContainerStatuses {
+				if cs.Name == "app" && cs.State.Waiting != nil && cs.LastTerminationState.Terminated != nil {
+					dead, node = cs.LastTerminationState.Terminated, p.Spec.NodeName
+				}
+			}
+		}
+		if dead == nil { // running again, or not yet crashed: its own log is read as today
+			continue
+		}
+		if gone { // gone already on a second pass
+			_ = exec.Command("docker", "exec", node, "crictl", "rm", strings.TrimPrefix(dead.ContainerID, "containerd://")).Run() //nolint:gosec // kind's node, the app's dead container
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, kind.executor+"/logs?app="+name+"&target=preview&tail=50", nil)
+		res, err := (&http.Client{Transport: toExecutor}).Do(req)
+		if err == nil {
+			body, _ := io.ReadAll(res.Body)
+			_ = res.Body.Close()
+			got = fmt.Sprintf("%d %q", res.StatusCode, body)
+			if res.StatusCode == http.StatusOK && strings.HasSuffix(string(body), want) {
+				cancel()
+				return
+			}
+		}
+		cancel()
+	}
+	t.Fatalf("/logs of %s never read its last run's lines while it waited to start again: %s", name, got)
 }
 
 // TestKindStopIsIdempotent is invariant 6 on a real cluster: /stop twice is 204 twice, and leaves none

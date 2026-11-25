@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +73,24 @@ func (e *Executor) Logs(ctx context.Context, app, target string, tail int, follo
 		ready()
 	}
 	lines := int64(tail)
-	stream, err := e.Client.CoreV1().Pods(Namespace).GetLogs(newest.Name, &corev1.PodLogOptions{Container: "app", Follow: follow, TailLines: &lines}).Stream(ctx)
+	opts := &corev1.PodLogOptions{Container: "app", Follow: follow, TailLines: &lines}
+	last := lastRun(newest, opts) // a crashed app's lines are its last run's (contracts/executor.md, A container that isn't running)
+	stream, err := e.Client.CoreV1().Pods(Namespace).GetLogs(newest.Name, opts).Stream(ctx)
+	if last != nil { // never followed: read whole, so the kubelet's own answer is told from the app's lines
+		var body []byte
+		if err == nil {
+			body, err = io.ReadAll(stream)
+			_ = stream.Close()
+		}
+		// Once the dead container is gone the kubelet answers 200 with this sentence (kubelet v1.33.0, kuberuntime_container.go).
+		gone := err == nil && string(body) == "unable to retrieve container logs for "+last.ContainerID
+		if gone || err != nil { // that run's log is gone: the end its status keeps
+			_, err = io.WriteString(out, kept(last, tail))
+			return err
+		}
+		_, err = out.Write(body)
+		return err
+	}
 	if err != nil {
 		return fmt.Errorf("logs of %s: %w", newest.Name, err)
 	}
@@ -81,6 +99,36 @@ func (e *Executor) Logs(ctx context.Context, app, target string, tail int, follo
 		return fmt.Errorf("logs of %s: %w", newest.Name, err)
 	}
 	return nil
+}
+
+// lastRun points opts at the app container's last run when it isn't running and has ended: the run before while it
+// waits to start again, its own once it has ended for good, never followed. It answers how that run ended, nil
+// for a running container, or one that never ended.
+func lastRun(p *corev1.Pod, opts *corev1.PodLogOptions) *corev1.ContainerStateTerminated {
+	for _, cs := range p.Status.ContainerStatuses {
+		switch {
+		case cs.Name != "app" || cs.State.Running != nil:
+		case cs.State.Terminated != nil:
+			opts.Follow = false
+			return cs.State.Terminated
+		case cs.LastTerminationState.Terminated != nil:
+			opts.Follow, opts.Previous = false, true
+			return cs.LastTerminationState.Terminated
+		}
+	}
+	return nil
+}
+
+// kept is the end of a run whose log is gone, as its status keeps it under FallbackToLogsOnError: its last tail
+// lines, from a whole line (whole), then Canyon's line saying so. The kubelet's record of a container it lost
+// (ContainerStatusUnknown) carries the kubelet's sentence, never the app's, so nothing of the app is kept.
+func kept(t *corev1.ContainerStateTerminated, tail int) string {
+	said := strings.TrimSuffix(whole(t.Message), "\n")
+	if t.Reason == "ContainerStatusUnknown" || said == "" {
+		return "canyon: the cluster kept nothing of the app's last run\n"
+	}
+	lines := strings.Split(said, "\n")
+	return strings.Join(append(lines[max(0, len(lines)-tail):], "canyon: the cluster kept only the end of the app's last run"), "\n") + "\n"
 }
 
 // newestPod is the pod created last, nil for none.

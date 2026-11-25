@@ -78,7 +78,7 @@ func TestAFailedStopKeepsTheAskAndTheRetryOnlyStops(t *testing.T) {
 		t.Fatalf("request undeploy rows: %d, want the one the ask wrote", n)
 	}
 	var detail string
-	if err := pool.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = $1", undeployRoute).Scan(&detail); err != nil || detail != `{"env": "preview", "run": "gr_building00", "package": "`+previewPackage(t, ctx, pool)+`"}` {
+	if err := pool.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = $1", undeployRoute).Scan(&detail); err != nil || detail != `{"env": "preview", "run": "gr_building00", "stop": "stopped", "package": "`+previewPackage(t, ctx, pool)+`"}` {
 		t.Fatalf("the undeploy's row: %q (%v)", detail, err)
 	}
 }

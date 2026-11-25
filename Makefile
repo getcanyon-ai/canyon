@@ -6,7 +6,7 @@ RUN ?= .
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 SARIF_SCHEMA_URL ?= https://json.schemastore.org/sarif-2.1.0.json
 
-.PHONY: setup build cli cli-release images-release install-test lint test test-all test-rest test-shards test-affected test-bounds tidy-check demo demo-down demo-check demo-check-steps tour-check preflight vendor-sarif pack-fetch pack-install test-kube test-e2e test-cluster-unit e2e-cluster-egress e2e-up e2e-down e2e e2e-ui e2e-ui-typecheck e2e-handoff e2e-handoff-repo e2e-cluster-handoff-repo tokens tokens-check deploy-bundle-check third-party-notices third-party-notices-check images-load web web-dev web-test opengrep-rules-test vendor-sast-rules docs-links docs-site docs-cli telemetry-docs
+.PHONY: setup build builder-node cli cli-release images-release install-test lint test test-all test-rest test-shards test-affected test-bounds tidy-check demo demo-down demo-check demo-check-steps tour-check preflight vendor-sarif pack-fetch pack-install test-kube test-e2e test-cluster-unit e2e-cluster-egress e2e-up e2e-down e2e e2e-ui e2e-ui-typecheck e2e-handoff e2e-handoff-repo e2e-cluster-handoff-repo tokens tokens-check deploy-bundle-check third-party-notices third-party-notices-check images-load web web-dev web-test opengrep-rules-test vendor-sast-rules docs-links docs-site docs-cli telemetry-docs
 
 setup: ## Go modules + the pinned linter
 	go mod download
@@ -46,7 +46,7 @@ cli-release: ## bin/release/: the CLI per platform as canyon_<version>_<os>_<arc
 	cd bin/release && sha256sum canyon_* > SHA256SUMS
 	sed 's/^version=dev$$/version=$(VERSION)/' cli/install.sh > bin/release/install.sh # the curl | sh installer, stamped with this release (cli.md §8.1)
 
-# Canyon's nine images, name:Dockerfile[:target], each built from the repository root: its five images on
+# Canyon's nine images built from a Dockerfile, name:Dockerfile[:target], each built from the repository root: its five images on
 # Kubernetes and its two scanner images (the Kubernetes install guide, docs/src/content/docs/self-host/kubernetes.md),
 # and the laptop demo's Docker executor and sample apps, which canyon-deploy.tar.gz's compose override names
 # (scripts/publish-release.sh).
@@ -82,15 +82,21 @@ IMAGE_BUILD = name=$${img%%:*}; file=$${img\#*:}; target=; \
 
 # images-release's push: release.yml's rehearsal sets false, building each image to its digest and pushing nothing.
 PUSH ?= true
-images-release: ## push each of the nine images for one PLATFORM (linux/amd64) to REPO/<name> by digest, untagged, writing bin/images/<name> = its digest — what the release workflow joins per architecture; needs a docker-container buildx builder and a login to REPO
+images-release: ## push each of the ten images for one PLATFORM (linux/amd64) to REPO/<name> by digest, untagged but for canyon-builder-node's VERSION-<arch>, writing bin/images/<name> = its digest — what the release workflow joins per architecture; needs a docker-container buildx builder and a login to REPO
 	rm -rf bin/images && mkdir -p bin/images
 	set -e; for img in $(IMAGES); do $(IMAGE_BUILD) --platform $(PLATFORM) \
 	    --output type=image,name=$(REPO)/$$name,push-by-digest=true,name-canonical=true,push=$(PUSH) \
 	    --metadata-file bin/images/$$name.json .; \
 	  jq -er '."containerimage.digest"' bin/images/$$name.json > bin/images/$$name; rm bin/images/$$name.json; \
 	done
+	$(MAKE) --no-print-directory builder-node BUILDER_NODE=canyon-builder-node:release
+	set -e; if [ "$(PUSH)" = true ]; then ref=$(REPO)/canyon-builder-node:$(VERSION)-$$(uname -m); \
+	  docker tag canyon-builder-node:release $$ref && docker push -q $$ref >/dev/null; \
+	  docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $$ref | grep -m1 "^$(REPO)/canyon-builder-node@" | cut -d@ -f2 > bin/images/canyon-builder-node; \
+	  [ -s bin/images/canyon-builder-node ] || { echo "$$ref was pushed but Docker names no digest for it in $(REPO)" >&2; exit 1; }; \
+	else docker image inspect --format '{{.Id}}' canyon-builder-node:release > bin/images/canyon-builder-node; fi # pack makes it in the daemon: the one image pushed by a tag
 
-images-load: ## build each of the nine images as images-release does, for this machine's platform, into the local Docker as canyon-load/<name>, and check what each carries: its licence label, LICENSE, NOTICE and THIRD_PARTY_NOTICES (this tree's) in Canyon's images, and ee/LICENSE (the Elastic License 2.0) in canyon-server, which links ee/, and Opengrep's licences and source pointer in canyon-opengrep; every image is checked, and every miss named, before it fails (CI's images job)
+images-load: ## build each of the ten images as images-release does, for this machine's platform, into the local Docker as canyon-load/<name>, and check what each carries: its licence label, LICENSE, NOTICE and THIRD_PARTY_NOTICES (this tree's) in Canyon's images, and ee/LICENSE (the Elastic License 2.0) in canyon-server, which links ee/, and Opengrep's licences and source pointer in canyon-opengrep; every image is checked, and every miss named, before it fails (CI's images job)
 	mkdir -p bin/image-files
 	set -e; bad=; for img in $(IMAGES); do $(IMAGE_BUILD) --load -t canyon-load/$$name .; \
 	  got=$$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.licenses"}}' canyon-load/$$name); \
@@ -105,6 +111,9 @@ images-load: ## build each of the nine images as images-release does, for this m
 	  done; docker rm $$c >/dev/null; \
 	  echo "canyon-load/$$name  licences=$$got  $$(for f in $$files; do printf '%s ' $$dir/$$f; done)"; \
 	done; rm -rf bin/image-files; \
+	$(MAKE) --no-print-directory builder-node BUILDER_NODE=canyon-load/canyon-builder-node; \
+	got=$$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.licenses"}}' canyon-load/canyon-builder-node); \
+	[ "$$got" = Apache-2.0 ] || bad="$$bad\n  canyon-load/canyon-builder-node is labelled [$$got], not [Apache-2.0]"; \
 	if [ -n "$$bad" ]; then printf "images-load:$$bad\n"; exit 1; fi; echo "every image carries its licence label and its notices"
 
 # The bundle check's project and the images it boots, built from this tree.
@@ -114,6 +123,7 @@ deploy-bundle-check: ## canyon-deploy.tar.gz as scripts/publish-release.sh build
 	rm -rf bin/bundle && mkdir -p bin/bundle
 	docker compose --profile demo-apps build server executor demo-apps
 	set -e; p=$$(docker compose config --format json | jq -r .name); for i in $(BUNDLE_IMAGES); do docker tag $$p-$${i#canyon-} canyon-bundle/$$i:check; echo canyon-bundle/$$i:check; done > bin/bundle/images.txt
+	$(MAKE) --no-print-directory builder-node BUILDER_NODE=canyon-bundle/canyon-builder-node:check && echo canyon-bundle/canyon-builder-node:check >> bin/bundle/images.txt
 	scripts/deploy-bundle.sh HEAD bin/bundle/images.txt bin/bundle/canyon-deploy.tar.gz
 	scripts/release-archives-check.sh bin/bundle
 	scripts/deploy-bundle-check.sh bin/bundle/canyon-deploy.tar.gz docs/src/content/docs/self-host/docker.md
@@ -362,6 +372,16 @@ PACK_SHA256_AMD64 := 2f18dd0e63a181af411e648ed7467f4f081dc458ffacbd11644d5b911fc
 PACK_SHA256_ARM64 := d84fbb295e2b11775616c22c2f3ada562141fe3c437298775e7b8892ff43c846
 
 PACK_URL ?= https://github.com/buildpacks/pack/releases/download/v$(PACK_VERSION)
+
+# The lifecycle canyon-builder-node carries: the pinned canyon-builder's own (executor/builder.Dockerfile), from its
+# release, each architecture's tarball held to its sha256 (#174). A bump of the builder that moves its lifecycle moves these.
+LIFECYCLE_VERSION := 0.21.29
+LIFECYCLE_SHA256_AMD64 := d261ccc62f8b00f4c63d7d137b371f369eb706e3ab6aedb3ff67eda4aa7d1ac2
+LIFECYCLE_SHA256_ARM64 := 1237e4314158511f5435a34e3c74be6d4959da7e9b65c3067af1246182984212
+BUILDER_NODE ?= canyon-builder-node:local
+
+builder-node: ## canyon-builder-node for this machine's platform into the local Docker as BUILDER_NODE (scripts/builder-node.sh): canyon-build, the pinned nodejs buildpack and lifecycle, with canyon-run:noble and Canyon's two build variables its own; needs pack (make pack-install)
+	LIFECYCLE_VERSION=$(LIFECYCLE_VERSION) LIFECYCLE_SHA256_AMD64=$(LIFECYCLE_SHA256_AMD64) LIFECYCLE_SHA256_ARM64=$(LIFECYCLE_SHA256_ARM64) SOURCE=$(SOURCE) scripts/builder-node.sh $(BUILDER_NODE)
 PACK_TGZ ?= /tmp/pack.tgz
 
 pack-fetch: ## the pinned pack release for this machine into $(PACK_TGZ), its sha256 checked, by .github/fetch.sh: a failed download, a GitHub 504 among them, is tried again with backoff, and GH_TOKEN goes to github.com alone (#2755)
@@ -391,10 +411,10 @@ opengrep-rules-test: ## the vendored sast-rules over the probe apps in gate/open
 test-kube: ## the kube-tagged tests (executor/kube/kind_test.go) against the cluster KUBECONFIG names — kind from .github/kind/up.sh in CI — its executor reached by port-forward
 	go test -tags kube -count=1 -v -timeout 30m -run '$(RUN)' ./executor/kube
 
-test-e2e: ## builds and serves the fixture apps with the real builder (needs Docker + pack, on Linux)
+test-e2e: builder-node ## builds and serves the fixture apps with the real builder, and with the Node builder make builder-node makes (needs Docker + pack, on Linux)
 	# Convention, not a list: every test of executor/e2e_test.go has EndToEnd or E2E in its name, and no
 	# unit test of the package does. A list left the sweep's out of CI (#1147).
-	go test -tags e2e -count=1 -run 'EndToEnd|E2E' -v -timeout 38m ./executor
+	go test -tags e2e -count=1 -run 'EndToEnd|E2E' -v -timeout 52m ./executor # the Node builder's trees, built twice each, added about ten minutes (#174)
 
 test-cluster-unit: ## the cluster harness's own pieces (e2e/cluster/README.md, Build): no test cluster needed, no $E2E_* required
 	go vet -tags cluster ./e2e/cluster/...

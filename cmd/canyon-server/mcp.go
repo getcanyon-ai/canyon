@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -54,7 +56,37 @@ func routesMCP(mux *http.ServeMux, api http.Handler, a *app) {
 	// stateless (design/specs/mcp.md §2.1): any replica answers any request, and GET and DELETE are 405
 	served := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server { return a.mcpServer(r, api) }, &mcp.StreamableHTTPOptions{Stateless: true})
 	bearer := auth.RequireBearerToken(a.mcpToken, nil)
-	mux.Handle("/mcp", a.mcpOrigin(a.mcpChallenge(bearer(a.mcpStepUp(served)))))
+	mux.Handle("/mcp", a.mcpOrigin(a.mcpChallenge(a.mcpRead(bearer(a.mcpStepUp(served))))))
+}
+
+// errUnread is a token or session the database couldn't be read for: an error, not "no such row".
+var errUnread = errors.New("the database could not be read")
+
+// tokenRead carries what mcpRead read of the request's bearer token to the SDK's bearer stage, which judges it.
+type tokenRead struct{}
+
+type readToken struct {
+	token string
+	info  *auth.TokenInfo
+	err   error
+}
+
+// mcpRead reads the bearer token's session once, before the SDK's bearer stage, which answers any error but an invalid
+// token with its text: one the database couldn't be read for is 503 session_unread, never the 401 that tells a connector
+// its sign-in ended (#179). The stage's verifier, mcpToken, then answers what was read.
+func (a *app) mcpRead(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fields := strings.Fields(r.Header.Get("Authorization")); len(fields) == 2 && strings.EqualFold(fields[0], "bearer") { // the SDK's own reading of the header
+			info, err := a.mcpTokenOf(r.Context(), fields[1])
+			if errors.Is(err, errUnread) {
+				a.log.Printf("canyon-server: mcp: %v", err)
+				sessionUnread(w)
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), tokenRead{}, readToken{token: fields[1], info: info, err: err}))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // mcpChallenge names, on a 401, where a client learns to get a token and the scopes it may ask for (RFC 6750 §3,
@@ -131,23 +163,37 @@ func (a *app) mcpOrigin(next http.Handler) http.Handler {
 	})
 }
 
-// mcpToken resolves an access token to its session: flow oauth, for this resource, its access unexpired, and the
-// person still on the membership lists, read as every request's session is (sessionFor).
-func (a *app) mcpToken(ctx context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
+// mcpToken is the SDK's verifier: what mcpRead read of this request's token, and an invalid token for any other.
+func (a *app) mcpToken(_ context.Context, token string, r *http.Request) (*auth.TokenInfo, error) {
+	if read, ok := r.Context().Value(tokenRead{}).(readToken); ok && read.token == token {
+		return read.info, read.err
+	}
+	return nil, auth.ErrInvalidToken
+}
+
+// mcpTokenOf resolves an access token to its session: flow oauth, for this resource, its access unexpired, and the
+// person still on the membership lists, read as every request's session is (readSession). errUnread when the database
+// answered an error.
+func (a *app) mcpTokenOf(ctx context.Context, token string) (*auth.TokenInfo, error) {
 	sum := sha256.Sum256([]byte(token))
 	var id string
 	var scopes []string
 	var expires time.Time
 	if err := a.pool.QueryRow(ctx, `SELECT id, scope, access_expires_at FROM sessions WHERE access_hash = $1 AND flow = 'oauth'
-		AND resource = $2 AND access_expires_at > now() AND revoked_at IS NULL AND expires_at > now()`, sum[:], a.mcpResource()).Scan(&id, &scopes, &expires); err != nil {
+		AND resource = $2 AND access_expires_at > now() AND revoked_at IS NULL AND expires_at > now()`, sum[:], a.mcpResource()).Scan(&id, &scopes, &expires); errors.Is(err, pgx.ErrNoRows) {
 		return nil, auth.ErrInvalidToken
+	} else if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUnread, err)
 	}
-	s, _, _, ok := a.sessionFor(ctx, id)
+	s, _, _, ok, err := a.readSession(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUnread, err)
+	}
 	if !ok {
 		return nil, auth.ErrInvalidToken
 	}
 	if _, err := a.pool.Exec(ctx, "UPDATE sessions SET rotated_unused = false WHERE id = $1 AND rotated_unused", id); err != nil { // the pair served: a return of the token it replaced is a second holder's
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUnread, err)
 	}
 	return &auth.TokenInfo{Scopes: scopes, Expiration: expires, UserID: sessionDigest(id), Extra: map[string]any{"caller": mcpCaller{session: s, scopes: scopes}}}, nil
 }
@@ -230,8 +276,11 @@ func (t *mcpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	in.Header.Del("Authorization")
 	in.Header.Set("Canyon-Transport", transportMCPRemote) // the host's word, whatever the handler set
 	w := httptest.NewRecorder()
-	signed, setup, flow, live := t.a.sessionFor(req.Context(), t.c.session.id)
+	signed, setup, flow, live, err := t.a.readSession(req.Context(), t.c.session.id)
 	switch status, code, message := mcpAdmits(t.c.scopes, in); {
+	case err != nil: // the database didn't answer: the sign-in may stand, so never that it ended (#179)
+		t.a.log.Printf("canyon-server: mcp: %v", err)
+		sessionUnread(w)
 	case !live || flow != "oauth":
 		writeErr(w, http.StatusUnauthorized, "unauthenticated", "this connection's sign-in has ended: connect Canyon again", nil)
 	case status != 0:

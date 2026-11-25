@@ -8,6 +8,7 @@
 //	go run ./internal/tools/paketobump -out <dir>        # from the repository's root: rewrites the pins, writes bump.json, prints the issue
 //	go run ./internal/tools/paketobump -out <dir> issue  # pushes the branch from <dir>/pins.patch and opens or updates the issue
 //	go run ./internal/tools/paketobump sbom              # this tree's pins: the fixture apps' image scans, as JSON on stdout
+//	go run ./internal/tools/paketobump pin <name>        # this tree's one pin of paketobuildpacks/<name>, by digest
 package main
 
 import (
@@ -68,8 +69,20 @@ func main() {
 		}
 		return
 	}
+	if flag.Arg(0) == "pin" { // what scripts/builder-node.sh builds the Node builder from (#174)
+		pinned, err := bumper{root: "."}.pins()
+		if err != nil {
+			log.Fatalf("paketobump pin: %v", err)
+		}
+		p := pinned[flag.Arg(1)]
+		if p == nil {
+			log.Fatalf("paketobump pin: no file pins paketobuildpacks/%s", flag.Arg(1))
+		}
+		fmt.Printf("docker.io/paketobuildpacks/%s@%s\n", flag.Arg(1), p.digest)
+		return
+	}
 	if *out == "" || *repo == "" {
-		log.Fatal("usage: paketobump -out <dir> [-repo owner/name] [issue] | paketobump sbom")
+		log.Fatal("usage: paketobump -out <dir> [-repo owner/name] [issue] | paketobump sbom | paketobump pin <name>")
 	}
 	if flag.Arg(0) == "issue" {
 		raw, err := os.ReadFile(filepath.Join(*out, "bump.json")) //nolint:gosec // the bump job's artifact

@@ -142,8 +142,9 @@ file and its pinned base determine the image but for its packages' patch version
 host built it; a host keeps the image its tag names until the file changes or the image is removed, so
 it takes a later security fix of those packages only then, and a change of the file changes the tag
 and every host builds it again — and
-names it `canyon-run:noble` too, a tag it moves onto each build, which pack is handed as `--run-image`
-(**amended 2026-10-18**, #2089): the lifecycle records the name pack is handed in the image's
+names it `canyon-run:noble` too, a tag it moves onto each build, which pack builds onto: handed as `--run-image`
+(**amended 2026-10-18**, #2089), or named as its run image by the builder itself, `canyon-builder`'s own and the Node
+builder (**amended 2026-11-25**, #177): the lifecycle records the name pack builds onto in the image's
 `runImage.image` and rebases only onto that name (`/rebase`), so a name that moved with the file would
 leave every image it built unrebasable. The name follows the distribution, so a file that moves to
 another Ubuntu release takes another name and a rebase across releases is refused, never forced. An
@@ -175,8 +176,18 @@ which the executor builds as it builds `canyon-run`, from `executor/builder.Dock
 `paketobuildpacks/ubuntu-noble-builder` pinned by digest — the builder no longer follows the tag, so
 every host that builds one `canyon-builder:<12 hex of the file's sha256>` tag holds the same buildpacks,
 and a bump of the pin is a new builder — with `libpq5`, as above, ending as the stack's build
-user, `1001:1001`. A `CANYON_BUILDER` replaces it whole, and its libraries are the operator's. On
-Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `executor/build.Dockerfile`:
+user, `1001:1001`. A `CANYON_BUILDER` replaces it whole, and its libraries are the operator's.
+
+**`canyon-builder`'s own** (**amended 2026-11-25**, #177). From that image the executor builds a second,
+`canyon-builder:<12 hex of the sha256 of the first's tag, a newline and executor/builder.own.Dockerfile>`, whose run
+image is `canyon-run:noble` and whose own build environment is the executor's two build variables (*Every build runs
+with*, below), as the Node builder's are. Its `io.buildpacks.builder.metadata` is the first's, read with a JSON parser,
+with `canyon-run:noble` its one run image under both keys pack 0.40.3 reads (`images` and `stack.runImage`), and its
+`/cnb/run.toml` names the same. A build on Docker uses it when `CANYON_BUILDER` and `CANYON_IMAGE_RUN` are unset and
+neither its build values nor the `project.toml` Canyon reads name either of those two variables, which only `--env`
+can replace: pack is then handed neither `--run-image` nor `--env` for them, and builds on it as it is, never on an
+ephemeral copy. Any other build on `canyon-builder` builds as before, on the first, with `--run-image` and `--env`. A
+metadata label that can't be read fails that build of the second. On Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `executor/build.Dockerfile`:
 `paketobuildpacks/ubuntu-noble-build` pinned by digest with `libpq5`, ending as `1001:1001`, which the
 deploy names by digest as it names `canyon-run`.
 
@@ -1157,16 +1168,18 @@ and no buildpack goes in, and nothing above the run image's layers changes.
 ```
 
 Which builder a `/build` now would use (#1244). With `CANYON_BUILDER_NODE` set (**amended 2026-11-24**, #174), the
-SHA-256 of the Node builder's image ID, a newline, and `canyon-builder`'s name, the tag its file's hash makes, as
-`sha256:<64 hex>`. The Node builder is pulled first when the daemon has none. A new Node builder, or a change to
-`executor/builder.Dockerfile`, a pin bump among them, is a new identity.
-- **The full builder's part is its Dockerfile's hash, not its image ID.** So a `canyon-builder` built again from
-  the same file, with newer packages from apt, is not a new identity, where without a Node builder it is.
+SHA-256 of the Node builder's image ID, a newline, and the name of `canyon-builder`'s own, the tag its two files'
+hashes make (**amended 2026-11-25**, #177), as `sha256:<64 hex>`. The Node builder is pulled first when the daemon has
+none. A new Node builder, or a change to `executor/builder.Dockerfile` or `executor/builder.own.Dockerfile`, a pin bump
+among them, is a new identity.
+- **The full builder's part is its Dockerfiles' hashes, not an image ID.** So a `canyon-builder` built again from
+  the same files, with newer packages from apt, is not a new identity, where without a Node builder it is.
 - **Why:** the image ID exists only once the full builder is built, which means downloading it. Asking for it here
   would download the full builder at the first deploy's reuse check, when a Node app never needs it.
 Otherwise, on Docker the builder image's ID (`docker image inspect
 --format {{.Id}}` of `CANYON_BUILDER`, pulled first when the daemon has none, as a build would pull it,
-else of `canyon-builder`, built first when the daemon has none, as a build would build it); on Kubernetes the ClusterBuilder `canyon`'s
+else of `canyon-builder`'s own, built first with the `canyon-builder` it is built from when the daemon has none, as a
+build would build them, so a change to either is a new identity); on Kubernetes the ClusterBuilder `canyon`'s
 `status.latestImage`, a reference by digest, and `502` while it has none. A builder patched or replaced —
 a new Paketo release pulled through `CANYON_BUILDER`, kpack's rebuilt ClusterBuilder — is a new identity. The server asks before
 every `/build` and before it reuses an image, and the build digest covers the answer (routes.md, the

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	accesslogdatav3 "github.com/envoyproxy/go-control-plane/envoy/data/accesslog/v3"
@@ -26,6 +27,8 @@ const (
 // known[] follows the destinations cap up to 500, the most an egress-control takes.
 func TestEgressCaps(t *testing.T) {
 	h := outboundHost(t)
+	egressWait = time.Second // rawPolicy reads the policy as a replica that never asks again: a change no longer waits it out (#136)
+	t.Cleanup(func() { egressWait = egressDefault })
 	caps := func() string {
 		code, out, _ := do(t, h.dana, http.MethodGet, h.base+"/api/v1/egress", "")
 		if code != 200 {

@@ -1173,8 +1173,14 @@ func TestKindCallWithoutTokenRefused(t *testing.T) {
 	}
 	allow(t, app, "example.com")
 	forwarded := func() error { // through the app's proxy variables: canyon-identity's forwarder, the pod's token
-		_, err := kubectl("-n", Namespace, "exec", pod.Name, "-c", "app", "--", "wget", "-q", "-O", "/dev/null", "-T", "15", "http://example.com/")
-		return err
+		out, err := kubectl("-n", Namespace, "exec", pod.Name, "-c", "app", "--", "wget", "-S", "-O", "/dev/null", "-T", "15", "http://example.com/")
+		if err != nil { // what wget said, the app's record and the forwarder's log: where the call ended (#143)
+			identity, _ := kubectl("-n", Namespace, "logs", pod.Name, "-c", "canyon-identity", "--tail=50")
+			return fmt.Errorf("%w\nwget -S said:\n%s\nthe app's egress_destinations: %s\ncanyon-identity's last lines:\n%s", err, out, ledger(t, `SELECT coalesce(string_agg(
+				destination || ':' || port || ' ' || env || ' calls ' || calls || ' ' || last_outcome || ' ' || last_status_class || ' ' || last_protocol || ' [' ||
+				array_to_string(last_response_flags, ',') || '] last ' || last_seen_at, '; '), 'none') FROM egress_destinations WHERE app = '`+app+`'`), identity)
+		}
+		return nil
 	}
 	direct := func() string { // straight to the gateway, no Proxy-Authorization: the check's refusal header, or ""
 		out, _ := kubectl("-n", Namespace, "exec", pod.Name, "-c", "app", "--", "sh", "-c",

@@ -109,15 +109,16 @@ cluster() {
 }
 
 # envoy_lost: each Envoy replica's access-log and receiver stats, and red when one lost an entry on its way to the
-# receiver or its stats name no such counter (#2377); Envoy's image has no curl, so an ephemeral container of the
-# router's image reads the admin socket from the pod's admin volume
+# receiver or its stats name no such counter (#2377), beside the plain cluster's upstream counters and the egress
+# listener's downstream ones, which say how a call that reached Envoy ended there (#143); Envoy's image has no curl, so
+# an ephemeral container of the router's image reads the admin socket from the pod's admin volume
 envoy_lost() {
   local router pods p stats lost=0
   router=$(kubectl -n canyon get deploy canyon-router -o jsonpath='{.spec.template.spec.containers[?(@.name=="nginx")].image}') || return
   pods=$(kubectl -n canyon get pods -l app.kubernetes.io/name=canyon-egress -o name) || return
   [ -n "$pods" ] || { echo "::error::no Envoy pod to read"; return 1; }
   for p in $pods; do
-    kubectl -n canyon patch "$p" --subresource=ephemeralcontainers --type=strategic -p '{"spec":{"ephemeralContainers":[{"name":"stats","image":"'"$router"'","command":["curl","-s","--unix-socket","/var/run/envoy-admin/admin.sock","http://x/stats?filter=access_log|ext_authz|receiver"],"volumeMounts":[{"name":"admin","mountPath":"/var/run/envoy-admin"}],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
+    kubectl -n canyon patch "$p" --subresource=ephemeralcontainers --type=strategic -p '{"spec":{"ephemeralContainers":[{"name":"stats","image":"'"$router"'","command":["curl","-s","--unix-socket","/var/run/envoy-admin/admin.sock","http://x/stats?filter=access_log|ext_authz|receiver|cluster.plain.upstream_|http.egress.downstream_"],"volumeMounts":[{"name":"admin","mountPath":"/var/run/envoy-admin"}],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
     for _ in $(seq 30); do kubectl -n canyon logs "$p" -c stats 2>/dev/null | grep -q . && break; sleep 2; done
     stats=$(kubectl -n canyon logs "$p" -c stats) || return
     echo "== $p"; echo "$stats"
@@ -146,6 +147,9 @@ kind_suite() {
   if [ "$rc" != 0 ]; then
     ps -eo pid,ppid,etime,args --forest | grep -E 'go |kube|make|kubectl|helm|docker' | grep -v grep | tail -60 || true
     cluster
+    for p in $(kubectl -n canyon-apps get pods -o name 2>/dev/null); do # each app's forwarder still running (#143)
+      echo "== $p canyon-identity"; kubectl -n canyon-apps logs "$p" -c canyon-identity --tail=100 || true
+    done
   fi
   return "$rc"
 }

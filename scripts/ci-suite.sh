@@ -307,8 +307,10 @@ docs() {
   CANYON_PUBLIC_CHECK_FORK=true .github/docs/site-check.sh
 }
 
-# gitleaks_scan is gitleaks.yml's: the pinned release over the pull request's own commits, main..HEAD, so a secret on
-# another branch never fails this one; a shallow checkout fetches the history that needs first
+# gitleaks_scan is gitleaks.yml's: the pinned release over a pull request's own commits, main..HEAD, so a secret on
+# another branch never fails this one; over the whole history for a commit already on main (private-ci's pr main), as
+# gitleaks.yml's push leg scans main, since main..HEAD would scan nothing. A range of no commit fails: a scan of nothing
+# passes nothing. A shallow checkout fetches the history it needs first.
 gitleaks_scan() {
   local version=8.30.1 sum=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 # as gitleaks.yml pins it: bump both together
   local unshallow=()
@@ -316,7 +318,11 @@ gitleaks_scan() {
   tar -xzf "$tmp/gitleaks.tar.gz" -C "$tmp" gitleaks || return
   if [ "$(git rev-parse --is-shallow-repository)" = true ]; then unshallow=(--unshallow); fi
   git fetch -q --no-tags "${unshallow[@]}" https://github.com/getcanyon-ai/canyon.git "+refs/heads/main:refs/ci-suite/main" "$(git rev-parse HEAD)" || return
-  "$tmp/gitleaks" detect --source . --redact --no-banner --exit-code 1 --log-opts="refs/ci-suite/main..HEAD"
+  local range=refs/ci-suite/main..HEAD
+  if git merge-base --is-ancestor HEAD refs/ci-suite/main; then range=HEAD
+  elif [ -z "$(git rev-list -n 1 "$range")" ]; then echo "::error::gitleaks: $range lists no commit to scan" >&2; return 1
+  fi
+  "$tmp/gitleaks" detect --source . --redact --no-banner --exit-code 1 --log-opts="$range"
 }
 
 # listed runs go test on what -list names, and fails unless every test listed ran and passed, so one renamed away

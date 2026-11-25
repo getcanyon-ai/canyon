@@ -54,11 +54,27 @@ describe("Connect an agent", () => {
     fireEvent.click(panel().getByRole("button", { name: `${T.copy} ${T.address.toLowerCase()}` }));
     expect(await panel().findByText(T.copied)).toBeDefined();
     expect(writeText).toHaveBeenCalledWith(ADDRESS);
-    expect(term(T.claudeWeb).textContent).toBe(`${T.claudeWebHow} ${T.claudeDocs}`);
+    expect(term(T.claudeWeb).textContent).toBe(`${T.claudeWebHow} ${T.claudeDocs}${T.askCloud}`);
     expect(within(term(T.claudeWeb)).getByRole("link", { name: T.claudeDocs }).getAttribute("href")).toBe(CONNECTOR_DOCS);
     expect(within(term(T.claudeWeb)).getByRole("link", { name: T.claudeDocs }).className).toMatch(/\btext-link\b/); // drawn as a link, never as plain text
-    expect(term(T.cursorCloud).textContent).toBe(T.cursorCloudHow);
-    expect(term("Codex").textContent).toBe(T.codexCloud);
+    expect(term(T.cursorCloud).textContent).toBe(`${T.cursorCloudHow}${T.askCloud}`);
+    expect(term("Codex").textContent).toBe(T.codexCloud); // no way in, so nothing to ask
+  });
+
+  // Each way in ends with what to say to the agent once it's connected (#192): on a laptop, in the app's folder; in the
+  // cloud, of what's pushed to GitHub. A way that isn't there asks nothing.
+  it("ends each way in with what to ask the agent", async () => {
+    server({ [METADATA]: served });
+    const { unmount } = render(<ConnectAgents signIn />);
+    await panel().findByLabelText(T.address);
+    const said = laptop().getByText(T.askLaptop);
+    expect(said.compareDocumentPosition(laptop().getAllByRole("listitem").at(-1)!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy(); // after the last step
+    expect(panel().getAllByText(T.askCloud)).toHaveLength(2);
+    unmount();
+    server({});
+    render(<ConnectAgents signIn={false} />);
+    expect(laptop().getByText(T.askLaptop)).toBeDefined();
+    expect(panel().queryByText(T.askCloud)).toBeNull();
   });
 
   // The address is for cloud agents: a laptop's agents get the CLI's own server. Nothing here installs the address on a

@@ -41,7 +41,7 @@ jobs:
 
   scan-dbs:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.paths.outputs.journeys == 'true' || needs.paths.outputs.probes == 'true' || needs.paths.outputs.egress == 'true' || needs.paths.outputs.oidc == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.paths.outputs.journeys == 'true' || needs.paths.outputs.probes == 'true' || needs.paths.outputs.egress == 'true' || needs.paths.outputs.oidc == 'true')) # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # today's scanner databases, downloaded once for the run's stacks when the cache does not hold them yet (#2510): the
     # jobs below set up meanwhile, and wait for it only when their own restore misses (.github/actions/scan-dbs)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
@@ -58,7 +58,7 @@ jobs:
 
   e2e-ui-shard:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.journeys == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.journeys == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 45
     permissions:
@@ -100,7 +100,7 @@ jobs:
 
   probes:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.probes == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.probes == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The probe apps never read clean (e2e/stack_test.go, TestProbesNeverReadClean): Canyon's own scanners and rules
     # through canyon check on the stack. A job of its own, so a change to the rules or the review runs it without
     # the dashboard's eight shards, and a change to the dashboard runs those without it.
@@ -130,7 +130,7 @@ jobs:
 
   egress:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.egress == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.egress == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The stack's egress tests in two parts, each on a stack of its own: together they passed the package's 30-minute
     # -timeout on #2850's run, and a part nearing it gets another part, never a longer -timeout, which would only hide a
     # hang. Each part lists and runs its own tests alone.
@@ -186,7 +186,7 @@ jobs:
 
   oidc:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.oidc == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.oidc == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
     # The team setup on one Docker server (docs: self-host/docker.md): the shipped compose file and deploy/docker/team.yml,
     # signing people in through the stub's OIDC issuer (make e2e-up OIDC=1), and e2e/oidc's journey on it: the admin's
     # browser sign-in, canyon login's code approved, a deploy, a teammate refused until the app is shared, and an MCP client's
@@ -248,7 +248,7 @@ jobs:
     # egress and oidc succeeded (a matrix's result is failure when any of its jobs failed), or was skipped because
     # the pull request's change doesn't reach it (.github/suites); red when one failed, was cancelled or skipped
     # for any other reason; on a fork's pull request, where they never run, green and saying so
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private'))
     needs: [paths, e2e-ui-shard, probes, egress, oidc]
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 2

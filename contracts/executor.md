@@ -480,6 +480,19 @@ what the executor made, and only that, with `docker ps -a --filter label=canyon.
 `docker network ls --filter label=canyon.app` — which is how the demo's `make demo-down` removes it,
 since compose did not create it and cannot.
 
+**What an app's things are labelled with: the executor's own compose project** (**amended 2026-11-25**, #178). At
+start the executor reads the `com.docker.compose.project` label of its own container, found by its hostname, which
+Docker sets to the container's ID; outside a container, in one compose didn't start, or with Docker not answering,
+it has none. With one, everything it makes for an app also carries `canyon.project=<that project>`: the container
+`<app>-<target>`, its floor holder, the network `canyon-app-<app>`, and the two build cache volumes, which it now
+creates with `canyon.app=<app>` (and `canyon.project`) before pack, which would make them unlabelled. pack can't
+label the image it builds, so the executor gives each image a build or a `/rebase` makes, tagged
+`canyon/<app>:<package>-<nonce>`, a second name on the same ID, `<project>/<app>:<package>-<nonce>`. Every name an
+app is read by stays `canyon/<app>`, and the executor's own cleanup of an app's images (after a `/run`, and
+`/forget`) removes both names. `canyon demo down` finds what the demo's executor made by
+`canyon.project=canyon-demo` and its images by `canyon-demo/*`, never by an app's id, which another Canyon on the
+same Docker can share (cli.md §6.14).
+
 **Egress** (**amended 2026-10-11**, #2085; design/EGRESS.md §2.2–2.3). `run` is the server's id of
 the run that asked for this `/run`, `gr_` and hex (contracts/events.md, `run`), and the executor writes
 it as the label `canyon.gate_run` on what it starts — the container on Docker, the pod on Kubernetes —

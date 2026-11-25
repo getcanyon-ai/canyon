@@ -201,6 +201,41 @@ func (a *app) reviewOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// logsOnly is teamOnly on the logs route, which is also a security responder's below contributor, for production's masked
+// read alone, the dashboard's (design/PERMISSIONS.md, Security responders; the owner, 2026-11-25). Which read it is,
+// projectLogs decides on the read as it parses it (#223's security review): this marks such a responder's request.
+func (a *app) logsOnly(next http.HandlerFunc) http.HandlerFunc {
+	team := a.teamOnly(next)
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, id := r.Context(), r.PathValue("id")
+		if roleOf(ctx) != "responder" {
+			team(w, r)
+			return
+		}
+		if !a.projectLive(ctx, w, id) {
+			return
+		}
+		level, err := levelOf(ctx, a.pool, id)
+		if err != nil {
+			a.log.Printf("canyon-server: team of %s: %v", id, err)
+			writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
+			return
+		}
+		if level != "owner" && level != "contributor" {
+			r = r.WithContext(context.WithValue(ctx, responderLogsKey{}, true))
+		}
+		next(w, r)
+	}
+}
+
+type responderLogsKey struct{}
+
+// responderLogs says the read is a security responder's below contributor: production's masked read is all theirs.
+func responderLogs(ctx context.Context) bool {
+	only, _ := ctx.Value(responderLogsKey{}).(bool)
+	return only
+}
+
 // runTeamOnly is teamOnly on a /gate-runs/ route, whose app is its run's: an unknown run is 404 first.
 // A run of a deleted app stays readable to its team, as its timeline does (contracts/routes.md).
 func (a *app) runTeamOnly(next http.HandlerFunc) http.HandlerFunc { return a.runTeam(next, false) }

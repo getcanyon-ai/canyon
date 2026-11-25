@@ -69,7 +69,7 @@ describe("the headline", () => {
     ["restarting in preview", { ...at("preview"), run: run({}), preview: env("pkg_14", "v1.4", { state: "restarting", restarting: { restarts: 7 } }), previewName: "v1.4" },
       "v1.4 restarted 7 times since it was deployed to preview", /^Deploy again once it's fixed: the build is reused\.( |$)/, undefined, undefined],
     ["restarting in production", { ...at("production"), run: run({}), preview: null, prod: env("pkg_14", "v1.4", { state: "restarting", restarting: { restarts: 1 } }), previewName: null, prodName: "v1.4" },
-      "v1.4 restarted once since it was deployed to production", "Deploy again once it's fixed: the build is reused.", undefined, undefined],
+      "v1.4 restarted once since it was deployed to production", "Deploy again once it's fixed: the build is reused. canyon logs --env prod has why.", undefined, undefined],
     // how it last exited, when the status read says it: the test cluster's case-dies-later never reads stopped on Kubernetes (#1597)
     ["restarting in preview, its last exit said", { ...at("preview"), run: run({}), preview: env("pkg_14", "v1.4", { state: "restarting", restarting: { restarts: 7, exit_code: 1, said: "lost the queue: exiting" } }), previewName: "v1.4" },
       "v1.4 restarted 7 times since it was deployed to preview", /^It last exited with code 1\. The app's last line is below\. Deploy again once it's fixed: the build is reused\. canyon logs --env preview has the rest\./, undefined, undefined],

@@ -356,10 +356,10 @@ describe("the app page", () => {
     const LOGS = "GET /api/v1/projects/claims-portal/logs?env=prod&lines=20&redaction=masked";
     for (const [status, redaction, text, want] of [
       [200, "masked", "GET /login 200 12ms\nlost the queue at <API_TOKEN>: exiting\n", null],
-      [200, "none", "lost the queue at tok-91c2: exiting\n", S.lastLinesUnread.replaceAll("<env>", "prod")],
-      [409, null, "", S.lastLinesUnmasked.replaceAll("<env>", "prod")],
-      [422, null, "", S.lastLinesTooLong.replaceAll("<env>", "prod")], // over 1 MiB: never cut and masked
-      [500, null, "", S.lastLinesUnread.replaceAll("<env>", "prod")],
+      [200, "none", "lost the queue at tok-91c2: exiting\n", (S.lastLinesUnread + S.lastLinesCli).replaceAll("<env>", "prod")],
+      [409, null, "", (S.lastLinesUnmasked + S.lastLinesCli).replaceAll("<env>", "prod")],
+      [422, null, "", (S.lastLinesTooLong + S.lastLinesCli).replaceAll("<env>", "prod")], // over 1 MiB: never cut and masked
+      [500, null, "", (S.lastLinesUnread + S.lastLinesCli).replaceAll("<env>", "prod")],
       [403, null, "", ""], // the reader's access, never a fault: the one line alone
     ] as const) {
       const calls = server({ ...reads(() => ({ ...promoted, envs: { ...promoted.envs, prod: { ...(promoted.envs.prod as Env), state: "restarting", restarting } } })), [PACKAGES]: { body: pages[0] }, ...NO_RUNS });
@@ -2462,6 +2462,41 @@ describe("the blocked-then-fixed story", () => {
     await waitFor(() => expect(container.textContent).toContain("promoted by someone not signed in"));
     expect(container.textContent).toContain("· someone not signed in ·");
     expect(container.textContent).not.toMatch(/anonymous/);
+  });
+});
+
+// An app's link, for everyone who opens its page (#193): its own address from the host's public URL, never the page's,
+// which may pin a run or be reached by another name. Opened signed out it comes back after sign-in (SignIn's list).
+describe("copying an app's link", () => {
+  const PUBLIC = "https://canyon.meridian.example";
+  const copyLink = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+  };
+  it("copies the app's own address for an admin and for a read-only member", async () => {
+    for (const [read, id] of [[{ ...reads(() => page.status) }, "claims-portal"],
+      [{ "GET /api/v1/projects/pricing-lab": { body: { project: { id: "pricing-lab", name: "pricing-lab", owners: [], summary: "x", access: { level: "viewer" } } } } }, "pricing-lab"]] as const) {
+      server(read);
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const { unmount } = render(<RailContext value={{ org: null, viewer: null, admin: true, publicURL: PUBLIC }}><App id={id} run="gr_8f2a" auth="oidc" /></RailContext>);
+      await copyLink();
+      expect(await screen.findByText("Link copied")).toBeDefined();
+      expect(writeText).toHaveBeenCalledWith(`${PUBLIC}/#/apps/${id}`);
+      unmount();
+    }
+  });
+  it("says when the browser won't copy, and offers no link before the host's address is known", async () => {
+    server(reads(() => page.status));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) }, configurable: true });
+    const { unmount } = render(<RailContext value={{ org: null, viewer: null, admin: true, publicURL: PUBLIC }}><App id="claims-portal" auth="oidc" /></RailContext>);
+    await copyLink();
+    expect((await screen.findByRole("alert")).textContent).toBe(S.copyFailed);
+    unmount();
+    server(reads(() => page.status));
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).toBeNull();
   });
 });
 

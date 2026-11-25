@@ -48,7 +48,7 @@ func fakes(t *testing.T) (*Executor, string) {
 [ "$1" = cp ] && cat > "`+dir+`/cp-tar"
 [ "$1" = run ] && [ "$2" = --rm ] && env > "`+dir+`/helper-env"
 [ "$1" = build ] && : > "`+dir+`/built-$4"
-[ "$1" = tag ] && : > "`+dir+`/built-$3"
+[ "$1" = tag ] && : > "`+dir+`/built-$(printf '%s' "$3" | tr / _)"
 [ "$1 $2" = "network ls" ] && exit 0
 [ "$1 $2" = "image inspect" ] && case "$5" in canyon-run:*|canyon-builder:*) [ -f "`+dir+`/built-$5" ] || exit 1;; esac
 while [ $# -gt 0 ]; do case "$1" in *Repository*) echo sha256:abababababababababababababababababababababababababababababababab canyon/claims-portal:pkg_7d3e8f-abcd; echo sha256:4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c canyon/claims-portal:pkg_7d3e8f-fixture; exit 0;; *.Names*) for a; do case "$a" in name=*) n=${a#name=^}; echo "${n%?} running sha256:abababababababababababababababababababababababababababababababab";; esac; done; exit 0;; *State.Status*) echo running 0 sha256:`+strings.Repeat("ab", 32)+`; exit 0;; esac; shift; done
@@ -1291,5 +1291,25 @@ func TestATailHoldsItsBoundAndStartsAtALine(t *testing.T) {
 	_, _ = short.Write([]byte("one\ntwo\n"))
 	if short.Lines() != "one\ntwo\n" {
 		t.Fatalf("a tail within the bound is kept whole: %q", short.Lines())
+	}
+}
+
+// Short says whether any text Mask replaces is under n characters: a value, a line of a multi-line one, or a URL's
+// password, whose name in its place would give a short one away (#223's security review).
+func TestShortSeesEveryTextMaskReplaces(t *testing.T) {
+	for name, c := range map[string]struct {
+		env  map[string]string
+		want bool
+	}{
+		"long values":                  {map[string]string{"GREETING": "hello, world"}, false},
+		"a short value":                {map[string]string{"GREETING": "hello, world", "PIN": "4321"}, true},
+		"a short line of a long value": {map[string]string{"KEY": "-----BEGIN-----\nab\n-----END-----"}, true},
+		"a short URL password":         {map[string]string{"DATABASE_URL": "postgres://canyon:pw@db:5432/app"}, true}, //nolint:gosec // G101: a synthetic URL, its password two letters
+		"eight characters, in runes":   {map[string]string{"WORD": "ééééééééé"[:16]}, false},
+		"none":                         {nil, false},
+	} {
+		if got := Short(c.env, 8); got != c.want {
+			t.Errorf("%s: Short = %v, want %v", name, got, c.want)
+		}
 	}
 }

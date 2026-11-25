@@ -438,17 +438,18 @@ func TestOAuthAClientThatHangsUpDoesNotKeepTheSession(t *testing.T) {
 // A code redeems only with what it was issued for: the client, the redirect, the verifier and the resource. A
 // mismatch spends it all the same, so a guessed verifier gets one try.
 func TestOAuthACodeRedeemsOnlyForWhatItWasIssued(t *testing.T) {
-	base, _, _, gina := oauthHost(t)
+	base, pool, ctx, gina := oauthHost(t)
 	const redirect = "https://claude.ai/api/mcp/auth_callback"
 	id := register(t, base, redirect)
 	verifier, challenge := pkce()
-	issue := func() string {
+	issueFor := func(id string) string {
 		req := requestOf(t, authorize(t, base, gina, neturl.Values{"response_type": {"code"}, "client_id": {id}, "redirect_uri": {redirect}, "code_challenge": {challenge},
 			"code_challenge_method": {"S256"}, "resource": {"http://localhost:7777/mcp"}}))
 		_, body, _ := doWith(t, gina, http.MethodPost, base+"/api/v1/oauth/requests/"+req+"/approve", "", fromPage)
 		back, _ := neturl.Parse(body["redirect"].(string))
 		return back.Query().Get("code")
 	}
+	issue := func() string { return issueFor(id) }
 	for name, change := range map[string]func(neturl.Values){
 		"another client":   func(f neturl.Values) { f.Set("client_id", "dcr_"+strings.Repeat("0", 32)) },
 		"another redirect": func(f neturl.Values) { f.Set("redirect_uri", "https://claude.ai/other") },
@@ -472,6 +473,51 @@ func TestOAuthACodeRedeemsOnlyForWhatItWasIssued(t *testing.T) {
 	}
 	if status, _ := tokenCall(t, base, neturl.Values{"grant_type": {"client_credentials"}, "client_id": {id}}); status != 400 || !strings.Contains(lastBody, `"unsupported_grant_type"`) {
 		t.Errorf("client_credentials: %d %s", status, lastBody)
+	}
+
+	// A refusal whose commit fails is 500, never a refusal of a code that is still unspent (#138): each of the three
+	// refusals, with the commit refused, then again once it is let through.
+	exec := func(q string) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`CREATE FUNCTION refuse_the_spend() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'the spend is refused'; END $$`)
+	const refuse = "CREATE CONSTRAINT TRIGGER refuse_the_spend AFTER DELETE ON oauth_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION refuse_the_spend()"
+	gone := register(t, base, redirect)
+	for _, c := range []struct {
+		name, client, then, after string
+		change                    func(neturl.Values)
+		want                      int
+	}{
+		{name: "another verifier", client: id, change: func(f neturl.Values) { f.Set("code_verifier", strings.Repeat("x", 43)) }, want: 200}, // unspent: the right one redeems it
+		{name: "off the lists", client: id, then: "UPDATE sessions SET email = 'gina@elsewhere.example' WHERE actor_subject = 'sub-gina'",
+			after: "UPDATE sessions SET email = 'gina@meridian.example' WHERE actor_subject = 'sub-gina'", want: 400},
+		{name: "a registration gone", client: gone, then: "DELETE FROM oauth_clients WHERE id = '" + gone + "'", want: 400},
+	} {
+		form := neturl.Values{"grant_type": {"authorization_code"}, "code": {issueFor(c.client)}, "client_id": {c.client}, "redirect_uri": {redirect}, "code_verifier": {verifier}}
+		if c.then != "" {
+			exec(c.then)
+		}
+		wrong := neturl.Values{}
+		for k, v := range form {
+			wrong[k] = v
+		}
+		if c.change != nil {
+			c.change(wrong)
+		}
+		exec(refuse)
+		if status, _ := tokenCall(t, base, wrong); status != 500 {
+			t.Errorf("%s, the commit refused: %d %s, want 500", c.name, status, lastBody)
+		}
+		exec("DROP TRIGGER refuse_the_spend ON oauth_requests")
+		if status, _ := tokenCall(t, base, form); status != c.want {
+			t.Errorf("%s, asked again: %d %s, want %d: the code was not spent", c.name, status, lastBody, c.want)
+		}
+		if c.after != "" {
+			exec(c.after)
+		}
 	}
 }
 

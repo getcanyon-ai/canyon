@@ -1757,12 +1757,7 @@ func (p *Pipeline) versioned(ctx context.Context, project, env, scope string) (m
 // the row was written before that start was recorded: the app may have been handed other values than
 // these, and a line is never masked with the wrong ones.
 func (p *Pipeline) Masked(ctx context.Context, app, env, line string) (string, error) {
-	var changed bool
-	if err := p.Pool.QueryRow(ctx, `WITH d AS (SELECT run_started_at AS since FROM deploys WHERE project_id = $1 AND env = $2 AND run_started_at IS NOT NULL)
-		SELECT NOT EXISTS (SELECT 1 FROM d)
-			OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = $2 AND set_at >= d.since)
-			OR EXISTS (SELECT 1 FROM audit_events, d WHERE project_id = $1 AND action = 'DELETE /api/v1/projects/{id}/secrets/{name}' AND detail->>'env' = $2 AND ts >= d.since)`,
-		app, env).Scan(&changed); err != nil || changed {
+	if changed, err := p.maskChanged(ctx, app, env, false); err != nil || changed {
 		return "", err
 	}
 	values, err := p.secrets(ctx, app, env, "runtime")
@@ -1770,6 +1765,49 @@ func (p *Pipeline) Masked(ctx context.Context, app, env, line string) (string, e
 		return "", err
 	}
 	return executor.Mask(line, values), nil
+}
+
+// maskChanged says Masked's rule can't mask env's log: no recorded start of what runs there, or a secret of env set or
+// removed since it started. With build, a build value of preview's set or removed since the image was built too (#223's
+// security review): the start of the first run whose build is that image, else the deploy's gate run, and none is a
+// change, since an image whose build no run records can't be told apart from one built with other values.
+func (p *Pipeline) maskChanged(ctx context.Context, app, env string, build bool) (bool, error) {
+	var changed bool
+	err := p.Pool.QueryRow(ctx, `WITH d AS (SELECT run_started_at AS since,
+			coalesce((SELECT min(r.created_at) FROM runs r WHERE r.project_id = $1 AND r.build_image = deploys.image), (SELECT r.created_at FROM runs r WHERE r.id = deploys.gate_run)) AS built
+			FROM deploys WHERE project_id = $1 AND env = $2 AND run_started_at IS NOT NULL)
+		SELECT NOT EXISTS (SELECT 1 FROM d)
+			OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = $2 AND set_at >= d.since)
+			OR EXISTS (SELECT 1 FROM audit_events, d WHERE project_id = $1 AND action = 'DELETE /api/v1/projects/{id}/secrets/{name}' AND detail->>'env' = $2 AND ts >= d.since)
+			OR ($3 AND (EXISTS (SELECT 1 FROM d WHERE built IS NULL)
+				OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = 'preview' AND scope = 'build' AND set_at >= d.built)
+				OR EXISTS (SELECT 1 FROM audit_events, d WHERE project_id = $1 AND action = 'DELETE /api/v1/projects/{id}/secrets/{name}' AND detail->>'env' = 'preview' AND ts >= d.built)))`,
+		app, env, build).Scan(&changed)
+	return changed, err
+}
+
+// LogValues is what a masked log read masks with (contracts/routes.md, the logs row): env's runtime values and
+// preview's build values together, preview having built the image, and the only environment that holds any; a build
+// value under a runtime value's name, but another, stands as "<NAME> (build)". ok is false where Masked's rule can't
+// mask it, a build value of preview's changed since the image was built counted too (maskChanged).
+func (p *Pipeline) LogValues(ctx context.Context, app, env string) (values map[string]string, ok bool, err error) {
+	if changed, err := p.maskChanged(ctx, app, env, true); err != nil || changed {
+		return nil, false, err
+	}
+	if values, err = p.secrets(ctx, app, env, "runtime"); err != nil {
+		return nil, false, err
+	}
+	build, err := p.secrets(ctx, app, "preview", "build")
+	if err != nil {
+		return nil, false, err
+	}
+	for name, v := range build {
+		if was, taken := values[name]; taken && was != v {
+			name += " (build)" // the runtime value keeps the name; a build one has no other name to take
+		}
+		values[name] = v
+	}
+	return values, true, nil
 }
 
 // Egress is the egress spec a run used, recorded on its deploy row (design/EGRESS.md §2.5): Via is off or

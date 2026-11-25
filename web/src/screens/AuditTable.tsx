@@ -91,7 +91,9 @@ function despite(d: Record<string, unknown>): string {
 
 // The verb and its specifics. Every action the server writes has its own; one the bundle doesn't know
 // yet is the trail's own sentence, or the action as written — odd, never blank.
-export function what(event: AuditEvent): { verb: string; rest?: string } {
+// tableWords is the table's own words for an action it words itself, null for the rest, which the trail's sentence says.
+// The sentence says these too, in the table's words (ui/Audit.tsx), so an app's Activity reads the same row the same way.
+export function tableWords(event: AuditEvent): { verb: string; rest?: string } | null {
   const d = event.detail;
   const v = named(event);
   if (UPLOAD.includes(event.action)) return { verb: d.kind === "check" ? "Checked" : event.action === "package from github" ? "Pushed" : "Uploaded", rest: v };
@@ -201,6 +203,13 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "scanner.credential.set": return { verb: "Set a scanner credential", rest: [text(d.tool), text(d.repo)].filter(Boolean).join(" · ") };
     case "scanner.credential.remove": return { verb: "Removed a scanner credential", rest: [text(d.tool), text(d.repo)].filter(Boolean).join(" · ") };
   }
+  return null;
+}
+
+// what is the row's verb and specifics: the table's own where it words the action, else the trail's sentence.
+export function what(event: AuditEvent): { verb: string; rest?: string } {
+  const own = tableWords(event);
+  if (own !== null) return own;
   const said = sentence(event);
   return { verb: said.charAt(0).toUpperCase() + said.slice(1) };
 }

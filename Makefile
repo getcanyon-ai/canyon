@@ -76,7 +76,7 @@ IMAGE_LICENCE = case $$name in \
 IMAGE_BUILD = name=$${img%%:*}; file=$${img\#*:}; target=; \
   case $$file in *:*) target="--target $${file\#*:}"; file=$${file%%:*} ;; esac; \
   licence=$$($(IMAGE_LICENCE)); \
-  docker buildx build -f $$file $$target --build-arg VERSION=$(VERSION) --provenance=false \
+  docker buildx build -f $$file $$target --build-arg VERSION=$(VERSION) --provenance=false $${GOPROXY:+--build-arg "GOPROXY=$$GOPROXY"} \
     --build-arg PACK_VERSION=$(PACK_VERSION) --build-arg PACK_SHA256_AMD64=$(PACK_SHA256_AMD64) --build-arg PACK_SHA256_ARM64=$(PACK_SHA256_ARM64) \
     --label org.opencontainers.image.source=$(SOURCE) --label "org.opencontainers.image.licenses=$$licence"
 
@@ -121,7 +121,7 @@ BUNDLE_IMAGES := canyon-server canyon-executor canyon-demo-apps
 
 deploy-bundle-check: ## canyon-deploy.tar.gz as scripts/publish-release.sh builds it (scripts/deploy-bundle.sh), from HEAD, with server, executor and demo-apps built from this tree in place of a release's, checked by scripts/release-archives-check.sh (licensed and clean) and scripts/deploy-bundle-check.sh: compose accepts it, nothing in it builds, every file it names is in it, and its stack comes up healthy, answers canyon fleet at localhost and refuses another Host 421, and the team setup the guide writes (its .env and Caddyfile) is complete (CI's deploy-bundle job; it starts the laptop demo's containers)
 	rm -rf bin/bundle && mkdir -p bin/bundle
-	docker compose --profile demo-apps build server executor demo-apps
+	docker compose --profile demo-apps build $${GOPROXY:+--build-arg "GOPROXY=$$GOPROXY"} server executor demo-apps
 	set -e; p=$$(docker compose config --format json | jq -r .name); for i in $(BUNDLE_IMAGES); do docker tag $$p-$${i#canyon-} canyon-bundle/$$i:check; echo canyon-bundle/$$i:check; done > bin/bundle/images.txt
 	$(MAKE) --no-print-directory builder-node BUILDER_NODE=canyon-bundle/canyon-builder-node:check && echo canyon-bundle/canyon-builder-node:check >> bin/bundle/images.txt
 	scripts/deploy-bundle.sh HEAD bin/bundle/images.txt bin/bundle/canyon-deploy.tar.gz
@@ -264,7 +264,8 @@ demo-check: ## the boot path end to end: compose up postgres, server and executo
 	@trap '$(DEMO_DOWN); exit 130' INT TERM; $(MAKE) --no-print-directory demo-check-steps || { $(DEMO_DOWN); exit 1; }
 
 demo-check-steps:
-	docker compose -f docker-compose.yml -f e2e/compose.telemetry-off.yml up -d --build postgres server executor
+	docker compose -f docker-compose.yml -f e2e/compose.telemetry-off.yml build $${GOPROXY:+--build-arg "GOPROXY=$$GOPROXY"} server executor
+	docker compose -f docker-compose.yml -f e2e/compose.telemetry-off.yml up -d postgres server executor
 	@for i in $$(seq 1 45); do curl -sf http://127.0.0.1:7777/ready && echo && exit 0; sleep 2; done; \
 	 echo "server never became ready"; docker compose logs --tail=60 postgres server; $(DEMO_DOWN); exit 1
 	scripts/telemetry-off-check.sh docker # the server sends no usage report: the runner's CI never reaches it

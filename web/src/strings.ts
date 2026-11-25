@@ -71,9 +71,23 @@ export const S = {
   // A restarting environment's last log lines under the app page's band, masked (#2744); the second when a secret of
   // the environment changed since what runs there started, the third when the read fails.
   lastLines: "The app's last lines, each secret's value replaced by its name:",
-  lastLinesUnmasked: "Canyon can't show the app's last lines here: it can't tell which secret values the app started with, so it can't hide them. canyon logs --env <env> shows them.",
-  lastLinesTooLong: "Canyon can't show the app's last lines here: they're over 1 MiB, too much to check for secrets. canyon logs --env <env> shows them.",
-  lastLinesUnread: "Canyon couldn't read the app's last lines. canyon logs --env <env> shows them.",
+  // lastLinesCli follows each to the app's team, whose canyon logs reads it raw; never to a responder, whose read is masked.
+  lastLinesUnmasked: "Canyon can't show the app's last lines here: it can't tell which secret values the app started with, so it can't hide them.",
+  lastLinesTooLong: "Canyon can't show the app's last lines here: they're over 1 MiB, too much to check for secrets.",
+  lastLinesUnread: "Canyon couldn't read the app's last lines.",
+  lastLinesCli: " canyon logs --env <env> shows them.",
+  // An environment's logs on its card (A of incidents and logs): its last 200 lines, masked, read again on Refresh, never followed.
+  showLogs: "Show logs",
+  logsOf: "<app>'s logs in <env>",
+  // What masked hides, said plainly (#223's security review).
+  logsLines: "The last 200 lines. Only the secrets set in Canyon are hidden, each shown as its name: anything else the app printed shows, its users' tokens included.",
+  // A security responder's read where a value is too short to hide by its name (409 too_short_to_mask).
+  logsTooShort: "Canyon can't show you the app's last lines: a secret in them is too short to hide by its name.",
+  logsReading: "Reading…",
+  logsNone: "No log lines yet.",
+  logsCopied: "Copied.",
+  logsUncopied: "Couldn't copy: select the lines and copy them yourself.",
+  logsTeamOnly: "Only the app's contributors see its logs.",
   signInForCli: "Sign in to approve the Canyon CLI",
   signInForCliLine: "Then you'll come back here to approve the code from your terminal.",
   signInForAgent: "Sign in to connect an agent to Canyon",
@@ -155,6 +169,9 @@ export const S = {
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
   putBackCodeBare: "Canyon puts back the code, not the data, the secrets or the outbound rules.",
+  // The headline of a production that's down (#188): the newest kept earlier version, or why none can go back.
+  putBackNamed: "Put <version> back",
+  putBackNone: "No earlier version can be put back as it ran: fix it, deploy to preview, then promote.",
   imageGone: "<version>'s image is no longer on this Canyon, so it can't be put back as it ran. Deploy <version> to preview and promote it if you want it rebuilt.",
   patched: "<version> · patched <date>",
   noDescription: "No description yet",
@@ -534,6 +551,9 @@ export const S = {
   revealTickBoth: "Tick the box once both are stored.",
   revealTickOne: "Tick the box once it is stored.",
   copyFailed: "Couldn't copy. The browser did not allow it.",
+  // An app's link to share, from its page's ⋯ (#193): the app's own address at the host's public URL.
+  copyLink: "Copy link",
+  linkCopied: "Link copied",
   onAsk: "Hand apps to your platform? From the next deploy or promotion, your platform runs every app Canyon builds, previews included. Apps running now stay where they are until their next deploy.",
   offAsk: "Run apps on this cluster again? From the next deploy or promotion Canyon runs each app here. What your platform runs now stays with it until then, and nothing moves: a database your platform made stays where it is.",
   revealTitle: "Store these now",
@@ -661,11 +681,9 @@ export const S = {
   needHeldWho: "An admin, or a security responder who isn't on its team, can lift it.",
   needDown: "<app> is down in <env>.",
   needRestarting: "<app> keeps restarting in <env>.",
-  needDownFixPreview: "canyon logs --env preview says why. Fix the cause, then deploy again.",
-  needDownFixProd: "canyon logs --env prod says why. Fix the cause, deploy to preview, then promote.",
-  // A restarting environment's fix: its page shows its last log lines, masked (#2744).
-  needRestartingFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
-  needRestartingFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
+  // A down environment's fix: its page shows its last log lines, masked, stopped or restarting (#2744, #188).
+  needDownFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
+  needDownFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
   needRefused: "<app> can't reach <destination> in <env>.",
   needRefusedWhy: "Nobody has allowed it for <env> yet, so Canyon refused <calls>, the last <age>.",
   needRefusedOther: "<other> tried to reach it <times> in the last 30 days.",
@@ -1153,6 +1171,9 @@ export const CONNECT = {
   stepInstall: "Install the CLI",
   stepLogin: "Sign in to this Canyon",
   stepSkill: "Set up your coding agents",
+  // What to say to an agent once it's connected (#192): on a laptop, in the app's folder; in the cloud, of what's pushed.
+  askLaptop: "Then open your agent in the app's folder and ask it: Deploy this app to Canyon.",
+  askCloud: "Then push the app to GitHub and ask the agent: Deploy this repository to Canyon.",
   laptopNote: "The last step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools. They load the next time each agent starts.",
   cloud: "In the cloud",
   cloudNote: "For agents that run on their vendor's machines. They review and deploy what you've pushed to GitHub. On a laptop, use the CLI above: one way per agent.",
@@ -1327,6 +1348,62 @@ export const AUDIT_ACTIONS: Record<string, string> = {
 };
 // lift hold when it started production again (detail.started), naming the version it started.
 export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
+// The rows the trail had no words for until #152, and the forms of them a row's detail picks (ui/Audit.tsx, more).
+export const AUDIT_MORE = {
+  linkRepo: "linked the GitHub repository <repo>",
+  unlinkRepo: "unlinked the GitHub repository <repo>",
+  importRepo: "made the app from the GitHub repository <repo>",
+  folder: ", folder <folder>",
+  handOver: "handed <repo> over to the developers: Canyon no longer commits to it",
+  archived: "archived <repo> on GitHub",
+  deleted: "deleted <repo> on GitHub",
+  removed: "took <repo> away from Canyon's GitHub App",
+  relinked: "gave Canyon's GitHub App access to <repo> again",
+  changed: "changed <repo> on GitHub", // a state this bundle doesn't know
+  autoOn: "turned on deploying each push to preview",
+  autoOff: "turned off deploying each push to preview",
+  deployFromGitHub: "started a deploy of <version> from GitHub",
+  keptRepo: "made the GitHub repository <repo> to keep the app's code in",
+  keptVersion: "kept <version> in GitHub as commit <commit>",
+  githubAccount: "linked the GitHub account <login>",
+  githubOrgImports: "set the GitHub organization <account>, importing its new repositories",
+  githubOrg: "set the GitHub organization <account>, not importing its new repositories",
+  githubSecret: "set the GitHub App's client secret for <account>",
+  connectRead: "connected the agent <client> from <client_host>, allowed to read",
+  connectAct: "connected the agent <client> from <client_host>, allowed to read, check, deploy and promote",
+  disconnect: "disconnected the agent <client>",
+  disconnectTheirs: "disconnected <subject>'s agent <client>",
+  disconnectCanyon: "disconnected <subject>'s agent: <reason>",
+  revokeBrowser: "ended a browser sign-in",
+  revokeCLI: "ended a CLI sign-in",
+  revokeTheirsBrowser: "ended <subject>'s browser sign-in",
+  revokeTheirsCLI: "ended <subject>'s CLI sign-in",
+  bindGrants: "accepted the access shared with <email>: <apps>",
+  dbRead: "opened a read session on the database <resource> in <env>",
+  dbWrite: "opened a write session on the database <resource> in <env>",
+  dbAttached: "joined the <db_mode> session on the database <resource> in <env>",
+  dbReason: ": <reason>",
+  dbClosed: "ended <person>'s database session: <why>",
+  dbClosedOwn: "closed their database session",
+  channelSet: "set the <kind> channel <channel>",
+  channelRemoved: "removed the <kind> channel <channel>",
+  channelTested: "sent a test to the <kind> channel <channel>: it answered <status>",
+  channelFailing: "couldn't post to the <kind> channel <channel>: it answered <status>",
+  rename: "renamed the app from <from> to <to>",
+  imageReport: "attached <tool>'s report on the app's image",
+  imageReplaced: ", replacing the one before",
+  noResources: "reported a release deployed in <env> without saying where <missing>: nothing went live",
+  licence: "set the Enterprise licence for <customer>, until <until>",
+  telemetryOn: "turned telemetry on",
+  telemetryOff: "turned telemetry off",
+  hostToken: "replaced the deploy repo's host token",
+};
+// A database session's close_reason, in the words its closed row says it with (contracts/routes.md, Database sessions).
+export const DB_CLOSED_WHY: Record<string, string> = {
+  signed_out: "they signed out", access_changed: "their access changed", setting_changed: "a setting changed", database_gone: "the database is gone",
+  expired: "it expired", held: "production is held", idle: "it was idle", turned_off: "database sessions were turned off",
+  closed: "they closed it", ended: "an owner or admin ended it", replaced: "a newer one replaced it",
+};
 // A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
 // platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
 export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";

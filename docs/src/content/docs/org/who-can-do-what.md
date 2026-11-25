@@ -76,6 +76,7 @@ never from the CLI, so a coding agent can't do them.
 | Ask for access | ✓ | ✓ | ✗ | ✗ | ✓ | ✗ |
 | See its findings | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ |
 | See its runs, versions, logs and secret names | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
+| See production's logs, secrets masked | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Upload, check, and deploy to preview | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
 | Deploy a pull request's version to preview (dashboard only) | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
 | Set and remove secrets | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ |
@@ -165,10 +166,13 @@ and nothing else:
 - in the list: the app's name, owners and description, production's address, whether it runs, and
   whether it is held;
 - on the app's page: its reviews, each one's findings with their few lines of code, and the go-live
-  checks.
+  checks;
+- production's last 200 log lines, so they can see why production is failing before they stop it. Only the
+  secrets set in Canyon are hidden, each shown as its name: anything else the app prints shows, its users'
+  tokens and details included. Each read is in the audit trail.
 
-A responder doesn't see preview, earlier versions, who deployed them, logs, secret names, or anything
-else of the app.
+A responder doesn't see preview, earlier versions, who deployed them, preview's logs, production's
+logs unmasked, secret names, or anything else of the app.
 
 ### Reading the audit trail
 

@@ -47,13 +47,13 @@ func (e *Executor) holdFloor(ctx context.Context, n appNet, app, target string, 
 		return "", fmt.Errorf("app network: the addresses of the Docker host: none read")
 	}
 	name := "canyon-appfloor-" + nonce()
-	args := []string{"run", "-d", "--name", name, "--network", n.Name, "--network-alias", app + "-" + target, "--restart", "no",
-		"--label", "canyon.app=" + app, "--label", "canyon.target=" + target, "--label", holderLabel,
-		"--cap-drop", "ALL", "--cap-add", "NET_ADMIN", "--security-opt", "no-new-privileges", "--read-only",
+	args := append([]string{"run", "-d", "--name", name, "--network", n.Name, "--network-alias", app + "-" + target, "--restart", "no",
+		"--label", "canyon.app=" + app, "--label", "canyon.target=" + target, "--label", holderLabel}, e.projectLabel()...)
+	args = append(args, "--cap-drop", "ALL", "--cap-add", "NET_ADMIN", "--security-opt", "no-new-privileges", "--read-only",
 		"--memory", "32m", "--pids-limit", "32", "--entrypoint", "/bin/sh",
-		"--env", "CANYON_APP_GATEWAY=" + gw.String(), "--env", "CANYON_APP_SUBNET=" + sub.String(), "--env", "CANYON_APP_HOST=" + prefixes(host),
-		"--env", "CANYON_APP_POOLS=" + prefixes(e.Refused()), "--env", "CANYON_APPS_ALLOW=" + strings.Join(e.AppsAllow, ","),
-		e.holder(), "-c", appFloor}
+		"--env", "CANYON_APP_GATEWAY="+gw.String(), "--env", "CANYON_APP_SUBNET="+sub.String(), "--env", "CANYON_APP_HOST="+prefixes(host),
+		"--env", "CANYON_APP_POOLS="+prefixes(e.Refused()), "--env", "CANYON_APPS_ALLOW="+strings.Join(e.AppsAllow, ","),
+		e.holder(), "-c", appFloor)
 	out, err := child(ctx, e.docker(), args...).CombinedOutput()
 	if err != nil {
 		err = fmt.Errorf("the holder %s: %w: %s", name, err, strings.TrimSpace(string(out)))

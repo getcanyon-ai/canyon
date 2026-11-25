@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
+import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Earlier, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status, type ViewerEnv, type Waiting } from "../api";
 import { AUTH, RENAME, S, TEARDOWN } from "../strings";
 import { Actor, actorName } from "../ui/Actor";
 import { Age } from "../ui/Age";
@@ -7,6 +7,7 @@ import { AppName } from "../ui/AppName";
 import { AppSource } from "./AppSource";
 import { Button } from "../ui/Button";
 import { EnvCard } from "../ui/EnvCards";
+import { Logs } from "../ui/Logs";
 import { down } from "../ui/EnvLink";
 import { DependencyCard } from "../ui/DependencyCard";
 import { CopyFix, Finding, type ApproveBody } from "../ui/Finding";
@@ -501,7 +502,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     run: pinned === null && fromCheck === null && reading !== null && reading.package === project.latest.package ? reading : null,
     preview, prod, previewName: preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label), prodName: prod === null ? null : version(prod.package, prod.label), receipt: status.receipt, hold: status.hold,
     broke: broke === null || broke instanceof Error ? undefined : broke,
-    progress: progressWords(steps), refused,
+    progress: progressWords(steps), refused, earlier: status.earlier,
     secret: (status.needs ?? []).some((need) => need.kind === "secret" && (need.version === undefined || need.version === newest)),
   });
   // What an empty preview says: where the newest version stopped, else how something gets there.
@@ -580,13 +581,33 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
     ? <CopyFix app={id} findings={reading.findings.filter((one) => one.properties.canyon.blocks && one.approval === undefined)} /> : null;
-  // A restarting environment the band doesn't show the lines of shows them on its card, to whoever may read its logs
-  // (#2744), so the need's "Its last log lines, on its page" holds wherever the band stands.
+  // Who may read an environment's lines, masked: the logs route's minimum, contributor, and a security responder production's,
+  // whatever their access to the app (design/PERMISSIONS.md; the owner, 2026-11-25).
+  const onTeam = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
+  const mayRead = (key: "preview" | "prod") => onTeam || role === "responder" && key === "prod";
+  // An environment's logs on its card (A), where Canyon runs it, which its read says by its state; below the team, who reads them.
+  const logs = (key: "preview" | "prod", at: Env | Waiting | ViewerEnv | undefined) => project === null || at === undefined || !("state" in at) || at.state === undefined ? null
+    : mayRead(key) ? <Logs app={id} name={project.name} env={key} team={onTeam} /> : <p className="col-start-1 text-sm text-text-faint">{S.logsTeamOnly}</p>;
+  // A down environment the band doesn't show the lines of shows them on its card, to whoever may read its logs (#2744,
+  // #188), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
     const at = status?.envs[key];
-    const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
-    return mayRead && at !== undefined && !waiting(at) && at.state === "restarting" && top.band?.tail !== key;
+    // stopped with no exit named is a switch under way, nothing crashed: its lines wait for Show logs (#199's putback journey)
+    return mayRead(key) && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped" && at.stopped !== undefined) && top.band?.tail !== key;
   };
+  // Put back from the headline is the card's own Put back of that version (#188): the card opens and follows its review.
+  const toPutBack = (row: Earlier) => {
+    const shelf = document.querySelector<HTMLElement>('section[aria-label="Earlier versions"]')?.closest("details");
+    if (shelf === null || shelf === undefined) return;
+    shelf.open = true;
+    shelf.querySelector<HTMLButtonElement>(`button[aria-label="Put back ${CSS.escape(row.version)}"]`)?.click();
+    shelf.parentElement?.scrollIntoView?.({ block: "nearest" });
+  };
+  const putBack = top.band?.back === undefined ? null : (
+    <span key="back" className="max-[620px]:order-first max-[620px]:basis-full max-[620px]:*:w-full">
+      <Button variant="primary" onClick={() => toPutBack(top.band!.back!)}>{S.putBackNamed.replace("<version>", () => top.band!.back!.version)}</Button>
+    </span>
+  );
   // What a running environment calls out to, on its card (D15): how many destinations, how many refused on their last call,
   // the Outbound card a click away; red while one of its requests is refused now (the refused tile's predicate).
   const calls = (key: "preview" | "prod") => {
@@ -650,7 +671,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
               )}
               {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} team={project.access.level === "owner" || project.access.level === "contributor"} changed={() => tick.current()} />}
             </div>
-            {project !== null && reduced(project) && stopping !== null && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={{ word: stopWord, act: stopping }} done={() => tick.current()} />}
+            {project !== null && reduced(project) && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={stopping === null ? undefined : { word: stopWord, act: stopping }} done={() => tick.current()} />}
             {project !== null && !reduced(project) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 {preview !== null && !down(preview) && <a className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium text-text no-underline hover:bg-surface-2" href={preview.url} target="_blank" rel="noreferrer">Open preview<Icon name="external" size={14} /></a>}
@@ -685,11 +706,11 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
               {/* A responder with no grant reads nothing of preview: the card says so, never that it is empty. */}
               {project.access.level === "none" ? <EnvCard name="Preview" env={undefined} blank="Not shown to you" empty="A security responder reads an app's production, never its preview." />
-                : <EnvCard name="Preview" env={project.envs?.preview} empty="Nothing is in preview." />}
+                : <EnvCard name="Preview" env={project.envs?.preview} empty="Nothing is in preview.">{logs("preview", project.envs?.preview)}</EnvCard>}
               {/* A read-only member's read never says production is held (design/PERMISSIONS.md): its card says nothing runs, which
                   is true either way, never that nothing is there. */}
               <EnvCard name="Production" env={project.envs?.prod} {...(status?.hold !== undefined ? { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" }
-                : status === null ? { empty: "" } : { empty: "Nothing is in production." })} />
+                : status === null ? { empty: "" } : { empty: "Nothing is in production." })}>{logs("prod", project.envs?.prod)}</EnvCard>
             </div>
             {status === null && (
               <section aria-label={S.whoLooksAfter} className="grid gap-1">
@@ -724,9 +745,9 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <>
             {(() => {
               const headed = top.band === null ? null : (
-                <Headline key="headline" band={top.band} app={admin || project.access.level === "owner" || project.access.level === "contributor" ? id : undefined}>
-                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && (lift === null || status.receipt.held === undefined) ? undefined
-                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
+                <Headline key="headline" band={top.band} app={top.band.tail !== undefined && mayRead(top.band.tail) ? id : undefined}>
+                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && putBack === null && (lift === null || status.receipt.held === undefined) ? undefined
+                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{putBack}{fixing}</>}
                 </Headline>
               );
               const listed = top.needs.length === 0 ? null : (
@@ -740,14 +761,16 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
               <EnvCard name="Preview" env={status.envs.preview} empty={emptyPreview} calls={calls("preview")} who={preview?.deployed_by === undefined || preview.deployed_by === null ? undefined : <Actor actor={preview.deployed_by} />}>
                 {untailed("preview") && <LastLines app={id} env="preview" />}
+                {logs("preview", status.envs.preview)}
               </EnvCard>
               {/* Held, it says who held it and who lets it run again: Promote is disabled, so it never says to promote. */}
-              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")}
+              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")} lined={mayRead("prod") && top.band?.tail === "prod"}
                 {...(status.hold === undefined ? { empty: "Promote a version from preview to run it here." } : { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" })}
                 who={prod?.promoted_by === undefined || prod.promoted_by === null ? undefined : <>promoted by <Actor actor={prod.promoted_by} /></>}>
                 {untailed("prod") && <LastLines app={id} env="prod" />}
+                {logs("prod", status.envs.prod)}
                 {/* a host from before earlier[] answers none */}
-                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
+                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} name={project.name} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
               </EnvCard>
             </div>
             {rows(project, status).length > 0 && <Versions rows={rows(project, status)} />}
@@ -766,7 +789,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     const advisories = `${others} ${others === 1 ? "advisory" : "advisories"}`;
                     // Beside what blocks production, "no advisories" is no news: it's said only with nothing blocking.
                     const blocks = S.blocksProduction.replace("<n>", () => String(atProd));
-                    return <span className="mt-0.5 block text-md font-normal text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
+                    return <span className="mt-0.5 block text-md font-regular text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
                   })()}
                 </h2>
               )}
@@ -821,7 +844,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                   ));
                   return (fix.length > 0 || stopsProd.length > 0) && advisory.length > 0 ? (
                     <details className="mt-2 grid gap-3">
-                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>{S.doesntBlock}<span className="ml-2 text-md font-normal text-text-faint">{`${shown(advisory).length} ${shown(advisory).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
+                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>{S.doesntBlock}<span className="ml-2 text-md font-regular text-text-faint">{`${shown(advisory).length} ${shown(advisory).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
                       {advisories}
                     </details>
                   ) : advisories;
@@ -873,26 +896,36 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
 
 // The ⋯ in the header: taking an environment offline is rare and risky, so it is not in the reading
 // flow (the redesign: "Take offline and Delete live in the ⋯ menu"). Each item asks before it acts.
-// Renaming and deleting are managing the app, its owners' and admins' (manage).
+// Renaming and deleting are managing the app, its owners' and admins' (manage). Copy link is everyone's who opens the
+// page, made from the host's public URL once it is known (#193).
 function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: (from: HTMLElement | null) => void }; live?: string; done: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
+  const [linked, setLinked] = useState<boolean | null>(null); // the link copied, or the browser refused
+  const { publicURL } = useContext(RailContext);
+  const link = typeof publicURL === "string" ? `${publicURL.replace(/\/+$/, "")}/#/apps/${encodeURIComponent(id)}` : null;
   const button = useRef<HTMLButtonElement>(null);
   const renaming = useRef<HTMLDivElement>(null);
   useInWindow(renaming, env === "rename");
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
-  if (!preview && !prod && !manage && stop === undefined) return null;
+  if (!preview && !prod && !manage && stop === undefined && link === null) return null;
   const close = () => { setOpen(false); setEnv(null); button.current?.focus(); };
+  // navigator.clipboard is absent outside a secure context, a plain-http host: that is a refusal too.
+  const copyLink = (to: string) => { setOpen(false); Promise.resolve().then(() => navigator.clipboard.writeText(to)).then(() => setLinked(true), () => setLinked(false)); button.current?.focus(); };
   return (
-    <div className="relative" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    <div className="relative flex items-center gap-2" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+      {linked === true && <span role="status" className="text-md text-ok">{S.linkCopied}</span>}
+      {linked === false && <span role="alert" className="text-md text-critical">{S.copyFailed}</span>}
       <button type="button" ref={button} aria-label="More actions" aria-expanded={open} onClick={() => { setOpen(!open); setEnv(null); }}
         className={`grid size-[34px] place-items-center rounded-[7px] border border-border-strong hover:bg-surface-2 ${open || env !== null ? "bg-surface-2 text-text" : "bg-surface text-text-dim"}`}>
         <Icon name="more" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
-          {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
+        <div role="menu" className="absolute top-full right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
+          {link !== null && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => copyLink(link)}>{S.copyLink}</button>}
+          {link !== null && (preview || prod || stop !== undefined || manage) && <div role="separator" className="my-1 h-px bg-border" />}
+          {preview &&<button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
           {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}
           {(preview || prod || stop !== undefined) && manage && <div role="separator" className="my-1 h-px bg-border" />}
@@ -908,7 +941,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         </Modal>
       )}
       {env === "rename" && (
-        <div ref={renaming} className="absolute right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
+        <div ref={renaming} className="absolute top-full right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}

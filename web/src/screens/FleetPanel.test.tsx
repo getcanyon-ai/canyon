@@ -629,4 +629,19 @@ describe("what needs a person, in the side pane", () => {
       unmount();
     }
   });
+
+  // Just after a hold is lifted elsewhere the status read can still list it while the row has none: the pane offers
+  // Stop production to whoever may stop it, never nothing (#158).
+  it("offers Stop production while the row has no hold, whatever the status read's needs still list", async () => {
+    const held = { kind: "held", env: "prod", rank: 1, since: "2026-11-08T09:00:00Z", you: true, ask: [] } as Need;
+    for (const role of ["admin", "responder", "member"] as const) {
+      server(() => ({ ...swap("premium-ledger", { needs: [held] }), viewer: { ...golden.viewer, role } })); // the golden's app with a production
+      const { unmount } = render(<Fleet org="Meridian Insurance" />);
+      await screen.findByText("premium-ledger");
+      openPanel("premium-ledger");
+      await inPanel("premium-ledger").findByRole("region", { name: "Needs you" }); // the status read is in, and lists the hold
+      expect(inPanel("premium-ledger").queryAllByRole("button", { name: "Stop production of premium-ledger" }), role).toHaveLength(role === "member" ? 0 : 1);
+      unmount();
+    }
+  });
 });

@@ -165,7 +165,7 @@ function Manage({ id, access, org, asked }: { id: string; access: TeamAccess; or
     <section ref={section} aria-label="Access">
       {/* Closed until asked for, its line on the summary; open while access requests wait on its owners. */}
       <details open={(access.requests ?? 0) > 0}>
-      <summary className="cursor-pointer"><h2 className={`${H2} inline`}>Who can open it<span className="ml-2 text-md font-normal text-text-faint">{words === "" ? S.private : `Shared with ${words}.`}</span></h2></summary>
+      <summary className="cursor-pointer"><h2 className={`${H2} inline`}>Who can open it<span className="ml-2 text-md font-regular text-text-faint">{words === "" ? S.private : `Shared with ${words}.`}</span></h2></summary>
       {failure !== null && <p className="mt-2 text-base text-critical">{failure}</p>}
       {read !== null && (
         <>

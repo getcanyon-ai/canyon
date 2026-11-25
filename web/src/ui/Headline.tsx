@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { type ApiError, entries, getMaskedLogs, type Env, type Hold, type Latest, type Need, type Receipt, type RunRead } from "../api";
+import { type ApiError, type Earlier, entries, getMaskedLogs, type Env, type Hold, type Latest, type Need, type Receipt, type RunRead } from "../api";
 import { S } from "../strings";
 import { actorName } from "./Actor";
 import { down } from "./EnvLink";
@@ -15,8 +15,9 @@ export type Act = "review" | "approve" | "cancel" | "promote" | "open" | "copy" 
 // about where versions run or a hold, which no review changes.
 // covers: the needs that say what this band says (contracts/routes.md, *What needs a person*), so the two are never drawn
 // together (D15; leads, below). repeats: the needs whose own lines say what this band says without its steps, so it isn't
-// drawn while they are. tail: the environment that keeps restarting, whose last log lines the app page shows under it (#2744).
-export interface Band { running?: true; tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; unshown?: string }
+// drawn while they are. tail: the environment that's down, whose last log lines the app page shows under it (#2744), and
+// lined the text in place of text where they show. back: the earlier version a production that's down can be put back to (#188).
+export interface Band { running?: true; tone: "red" | "amber" | "green" | "teal" | "neutral"; title: string; text: string; said?: string; primary?: Act; secondary?: Act; going?: true; review?: true; covers?: string[]; repeats?: string[]; tail?: "preview" | "prod"; lined?: string; back?: Earlier }
 
 export interface Facts {
   latest: Latest; // the newest version
@@ -33,6 +34,7 @@ export interface Facts {
   progress?: string | null; // a review going: how many of its checks are done, and which waits its turn
   refused?: string[]; // production's egress requests pending, the destinations Canyon refused that wait on a person (#2723)
   secret?: boolean; // the status read needs the newest version's secret rotated: the blocked band says it, in that need's place
+  earlier?: Earlier[]; // production's earlier versions, newest first, where the reader's read carries them
 }
 
 // After a review that let the build go ahead, what broke: the review is said as it ended (approved is never passed).
@@ -79,13 +81,23 @@ const findings = (n: number) => `${n} blocking ${n === 1 ? "finding" : "findings
 // " once"; "" when the read carries no count.
 const times = (env: Env) => (env.restarting === undefined ? "" : env.restarting.restarts === 1 ? " once" : ` ${env.restarting.restarts} times`);
 // What a restarting environment's headline says under it: how it last exited when the read says it, with
-// the app's last line below, else where its reason is (#1597).
-const restarted = (env: Env, at: "preview" | "prod") => {
+// the app's last line below, else where its reason is (#1597); after is what the band says next.
+const restarted = (env: Env, at: "preview" | "prod", after: string) => {
   const code = env.restarting?.exit_code;
   const said = env.restarting?.said || undefined;
-  const text = code === undefined ? S.restartedWayOut : S.restartedLastExit.replace("<code>", String(code)).replace("<below>", said === undefined ? "" : " The app's last line is below.");
-  return { text: text.replace("<env>", at), said, tail: at, unshown: code === undefined ? S.restartedHasWhy.replace("<env>", at) : undefined };
+  const text = (code === undefined ? S.restartedWayOut : S.restartedLastExit.replace("<code>", String(code)).replace("<below>", said === undefined ? "" : " The app's last line is below.")).replace("<env>", at) + after;
+  return { text: text + (code === undefined ? S.restartedHasWhy.replace("<env>", at) : ""), lined: text, said, tail: at };
 };
+// A stopped environment's lines are read, an audited read, only where the executor named how it exited: stopped with no
+// exit is a switch under way, a deploy's new container not yet started, and nothing crashed (#199's putback journey).
+const exited = (env: Env, at: "preview" | "prod"): { tail?: "preview" | "prod" } => (env.stopped === undefined ? {} : { tail: at });
+// Where a production that's down can go back to: the newest earlier version Canyon kept, else, where the read carries
+// earlier[], why none can (#188).
+const back = (f: Facts) => {
+  const row = f.earlier?.find((one) => one.kept);
+  return { back: row, none: f.earlier !== undefined && row === undefined ? S.putBackNone : "" };
+};
+const sentences = (...parts: string[]) => parts.filter((one) => one !== "").join(" ");
 
 const READY_COVERS: Record<string, string[]> = { "prod.clean-gate": ["blocked_prod"], "prod.egress-allowed": ["unchecked:prod"] };
 
@@ -100,12 +112,15 @@ export function headline(f: Facts): Band {
   // An environment that ran and stopped outranks everything else on the page.
   if (f.prod?.state === "stopped") {
     const code = f.prod.stopped === undefined ? "" : ` with exit code ${f.prod.stopped.exit_code}`;
-    const twin = f.preview !== null && f.preview.package === f.prod.package && f.preview.state === "running" ? "Preview runs the same version and is still up. " : "";
-    return { tone: "red", title: `Production is down: ${f.prodName} stopped${code}`, text: `${twin}${f.prod.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env prod has the rest.`, said: f.prod.stopped?.said || undefined, covers: ["down:prod"] };
+    const twin = f.preview !== null && f.preview.package === f.prod.package && f.preview.state === "running" ? "Preview runs the same version and is still up." : "";
+    const { back: row, none } = back(f);
+    return { tone: "red", title: `Production is down: ${f.prodName} stopped${code}`, text: sentences(twin, `${f.prod.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env prod has the rest.`, none),
+      lined: sentences(twin, none), said: f.prod.stopped?.said || undefined, ...exited(f.prod, "prod"), back: row, covers: ["down:prod"] };
   }
   // One started again since its deploy is not running, up or not at this instant, and the way out is a new deploy (#1722).
   if (f.prod?.state === "restarting") {
-    return { tone: "red", title: `${f.prodName} restarted${times(f.prod)} since it was deployed to production`, ...restarted(f.prod, "prod"), covers: ["down:prod"] };
+    const { back: row, none } = back(f);
+    return { tone: "red", title: `${f.prodName} restarted${times(f.prod)} since it was deployed to production`, ...restarted(f.prod, "prod", none === "" ? "" : ` ${none}`), back: row, covers: ["down:prod"] };
   }
   const run = f.run;
   if (run !== null && (run.state === "pending" || run.state === "running")) {
@@ -162,12 +177,12 @@ export function headline(f: Facts): Band {
     return { tone: "green", title: `${v} is live in production`, text: `${twin}${partly}`.trim(), primary: "open" };
   }
   if (f.preview !== null && f.preview.package === f.latest.package && f.preview.state === "restarting") {
-    const { text, said, tail, unshown } = restarted(f.preview, "preview");
-    return { tone: "red", title: `${v} restarted${times(f.preview)} since it was deployed to preview`, text: `${text}${keeps}`, said, tail, unshown, covers: ["down:preview"] };
+    return { tone: "red", title: `${v} restarted${times(f.preview)} since it was deployed to preview`, ...restarted(f.preview, "preview", keeps), covers: ["down:preview"] };
   }
   if (f.preview !== null && f.preview.package === f.latest.package && f.preview.state === "stopped") {
     const code = f.preview.stopped === undefined ? "" : ` with exit code ${f.preview.stopped.exit_code}`;
-    return { tone: "red", title: `${v} stopped in preview${code}`, text: `${f.preview.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env preview has the rest.${keeps}`, said: f.preview.stopped?.said || undefined, covers: ["down:preview"] };
+    return { tone: "red", title: `${v} stopped in preview${code}`, text: `${f.preview.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env preview has the rest.${keeps}`,
+      lined: keeps.trim(), said: f.preview.stopped?.said || undefined, ...exited(f.preview, "preview"), covers: ["down:preview"] };
   }
   if (f.preview !== null && f.preview.package === f.latest.package && f.preview.state === "unknown") {
     return { tone: "amber", title: `${v} is in preview, but Canyon couldn't check whether it runs`, text: `canyon logs --env preview shows what it is doing.${keeps}` };
@@ -244,7 +259,16 @@ export function goLive(receipt: Receipt): { set: number; met: number } {
   return { set: set.length, met: set.filter((rule) => rule.passed).length };
 }
 
-// A restarting environment's last log lines, masked by the server (#2744), for a contributor and above, who may read
+// What a failed masked read of an environment's lines says: a log it can't mask (409), one too long to (422), else unread;
+// to the app's team, canyon logs after it, which reads it raw. A responder's read is masked alone, so theirs names no CLI.
+export const unread = (err: unknown, env: "preview" | "prod", team: boolean) => {
+  const status = (err as ApiError).status;
+  // a responder's read alone is refused where a value is too short to hide by its name (contracts/routes.md, the logs row)
+  if (status === 409 && ((err as ApiError).body as { error?: string } | null)?.error === "too_short_to_mask") return S.logsTooShort;
+  return (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread) + (team ? S.lastLinesCli.replaceAll("<env>", env) : "");
+};
+
+// A down environment's last log lines, masked by the server (#2744, #188), for a contributor and above, who may read
 // its logs: the caller never draws it for a reader below. They stand in for said, the one line the status read
 // carries. Until they come, or when none can be shown, said stays, with why the rest can't; a 403 adds nothing, since
 // it's the reader's access, not a fault. place is where it sits in its parent's grid. The band draws it for the
@@ -259,21 +283,21 @@ export function LastLines({ app, env, said, place = "" }: { app: string; env: "p
     let live = true;
     setRead(null);
     getMaskedLogs(app, env, 20).then((lines) => { if (live) setRead({ lines: lines.trimEnd() }); },
-      (err) => { const status = (err as ApiError).status; if (live) setRead({ failed: status === 403 ? null : (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread).replaceAll("<env>", env) }); });
+      (err) => { const status = (err as ApiError).status; if (live) setRead({ failed: status === 403 ? null : unread(err, env, true) }); });
     return () => { live = false; };
   }, [app, env, said]);
-  const box = `${place} mt-2 rounded-[7px] border border-border bg-surface px-3 py-2 font-mono text-md break-words`;
+  const box = "mt-2 rounded-[7px] border border-border bg-surface px-3 py-2 font-mono text-md break-words";
   if (read !== null && "lines" in read && read.lines !== "") {
     return (
       <figure className={`${place} mt-2 grid gap-1`}>
         <figcaption className="text-sm text-text-dim">{S.lastLines}</figcaption>
-        <pre ref={newest} className={`${box} mt-0 max-h-80 overflow-auto whitespace-pre-wrap`}>{read.lines}</pre>
+        <pre ref={newest} className={`${box} mt-0 max-h-80 overflow-auto whitespace-pre-wrap max-[620px]:max-h-48`}>{read.lines}</pre>
       </figure>
     );
   }
   return (
     <>
-      {said !== undefined && <p className={box}>{said}</p>}
+      {said !== undefined && <p className={`${place} ${box}`}>{said}</p>}
       {read !== null && "failed" in read && read.failed !== null && <p className={`${place} text-sm text-text-dim`}>{read.failed}</p>}
     </>
   );
@@ -292,7 +316,7 @@ function Said({ band, app }: { band: Band; app?: string }) {
 // line when one says why, and the actions on the right. The headline is the page's status.
 export function Headline({ band, app, children }: { band: Band; app?: string; children?: ReactNode }) {
   const tone = TONE[band.tone];
-  const text = band.text + (app !== undefined && band.tail !== undefined ? "" : band.unshown ?? ""); // the lines say why where they're shown
+  const text = app !== undefined && band.tail !== undefined ? band.lined ?? band.text : band.text; // the lines say why where they're shown
   return (
     <section aria-label="Where it stands" className={`grid grid-cols-[22px_minmax(0,1fr)_auto] items-start gap-x-3.5 gap-y-1 rounded-[10px] border border-border border-l-4 px-[18px] py-4 max-[620px]:grid-cols-[22px_minmax(0,1fr)] ${tone.box}`}>
       {/* running, the environment cards' green dot: the empty circle said nothing ran (#102) */}

@@ -54,6 +54,7 @@ export function ConnectAgents({ signIn }: { signIn: boolean }) {
             </li>
           ))}
         </ol>
+        <p className="mt-3 text-md">{T.askLaptop}</p>
         <p role="status" className="mt-1 text-md text-ok">{line?.ok === true ? "Copied" : ""}</p>
         {line?.ok === false && <p role="alert" className="text-md text-critical">{S.copyFailed}</p>}
         <p className={SUB}>{T.laptopNote}</p>
@@ -76,8 +77,8 @@ export function ConnectAgents({ signIn }: { signIn: boolean }) {
             {copied === false && <p role="alert" className="text-md text-critical">{S.copyFailed}</p>}
             <dl className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2.5 border-t border-border pt-3 text-md max-[640px]:grid-cols-1 max-[640px]:gap-y-1">
               <dt className="font-semibold">{T.claudeWeb}</dt>
-              <dd className="text-text-dim max-[640px]:mb-2">{T.claudeWebHow} <a className="text-link no-underline hover:underline" href={CONNECTOR_DOCS} target="_blank" rel="noreferrer">{T.claudeDocs}</a></dd>
-              <dt className="font-semibold">{T.cursorCloud}</dt><dd className="text-text-dim max-[640px]:mb-2">{T.cursorCloudHow}</dd>
+              <dd className="text-text-dim max-[640px]:mb-2">{T.claudeWebHow} <a className="text-link no-underline hover:underline" href={CONNECTOR_DOCS} target="_blank" rel="noreferrer">{T.claudeDocs}</a><span className="mt-1 block text-text">{T.askCloud}</span></dd>
+              <dt className="font-semibold">{T.cursorCloud}</dt><dd className="text-text-dim max-[640px]:mb-2">{T.cursorCloudHow}<span className="mt-1 block text-text">{T.askCloud}</span></dd>
               <dt className="font-semibold">Codex</dt><dd className="text-text-dim">{T.codexCloud}</dd>
             </dl>
           </div>

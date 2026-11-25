@@ -191,3 +191,7 @@ spec:
     {{- if not (or $cidrs .Values.platform.k3s.enabled) }}{{ fail "canyon.kubeAPI.cidrs is empty: set your API server's endpoint addresses (kubectl get endpoints kubernetes) and the kubernetes Service's cluster IP, or the server never reads the key set the egress gateway's token is checked against, and the gateway is never ready" }}{{ end }}
     - to: [{{ range $i, $cidr := $cidrs | default (list (printf "%s/32" .Values.platform.k3s.apiServer)) }}{{ if $i }}, {{ end }}{ipBlock: {cidr: {{ $cidr }}}}{{ end }}]
       ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]
+{{- if .Values.canyon.existingSecret }}{{/* the chart writes no Secret then, so these two would be dropped without a word (#149) */}}
+{{- if .Values.canyon.auth.allowedEmails }}{{ fail "canyon.auth.allowedEmails and canyon.existingSecret: put CANYON_OIDC_ALLOWED_EMAILS in that Secret instead" }}{{ end }}
+{{- if .Values.canyon.auth.allowedDomains }}{{ fail "canyon.auth.allowedDomains and canyon.existingSecret: put CANYON_OIDC_ALLOWED_DOMAINS in that Secret instead" }}{{ end }}
+{{- end }}

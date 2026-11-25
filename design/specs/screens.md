@@ -664,6 +664,12 @@ Two columns. Left 62% is the gate. Right 38% is state and the promote decision. 
 
 ### Renaming it (#1909)
 
+The header's ⋯ offers **Copy link** first, to everyone who opens the page, a read-only member and a responder
+included (amended 2026-11-24, #193): it copies `<public URL>/#/apps/<app>`, the host's public URL as `/auth/config`
+names it, never the page's own address with its pinned run or section, and says `Link copied` beside the ⋯, or
+`Couldn't copy. The browser did not allow it.` Until that URL is read it isn't offered. A link opened signed out comes
+back to the app after sign-in (A0), and one opened without access is the no-access screen.
+
 The header's ⋯ offers **Rename…** to the app's owners and admins, above **Delete app…**, and to nobody
 else. It opens a panel under the ⋯: `Name` and a field holding the current name, `Save` and `Cancel`,
 and under them `Only the name changes. Its address, canyon.toml and the CLI keep <id>.` Save sends
@@ -1028,7 +1034,9 @@ is never offered for a laptop):
 
 - **`On your laptop`**: three numbered steps, each a line to run, this host filled in from the page's own address:
   `Install the CLI` (`curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh`),
-  `Sign in to this Canyon` (`canyon login <host>`), `Set up your coding agents` (`canyon skill install`); then `The last
+  `Sign in to this Canyon` (`canyon login <host>`), `Set up your coding agents` (`canyon skill install`); then what to ask
+  the agent once it's set up, `Then open your agent in the app's folder and ask it: Deploy this app to Canyon.` (amended
+  2026-11-24, #192); then `The last
   step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's
   tools. They load the next time each agent starts.` Every host shows them, sign-in on or off.
 - **`In the cloud`**: `For agents that run on their vendor's machines. They review and deploy what you've pushed to
@@ -1043,6 +1051,10 @@ is never offered for a laptop):
   - `Cursor's cloud agents`: `A team admin adds this address as a team MCP server in Cursor's dashboard, under Plugins &
     MCPs.`
   - Codex: `Codex's cloud tasks can't connect to an MCP server yet. Use Codex on your laptop, with the CLI above.`
+
+  Claude Code on the web's and Cursor's each end with what to ask the agent once it's connected, `Then push the app to
+  GitHub and ask the agent: Deploy this repository to Canyon.`; Codex's, a host with no address and one with sign-in
+  off, none (amended 2026-11-24, #192).
 
   No agent's command, install link or managed settings for the address: each of those reaches a laptop. Where the
   metadata answers `404`, no address and `Agents can't connect to this Canyon by its address, because it isn't served

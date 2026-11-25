@@ -371,6 +371,44 @@ func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
 			t.Errorf("%s, a build value rotated since the build: %d %s, want 409 not_maskable", who, code, lastBody)
 		}
 	}
+	masked := func(who string, want int, wantErr string) {
+		t.Helper()
+		code, body, _ := do(t, carl, http.MethodGet, logs+"?env=prod&redaction=masked", "")
+		if code != want || (wantErr != "" && body["error"] != wantErr) {
+			t.Errorf("%s: %d %s, want %d %s", who, code, lastBody, want, wantErr)
+		}
+		if code == 200 {
+			reads++
+		}
+	}
+	rebuilt := func() { // the image built again, after every value set so far
+		t.Helper()
+		if _, err := pool.Exec(ctx, "UPDATE runs SET created_at = now() WHERE id = 'gr_seed'"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rebuilt()
+	started()
+	masked("rebuilt since the rotation", 200, "")
+	// a build value removed since the build: the image may hold it, and the vault has it no longer
+	if code, _, _ := do(t, olive, http.MethodDelete, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH?env=preview", ""); code != 204 {
+		t.Fatalf("the build value removed: %d %s", code, lastBody)
+	}
+	started()
+	masked("a build value removed since the build", 409, "not_maskable")
+	// an image no run records building: the deploy's gate run stands for its build, so a build value set before that run
+	// is masked, and one set after it is a change
+	rebuilt()
+	if _, err := pool.Exec(ctx, "UPDATE runs SET build_image = NULL WHERE id = 'gr_seed'"); err != nil {
+		t.Fatal(err)
+	}
+	started()
+	masked("an image no run records building, nothing set since its gate run", 200, "")
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/LATER_PATH", `{"value":"/api/later/one","where":"build"}`); code != 204 {
+		t.Fatalf("a build value after the gate run: %d %s", code, lastBody)
+	}
+	started()
+	masked("an image no run records building, a build value set since its gate run", 409, "not_maskable")
 	if n := count(t, ctx, pool, logsAudited); n != reads {
 		t.Fatalf("%d rows for %d reads served", n, reads)
 	}

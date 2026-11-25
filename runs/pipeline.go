@@ -1771,6 +1771,10 @@ func (p *Pipeline) Masked(ctx context.Context, app, env, line string) (string, e
 // removed since it started. With build, a build value of preview's set or removed since the image was built too (#223's
 // security review): the start of the first run whose build is that image, else the deploy's gate run, and none is a
 // change, since an image whose build no run records can't be told apart from one built with other values.
+//
+// The lookup joins runs.build_image to deploys.image: it relies on the two holding the same string, the image as the
+// build named it. built IS NULL can't happen today, since deploys.gate_run is NOT NULL and references a run, whose
+// created_at is NOT NULL; it stays a refusal so a build no run records fails closed if the schema ever lets one through.
 func (p *Pipeline) maskChanged(ctx context.Context, app, env string, build bool) (bool, error) {
 	var changed bool
 	err := p.Pool.QueryRow(ctx, `WITH d AS (SELECT run_started_at AS since,

@@ -58,6 +58,7 @@ type demoMachine struct {
 	imaged   bool                // every image the demo's compose file names is here
 	cleanEnv int                 // compose config --images asked without the shell's CANYON_IMAGE_* variables
 	store    string              // docker info's DriverStatus, as JSON: overlay2's unless a case says otherwise
+	theirs   map[string]bool     // the containers, networks and volumes another project's executor labelled as its own
 }
 
 // docker info's DriverStatus on each of Docker's two image stores, as hosted runners answered it (#165).
@@ -71,7 +72,7 @@ func demoOn(t *testing.T) *demoMachine {
 	t.Helper()
 	m := &demoMachine{t: t, home: t.TempDir(), deployer: "0", answers: true, apps: []string{"claims-portal", "witty-wren"},
 		ctrs: map[string]string{}, nets: map[string]string{}, images: map[string]string{}, refs: map[string]bool{},
-		tags: map[string][]string{}, users: map[string][]string{}, store: overlay2Status}
+		tags: map[string][]string{}, users: map[string][]string{}, store: overlay2Status, theirs: map[string]bool{}}
 	bundle := demoTar(t, map[string]string{"canyon/docker-compose.yml": "services: {}\n", "canyon/deploy/egress/floor.sh": "#!/bin/sh\n"})
 	release := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.fetched++
@@ -145,8 +146,13 @@ func demoOn(t *testing.T) *demoMachine {
 		if id, ok := strings.CutPrefix(line, "ps -a --filter ancestor="); ok {
 			id, _, _ = strings.Cut(id, " ")
 			for ref, rows := range m.users {
-				if demoID(ref) == id {
-					return strings.Join(rows, "\n"), nil
+				if demoID(ref) == id || ref == id { // a pulled image by its reference, a built one by its ID
+					var answer []string
+					for _, row := range rows { // "<name> <compose project>": no canyon.project of the demo's executor
+						name, project, _ := strings.Cut(row, " ")
+						answer = append(answer, name+"|"+project+"|")
+					}
+					return strings.Join(answer, "\n"), nil
 				}
 			}
 			return "", nil
@@ -193,7 +199,7 @@ func (m *demoMachine) answer(line string) string {
 		for _, app := range m.apps {
 			m.ctrs[app+"-preview"], m.nets["canyon-app-"+app] = app, app
 			m.vols = append(m.vols, "canyon-cache-"+app+"-build", "canyon-cache-"+app+"-launch")
-			m.images["id-"+app] = "canyon/" + app + ":pkg_1"
+			m.images["id-"+app] = "canyon-demo/" + app + ":pkg_1" // the second name the demo's executor gives each image it builds
 		}
 		m.images["id-builder"], m.images["id-scan"] = "canyon-builder:0a1b2c3d4e5f", "canyon-scan/opengrep:latest"
 		m.images["id-lifecycle-other"] = "buildpacksio/lifecycle:0.20.0" // another lifecycle, pack's own pull for another builder: never the demo's
@@ -232,23 +238,32 @@ func (m *demoMachine) answer(line string) string {
 		return strings.Join(m.project, "\n")
 	case strings.HasPrefix(line, compose("down -v")): // the server stops with it; --rmi all left the images it pulled by digest (#170)
 		m.up, m.server, m.project, m.answers = false, "", nil, false
-	case line == `ps -a --filter label=canyon.app --format {{.Names}} {{.Label "canyon.app"}}`:
-		return m.listed(m.ctrs)
-	case line == `network ls --filter label=canyon.app --format {{.Name}} {{.Label "canyon.app"}}`:
-		return m.listed(m.nets)
+	case line == "ps -a --filter label=canyon.project=canyon-demo --format {{.Names}}":
+		return m.ours(m.ctrs)
+	case line == "network ls --filter label=canyon.project=canyon-demo --format {{.Name}}":
+		return m.ours(m.nets)
+	case line == "volume ls -q --filter label=canyon.project=canyon-demo":
+		caches := map[string]string{}
+		for _, v := range m.vols {
+			if app, ok := strings.CutPrefix(v, "canyon-cache-"); ok {
+				caches[v] = app
+			}
+		}
+		return m.ours(caches)
 	case line == "ps -a --filter label=canyon.build --filter since=e1e2e3e4e5e6 --format {{.Names}}":
 		return strings.Join(m.transit, "\n")
 	case line == "ps -a --filter label=canyon.scan --filter since=e1e2e3e4e5e6 --format {{.Names}}", line == "ps -a --filter label=canyon.scan --format {{.Names}}":
 		return ""
 	case line == "ps -a --filter label=canyon.build --format {{.Names}}": // every build on the host: one from before the demo's executor too
 		return strings.Join(append([]string{"canyon-build-0ld0ld00"}, m.transit...), "\n")
-	case line == "volume ls -q --filter name=canyon-cache-", line == "volume ls -q --filter dangling=true --filter name=canyon-scandb-":
+	case line == "volume ls -q --filter dangling=true --filter name=canyon-scandb-":
 		return strings.Join(m.vols, "\n") // name= is a substring: canyon keeps only the names it means
-	case line == "images --filter reference=canyon/* --format {{.ID}} {{.Repository}}:{{.Tag}}":
-		return m.imageRows(func(ref string) bool { return strings.HasPrefix(ref, "canyon/") })
+	case line == "images --filter reference=canyon-demo/* --format {{.ID}} {{.Repository}}:{{.Tag}}":
+		return m.imageRows(func(ref string) bool { return strings.HasPrefix(ref, "canyon-demo/") })
 	case line == "images --filter reference=canyon-scan/* --filter reference=canyon-run --filter reference=canyon-builder --format {{.ID}} {{.Repository}}:{{.Tag}}":
 		return m.imageRows(func(ref string) bool {
-			return !strings.HasPrefix(ref, "canyon/") && !strings.HasPrefix(ref, "buildpacksio/")
+			repo, _, _ := strings.Cut(ref, ":")
+			return strings.HasPrefix(repo, "canyon-scan/") || repo == "canyon-run" || repo == "canyon-builder"
 		})
 	case line == "images --filter reference=buildpacksio/lifecycle --format {{.ID}} {{.Repository}}:{{.Tag}}":
 		return m.imageRows(func(ref string) bool { return strings.HasPrefix(ref, "buildpacksio/lifecycle:") })
@@ -276,15 +291,6 @@ func (m *demoMachine) answer(line string) string {
 
 // demoID is the ID the machine's Docker gives the image a reference pulled.
 func demoID(ref string) string { return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(ref))) }
-
-func (m *demoMachine) listed(byName map[string]string) string {
-	var rows []string
-	for name, app := range byName {
-		rows = append(rows, name+" "+app)
-	}
-	slices.Sort(rows)
-	return strings.Join(rows, "\n")
-}
 
 func (m *demoMachine) imageRows(keep func(string) bool) string {
 	var rows []string
@@ -314,6 +320,22 @@ func (m *demoMachine) another() {
 	m.ctrs["some-postgres"] = ""
 	m.vols = append(m.vols, "canyon-cache-ux-data-build", "canyon-cache-ux-data-launch", "canyon-cache-claims-portal-old")
 	m.images["id-ux-data"] = "canyon/ux-data:pkg_9"
+	for _, name := range []string{"ux-data-preview", "canyon-app-ux-data", "canyon-cache-ux-data-build", "canyon-cache-ux-data-launch", "canyon-cache-claims-portal-old"} {
+		m.theirs[name] = true // its executor's project is its own
+	}
+}
+
+// ours is the names of what of byName the demo's executor made, as Docker lists them by its label
+// canyon.project=canyon-demo: an app's, and no other project's.
+func (m *demoMachine) ours(byName map[string]string) string {
+	var own []string
+	for name, app := range byName {
+		if app != "" && !m.theirs[name] {
+			own = append(own, name)
+		}
+	}
+	slices.Sort(own)
+	return strings.Join(own, "\n")
 }
 
 // golden compares out, with the test's own addresses and folder put back to the ones a person sees,
@@ -781,9 +803,6 @@ func TestDemoDownNeverActsOnAnotherCanyonWhileTheDemosFilesAreHere(t *testing.T)
 			t.Errorf("%v with another Canyon running: exit %d, stdout %q, stderr %q, ran %q", args, code, out, errs, m.calls)
 		}
 	}
-	if kept, _ := demoKept(filepath.Join(m.home, ".canyon", "demo")); slices.Contains(kept, "team-app") {
-		t.Errorf("the team Canyon's app was kept as the demo's: %v", kept)
-	}
 	if _, ok := m.ctrs["team-app-preview"]; !ok {
 		t.Errorf("down removed the team Canyon's app")
 	}
@@ -830,22 +849,37 @@ func TestDemoDownPurgeKeepsAPersonsTagTheComposeFileAlsoWrites(t *testing.T) {
 	}
 }
 
-// Only a running canyon-server of the demo's is asked which apps are its own: with it stopped, whatever answers on the
-// demo's port is something else, and down takes the apps as up kept them (#170).
-func TestDemoDownAsksNoServerWhileTheDemosIsStopped(t *testing.T) {
+// down takes what the demo's executor labelled canyon.project=canyon-demo, and nothing by its app id alone (#178): after
+// an earlier down, another Canyon on this Docker made an app of the same id, claims-portal, as dev and e2e stacks do,
+// and down --purge takes none of it: not its container, network, caches, nor its image.
+func TestDemoDownTakesOnlyWhatTheDemosExecutorLabelled(t *testing.T) {
 	m := demoOn(t)
 	if _, errs, code := m.run("up"); code != exitOK {
 		t.Fatalf("up: exit %d, %s", code, errs)
 	}
-	m.up = false                  // canyon-server is there, stopped
-	m.apps = []string{"stranger"} // what answers on the port now
-	m.ctrs["stranger-preview"] = "stranger"
 	if _, errs, code := m.run("down"); code != exitOK {
 		t.Fatalf("down: exit %d, %s", code, errs)
 	}
-	kept, _ := demoKept(filepath.Join(m.home, ".canyon", "demo"))
-	if _, there := m.ctrs["stranger-preview"]; !there || slices.Contains(kept, "stranger") {
-		t.Fatalf("down took what answers on the port as the demo's: containers %v, kept %v", m.ctrs, kept)
+	theirs := []string{"claims-portal-preview", "canyon-app-claims-portal", "canyon-cache-claims-portal-build", "canyon-cache-claims-portal-launch"}
+	m.ctrs["claims-portal-preview"], m.nets["canyon-app-claims-portal"] = "claims-portal", "claims-portal"
+	m.vols = append(m.vols, "canyon-cache-claims-portal-build", "canyon-cache-claims-portal-launch")
+	m.images["id-theirs"] = "canyon/claims-portal:pkg_theirs"
+	for _, name := range theirs {
+		m.theirs[name] = true
+	}
+	m.users["id-witty-wren"] = []string{"wren-copy canyon-team"} // a container of another project runs the demo's own image
+	out, errs, code := m.run("down", "--purge")
+	if code != exitOK || !strings.Contains(out, "    image canyon-demo/witty-wren:pkg_1 (the container wren-copy uses it)\n") {
+		t.Fatalf("down --purge: exit %d, stderr %q\n%s", code, errs, out)
+	}
+	if _, ok := m.images["id-witty-wren"]; !ok || m.images["id-claims-portal"] != "" {
+		t.Errorf("purge took the image another project's container uses, or left the demo's own: %v", m.images)
+	}
+	_, ctr := m.ctrs["claims-portal-preview"]
+	_, net := m.nets["canyon-app-claims-portal"]
+	_, img := m.images["id-theirs"]
+	if !ctr || !net || !img || !slices.Contains(m.vols, "canyon-cache-claims-portal-build") || !slices.Contains(m.vols, "canyon-cache-claims-portal-launch") {
+		t.Fatalf("down --purge took another Canyon's claims-portal: container %v, network %v, image %v, volumes %q", ctr, net, img, m.vols)
 	}
 }
 
@@ -907,27 +941,6 @@ func TestDemoDownPurgeFailsClosedOnAnImageItCannotRead(t *testing.T) {
 	}
 }
 
-// With no server answering and no list of its apps, down names everything of the demo's it found left, its images
-// among them, never only the containers (#170).
-func TestDemoDownWithNoServerAndNoListNamesWhatIsLeft(t *testing.T) {
-	m := demoOn(t)
-	if _, errs, code := m.run("up"); code != exitOK {
-		t.Fatalf("up: exit %d, %s", code, errs)
-	}
-	must(t, os.Remove(demoAppsKept(filepath.Join(m.home, ".canyon", "demo"))))
-	m.answers = false
-	m.docker = func(line string) (string, error, bool) {
-		if strings.HasPrefix(line, "image rm ") {
-			return "", errors.New("exit status 1: Error response from daemon: conflict"), true // the images stay
-		}
-		return "", nil, false
-	}
-	out, errs, code := m.run("down", "--purge")
-	if code != exitError || !strings.Contains(errs, "These may be the demo's:\n    container claims-portal-preview\n    container witty-wren-preview\n") || !strings.Contains(errs, "    image ghcr.io/getcanyon-ai/canyon-server@sha256:aa\n") {
-		t.Fatalf("exit %d, stdout %q, stderr\n%s", code, out, errs)
-	}
-}
-
 // down says done only when Docker holds nothing of the demo's: what it could not remove is named,
 // and a listing Docker refused is a failure, never "nothing found".
 func TestDemoDownNamesWhatItLeftAndExits1(t *testing.T) {
@@ -960,24 +973,11 @@ func TestDemoDownNamesWhatItLeftAndExits1(t *testing.T) {
 	if out, errs, code := m.run("down"); code != exitError || strings.Contains(out, "✓") || !strings.Contains(errs, "Docker could not list the demo's networks: exit status 1: Cannot connect to the Docker daemon") {
 		t.Fatalf("a listing Docker refused: exit %d, stdout %q, stderr\n%s", code, out, errs)
 	}
-
-	// A server that does not answer cannot say which apps are its own: with no list up or an earlier down kept
-	// (#170), down removes none, and says so.
-	m = demoOn(t)
-	if _, errs, code := m.run("up"); code != exitOK {
-		t.Fatalf("up: exit %d, %s", code, errs)
-	}
-	must(t, os.Remove(demoAppsKept(filepath.Join(m.home, ".canyon", "demo"))))
-	m.answers = false
-	out, errs, code = m.run("down")
-	if code != exitError || m.ran("rm -f") != 0 || !strings.Contains(errs, "The demo's server didn't answer, so no app was removed. These may be the demo's:\n    container claims-portal-preview\n    container witty-wren-preview") {
-		t.Fatalf("exit %d, stdout %q, stderr\n%s", code, out, errs)
-	}
 }
 
-// A server that does not answer, on a demo whose up kept the list of its apps: down removes them all the same, and
-// nothing another Canyon made (#170).
-func TestDemoDownWithTheServerGoneRemovesTheAppsUpKept(t *testing.T) {
+// A server that does not answer has nothing to say: down removes what the demo's executor labelled all the same, and
+// nothing another Canyon's did (#178).
+func TestDemoDownWithTheServerGoneRemovesWhatTheDemoLabelled(t *testing.T) {
 	m := demoOn(t)
 	m.another()
 	if _, errs, code := m.run("up"); code != exitOK {

@@ -3886,8 +3886,8 @@ was asked to "get Canyon running" improvised: it installed an engine, edited Doc
 |---|---|
 | `canyon demo up` | The five stages below, ending `✓ Canyon is ready at http://localhost:7777`. It can be run again at any point: it keeps what it downloaded, and on a demo that is already running it checks, signs in and says the same line |
 | `canyon demo tour` | The guided tour on this demo, a chapter at a time (§6.14.1) |
-| `canyon demo down` | `make demo-down` for a machine with no checkout, on the demo alone: its Compose project with its volumes, then what its executor made for the apps its own server lists, read before it stops: their containers and networks (`canyon.app=<app>`), their build caches (`canyon-cache-<app>-build`, `-launch`), and the builds and scans (`canyon.build`, `canyon.scan`) started since its executor did. Nothing another Canyon on this Docker made is touched. Images and the scanners' databases stay, so the next start is quick |
-| `canyon demo down --purge` | The same, and the images too: the demo's own, as its compose file named them when `up` started it (`up` keeps that in `~/.canyon/demo/images`; with none kept, the file's own pins, read without the shell's `CANYON_IMAGE_*`), and the scanners' its executor pulls, each by its reference; the ones it built for its apps (`canyon/<app>`); Canyon's tool images (`canyon-scan/*`, `canyon-run`, `canyon-builder`); the lifecycle by its pin's linux/amd64 and linux/arm64 digests alone, never by repository; the scanners' databases (`canyon-scandb-*`) nothing uses; the build network; and `~/.canyon/demo`. It works the same after a `down`, with the server gone. An image pulled by digest that something else holds stays, each named with why under `These images stay, because something else on this Docker holds them:` (below) (**amended 2026-11-24**, #170) |
+| `canyon demo down` | `make demo-down` for a machine with no checkout, on the demo alone: its Compose project with its volumes, then what its executor made for its apps, by the label it puts on each (`canyon.project=canyon-demo`; **amended 2026-11-25**, #178): their containers and floor holders, networks and build caches, and the builds and scans (`canyon.build`, `canyon.scan`) started since its executor did. Nothing another Canyon on this Docker made is touched. Images and the scanners' databases stay, so the next start is quick |
+| `canyon demo down --purge` | The same, and the images too: the demo's own, as its compose file named them when `up` started it (`up` keeps that in `~/.canyon/demo/images`; with none kept, the file's own pins, read without the shell's `CANYON_IMAGE_*`), and the scanners' its executor pulls, each by its reference; the ones its executor built for its apps, by the second name it gives each (`canyon-demo/<app>`), removed by ID with their `canyon/<app>` name, unless a container that isn't the demo's uses one; Canyon's tool images (`canyon-scan/*`, `canyon-run`, `canyon-builder`); the lifecycle by its pin's linux/amd64 and linux/arm64 digests alone, never by repository; the scanners' databases (`canyon-scandb-*`) nothing uses; the build network; and `~/.canyon/demo`. It works the same after a `down`, with the server gone. An image pulled by digest that something else holds stays, each named with why under `These images stay, because something else on this Docker holds them:` (below) (**amended 2026-11-24**, #170) |
 
 **The demo is its own Compose project** (**amended 2026-11-15**, review of #2866). Every compose call runs as
 `docker compose -p canyon-demo --profile demo-apps`, whatever the folder: the bundle unpacked by hand into `canyon/`,
@@ -3902,14 +3902,14 @@ never Compose's progress, as `up` does.
 **down says the demo is gone only when it is.** After the sweep it lists again what it removed. Anything left is named,
 a line each (`container claims-portal-preview`), under `✗ The demo is stopped, but these are left:`, and the verb
 exits 1; a listing Docker refuses is a failure, never an empty list, and only Docker's own `No such image` says an
-image is gone. A server that does not answer cannot say which apps are its own: `down` then removes no app container,
-names every `canyon.app` container it found as ones that may be the demo's, and what of the demo's own is left, and
-exits 1.
+image is gone.
 
-**Which apps are the demo's, when its server is gone** (**amended 2026-11-24**, #170). `up` keeps the ids its server
-lists in `~/.canyon/demo/apps`, and each `down` whose server answers adds the ones it lists; only the server of the
-compose project `canyon-demo` is ever asked, and only while its container runs. A `down` whose server does not answer, as one after an earlier `down`,
-takes the apps from that file; only with neither does it remove no app and name the `canyon.app` containers as above.
+**What is the demo's** (**amended 2026-11-25**, #178; it was a list of app ids, #170). The demo's executor labels
+everything it makes for an app `canyon.project=canyon-demo`, its own compose project, and gives each image it builds
+a second name, `canyon-demo/<app>:<tag>` (contracts/executor.md). `down` takes those, and nothing by an app's id
+alone, which another Canyon on the same Docker can share. No server is asked, so a `down` after an earlier `down`, with
+the server gone, takes the same. A demo an executor before this release started carries no label, so `down` doesn't
+find its apps' containers, networks and caches.
 
 **An image something else holds stays** (**amended 2026-11-24**, #170). On Docker's containerd image store, removing
 a reference by digest takes every tag of its repository at that digest with it. So `--purge` keeps an image it pulled

@@ -1778,13 +1778,14 @@ func (p *Pipeline) Masked(ctx context.Context, app, env, line string) (string, e
 func (p *Pipeline) maskChanged(ctx context.Context, app, env string, build bool) (bool, error) {
 	var changed bool
 	err := p.Pool.QueryRow(ctx, `WITH d AS (SELECT run_started_at AS since,
-			(SELECT min(r.created_at) FROM runs r WHERE r.project_id = $1 AND r.build_image = deploys.image) AS built
+			coalesce((SELECT min(r.created_at) FROM runs r WHERE r.project_id = $1 AND r.build_image = deploys.image), (SELECT r.created_at FROM runs r WHERE r.id = deploys.gate_run)) AS built
 			FROM deploys WHERE project_id = $1 AND env = $2 AND run_started_at IS NOT NULL)
 		SELECT NOT EXISTS (SELECT 1 FROM d)
 			OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = $2 AND set_at >= d.since)
 			OR EXISTS (SELECT 1 FROM audit_events, d WHERE project_id = $1 AND action = 'DELETE /api/v1/projects/{id}/secrets/{name}' AND detail->>'env' = $2 AND ts >= d.since)
 			OR ($3 AND (EXISTS (SELECT 1 FROM d WHERE built IS NULL)
-				OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = 'preview' AND scope = 'build' AND set_at >= d.built)))`,
+				OR EXISTS (SELECT 1 FROM secrets, d WHERE project_id = $1 AND env = 'preview' AND scope = 'build' AND set_at >= d.built)
+				OR EXISTS (SELECT 1 FROM audit_events, d WHERE project_id = $1 AND action = 'DELETE /api/v1/projects/{id}/secrets/{name}' AND detail->>'env' = 'preview' AND ts >= d.built)))`,
 		app, env, build).Scan(&changed)
 	return changed, err
 }

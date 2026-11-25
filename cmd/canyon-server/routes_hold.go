@@ -191,7 +191,7 @@ func (a *app) hold(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	detail := map[string]any{"env": "prod", "reason": body.Reason, "cancelled": []string{}}
+	detail := map[string]any{"env": "prod", "reason": body.Reason, "cancelled": []string{}, "stop": runs.StopOf(runBy == "canyon", handedOff)}
 	if pkg != nil {
 		_, digest, _ := strings.Cut(*image, "@")
 		detail["package"], detail["image_digest"] = *pkg, digest

@@ -74,6 +74,9 @@ executor/appfloor.sh                compose-up
 LICENSE                             images
 NOTICE                              images
 THIRD_PARTY_NOTICES                 images
+scripts/builder-node.sh             images deploy-bundle
+deploy/k8s/builds.yaml              images
+internal/tools/paketobump/**        images
 scripts/deploy-bundle.sh            deploy-bundle
 scripts/deploy-bundle-check.sh      deploy-bundle
 scripts/guide-block.sh              deploy-bundle

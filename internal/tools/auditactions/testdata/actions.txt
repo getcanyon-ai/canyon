@@ -1,0 +1,126 @@
+DELETE /api/v1/projects/{id}
+DELETE /api/v1/projects/{id}/envs/{env}
+DELETE /api/v1/projects/{id}/secrets/{name}
+GET /api/v1/projects/{id}/logs
+POST /api/v1/design-systems
+POST /api/v1/gate-runs/{id}/cancel
+POST /api/v1/gate-runs/{run}/findings/approve
+POST /api/v1/gate-runs/{run}/findings/{fingerprint}/approve
+POST /api/v1/guardrails/setup
+POST /api/v1/projects
+POST /api/v1/projects/{id}/deploys
+POST /api/v1/projects/{id}/gate-runs
+POST /api/v1/projects/{id}/packages
+POST /api/v1/projects/{id}/packages/from-repository
+POST /api/v1/projects/{id}/promotions
+PUT /api/v1/licence
+PUT /api/v1/preferences
+PUT /api/v1/projects/{id}/owner
+PUT /api/v1/projects/{id}/secrets/{name}
+PUT /api/v1/telemetry
+app_policy.remove
+app_policy.set
+approve patch identity
+approve promotion
+attach image report
+attach report
+bind grants
+build failed
+build had no room
+commit release
+complete setup
+connect agent
+create kept repository
+custom_rule.set
+db session attached
+db session closed
+db session opened
+db write session opened
+declare resource
+delete resource
+denied
+deny promotion
+deploy from github
+deploy preview
+deploy prod
+detect failed
+disconnect agent
+dismiss access request
+egress.allow
+egress.ca.rotate
+egress.disallow
+egress.mode.set
+egress.networks.recreate
+egress.request
+egress.request.dismiss
+egress.route.remove
+egress.route.set
+egress.set
+ensure resource
+gate run from github
+github app registered
+hand over repository
+import repository
+integration.channel.failing
+integration.channel.removed
+integration.channel.set
+integration.channel.tested
+keep version in github
+lift hold
+link github account
+link repository
+package from github
+patch preview
+patch prod
+patching off at start
+pause patching
+platform reported another digest
+platform reported deployed
+platform reported deployed without resources
+platform reported failed
+platform reported removed
+policy.set
+pull request changed
+pull request closed
+reissue resource password
+release live by check-in
+release removed by commit
+release tree mismatch
+remove playbook
+rename app
+replace platform repo host token
+replace platform repo token
+repository changed
+request access
+request patch approval
+request promotion
+request undeploy
+restore playbook
+resume patching
+revert patch preview
+revert patch prod
+revoke session
+revoke sessions
+rotate fetch token
+rotate platform secret
+rotate platform token
+scanner.credential.remove
+scanner.credential.set
+send remove again
+set auto-deploy
+set front door
+set github client secret
+set github org
+set platform repo
+set platform webhook
+set playbook
+share app
+sign in
+sign in refused
+sign out
+start failed
+stop app
+unlink repository
+unshare app
+update sidecar
+verdict

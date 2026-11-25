@@ -217,7 +217,7 @@ describe("the audit screen", () => {
     "patch prod", "revert patch prod", "request patch approval", "approve patch identity",
   ];
   const PLATFORM = [
-    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest",
+    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest", "platform reported deployed without resources",
     "commit release", "release live by check-in", "release removed by commit", "release tree mismatch", "pull request closed", "pull request changed",
   ];
   const NOT_PRODUCTION = [

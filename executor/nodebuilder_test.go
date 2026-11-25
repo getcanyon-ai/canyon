@@ -106,17 +106,18 @@ func TestTheNodeBuilderIsChosenOnlyWhenNoEarlierGroupCouldPass(t *testing.T) {
 }
 
 // GET /builder's identity with a Node builder covers both builders: the Node builder's image ID and canyon-builder's
-// file, never canyon-builder's image ID, which only a download makes.
+// two files, whose hashes make its own's tag (TestBuildNeverTrustsTheBuilder), never an image ID, which only a
+// download makes.
 func TestTheIdentityCoversBothBuildersWithoutTheFullOnesImage(t *testing.T) {
 	one, two := nodeIdentity("sha256:"+strings.Repeat("a", 64)), nodeIdentity("sha256:"+strings.Repeat("b", 64))
 	if one == two || !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(one) {
 		t.Fatalf("another Node builder, the same identity, or not sha256:<64 hex>: %s %s", one, two)
 	}
-	saved := builderImage.repo
-	defer func() { builderImage.repo = saved }()
-	builderImage.repo = "canyon-builder:000000000000"
+	saved := ownBuilder.repo
+	defer func() { ownBuilder.repo = saved }()
+	ownBuilder.repo = "canyon-builder:000000000000"
 	if nodeIdentity("sha256:"+strings.Repeat("a", 64)) == one {
-		t.Fatal("another builder.Dockerfile, the same identity")
+		t.Fatal("another builder.Dockerfile or builder.own.Dockerfile, the same identity")
 	}
 }
 
@@ -157,9 +158,12 @@ func TestANodeAppBuildsOnTheNodeBuilderWithNoEphemeralCopy(t *testing.T) {
 	if argv := build("", map[string]string{"NEXT_PUBLIC_API_URL": "https://api.example"}, node); !strings.Contains(argv, "\n--env\nNEXT_PUBLIC_API_URL\n") || strings.Contains(argv, "NODE_ENV") || !strings.Contains(argv, nodeRef) {
 		t.Errorf("a Node app with a build value: pack argv %q", argv)
 	}
-	tag := "canyon-builder:" + builderImage.repo[len("canyon-builder:"):]
-	if argv := build("", nil, map[string]string{"package.json": "{}", "requirements.txt": ""}); !strings.Contains(argv, "\n--builder\n"+tag+"\n") || !strings.Contains(argv, "\n--run-image\ncanyon-run:noble\n") || !strings.Contains(argv, "\n--env\nNODE_ENV\n") {
-		t.Errorf("a tree the Node builder can't take: pack argv %q", argv)
+	python := map[string]string{"package.json": "{}", "requirements.txt": ""}
+	if argv := build("", nil, python); !strings.Contains(argv, "\n--builder\n"+ownBuilder.repo+"\n") || strings.Contains(argv, "--run-image") || strings.Contains(argv, "--env") {
+		t.Errorf("a tree the Node builder can't take, with no build values: pack argv %q", argv)
+	}
+	if argv := build("", map[string]string{"NODE_ENV": "test"}, node); !strings.Contains(argv, "\n--builder\n"+builderImage.repo+"\n") || !strings.Contains(argv, "\n--run-image\ncanyon-run:noble\n") || !strings.Contains(argv, "\n--env\nNODE_ENV\n") {
+		t.Errorf("a build value naming NODE_ENV: pack argv %q", argv)
 	}
 	if argv := build("paketobuildpacks/ubuntu-noble-builder", nil, node); strings.Contains(argv, nodeRef) {
 		t.Errorf("CANYON_BUILDER set: pack argv %q", argv)

@@ -504,16 +504,20 @@ func (e *Executor) idOf(ctx context.Context, image string) (string, error) {
 	return got, nil
 }
 
-// builder is the builder a /build builds with: CANYON_BUILDER, else canyon-builder, built first when
-// the daemon has none.
-func (e *Executor) builder(ctx context.Context) (string, error) {
+// builder is the builder a /build builds with: CANYON_BUILDER, else canyon-builder, built first when the daemon has
+// none: with own, the one whose run image and two build variables are its own (ownBuilder), else builderImage's.
+func (e *Executor) builder(ctx context.Context, own bool) (string, error) {
 	if e.Builder != "" {
 		return untrusted(e.Builder), nil
 	}
-	if _, err := builderImage.built(ctx, e.docker()); err != nil {
+	image := builderImage
+	if own {
+		image = ownBuilder
+	}
+	if _, err := image.built(ctx, e.docker()); err != nil {
 		return "", builderFailed(err)
 	}
-	return builderImage.repo, nil
+	return image.repo, nil
 }
 
 // builderFailed names canyon-builder in its build's error, but for a build past its deadline, whose words do.
@@ -536,6 +540,9 @@ func (e *Executor) Prepared() time.Time {
 		}
 	case e.Builder == "":
 		at = builderImage.builtAt()
+		if own := ownBuilder.builtAt(); own.After(at) {
+			at = own
+		}
 	}
 	if ran := runImage.builtAt(); e.RunImage == "" && ran.After(at) {
 		at = ran
@@ -544,8 +551,8 @@ func (e *Executor) Prepared() time.Time {
 }
 
 // BuilderImage is the identity of the builder a /build now builds with: its image's ID on the daemon —
-// CANYON_BUILDER's pulled first when the daemon has none, as a build pulls it, canyon-builder's built
-// first — (contracts/executor.md, GET /builder).
+// CANYON_BUILDER's pulled first when the daemon has none, as a build pulls it, canyon-builder's own built
+// first, which covers the canyon-builder it is built from — (contracts/executor.md, GET /builder).
 func (e *Executor) BuilderImage(ctx context.Context) (string, error) {
 	if e.nodeOn() {
 		_, id, err := e.nodeBuilder(ctx)
@@ -555,7 +562,7 @@ func (e *Executor) BuilderImage(ctx context.Context) (string, error) {
 		return nodeIdentity(id), nil
 	}
 	if e.Builder == "" {
-		id, err := builderImage.built(ctx, e.docker())
+		id, err := ownBuilder.built(ctx, e.docker())
 		if err != nil {
 			return "", builderFailed(err)
 		}
@@ -630,13 +637,14 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 }
 
 // buildOn builds the tree in dir on the Node builder, or else on the one builder (CANYON_BUILDER or canyon-builder).
-// The Node builder carries canyon-run:noble and the executor's two build variables, so with no build values pack is
-// handed neither --run-image nor --env and builds on it as it is, never on an ephemeral copy; its log is held back
-// until its detection passed.
+// The Node builder and ownBuilder carry canyon-run:noble and the executor's two build variables, so with no build
+// values pack is handed neither --run-image nor --env and builds on them as they are, never on an ephemeral copy; the
+// Node builder's log is held back until its detection passed.
 func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, out io.Writer, node bool) (BuildResult, error) {
+	own := !node && e.ownBuilderFor(ctx, dir, req.BuildValues)
 	env := BuildEnv(req.BuildValues)
-	if node {
-		env = req.BuildValues // fullBuilderFor sent a build value of either of the executor's own two elsewhere
+	if node || own {
+		env = req.BuildValues // a build that names either of the executor's own two builds on canyon-builder's base
 	}
 	values, err := envPairs(env, true)
 	if err != nil {
@@ -650,7 +658,7 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 		_, _ = fmt.Fprintf(out, "This app needs Canyon's full build image, which this Docker host doesn't have yet. Downloading it once: %s\n", builderSize)
 		fallthrough
 	default:
-		builder, err = e.builder(ctx)
+		builder, err = e.builder(ctx, own)
 	}
 	if err != nil {
 		return BuildResult{}, &HostFailed{Message: err.Error()}
@@ -677,7 +685,7 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 		"--descriptor", descriptor,
 		// one pair per app, one flag per type (pack reads one type from each): pack's default is named after the per-build tag, so each build left two volumes behind
 		"--cache", "type=build;format=volume;name=" + names.CacheVolume(req.App, "build"), "--cache", "type=launch;format=volume;name=" + names.CacheVolume(req.App, "launch")}
-	if !node || e.RunImage != "" { // the Node builder names canyon-run:noble itself
+	if !node && !own || e.RunImage != "" { // the Node builder and ownBuilder name canyon-run:noble themselves
 		args = append(args, "--run-image", e.runName())
 	}
 	for _, k := range sortedKeys(env) {

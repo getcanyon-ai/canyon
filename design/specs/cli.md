@@ -4472,6 +4472,9 @@ app's id into `canyon.toml`. After that, run `canyon check` after a change that 
 a dependency, a route or a secret: it runs the review a deploy runs, without
 deploying, so you fix what blocks before the deploy.
 
+Start a new app on a version of its language that its vendor still supports:
+for .NET, that's .NET 10 (`net10.0` in the project file).
+
 A static single-page app (a Vite app, say) runs no server of its own: give it this
 `project.toml` at its root and Canyon serves the files its build writes.
 `BP_WEB_SERVER_ROOT` is the directory they are written to — `dist` for Vite.

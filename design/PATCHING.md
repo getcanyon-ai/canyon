@@ -702,7 +702,18 @@ live container to watch between runs); the tag cleanup keeps every image a deplo
   `npm 10.8.2 → 10.9.x`): Actions cannot open pull requests in this repository by design, and a
   person's PR runs its checks as any other (decided 2026-11-02, #2114). An open issue for the same pins is updated, never
   a second. This is how Node and Python security releases, which trivy cannot see (§2), still reach
-  Canyon on a schedule. An operator moves faster with `CANYON_BUILDER` and `CANYON_IMAGE_RUN`.
+  Canyon on a schedule, except for the Python of an app built with uv. An operator moves faster with
+  `CANYON_BUILDER` and `CANYON_IMAGE_RUN`.
+- **A uv app's Python is uv's choice** (#160). uv chooses and downloads CPython itself during the build: the newest
+  its own version knows that the app's `requires-python` allows, fetched from outside the pinned images (3.15.2, where
+  a pipenv app on the same builder got the builder's 3.11.18). So a bump moves that Python only as far as a newer uv
+  knows a newer one, and a rebuild of unchanged code can get another. Having uv use the builder's CPython is #210.
+- **Which .NET line an app builds on is the app's own** (#159): the `TargetFramework` its project file names. Paketo's
+  default line (`8.*`) is used only where nothing names one, so for an app built from a project file it decides
+  nothing. Canyon builds every line its pins carry, one past its vendor's support date too (.NET 8 and 9 since
+  2026-11-10; by the pinned buildpacks' dates, also Node 18 and 20, Python 3.10 and PHP 8.3), and a bump brings such a
+  line nothing more. Canyon's skill tells coding agents to start a new app on a version its vendor still supports,
+  .NET 10 for .NET; a finding for an app on a line past its date is #211.
 - **Rebuild patches** — opt-in, **always asked**, never called platform-only (built 2026-11-02, #2111, #2117;
   contracts/routes.md, *Patch runs*, *A rebuild patch*). The org's **`rebuilds` ∈ `off | ask`**, `off` by default,
   is set as `patching` is: an admin's, from a browser session, audited, and read `off` while `patching` is. Each

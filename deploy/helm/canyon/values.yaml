@@ -43,8 +43,8 @@ canyon:
   auth:
     mode: oidc            # CANYON_AUTH: oidc only; the chart refuses to render off and demo
     admins: []            # CANYON_ADMINS (required under oidc)
-    allowedEmails: []     # CANYON_OIDC_ALLOWED_EMAILS
-    allowedDomains: []    # CANYON_OIDC_ALLOWED_DOMAINS
+    allowedEmails: []     # CANYON_OIDC_ALLOWED_EMAILS; with existingSecret the chart refuses it: put it in the Secret
+    allowedDomains: []    # CANYON_OIDC_ALLOWED_DOMAINS; the same
     adminClaim: ""        # CANYON_ADMIN_CLAIM + CANYON_ADMIN_VALUE, both or neither
     adminValue: ""
     responderClaim: ""    # CANYON_RESPONDER_CLAIM + CANYON_RESPONDER_VALUE, both or neither: security responders

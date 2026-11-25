@@ -1250,3 +1250,23 @@ func TestATailHoldsItsBoundAndStartsAtALine(t *testing.T) {
 		t.Fatalf("a tail within the bound is kept whole: %q", short.Lines())
 	}
 }
+
+// Short says whether any text Mask replaces is under n characters: a value, a line of a multi-line one, or a URL's
+// password, whose name in its place would give a short one away (#223's security review).
+func TestShortSeesEveryTextMaskReplaces(t *testing.T) {
+	for name, c := range map[string]struct {
+		env  map[string]string
+		want bool
+	}{
+		"long values":                  {map[string]string{"GREETING": "hello, world"}, false},
+		"a short value":                {map[string]string{"GREETING": "hello, world", "PIN": "4321"}, true},
+		"a short line of a long value": {map[string]string{"KEY": "-----BEGIN-----\nab\n-----END-----"}, true},
+		"a short URL password":         {map[string]string{"DATABASE_URL": "postgres://canyon:pw@db:5432/app"}, true}, //nolint:gosec // G101: a synthetic URL, its password two letters
+		"eight characters, in runes":   {map[string]string{"WORD": "ééééééééé"[:16]}, false},
+		"none":                         {nil, false},
+	} {
+		if got := Short(c.env, 8); got != c.want {
+			t.Errorf("%s: Short = %v, want %v", name, got, c.want)
+		}
+	}
+}

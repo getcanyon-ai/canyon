@@ -20,6 +20,8 @@ const (
 	// is refused whole, never cut, since a cut can split a secret's value and leave its tail in the clear.
 	maxMaskedLines = 200
 	maxMaskedBytes = 1 << 20
+	// The shortest value a security responder's masked read masks with: the name in a shorter one's place gives it away.
+	responderMaskMin = 8
 )
 
 // keepaliveLine is what the stream carries after logsKeepalive with nothing from the app
@@ -90,6 +92,10 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, id := r.Context(), r.PathValue("id")
+	if responderLogs(ctx) && (env != "prod" || !masked) { // the read as parsed: a repeated or unparsable parameter never counts as another
+		a.teamRequired(ctx, w, a.pool, id)
+		return
+	}
 	if !a.projectLive(ctx, w, id) {
 		return
 	}
@@ -122,7 +128,7 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 		a.maskedLogs(w, r, id, env, stream)
 		return
 	}
-	if err := a.auditRead(r, id, env); err != nil {
+	if err := a.auditRead(r, id, env, "none"); err != nil {
 		a.log.Printf("canyon-server: logs %s/%s: audit: %v", id, env, err)
 		writeErr(w, http.StatusInternalServerError, "internal", "internal error", nil)
 		return
@@ -142,22 +148,36 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 // (runs.Pipeline.Masked), so a value Canyon knows is a secret never reaches the answer. A log Canyon can't
 // mask that way, a secret of env set or removed since what runs there started or a start with no record, is 409 and
 // no line. One over maxMaskedBytes is 422 and no line: it is never cut to fit.
+// It masks with env's build values too (pipe.LogValues). A security responder's read below contributor is 409 too where a
+// value is under responderMaskMin characters, which the name in its place would give away, and its 422 names no canyon
+// logs, whose raw read isn't theirs (#223's security review).
 func (a *app) maskedLogs(w http.ResponseWriter, r *http.Request, id, env string, stream io.Reader) {
+	responder := responderLogs(r.Context())
 	raw, err := io.ReadAll(io.LimitReader(stream, maxMaskedBytes+1))
 	if err == nil && len(raw) > maxMaskedBytes {
-		writeErr(w, http.StatusUnprocessableEntity, "too_long_to_mask", "the last lines are over 1 MiB, too much to check for secrets: canyon logs --env "+env+" shows them", nil)
+		said := "the last lines are over 1 MiB, too much to check for secrets"
+		if !responder {
+			said += ": canyon logs --env " + env + " shows them"
+		}
+		writeErr(w, http.StatusUnprocessableEntity, "too_long_to_mask", said, nil)
 		return
 	}
-	said := ""
+	var values map[string]string
+	ok := false
 	if err == nil {
-		said, err = a.pipe.Masked(r.Context(), id, env, string(raw))
+		values, ok, err = a.pipe.LogValues(r.Context(), id, env)
 	}
-	if err == nil && said == "" && len(raw) > 0 {
+	if err == nil && !ok && len(raw) > 0 {
 		writeErr(w, http.StatusConflict, "not_maskable", "Canyon can't tell which secret values the app in "+env+" started with, so it can't mask its log", nil)
 		return
 	}
+	if err == nil && responder && executor.Short(values, responderMaskMin) {
+		writeErr(w, http.StatusConflict, "not_maskable", "a secret of "+env+" is too short to hide by its name, so Canyon doesn't show its log to a security responder", nil)
+		return
+	}
+	said := executor.Mask(string(raw), values)
 	if err == nil {
-		err = a.auditRead(r, id, env)
+		err = a.auditRead(r, id, env, "masked")
 	}
 	if err != nil {
 		a.log.Printf("canyon-server: logs %s/%s: masked: %v", id, env, err)
@@ -226,15 +246,15 @@ func follow(w io.Writer, flush func() error, r io.Reader, every time.Duration) e
 	}
 }
 
-// auditRead writes the one row of a served log read: the reader and the env, never a line.
-func (a *app) auditRead(r *http.Request, id, env string) error {
+// auditRead writes the one row of a served log read: the reader, the env and the redaction, never a line.
+func (a *app) auditRead(r *http.Request, id, env, redaction string) error {
 	ctx := r.Context()
 	tx, err := a.mutation(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := events.AuditTx(ctx, tx, actorOf(ctx), action(r), id, "", map[string]any{"env": env}); err != nil {
+	if err := events.AuditTx(ctx, tx, actorOf(ctx), action(r), id, "", map[string]any{"env": env, "redaction": redaction}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

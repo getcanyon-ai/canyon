@@ -257,7 +257,7 @@ func (a *app) demoPreflight(ctx context.Context, stack string) []gap {
 		gaps = append(gaps, gap{"Docker could not download and run a small image: " + cell(plainly(cmp.Or(err, errors.New("df answered nothing Canyon can read")))) + ".",
 			"check this machine's network connection and that Docker can reach docker.io."})
 	case demoContainerd(engine) && free < demoContainerdDiskGB:
-		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB where Docker stores its images with containerd, as this one does.", free, demoContainerdDiskGB), demoDiskFix(colima)})
+		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB with Docker's containerd image store, which this Docker uses.", free, demoContainerdDiskGB), demoDiskFix(colima)})
 	case free < demoDiskGB:
 		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB.", free, demoDiskGB), demoDiskFix(colima)})
 	}

@@ -12,7 +12,7 @@ real deploy on your Canyon, and at the end you have a working app in production.
 | | |
 |---|---|
 | **Time** | Minutes, once the demo is up |
-| **You need** | Claude Code, Codex, Cursor, Gemini CLI or another coding agent, and what the [laptop demo](/start/try-it-on-your-laptop/#what-you-need) needs: Docker 28 or newer, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk, 30 GB where Docker stores its images with containerd |
+| **You need** | Claude Code, Codex, Cursor, Gemini CLI or another coding agent, and what the [laptop demo](/start/try-it-on-your-laptop/#what-you-need) needs: Docker 28 or newer, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk (30 GB with Docker's containerd image store) |
 | **You get** | A claims tracker in your org's design system, with a safe search, running in preview and in production |
 
 Canyon checks an app at three stages: when a coding agent deploys, on every pull request, and before

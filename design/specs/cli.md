@@ -3957,7 +3957,7 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
    (§6.14.1).
 
 The minimums are the ones the laptop page and the README name: 4 CPUs, 6 GB of memory, 18 GB of free disk (30 GB
-where Docker stores its images with containerd). A
+with Docker's containerd image store). A
 `CANYON_DEMO_FROM` in the environment names where the bundle and its `SHA256SUMS` are served, in place of this CLI's
 release: CI starts the demo from a release built from its tree. `--help` does not offer it.
 

@@ -148,6 +148,67 @@ describe("the sign-in screen", () => {
     }
   });
 
+  // A sign-in is open for 10 minutes (the server's signInWindow), so a page kept longer belongs to none (#154): one that
+  // was never finished isn't opened by the next visit to the front page.
+  it("takes back no page past the sign-in's 10 minutes", async () => {
+    config();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      window.location.hash = "#/apps/claims-portal";
+      render(<SignIn />);
+      fireEvent.click(await screen.findByRole("link", { name: "Continue to company sign-in" }));
+      vi.setSystemTime(Date.now() + 10 * 60_000 - 1);
+      expect(sessionStorage.getItem("canyon_return")).toBe("#/apps/claims-portal");
+      const kept = { hash: sessionStorage.getItem("canyon_return"), at: sessionStorage.getItem("canyon_return_at") };
+      expect(takeReturn()).toBe("#/apps/claims-portal");
+      sessionStorage.setItem("canyon_return", kept.hash ?? "");
+      sessionStorage.setItem("canyon_return_at", kept.at ?? "");
+      vi.setSystemTime(Date.now() + 2);
+      expect(takeReturn()).toBeNull();
+      expect(sessionStorage.getItem("canyon_return")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Try again begins a sign-in of its own, so the page the refused one began on comes back after it, however long the
+  // refused one took: a device page with its code, and an app's page (#154).
+  it("keeps the page for a sign-in tried again after the first one expired", async () => {
+    config();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      for (const page of ["#/device?code=K7QP-4RXM", "#/apps/claims-portal"]) {
+        sessionStorage.clear();
+        window.location.hash = page;
+        const first = render(<SignIn />);
+        fireEvent.click(await screen.findByRole("link", { name: /sign-in/ }));
+        first.unmount();
+        vi.setSystemTime(Date.now() + 15 * 60_000); // the first sign-in expired at the provider: the callback refuses it
+        window.location.hash = "#/signin";
+        const again = render(<SignIn reason="failed" />);
+        fireEvent.click(await screen.findByRole("link", { name: "Try again" }));
+        again.unmount();
+        vi.setSystemTime(Date.now() + 60_000);
+        expect(takeReturn(), page).toBe(page);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A tab can hold a page an earlier release kept, with no time: it is dropped, never an error, as no sign-in is known to own it.
+  it("drops a page kept by an earlier release", () => {
+    sessionStorage.setItem("canyon_return", "#/apps/claims-portal");
+    expect(takeReturn()).toBeNull();
+    expect(sessionStorage.getItem("canyon_return")).toBeNull();
+    for (const at of ["", "soon", "1e400", String(Date.now() + 60_000)]) {
+      sessionStorage.setItem("canyon_return", "#/apps/claims-portal");
+      sessionStorage.setItem("canyon_return_at", at);
+      expect(takeReturn(), at).toBeNull();
+      expect(sessionStorage.getItem("canyon_return_at")).toBeNull();
+    }
+  });
+
   // Signing out was chosen, and the next person to sign in here may be another: they start on the fleet.
   it("keeps no page after a sign-out the person chose", async () => {
     config();

@@ -18,23 +18,36 @@ const linked = new RegExp(`^#/(apps/${APP}(/(outbound|secrets))?|audit|(guardrai
 const returnable = (hash: string) => step.test(hash) || linked.test(hash);
 export const signingIn = (hash: string) => step.test(hash); // a page that is a step of signing in, which a sign-out stays on
 
+// When the page was kept, in ms: a sign-in is open for 10 minutes (the server's signInWindow), so one kept longer
+// belongs to none (#154). A page with no time is an earlier release's, which no sign-in is known to own.
+const RETURN_AT = "canyon_return_at";
+const SIGN_IN_MS = 10 * 60_000;
+
 // A browser that refuses storage (a private window) signs in all the same and lands on the fleet. A sign-in begun on any
-// other page forgets what an earlier one kept; trying a refused one again doesn't. After a sign-out the person chose, a
-// step of signing in is still come back to (the device page's Switch account), a page someone was reading is not: the
-// next person to sign in here may be another.
+// other page forgets what an earlier one kept; trying a refused one again keeps it for the new sign-in, however long the
+// refused one took. After a sign-out the person chose, a step of signing in is still come back to (the device page's
+// Switch account), a page someone was reading is not: the next person to sign in here may be another.
 function keep(hash: string, reason: Reason | undefined) {
   try {
-    if (step.test(hash) || (reason !== "signed-out" && linked.test(hash))) sessionStorage.setItem(RETURN, hash);
-    else if (reason !== "failed") sessionStorage.removeItem(RETURN);
+    const kept = step.test(hash) || (reason !== "signed-out" && linked.test(hash)) ? hash : reason === "failed" ? sessionStorage.getItem(RETURN) : null;
+    if (kept === null) {
+      sessionStorage.removeItem(RETURN);
+      sessionStorage.removeItem(RETURN_AT);
+      return;
+    }
+    sessionStorage.setItem(RETURN, kept);
+    sessionStorage.setItem(RETURN_AT, String(Date.now()));
   } catch { /* the fleet is where a sign-in lands without it */ }
 }
 
-// takeReturn is the page a sign-in began on, read once and cleared, or null.
+// takeReturn is the page a sign-in began on, read once and cleared, or null: within the sign-in's 10 minutes alone.
 export function takeReturn(): string | null {
   try {
     const hash = sessionStorage.getItem(RETURN);
+    const age = Date.now() - Number(sessionStorage.getItem(RETURN_AT) ?? NaN);
     sessionStorage.removeItem(RETURN);
-    return hash !== null && returnable(hash) ? hash : null;
+    sessionStorage.removeItem(RETURN_AT);
+    return hash !== null && returnable(hash) && age >= 0 && age <= SIGN_IN_MS ? hash : null;
   } catch {
     return null; // nothing could be kept, so there is nothing to come back to
   }

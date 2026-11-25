@@ -33,6 +33,12 @@ const signInPage = async (start = "/auth/start", button = "Continue to company s
   expect(screen.queryByText("commission-calc")).toBeNull();
 };
 
+// keptNow is the page a sign-in begun ago ms before now kept, as SignIn keeps it.
+const keptNow = (hash: string, ago = 0) => {
+  sessionStorage.setItem("canyon_return", hash);
+  sessionStorage.setItem("canyon_return_at", String(Date.now() - ago));
+};
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -478,7 +484,7 @@ describe("the shell", () => {
   // back to it, once: the page kept is cleared as it is read, and nothing else is ever restored.
   it("comes back from a sign-in to the page it was begun on, once", async () => {
     server(prefs, () => answer(200, signedIn));
-    sessionStorage.setItem("canyon_return", "#/device?code=K7QP-4RXM");
+    keptNow("#/device?code=K7QP-4RXM");
     render(<Shell />);
     await waitFor(() => expect(window.location.hash).toBe("#/device?code=K7QP-4RXM"));
     expect(sessionStorage.getItem("canyon_return")).toBeNull();
@@ -486,7 +492,7 @@ describe("the shell", () => {
 
   it("keeps the page through a refused sign-in, which lands on #/signin, not /", async () => {
     server(prefs, () => answer(200, signedIn));
-    sessionStorage.setItem("canyon_return", "#/no-access/claims-portal");
+    keptNow("#/no-access/claims-portal");
     window.location.hash = "#/signin";
     render(<Shell />);
     expect(await screen.findByText("Sign-in didn't finish")).toBeDefined();
@@ -495,15 +501,25 @@ describe("the shell", () => {
 
   it("comes back to the page a link named", async () => {
     server(prefs, () => answer(200, signedIn));
-    sessionStorage.setItem("canyon_return", "#/audit?range=7d");
+    keptNow("#/audit?range=7d");
     render(<Shell />);
     await waitFor(() => expect(window.location.hash).toBe("#/audit?range=7d"));
     expect(sessionStorage.getItem("canyon_return")).toBeNull();
   });
 
+  // A sign-in given up leaves its page kept; past the sign-in's 10 minutes the next visit to the front page opens the fleet (#154).
+  it("opens no page kept by a sign-in that was never finished", async () => {
+    server(prefs, () => answer(200, signedIn));
+    keptNow("#/apps/claims-portal", 10 * 60_000 + 1);
+    render(<Shell />);
+    expect(await screen.findByRole("heading", { name: "Meridian Insurance" })).toBeDefined();
+    expect(window.location.hash).toBe("#/fleet");
+    expect(sessionStorage.getItem("canyon_return")).toBeNull();
+  });
+
   it("restores nothing that is not one of those pages", async () => {
     server(prefs, () => answer(200, signedIn));
-    sessionStorage.setItem("canyon_return", "#/apps/claims-portal/../../evil");
+    keptNow("#/apps/claims-portal/../../evil");
     render(<Shell />);
     expect(await screen.findByRole("heading", { name: "Meridian Insurance" })).toBeDefined();
     expect(window.location.hash).toBe("#/fleet"); // where every other sign-in lands

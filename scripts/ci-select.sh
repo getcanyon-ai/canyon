@@ -15,10 +15,11 @@ set -f # a pattern is git's to expand, never the shell's
 cd "$(dirname "$0")/.."
 
 suites="journeys-1 journeys-2 journeys-3 journeys-4 journeys-5 journeys-6 journeys-7 journeys-8 probes kind-calico
-  kind-kindnet kind-canyon handoff-argocd handoff-flux egress-floor egress-layer3 oidc patch tour backup build-arch
-  test-rest server-1 server-2 server-3 server-4 noee-rest noee-server-1 noee-server-2 noee-server-3 noee-server-4
-  runs-1 runs-2 runs-3 provisioners-14 provisioners-15 provisioners-16 provisioners-17 provisioners-18 lint tidy web
-  compose-up images deploy-bundle helm-chart docs gitleaks"
+  kind-calico-1 kind-calico-2 kind-calico-3 kind-kindnet kind-canyon handoff-argocd handoff-flux egress-floor
+  egress-layer3 oidc patch tour backup build-arch test-rest server-1 server-2 server-3 server-4 noee-rest
+  noee-server-1 noee-server-2 noee-server-3 noee-server-4 runs-1 runs-2 runs-3 provisioners-14 provisioners-15
+  provisioners-16 provisioners-17 provisioners-18 lint tidy web compose-up images deploy-bundle helm-chart docs
+  gitleaks"
 always=" lint tidy web test-rest gitleaks "
 
 # listed is the .github/suites list a stack suite runs by, as its public workflow asks reach.sh for it

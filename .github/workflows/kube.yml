@@ -83,17 +83,12 @@ jobs:
   kind:
     needs: paths
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.kind == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
-    strategy:
-      fail-fast: false
-      # kindnet proves the probe says "not enforced" on a cluster without NetworkPolicy, and that under run_by: canyon
-      # nothing builds there and the chart's bootstrap fails closed without failing the upgrade (#2514, #2516): on main
-      # and on a pull request, beside it. A pull request runs Calico, the whole suite, which main never re-runs (#2173).
-      # kindnet's run on main writes the kube build cache pull requests read.
-      matrix:
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"network":"kindnet","network_policy":"not_enforced","run":"TestKindProbeTellsEnforcement"}]' || '[{"network":"calico","network_policy":"enforced","run":"TestKind"},{"network":"kindnet","network_policy":"not_enforced","run":"TestKindProbeTellsEnforcement"}]') }}
-    name: kind (${{ matrix.network }})
+    # kindnet proves the probe says "not enforced" on a cluster without NetworkPolicy, and that under run_by: canyon
+    # nothing builds there and the chart's bootstrap fails closed without failing the upgrade (#2514, #2516): on main
+    # and on a pull request. Its run on main writes the kube build cache pull requests read.
+    name: kind (kindnet)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; kind, its node images, Calico and kpack are multi-arch, and kpack's controller is scaled to 0 here: this suite builds no app (build-arch.yml builds one on arm64 and on amd64)
-    timeout-minutes: 50 # the journey builds the dashboard and installs Chromium (#2439)
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
@@ -111,7 +106,41 @@ jobs:
           docker image prune -af >/dev/null &
           wait
           df -h /
-      - if: matrix.network == 'calico'
+      - run: scripts/ci-suite.sh kind-kindnet # the suite's steps, as Canyon's private runners run them too
+        env:
+          GH_TOKEN: ${{ github.token }} # up.sh's and fetch.sh's release downloads, authenticated on github.com alone (.github/fetch.sh)
+
+  kind-calico:
+    needs: paths
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.kind == 'true' # a pull request's alone, which main never re-runs (#2173), and never a fork's
+    # The whole kind suite on Calico, which enforces NetworkPolicy, in parts of about 15 minutes, each on a cluster of its
+    # own: the tests .github/kind/calico-parts.txt lists for it, Envoy's lost entries, and in the last part the hand-off
+    # journey (scripts/ci-suite.sh kind-calico-<part>). The parts here are that file's, which a test holds them to.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
+    name: kind (calico ${{ matrix.part }}/3)
+    runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; kind, its node images, Calico and kpack are multi-arch, and kpack's controller is scaled to 0 here: this suite builds no app (build-arch.yml builds one on arm64 and on amd64)
+    timeout-minutes: 35 # a part's: about 15 minutes, the cluster's start included
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/go-cache # before setup-go: restoring the module cache over the toolchain setup-go just fetched collides (tar: File exists)
+        with:
+          job: kube
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - if: runner.environment == 'github-hosted' # a fork's pull request; our own VMs have 100 GiB and none of these directories
+        name: free the runner's disk — kind's images, two image builds and Calico need more than it leaves
+        run: |
+          df -h /
+          for d in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; do sudo rm -rf "$d" & done # in parallel: serially this was 150 s
+          docker image prune -af >/dev/null &
+          wait
+          df -h /
+      - if: matrix.part == 3 # the last part's: .github/kind/calico-parts.txt
         uses: actions/setup-node@v4 # the hand-off journey's set-up in the dashboard (e2e/ui), which ci-suite.sh installs
         with:
           node-version: '22'
@@ -119,7 +148,7 @@ jobs:
           cache-dependency-path: |
             web/package-lock.json
             e2e/ui/package-lock.json
-      - run: scripts/ci-suite.sh kind-${{ matrix.network }} # the suite's steps, as Canyon's private runners run them too
+      - run: scripts/ci-suite.sh kind-calico-${{ matrix.part }} # the suite's steps, as Canyon's private runners run them too
         env:
           GH_TOKEN: ${{ github.token }} # up.sh's and fetch.sh's release downloads, authenticated on github.com alone (.github/fetch.sh)
 

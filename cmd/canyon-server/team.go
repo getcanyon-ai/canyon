@@ -201,6 +201,22 @@ func (a *app) reviewOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// logsOnly is teamOnly on the logs route, which is also a responder's with no grant for production's masked read alone, the
+// dashboard's (design/PERMISSIONS.md, Security responders; the owner, 2026-11-25): preview's, or a raw read, is the team's.
+func (a *app) logsOnly(next http.HandlerFunc) http.HandlerFunc {
+	team := a.teamOnly(next)
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if roleOf(r.Context()) != "responder" || q.Get("env") != "prod" || q.Get("redaction") != "masked" {
+			team(w, r)
+			return
+		}
+		if a.projectLive(r.Context(), w, r.PathValue("id")) {
+			next(w, r)
+		}
+	}
+}
+
 // runTeamOnly is teamOnly on a /gate-runs/ route, whose app is its run's: an unknown run is 404 first.
 // A run of a deleted app stays readable to its team, as its timeline does (contracts/routes.md).
 func (a *app) runTeamOnly(next http.HandlerFunc) http.HandlerFunc { return a.runTeam(next, false) }

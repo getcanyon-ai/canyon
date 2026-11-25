@@ -519,7 +519,7 @@ func TestAMemberReadsTheTrailOfTheirTeamAppsAndTheirOwn(t *testing.T) {
 }
 
 // gatedElsewhere is each app route registered without a team check — teamOnly, runTeamOnly, ownerOnly,
-// reviewOnly, runReviewOnly or outboundTeamOnly — and where its check lives instead.
+// reviewOnly, runReviewOnly, outboundTeamOnly or logsOnly — and where its check lives instead.
 var gatedElsewhere = map[string]string{
 	"GET /projects/{id}":                   "a viewer reads it too: getProject trims what one below the team sees",
 	"PUT /projects/{id}/owner":             "claimProject: anyone claims an app nobody owns, else its owners and admins",
@@ -532,7 +532,7 @@ var gatedElsewhere = map[string]string{
 }
 
 // Every route under /projects/{id} and /gate-runs/ is registered through a team check — teamOnly,
-// runTeamOnly, ownerOnly, reviewOnly, runReviewOnly or outboundTeamOnly — or is named in gatedElsewhere with
+// runTeamOnly, ownerOnly, reviewOnly, runReviewOnly, outboundTeamOnly or logsOnly — or is named in gatedElsewhere with
 // where its check lives: a route added with neither fails here instead of shipping open to every signed-in
 // person (#1117). Read off the package's source with go/ast, since http.ServeMux does not list its patterns; a
 // name in gatedElsewhere no route has is stale.
@@ -567,7 +567,7 @@ func TestEveryAppRouteIsGatedOrNamed(t *testing.T) {
 			}
 			seen[pattern] = true
 			wrap, _ := call.Args[1].(*ast.CallExpr)
-			if name, ok := callee(wrap); (!ok || !slices.Contains([]string{"teamOnly", "runTeamOnly", "ownerOnly", "reviewOnly", "runReviewOnly", "outboundTeamOnly"}, name)) && gatedElsewhere[pattern] == "" {
+			if name, ok := callee(wrap); (!ok || !slices.Contains([]string{"teamOnly", "runTeamOnly", "ownerOnly", "reviewOnly", "runReviewOnly", "outboundTeamOnly", "logsOnly"}, name)) && gatedElsewhere[pattern] == "" {
 				t.Errorf("%s: %s registers it with no team check and gatedElsewhere does not name it", fset.Position(call.Pos()), pattern)
 			}
 			return true

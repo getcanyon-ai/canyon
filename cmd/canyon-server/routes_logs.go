@@ -30,7 +30,7 @@ const keepaliveLine = "canyon: keepalive\n"
 var logsKeepalive = 30 * time.Second
 
 func routesLogs(api *http.ServeMux, a *app) {
-	api.HandleFunc("GET /projects/{id}/logs", a.teamOnly(a.projectLogs))
+	api.HandleFunc("GET /projects/{id}/logs", a.logsOnly(a.projectLogs))
 }
 
 // projectLogs streams the container's stdout+stderr for the project's env, raw: the last lines,

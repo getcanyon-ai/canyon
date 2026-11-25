@@ -1,7 +1,7 @@
 name: Release
 
 # A pushed tag v* publishes one release of the tagged commit (RELEASING.md): the CLI for every platform (make
-# cli-release) as the tag's GitHub release, and Canyon's nine images on GHCR (make images-release), each for
+# cli-release) as the tag's GitHub release, and Canyon's ten images on GHCR (make images-release), each for
 # linux/amd64 and linux/arm64, with images.txt on the release naming each one by digest (the Kubernetes install
 # guide, docs/src/content/docs/self-host/kubernetes.md). The release stays a draft until images.txt is on it and
 # every image in it pulls by digest on amd64 and on arm64. Then the same release, with the chart, the deploy bundle
@@ -11,12 +11,12 @@ name: Release
 # runners. release, images and canyon-releases each refuse a commit that isn't on main.
 #
 # Credentials (RELEASING.md, The tokens): the images push with each job's own GITHUB_TOKEN (packages: write), which
-# needs this repository to have write access on each of the nine packages. Only canyon-releases holds a secret,
+# needs this repository to have write access on each of the ten packages. Only canyon-releases holds a secret,
 # CANYON_RELEASES_TOKEN (fine-grained: Contents read and write on getcanyon-ai/canyon-releases alone), in the release
 # environment, which only a v* tag may use; that job checks nothing out and runs none of the tree's code. The packing
 # that runs the tree's scripts is canyon-releases-pack, with no secret.
 #
-# Run by hand (workflow_dispatch), it is a rehearsal that publishes nothing: the CLI, all nine images for both
+# Run by hand (workflow_dispatch), it is a rehearsal that publishes nothing: the CLI, all ten images for both
 # architectures (built to their digests, pushed nowhere), and the chart, the bundle and Opengrep's source packed and
 # checked as for a release, under the version v0.0.0-rehearsal.
 on:
@@ -153,6 +153,12 @@ jobs:
           persist-credentials: false
       - name: the tag is a version
         run: '[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::$TAG is not a version tag"; exit 1; }'
+      - uses: actions/setup-go@v5 # canyon-builder-node reads its nodejs pin with this tree's own tool (scripts/builder-node.sh)
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: pack, the pinned release, checksum-verified, which makes canyon-builder-node
+        run: make pack-install # no GH_TOKEN: this job's token carries packages: write, and pack's release is public
       - name: log in to ghcr.io with this job's own token
         if: env.REHEARSAL != 'true'
         env:
@@ -208,7 +214,7 @@ jobs:
             digest=$(docker buildx imagetools inspect "$repo:$TAG" --format '{{json .Manifest}}' | jq -er .digest)
             echo "$repo@$digest" >> images.txt
           done
-          [ "$(wc -l < images.txt)" -eq 9 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 9"; exit 1; }
+          [ "$(wc -l < images.txt)" -eq 10 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 10"; exit 1; }
           cat images.txt
           gh release upload "$TAG" images.txt -R "$GITHUB_REPOSITORY"
       - name: log out of ghcr.io, whatever the join did
@@ -240,7 +246,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          [ "$(wc -l < images.txt)" -eq 9 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 9"; exit 1; }
+          [ "$(wc -l < images.txt)" -eq 10 ] || { echo "::error::images.txt names $(wc -l < images.txt) images, not 10"; exit 1; }
           while read -r ref; do
             docker pull -q --platform "linux/$ARCH" "$ref"
             got=$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$ref")
@@ -377,6 +383,6 @@ jobs:
         run: |
           set -euo pipefail
           for name in $(ls digests/digests-amd64); do echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$name@$(cat "digests/digests-amd64/$name")"; done > assets/images.txt
-          [ "$(wc -l < assets/images.txt)" -eq 9 ] || { echo "::error::the rehearsal built $(wc -l < assets/images.txt) images for amd64, not 9"; exit 1; }
-          [ "$(ls digests/digests-arm64 | wc -l)" -eq 9 ] || { echo "::error::the rehearsal built $(ls digests/digests-arm64 | wc -l) images for arm64, not 9"; exit 1; }
+          [ "$(wc -l < assets/images.txt)" -eq 10 ] || { echo "::error::the rehearsal built $(wc -l < assets/images.txt) images for amd64, not 10"; exit 1; }
+          [ "$(ls digests/digests-arm64 | wc -l)" -eq 10 ] || { echo "::error::the rehearsal built $(ls digests/digests-arm64 | wc -l) images for arm64, not 10"; exit 1; }
           PUBLISH_ASSETS=assets PUBLISH_REF="$GITHUB_SHA" scripts/publish-release.sh "$TAG"

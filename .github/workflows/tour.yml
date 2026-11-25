@@ -46,4 +46,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - run: make pack-install # pack makes the Node builder the demo's executor builds Node apps on (scripts/builder-node.sh)
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - run: make tour-check

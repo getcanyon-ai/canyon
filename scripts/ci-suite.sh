@@ -29,7 +29,7 @@
 #   tidy              ci.yml's tidy: go.mod and go.sum are tidy
 #   web               ci.yml's web: the dashboard's tests and build, e2e/ui type-checked
 #   compose-up        ci.yml's compose-up: Envoy's bootstrap validates, and make demo-check
-#   images            ci.yml's images: the nine release images build, each carrying what it must
+#   images            ci.yml's images: the ten release images build, each carrying what it must
 #   deploy-bundle     ci.yml's deploy-bundle: canyon-deploy.tar.gz starts with no source, and Opengrep's source builds
 #   helm-chart        helm.yml's chart job (.github/helm/chart-check.sh)
 #   docs              docs.yml: the links, and the site built and checked (.github/docs/site-check.sh)
@@ -55,6 +55,14 @@ export GOPROXY
 tmp=${RUNNER_TEMP:-$(mktemp -d)}
 compose=(docker compose -f docker-compose.yml -f e2e/compose.e2e.yml)
 dbs="$HOME/.cache/canyon-scandb"
+
+# pack_cli is the pinned pack CLI in ~/.local/bin, checked against its sha256 (make pack-fetch), which makes
+# canyon-builder-node for the images, deploy-bundle and tour suites, as their public jobs' make pack-install does
+pack_cli() {
+  local tgz
+  tgz=$(mktemp -d)/pack.tgz
+  make --no-print-directory pack-fetch PACK_TGZ="$tgz" && tar -xzf "$tgz" -C "$HOME/.local/bin" pack
+}
 
 # chromium is the journeys' browser and the hand-off journeys' set-up in the dashboard, with its system libraries
 chromium() { (cd e2e/ui && npm ci && npx playwright install --with-deps chromium); }
@@ -388,7 +396,7 @@ case $suite in
   egress-layer3) stack egress 'Interception$|ForgedInterceptHeaderRejected$|ARouteCredentialReachesItsUpstream$|ForcedHTTP2CarriesTheRouteCredential$|GRPCCarriesTheRouteCredential$|PassThroughDestinationIsNeverDecrypted$' ;;
   oidc) stack oidc_suite oidc . 30m ;;
   patch) stack oidc_suite oidc,patch '^TestRebasePatch' 65m ;;
-  tour) make tour-check ;;
+  tour) pack_cli && make tour-check ;;
   backup) kind kind_backup ;;
   build-arch) kind kind_build_arch ;;
   test-rest) test_rest ;;
@@ -401,8 +409,8 @@ case $suite in
   tidy) make tidy-check ;;
   web) dashboard ;;
   compose-up) compose_up ;;
-  images) make images-load ;;
-  deploy-bundle) make deploy-bundle-check && opengrep_source ;;
+  images) pack_cli && make images-load ;;
+  deploy-bundle) pack_cli && make deploy-bundle-check && opengrep_source ;;
   helm-chart) helm_chart ;;
   docs) docs ;;
   gitleaks) gitleaks_scan ;;

@@ -169,7 +169,7 @@ and nothing else:
   checks;
 - production's last 200 log lines, so they can see why production is failing before they stop it. Only the
   secrets set in Canyon are hidden, each shown as its name: anything else the app prints shows, its users'
-  tokens included. Each read is in the audit trail.
+  tokens and details included. Each read is in the audit trail.
 
 A responder doesn't see preview, earlier versions, who deployed them, preview's logs, production's
 logs unmasked, secret names, or anything else of the app.

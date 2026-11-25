@@ -261,7 +261,7 @@ type egressReceiver struct {
 	tunnels map[tunnel]streamCaller // run's alone
 	gaps    map[string]egressGap    // run's alone: by reason, and a dropped and an envoy_dropped one no one counted apart, those no flush has written yet — at most six
 	last    time.Time               // run's alone: the previous flush, where this one's gaps start
-	warned  time.Time               // run's alone: when unrecorded last said calls out may not be recorded
+	warned  time.Time               // run's alone: when unrecorded last said some calls out weren't recorded
 }
 
 // envoyLost is what egress-control reported Envoy lost (POST /egress/dropped) until a flush takes it, and whether
@@ -484,13 +484,13 @@ func (r *egressReceiver) run(ctx context.Context) {
 	}
 }
 
-// unrecorded says calls out may not be recorded, at most once a minute, when a flush has a sign of it: what Envoy or
+// unrecorded says some calls out weren't recorded, at most once a minute, when a flush has a sign of it: what Envoy or
 // egress-control reported lost, or a stream the receiver refused or couldn't read. Never for no stream open alone:
 // Envoy opens one when it has a call to send, so a host nobody calls out from has none, which is no fault (#146).
 func (r *egressReceiver) unrecorded() {
 	if now := r.now(); r.warned.IsZero() || now.Sub(r.warned) >= time.Minute {
 		r.warned = now
-		r.log.Print("egress: calls out may not be recorded: Envoy lost entries, or Canyon couldn't take them, so each span is kept as a gap")
+		r.log.Print("egress: some calls out weren't recorded (Envoy dropped entries, or Canyon couldn't read them); that time shows as a gap in the connection records")
 	}
 }
 

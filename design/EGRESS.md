@@ -499,7 +499,7 @@ with an app id out of contract, or a target other than `preview` or `prod`, is n
 can count it. egress-control reads Envoy's stats on the admin socket every 10 s, first 10 s after it starts, and
 once more as it stops, and reports what they say (`POST /egress/dropped`, contracts/routes.md); the next flush
 writes it as `envoy_dropped`, the same way as the receiver's own `dropped`. A flush that writes either, or a stream
-the receiver refused or couldn't read, logs `egress: calls out may not be recorded: …`, at most once a minute. No
+the receiver refused or couldn't read, logs `egress: some calls out weren't recorded (…)`, at most once a minute. No
 stream open is no sign by itself: Envoy opens one when it has a call to send, so an idle host has none (#146).
 One read names three stats:
 

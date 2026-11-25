@@ -17,7 +17,7 @@ func TestCallsOutNotRecordedAreSaidOnlyWhenSomethingWasLost(t *testing.T) {
 	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
 	r.now = func() time.Time { return now }
 	ctx := context.Background()
-	const warning = "egress: calls out may not be recorded"
+	const warning = "egress: some calls out weren't recorded"
 	said := func() int { return strings.Count(logged.String(), warning) }
 
 	for range 60 { // an idle hour of flushes and ticks: no stream open, nothing lost

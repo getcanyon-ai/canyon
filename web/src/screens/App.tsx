@@ -650,7 +650,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
               )}
               {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} team={project.access.level === "owner" || project.access.level === "contributor"} changed={() => tick.current()} />}
             </div>
-            {project !== null && reduced(project) && stopping !== null && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={{ word: stopWord, act: stopping }} done={() => tick.current()} />}
+            {project !== null && reduced(project) && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={stopping === null ? undefined : { word: stopWord, act: stopping }} done={() => tick.current()} />}
             {project !== null && !reduced(project) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 {preview !== null && !down(preview) && <a className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium text-text no-underline hover:bg-surface-2" href={preview.url} target="_blank" rel="noreferrer">Open preview<Icon name="external" size={14} /></a>}
@@ -873,26 +873,36 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
 
 // The ⋯ in the header: taking an environment offline is rare and risky, so it is not in the reading
 // flow (the redesign: "Take offline and Delete live in the ⋯ menu"). Each item asks before it acts.
-// Renaming and deleting are managing the app, its owners' and admins' (manage).
+// Renaming and deleting are managing the app, its owners' and admins' (manage). Copy link is everyone's who opens the
+// page, made from the host's public URL once it is known (#193).
 function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: (from: HTMLElement | null) => void }; live?: string; done: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
+  const [linked, setLinked] = useState<boolean | null>(null); // the link copied, or the browser refused
+  const { publicURL } = useContext(RailContext);
+  const link = typeof publicURL === "string" ? `${publicURL.replace(/\/+$/, "")}/#/apps/${encodeURIComponent(id)}` : null;
   const button = useRef<HTMLButtonElement>(null);
   const renaming = useRef<HTMLDivElement>(null);
   useInWindow(renaming, env === "rename");
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
-  if (!preview && !prod && !manage && stop === undefined) return null;
+  if (!preview && !prod && !manage && stop === undefined && link === null) return null;
   const close = () => { setOpen(false); setEnv(null); button.current?.focus(); };
+  // navigator.clipboard is absent outside a secure context, a plain-http host: that is a refusal too.
+  const copyLink = (to: string) => { setOpen(false); Promise.resolve().then(() => navigator.clipboard.writeText(to)).then(() => setLinked(true), () => setLinked(false)); button.current?.focus(); };
   return (
-    <div className="relative" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    <div className="relative flex items-center gap-2" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+      {linked === true && <span role="status" className="text-md text-ok">{S.linkCopied}</span>}
+      {linked === false && <span role="alert" className="text-md text-critical">{S.copyFailed}</span>}
       <button type="button" ref={button} aria-label="More actions" aria-expanded={open} onClick={() => { setOpen(!open); setEnv(null); }}
         className={`grid size-[34px] place-items-center rounded-[7px] border border-border-strong hover:bg-surface-2 ${open || env !== null ? "bg-surface-2 text-text" : "bg-surface text-text-dim"}`}>
         <Icon name="more" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
-          {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
+        <div role="menu" className="absolute top-full right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
+          {link !== null && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => copyLink(link)}>{S.copyLink}</button>}
+          {link !== null && (preview || prod || stop !== undefined || manage) && <div role="separator" className="my-1 h-px bg-border" />}
+          {preview &&<button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
           {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}
           {(preview || prod || stop !== undefined) && manage && <div role="separator" className="my-1 h-px bg-border" />}
@@ -908,7 +918,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         </Modal>
       )}
       {env === "rename" && (
-        <div ref={renaming} className="absolute right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
+        <div ref={renaming} className="absolute top-full right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}

@@ -26,6 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 	sweepCtx, sweepCancel := context.WithTimeout(context.Background(), time.Minute) // what a crash left behind, before the first request can find it
+	e.Project = e.OwnProject(sweepCtx)                                              // what it makes for an app carries it (#178)
 	e.Sweep(sweepCtx)
 	sweepCancel()
 	// executor.IdleTimeout: the server drops an idle connection at half of it, before the executor closes it

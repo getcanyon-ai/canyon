@@ -62,6 +62,7 @@ var (
 type Executor struct {
 	Builder     string         // buildpack builder image, a noble one; "" = paketobuildpacks/ubuntu-noble-builder
 	NodeBuilder string         // CANYON_BUILDER_NODE, Canyon's Node builder, which a Node app builds on; "" = none (nodebuilder.go)
+	Project     string         // the compose project of this executor's own container (OwnProject), which what it makes for an app carries as canyon.project; "" = none
 	RunImage    string         // CANYON_IMAGE_RUN, the run image by digest; "" = canyon-run, which the executor builds
 	Lifecycle   string         // CANYON_IMAGE_LIFECYCLE, pack's lifecycle image by digest; "" = lifecycleImage
 	Busybox     string         // CANYON_IMAGE_BUSYBOX, the port check's busybox by digest; "" = busyboxImage
@@ -671,6 +672,12 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 		return BuildResult{}, &HostFailed{Message: "build network: " + err.Error()} // the host's, never the package's (#2489)
 	}
 	defer remove()
+	for _, kind := range []string{"build", "launch"} { // pack makes a cache volume it lacks unlabelled: made here first, labelled as the app's other things
+		create := append([]string{"volume", "create", "--label", "canyon.app=" + req.App}, e.projectLabel()...)
+		if out, err := child(ctx, e.docker(), append(create, names.CacheVolume(req.App, kind))...).CombinedOutput(); err != nil {
+			return BuildResult{}, &HostFailed{Message: fmt.Sprintf("build cache: %v: %s", err, strings.TrimSpace(string(out)))}
+		}
+	}
 	tag := "canyon/" + req.App + ":" + req.Package + "-" + nonce() // unique per build: two builds never read each other's image
 	args := []string{"build", tag, "--no-color", "--path", dir, "--builder", builder, "--pull-policy", "if-not-present",
 		"--lifecycle-image", or(e.Lifecycle, lifecycleImage), "--network", "container:" + holder, // every phase in the holder's floored namespace
@@ -708,6 +715,9 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 	if err != nil {
 		log.Printf("executor: image inspect %s: %s", tag, strings.TrimSpace(string(id)))
 		return BuildResult{}, &HostFailed{Message: "image id: " + err.Error()} // pack built it: the daemon's (#2537)
+	}
+	if err := e.projectTag(ctx, tag); err != nil {
+		return BuildResult{}, &HostFailed{Message: err.Error()}
 	}
 	return BuildResult{Image: "canyon/" + req.App + "@" + strings.TrimSpace(string(id)), DurationMS: time.Since(start).Milliseconds(), Buildpacks: e.ran(ctx, tag, builder)}, nil
 }
@@ -891,6 +901,7 @@ func (e *Executor) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 		verb = []string{"create"}
 	}
 	args := append(verb, "--name", name, "--network", joined, "--label", "canyon.app="+req.App, "--label", "canyon.target="+req.Target)
+	args = append(args, e.projectLabel()...)
 	if ip != "" {
 		args = append(args, "--ip", ip)
 	}
@@ -1401,7 +1412,8 @@ func (e *Executor) createNetwork(ctx context.Context, network string, internal b
 		if internal { // nothing routed out of it, no address of the host's on it, and the lower /25 kept for the fixed addresses
 			args = append(args, "--internal", "-o", "com.docker.network.bridge.gateway_mode_ipv4=isolated", "--ip-range", netip.PrefixFrom(at(sub, 128), 25).String())
 		}
-		out, err := child(ctx, e.docker(), append(args, "--label", "canyon.app="+strings.TrimPrefix(network, "canyon-app-"), network)...).CombinedOutput()
+		args = append(append(args, "--label", "canyon.app="+strings.TrimPrefix(network, "canyon-app-")), e.projectLabel()...)
+		out, err := child(ctx, e.docker(), append(args, network)...).CombinedOutput()
 		if err == nil {
 			log.Printf("executor: created %s on %s (internal %t)", network, sub, internal)
 			n := appNet{Name: network, Internal: internal}
@@ -1624,14 +1636,22 @@ type imageTag struct{ id, ref string }
 
 // images is every tag of the repository canyon/<app> exactly — never canyon/<app>-other — with its image ID.
 func (e *Executor) images(ctx context.Context, app string) ([]imageTag, error) {
-	out, err := child(ctx, e.docker(), "image", "ls", "--no-trunc", "--filter", "reference=canyon/"+app, "--format", "{{.ID}} {{.Repository}}:{{.Tag}}").Output()
+	repos := []string{"canyon/" + app}
+	if e.Project != "" { // its second name (projectTag): removed with the first, or the image outlives every canyon/<app> tag
+		repos = append(repos, e.Project+"/"+app)
+	}
+	list := []string{"image", "ls", "--no-trunc"}
+	for _, repo := range repos {
+		list = append(list, "--filter", "reference="+repo)
+	}
+	out, err := child(ctx, e.docker(), append(list, "--format", "{{.ID}} {{.Repository}}:{{.Tag}}")...).Output()
 	if err != nil {
 		return nil, fmt.Errorf("image ls: %w", err)
 	}
 	var tags []imageTag
 	for _, line := range strings.Split(string(out), "\n") {
 		id, ref, _ := strings.Cut(strings.TrimSpace(line), " ")
-		if repo, tag, _ := strings.Cut(ref, ":"); repo == "canyon/"+app && tag != "" && tag != "<none>" {
+		if repo, tag, _ := strings.Cut(ref, ":"); slices.Contains(repos, repo) && tag != "" && tag != "<none>" {
 			tags = append(tags, imageTag{id, ref})
 		}
 	}

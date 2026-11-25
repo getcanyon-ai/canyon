@@ -24,5 +24,7 @@ opens an issue as before.
   - `foundation.txt` must hold the shared foundation.
 - **The server:** the server's own code is listed by area, the route files a suite drives. Its core is in
   `foundation.txt`.
+- **On Canyon's private runners:** `scripts/ci-select.sh` reads these lists for the stack suites, beside its own
+  table for the rest (`scripts/ci-select.txt`; CONTRIBUTING.md, Maintainers).
 - **What a diff would run:** `SUITES_BASE=<base> SUITES_HEAD=<head> .github/suites/reach.sh <suite>…`, with the
   diff the pull request's own paths job reads.

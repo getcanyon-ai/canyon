@@ -569,7 +569,9 @@ signs the person in, through §4.1 unchanged; Canyon decides what the client get
 **Two scopes:** `read` (the rules, playbooks, status, logs and resources) and `act` (those, and check, deploy and
 promote). A scope never widens a level: it only narrows what a token may ask. **The session is the person**, as §4.4
 says of every session: `kind = person`, recorded under their name. `dashboard_required` refuses it as it refuses a CLI
-session, and no cookie route takes it at all: it is bound to `/mcp`.
+session, and no cookie route takes it at all: it is bound to `/mcp`. A token or its session the database couldn't be
+read for is `503 session_unread`, as the session stage answers a cookie's (§4.1), on the token and on each tool's request:
+never the `401` that tells a connector its sign-in ended and asks the person to connect Canyon again (#179).
 
 **Registrations don't pile up.** A registration counts as used when a code issued to it redeems, and each new
 registration deletes those unused a day after they were made, unconditionally, and those with no session live or

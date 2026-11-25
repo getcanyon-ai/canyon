@@ -44,11 +44,11 @@ func main() {
 	}
 }
 
-// executorOf is the executor the environment names: CANYON_BUILDER, the images it runs by digest
+// executorOf is the executor the environment names: CANYON_BUILDER and CANYON_BUILDER_NODE, the images it runs by digest
 // (contracts/executor.md, Images and database sources), CANYON_APPS_POOL (unset 172.28.0.0/16, as the
 // server's CANYON_APPS_SUBNET), CANYON_EXECUTOR_JOIN and CANYON_EXECUTOR_EGRESS_JOIN. A bad value refuses the start, naming it.
 func executorOf(getenv func(string) string) (*executor.Executor, error) {
-	e := &executor.Executor{Builder: getenv("CANYON_BUILDER")}
+	e := &executor.Executor{Builder: getenv("CANYON_BUILDER"), NodeBuilder: getenv("CANYON_BUILDER_NODE")}
 	var err error
 	if e.Lifecycle, err = executor.ImageSetting(getenv, "CANYON_IMAGE_LIFECYCLE"); err != nil {
 		return nil, err

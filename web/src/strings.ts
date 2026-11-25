@@ -1330,6 +1330,18 @@ export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
 // A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
 // platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
 export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";
+// What a hold's and an undeploy's rows say happened to what ran, by their stop (contracts/routes.md; #156). "stopped" only
+// of what Canyon ran; a row written before stop reads as AUDIT_ACTIONS has it.
+export const AUDIT_STOP: Record<string, string> = {
+  stopped: "stopped and held production: <reason>",
+  remove_sent: "held production and asked your platform to remove it: <reason>",
+  nothing: "held production, where nothing ran: <reason>",
+  failed: AUDIT_HELD_RUNNING,
+};
+export const AUDIT_UNDEPLOY: Record<string, string> = {
+  remove_sent: "asked your platform to take <env> offline, keeping its data",
+  nothing: "stopped the deploy to <env>; nothing ran there",
+};
 // egress.networks.recreate when its row's failed names the step that failed (#2563).
 export const AUDIT_RECREATE_FAILED = "tried to recreate the app's network, but it failed";
 // egress.route.set when its row names the secret it moved (detail.secret), and egress.ca.rotate onto an admin's sub-CA

@@ -85,7 +85,15 @@ describe("an audit row's sentence", () => {
     ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // Canyon stopped it
     // Canyon could not stop it, or the org's platform runs it and was sent a remove: neither says it stopped (contracts/routes.md, The hold)
     ["stop app", { env: "prod", package: "pkg_9e40", image_digest: "sha256:0", reason: "Exports claimant SSNs (INC-2231)", cancelled: ["gr_1"], stopped: false }, "held production, but Canyon couldn't stop it: Exports claimant SSNs (INC-2231)"],
-    ["stop app", { env: "prod", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // it ran nothing (contracts/routes.md: image_digest absent)
+    ["stop app", { env: "prod", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"],
+    // A row that says what happened to what ran (contracts/routes.md, the hold's and the undeploy's stop; #156).
+    ["stop app", { env: "prod", reason: "INC-2231", cancelled: [], stop: "stopped" }, "stopped and held production: INC-2231"],
+    ["stop app", { env: "prod", reason: "INC-2231", cancelled: [], stop: "remove_sent" }, "held production and asked your platform to remove it: INC-2231"],
+    ["stop app", { env: "prod", reason: "INC-2231", cancelled: [], stop: "nothing" }, "held production, where nothing ran: INC-2231"],
+    ["stop app", { env: "prod", reason: "INC-2231", cancelled: ["gr_1"], stop: "failed", stopped: false }, "held production, but Canyon couldn't stop it: INC-2231"],
+    ["DELETE /api/v1/projects/{id}/envs/{env}", { env: "prod", package: "pkg_9e40", stop: "stopped" }, "took production offline, keeping its data"],
+    ["DELETE /api/v1/projects/{id}/envs/{env}", { env: "prod", package: "pkg_9e40", stop: "remove_sent" }, "asked your platform to take production offline, keeping its data"],
+    ["DELETE /api/v1/projects/{id}/envs/{env}", { env: "preview", package: null, run: "gr_1", stop: "nothing" }, "stopped the deploy to preview; nothing ran there"], // it ran nothing (contracts/routes.md: image_digest absent)
     ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "lifted the hold without starting production"],
     ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: true, package: "pkg_9e40", label: "v1.4" }, "lifted the hold and started v1.4"],
     ["POST /api/v1/nothing/{id}", {}, "POST /api/v1/nothing/{id}"], // a route the bundle was built before: shown as written, never blank

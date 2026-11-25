@@ -40,7 +40,7 @@ func TestUndeployKeepsSecretsTheCountIsUnchangedAndTheNextDeployStartsWithThem(t
 		t.Fatalf("the fleet still shows it running: %s", lastBody)
 	}
 	var detail string
-	if err := pool.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = $1 AND project_id = 'claims-portal'", undeployRoute).Scan(&detail); err != nil || detail != `{"env": "preview", "package": "`+pkg+`"}` {
+	if err := pool.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = $1 AND project_id = 'claims-portal'", undeployRoute).Scan(&detail); err != nil || detail != `{"env": "preview", "stop": "stopped", "package": "`+pkg+`"}` {
 		t.Fatalf("one audit row naming the env and what ran there: %q (%v)", detail, err)
 	}
 	// nothing deployed any more: the 404, and neither the executor nor the trail hears of it

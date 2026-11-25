@@ -641,10 +641,11 @@ $ canyon undeploy --app claims-portal --env prod --hold --reason "Exports claima
   receipt's `held`; `responder_*` on preferences; the `role` enum. events.md — the hold `build.log`
   line (the pending-stop lines land with the brake seam, PR 2). Schemas — `role` in `access`, `app-page`, `fleet`,
   `guardrails`; `hold` in `app-page` and `fleet`.
-- **Audit** (both `governance`): `stop app` `{env, package?, image?, reason, cancelled[]}`, written
+- **Audit** (both `governance`): `stop app` `{env, package?, image?, reason, cancelled[], stop}`, written
   when stopped; `lift hold` `{held_by, held_at, reason, started, package?}`. Trail words (#2244, amended
-  by #145): `held production: <reason>`, or `held production, but Canyon couldn't stop it: <reason>`
-  (`stopped: false`) · `lifted the hold without starting production` · `lifted the hold and started
+  by #145 and #156), by its `stop`: `stopped and held production: <reason>`, `held production and asked your platform to
+  remove it: <reason>`, `held production, where nothing ran: <reason>`, `held production, but Canyon couldn't stop it:
+  <reason>` (`failed`, or `stopped: false` on an older row); a row with no `stop` `held production: <reason>` · `lifted the hold without starting production` · `lifted the hold and started
   <version>`.
 
 ### 3.10 Testing

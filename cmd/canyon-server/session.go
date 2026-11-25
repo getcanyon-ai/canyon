@@ -317,7 +317,7 @@ func (a *app) session(next http.Handler) http.Handler {
 		}
 		if err != nil && a.auth == authOIDC { // the database didn't answer: the session may live, so never the 401 that says it ended (#153); with sign-in off every caller is the anonymous admin, as below
 			a.log.Printf("canyon-server: session: %v", err)
-			writeErr(w, http.StatusServiceUnavailable, "session_unread", "Canyon couldn't check your sign-in just now. Try again in a moment.", nil)
+			sessionUnread(w)
 			return
 		}
 		if a.auth == authOIDC {
@@ -371,6 +371,12 @@ func (a *app) sessionOf(ctx context.Context, r *http.Request, name string) (s si
 	}
 	// how and from where the request's audit rows were done (contracts/routes.md, the audit read)
 	return s, setup, events.Provenance{Via: viaOf[flow], Role: s.role, Session: sessionDigest(c.Value), Source: a.proxies.source(r)}, ok, err
+}
+
+// sessionUnread answers a request whose session, or token, the database couldn't be read for: the session may live, so
+// never the 401 that says it ended (contracts/routes.md; #153, #179).
+func sessionUnread(w http.ResponseWriter) {
+	writeErr(w, http.StatusServiceUnavailable, "session_unread", "Canyon couldn't check your sign-in just now. Try again in a moment.", nil)
 }
 
 // clearSession clears the session cookie, with its own attributes.

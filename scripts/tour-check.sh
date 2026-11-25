@@ -110,7 +110,9 @@ cd "$repo"
 docker compose --profile demo-apps build server executor demo-apps
 p=$(docker compose config --format json | jq -r .name)
 docker run -d --name canyon-tour-registry -p 127.0.0.1:5000:5000 docker.io/library/registry:2.8.3 >/dev/null
-for i in canyon-server canyon-executor canyon-demo-apps; do
+make --no-print-directory builder-node BUILDER_NODE=canyon-builder-node:tour >&2 # the Node builder the release publishes, built as it builds it
+docker tag canyon-builder-node:tour "$p-builder-node"
+for i in canyon-server canyon-executor canyon-demo-apps canyon-builder-node; do
   docker tag "$p-${i#canyon-}" "localhost:5000/$i:tour"
   docker push -q "localhost:5000/$i:tour" >&2
   echo "localhost:5000/$i:tour"

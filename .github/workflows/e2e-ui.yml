@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5 # go doc reads the executor's image pins
+      - uses: actions/setup-go@v5 # go doc reads the executor's image pins (internal/names)
         with:
           go-version-file: go.mod
           cache: false

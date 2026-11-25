@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Earlier, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
+import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Earlier, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status, type ViewerEnv, type Waiting } from "../api";
 import { AUTH, RENAME, S, TEARDOWN } from "../strings";
 import { Actor, actorName } from "../ui/Actor";
 import { Age } from "../ui/Age";
@@ -7,6 +7,7 @@ import { AppName } from "../ui/AppName";
 import { AppSource } from "./AppSource";
 import { Button } from "../ui/Button";
 import { EnvCard } from "../ui/EnvCards";
+import { Logs } from "../ui/Logs";
 import { down } from "../ui/EnvLink";
 import { DependencyCard } from "../ui/DependencyCard";
 import { CopyFix, Finding, type ApproveBody } from "../ui/Finding";
@@ -580,13 +581,18 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
     ? <CopyFix app={id} findings={reading.findings.filter((one) => one.properties.canyon.blocks && one.approval === undefined)} /> : null;
-  // Who may read an environment's last lines: the logs route's minimum, contributor (design/PERMISSIONS.md).
-  const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
+  // Who may read an environment's lines, masked: the logs route's minimum, contributor, and a security responder production's,
+  // whatever their access to the app (design/PERMISSIONS.md; the owner, 2026-11-25).
+  const onTeam = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
+  const mayRead = (key: "preview" | "prod") => onTeam || role === "responder" && key === "prod";
+  // An environment's logs on its card (A), where Canyon runs it, which its read says by its state; below the team, who reads them.
+  const logs = (key: "preview" | "prod", at: Env | Waiting | ViewerEnv | undefined) => project === null || at === undefined || !("state" in at) || at.state === undefined ? null
+    : mayRead(key) ? <Logs app={id} name={project.name} env={key} team={onTeam} /> : <p className="col-start-1 text-sm text-text-faint">{S.logsTeamOnly}</p>;
   // A down environment the band doesn't show the lines of shows them on its card, to whoever may read its logs (#2744,
   // #188), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
     const at = status?.envs[key];
-    return mayRead && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped") && top.band?.tail !== key;
+    return mayRead(key) && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped") && top.band?.tail !== key;
   };
   // Put back from the headline is the card's own Put back of that version (#188): the card opens and follows its review.
   const toPutBack = (row: Earlier) => {
@@ -699,11 +705,11 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
               {/* A responder with no grant reads nothing of preview: the card says so, never that it is empty. */}
               {project.access.level === "none" ? <EnvCard name="Preview" env={undefined} blank="Not shown to you" empty="A security responder reads an app's production, never its preview." />
-                : <EnvCard name="Preview" env={project.envs?.preview} empty="Nothing is in preview." />}
+                : <EnvCard name="Preview" env={project.envs?.preview} empty="Nothing is in preview.">{logs("preview", project.envs?.preview)}</EnvCard>}
               {/* A read-only member's read never says production is held (design/PERMISSIONS.md): its card says nothing runs, which
                   is true either way, never that nothing is there. */}
               <EnvCard name="Production" env={project.envs?.prod} {...(status?.hold !== undefined ? { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" }
-                : status === null ? { empty: "" } : { empty: "Nothing is in production." })} />
+                : status === null ? { empty: "" } : { empty: "Nothing is in production." })}>{logs("prod", project.envs?.prod)}</EnvCard>
             </div>
             {status === null && (
               <section aria-label={S.whoLooksAfter} className="grid gap-1">
@@ -738,7 +744,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <>
             {(() => {
               const headed = top.band === null ? null : (
-                <Headline key="headline" band={top.band} app={mayRead ? id : undefined}>
+                <Headline key="headline" band={top.band} app={top.band.tail !== undefined && mayRead(top.band.tail) ? id : undefined}>
                   {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && putBack === null && (lift === null || status.receipt.held === undefined) ? undefined
                     : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{putBack}{fixing}</>}
                 </Headline>
@@ -754,12 +760,14 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
             <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
               <EnvCard name="Preview" env={status.envs.preview} empty={emptyPreview} calls={calls("preview")} who={preview?.deployed_by === undefined || preview.deployed_by === null ? undefined : <Actor actor={preview.deployed_by} />}>
                 {untailed("preview") && <LastLines app={id} env="preview" />}
+                {logs("preview", status.envs.preview)}
               </EnvCard>
               {/* Held, it says who held it and who lets it run again: Promote is disabled, so it never says to promote. */}
-              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")} lined={mayRead && top.band?.tail === "prod"}
+              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")} lined={mayRead("prod") && top.band?.tail === "prod"}
                 {...(status.hold === undefined ? { empty: "Promote a version from preview to run it here." } : { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" })}
                 who={prod?.promoted_by === undefined || prod.promoted_by === null ? undefined : <>promoted by <Actor actor={prod.promoted_by} /></>}>
                 {untailed("prod") && <LastLines app={id} env="prod" />}
+                {logs("prod", status.envs.prod)}
                 {/* a host from before earlier[] answers none */}
                 {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} name={project.name} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
               </EnvCard>

@@ -256,6 +256,11 @@ export function goLive(receipt: Receipt): { set: number; met: number } {
   return { set: set.length, met: set.filter((rule) => rule.passed).length };
 }
 
+// What a failed masked read of an environment's lines says: a log it can't mask (409), one too long to (422), else unread;
+// to the app's team, canyon logs after it, which reads it raw. A responder's read is masked alone, so theirs names no CLI.
+export const unread = (status: number | undefined, env: "preview" | "prod", team: boolean) =>
+  (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread) + (team ? S.lastLinesCli.replaceAll("<env>", env) : "");
+
 // A down environment's last log lines, masked by the server (#2744, #188), for a contributor and above, who may read
 // its logs: the caller never draws it for a reader below. They stand in for said, the one line the status read
 // carries. Until they come, or when none can be shown, said stays, with why the rest can't; a 403 adds nothing, since
@@ -271,7 +276,7 @@ export function LastLines({ app, env, said, place = "" }: { app: string; env: "p
     let live = true;
     setRead(null);
     getMaskedLogs(app, env, 20).then((lines) => { if (live) setRead({ lines: lines.trimEnd() }); },
-      (err) => { const status = (err as ApiError).status; if (live) setRead({ failed: status === 403 ? null : (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread).replaceAll("<env>", env) }); });
+      (err) => { const status = (err as ApiError).status; if (live) setRead({ failed: status === 403 ? null : unread(status, env, true) }); });
     return () => { live = false; };
   }, [app, env, said]);
   const box = "mt-2 rounded-[7px] border border-border bg-surface px-3 py-2 font-mono text-md break-words";

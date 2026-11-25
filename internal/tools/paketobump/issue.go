@@ -141,8 +141,22 @@ func (g ghCLI) open() ([]issue, error) {
 	return open, json.Unmarshal(out, &open)
 }
 
+// labels are the issue's: gh issue create refuses a label the repository lacks, after the branch is pushed (#132)
+var labels = []struct{ name, color, description string }{
+	{"patching", "0e8a16", "Newer system libraries or build tools to take"},
+	{"chore", "ededed", "Not a bug or a feature: tests, docs, tooling"},
+	{"P3", "0e8a16", "when there is room"},
+}
+
+// create makes each label first, as main-health.yml makes ci: one that is there already refuses, which is no error
+// here, and a label still missing after makes the issue's own create refuse.
 func (g ghCLI) create(title, body string) error {
-	return g.gh(body, "issue", "create", "-R", g.repo, "--title", title, "--body-file", "-", "--label", "patching", "--label", "chore", "--label", "P3")
+	args := []string{"issue", "create", "-R", g.repo, "--title", title, "--body-file", "-"}
+	for _, l := range labels {
+		_ = exec.Command("gh", "label", "create", l.name, "-R", g.repo, "--color", l.color, "--description", l.description).Run() //nolint:gosec // this file's labels
+		args = append(args, "--label", l.name)
+	}
+	return g.gh(body, args...)
 }
 
 func (g ghCLI) edit(number int, title, body string) error {

@@ -27,11 +27,11 @@ func (e *Executor) nodeBuilder(ctx context.Context) (ref, id string, err error) 
 	return ref, id, nil
 }
 
-// nodeIdentity is GET /builder's builder with a Node builder: the SHA-256 of its image ID, a newline, and
-// canyon-builder's name, the tag its file's hash makes. The full builder's part is its file, never its image ID,
-// which exists only once it is downloaded: a reuse check never downloads it.
+// nodeIdentity is GET /builder's builder with a Node builder: the SHA-256 of its image ID, a newline, and the name of
+// canyon-builder's own (ownBuilder), the tag its two files' hash makes. The full builder's part is its files, never an
+// image ID, which exists only once it is downloaded: a reuse check never downloads it.
 func nodeIdentity(nodeID string) string {
-	sum := sha256.Sum256([]byte(nodeID + "\n" + builderImage.repo))
+	sum := sha256.Sum256([]byte(nodeID + "\n" + ownBuilder.repo))
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 

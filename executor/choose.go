@@ -60,32 +60,61 @@ var buildVariables = map[string]string{
 	"NODE_ENV": "the Node builder's own", "NEXT_PRIVATE_OUTPUT_TRACE_ROOT": "the Node builder's own",
 }
 
-// fullBuilderFor is why the tree in dir, with its build values and its project.toml's build environment, builds on
-// canyon-builder: "" when nothing rules the Node builder out, else the entry or variable that did and the group it
-// came from. An entry that can't be read rules it out. The tree holds directories and regular files alone (untar), so
-// no link leads detect outside what this reads.
-func (e *Executor) fullBuilderFor(ctx context.Context, dir string, values map[string]string) string {
-	names := map[string]bool{}
+// buildNames is every variable the build in dir sets: its build values, and the build environment of the project.toml
+// Canyon reads. why is "" unless that project.toml can't be read or names buildpacks, and then says which.
+func (e *Executor) buildNames(ctx context.Context, dir string, values map[string]string) (names map[string]bool, why string) {
+	names = map[string]bool{}
 	for k := range values {
 		names[k] = true
 	}
 	switch b, err := os.ReadFile(filepath.Join(dir, "project.toml")); { //nolint:gosec // dir is the build's own
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
-		return "project.toml can't be read"
+		return names, "project.toml can't be read"
 	default:
 		var w written
 		if err := e.read(ctx, b, "", &w); err != nil { // with no builder it reads the file alone
-			return "project.toml can't be read: " + err.Error()
+			return names, "project.toml can't be read: " + err.Error()
 		}
 		if w.named {
-			return "project.toml names buildpacks"
+			return names, "project.toml names buildpacks"
 		}
 		if w.IO.Buildpacks.Build != nil {
 			for _, v := range w.IO.Buildpacks.Build.Env {
 				names[v.Name] = true
 			}
 		}
+	}
+	return names, ""
+}
+
+// ownBuilderFor is whether a build on canyon-builder may build on ownBuilder: CANYON_BUILDER and CANYON_IMAGE_RUN
+// unset, and nothing in the build naming either of the executor's own two build variables, which ownBuilder's own
+// build environment would override. A project.toml that can't be read, or names buildpacks, builds as before.
+func (e *Executor) ownBuilderFor(ctx context.Context, dir string, values map[string]string) bool {
+	if e.Builder != "" || e.RunImage != "" {
+		return false
+	}
+	names, why := e.buildNames(ctx, dir, values)
+	if why != "" {
+		return false
+	}
+	for name := range BuildEnv(nil) {
+		if names[name] {
+			return false
+		}
+	}
+	return true
+}
+
+// fullBuilderFor is why the tree in dir, with its build values and its project.toml's build environment, builds on
+// canyon-builder: "" when nothing rules the Node builder out, else the entry or variable that did and the group it
+// came from. An entry that can't be read rules it out. The tree holds directories and regular files alone (untar), so
+// no link leads detect outside what this reads.
+func (e *Executor) fullBuilderFor(ctx context.Context, dir string, values map[string]string) string {
+	names, why := e.buildNames(ctx, dir, values)
+	if why != "" {
+		return why
 	}
 	for name := range names {
 		if group, ok := buildVariables[name]; ok {
@@ -106,7 +135,6 @@ func (e *Executor) fullBuilderFor(ctx context.Context, dir string, values map[st
 			}
 		}
 	}
-	why := ""
 	walked := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

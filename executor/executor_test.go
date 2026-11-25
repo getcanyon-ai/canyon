@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -57,12 +58,17 @@ echo sha256:`+strings.Repeat("ab", 32))
 	return e, dir
 }
 
+// builderMetadataFake is a builder's io.buildpacks.builder.metadata as Paketo's noble builder writes it, cut to the
+// fields ownRunImage moves and one it keeps.
+const builderMetadataFake = `{"description":"Paketo noble","stack":{"runImage":{"image":"docker.io/paketobuildpacks/ubuntu-noble-run-base:latest","mirrors":[]}},"images":[{"image":"docker.io/paketobuildpacks/ubuntu-noble-run-base:latest"}],"buildpacks":[{"id":"paketo-buildpacks/nodejs","version":"9.9.9"}]}`
+
 // floorFake answers what a build's floor asks of docker as a daemon that floors it would: canyon-builds as the
 // executor creates it, the holder started, and its floor in place; and a builder running as 1001. A docker fake a build runs against carries
 // it after recording its argv.
 const floorFake = hostAddrsFake + `case "$1 $2 $5" in "network inspect canyon-builds") echo '{"Name":"canyon-builds","Driver":"bridge","EnableIPv6":false,"Internal":false,"Labels":{"canyon.build":""},"Options":{"com.docker.network.bridge.enable_icc":"false"},"IPAM":{"Config":[{"Subnet":"172.18.0.0/16"}]}}'; exit 0;; esac
 case "$1 $2 $3 $4" in "run -d --name canyon-build-"*) exit 0;; esac
 case "$*" in *"{{.Config.User}}"*) echo "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd 1001:1001"; exit 0;; esac
+case "$*" in *io.buildpacks.builder.metadata*) echo '` + builderMetadataFake + `'; exit 0;; esac
 [ "$1" = exec ] && exit 0
 `
 
@@ -127,33 +133,65 @@ func TestBuildStreamsTheLogThenReturnsTheDigest(t *testing.T) {
 // Every build runs with NODE_ENV=production, which a build value of that name replaces
 // (contracts/executor.md, /build): Paketo's npm-install hands the buildpacks after it
 // NODE_ENV=development, and a stock next build fails under it (canyonv2-g6il).
+//
+// A build that names neither builds on canyon-builder's own (#177), whose own build environment carries both at those
+// values and whose metadata names canyon-run:noble: pack is handed neither --env for them nor --run-image, so it builds
+// on that builder as it is, never on an ephemeral copy. A build value naming either builds on canyon-builder, as
+// before, its value handed through pack's environment with --env, and canyon-run:noble with --run-image.
 func TestEveryBuildRunsWithNodeEnvProduction(t *testing.T) {
-	for want, values := range map[string]map[string]string{"production": nil, "test": {"NODE_ENV": "test"}} {
+	for _, file := range []string{"/cnb/build-config/env/NODE_ENV.override", "/cnb/build-config/env/NEXT_PRIVATE_OUTPUT_TRACE_ROOT.override"} {
+		name := strings.TrimSuffix(path.Base(file), ".override")
+		if want := "printf " + BuildEnv(nil)[name] + " > " + file; !strings.Contains(ownBuilderDockerfile, want) {
+			t.Errorf("builder.own.Dockerfile does not set %s as BuildEnv does: no %q", name, want)
+		}
+	}
+	if !strings.Contains(ownBuilderDockerfile, `image = "`+runTag+`"`) {
+		t.Errorf("builder.own.Dockerfile's run.toml does not name %s", runTag)
+	}
+	for _, c := range []struct {
+		values           map[string]string
+		builder          string
+		env, trace, flag string
+	}{
+		{nil, ownBuilder.repo, "", "", ""},
+		{map[string]string{"NEXT_PUBLIC_API_URL": "https://api.example.com"}, ownBuilder.repo, "", "", "--env\nNEXT_PUBLIC_API_URL\n"},
+		{map[string]string{"NODE_ENV": "test"}, builderImage.repo, "test", "/", "--env\nNEXT_PRIVATE_OUTPUT_TRACE_ROOT\n--env\nNODE_ENV\n"},
+		{map[string]string{"NEXT_PRIVATE_OUTPUT_TRACE_ROOT": "/workspace"}, builderImage.repo, "production", "/workspace", "--env\nNEXT_PRIVATE_OUTPUT_TRACE_ROOT\n--env\nNODE_ENV\n"},
+	} {
 		e, dir := fakes(t)
-		if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f", BuildValues: values}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
+		if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f", BuildValues: c.values}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
 			t.Fatal(err)
 		}
-		argv, _ := os.ReadFile(filepath.Join(dir, "pack-argv")) //nolint:gosec // test dir
-		seen, _ := os.ReadFile(filepath.Join(dir, "node-env"))  //nolint:gosec // test dir
-		if !strings.Contains(string(argv), "--env\nNODE_ENV\n") || string(seen) != want {
-			t.Fatalf("build values %v: pack's NODE_ENV %q, want %q, through its environment (argv %q)", values, seen, want, argv)
+		argv, _ := os.ReadFile(filepath.Join(dir, "pack-argv"))   //nolint:gosec // test dir
+		env, _ := os.ReadFile(filepath.Join(dir, "node-env"))     //nolint:gosec // test dir
+		trace, _ := os.ReadFile(filepath.Join(dir, "trace-root")) //nolint:gosec // test dir
+		own := c.builder == ownBuilder.repo
+		if !strings.Contains(string(argv), "\n--builder\n"+c.builder+"\n") || string(env) != c.env || string(trace) != c.trace ||
+			strings.Contains(string(argv), "--run-image") == own || (c.flag == "") != !strings.Contains(string(argv), "--env") ||
+			c.flag != "" && !strings.Contains(string(argv), c.flag) {
+			t.Fatalf("build values %v: pack's NODE_ENV %q, NEXT_PRIVATE_OUTPUT_TRACE_ROOT %q, want %q and %q on %s with %q (argv %q)", c.values, env, trace, c.env, c.trace, c.builder, c.flag, argv)
 		}
 	}
 }
 
-// Every build runs with NEXT_PRIVATE_OUTPUT_TRACE_ROOT=/, which a build value of that name replaces
-// (contracts/executor.md, /build; #1240): Turbopack refuses npm-install's node_modules link, which
-// leaves the app's directory, unless its root holds the layer the link points into.
-func TestEveryBuildRunsWithTurbopacksRootAtTheFilesystemsRoot(t *testing.T) {
-	for want, values := range map[string]map[string]string{"/": nil, "/workspace": {"NEXT_PRIVATE_OUTPUT_TRACE_ROOT": "/workspace"}} {
-		e, dir := fakes(t)
-		if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f", BuildValues: values}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
-			t.Fatal(err)
-		}
-		argv, _ := os.ReadFile(filepath.Join(dir, "pack-argv"))  //nolint:gosec // test dir
-		seen, _ := os.ReadFile(filepath.Join(dir, "trace-root")) //nolint:gosec // test dir
-		if !strings.Contains(string(argv), "--env\nNEXT_PRIVATE_OUTPUT_TRACE_ROOT\n") || string(seen) != want {
-			t.Fatalf("build values %v: pack's NEXT_PRIVATE_OUTPUT_TRACE_ROOT %q, want %q, through its environment (argv %q)", values, seen, want, argv)
+// ownRunImage names canyon-run:noble as the builder's one run image under both keys pack 0.40.3 reads, and keeps
+// every other field; metadata it can't read fails the build of canyon-builder's own, never a builder without it.
+func TestOwnBuilderNamesCanyonRunAsItsRunImage(t *testing.T) {
+	got, err := ownRunImage([]byte(builderMetadataFake))
+	must(t, err)
+	var m struct {
+		Description string                                    `json:"description"`
+		Stack       struct{ RunImage struct{ Image string } } `json:"stack"`
+		Images      []struct{ Image string }                  `json:"images"`
+		Buildpacks  []struct{ ID, Version string }            `json:"buildpacks"`
+	}
+	must(t, json.Unmarshal(got, &m))
+	if m.Stack.RunImage.Image != runTag || len(m.Images) != 1 || m.Images[0].Image != runTag || m.Description != "Paketo noble" || len(m.Buildpacks) != 1 || m.Buildpacks[0].ID != "paketo-buildpacks/nodejs" {
+		t.Fatalf("%s", got)
+	}
+	for _, bad := range []string{"", "sha256:abab", `{"stack":"noble"}`} {
+		if _, err := ownRunImage([]byte(bad)); err == nil {
+			t.Errorf("%q read as builder metadata", bad)
 		}
 	}
 }
@@ -180,9 +218,13 @@ func TestBuildsOfOneAppShareOneCache(t *testing.T) {
 // CANYON_BUILDER is named with its registry, which matches no entry; the lifecycle image is by digest.
 func TestBuildNeverTrustsTheBuilder(t *testing.T) {
 	tag := "canyon-builder:" + fmt.Sprintf("%x", sha256.Sum256([]byte(builderDockerfile)))[:12]
-	for configured, want := range map[string]string{"": tag, "paketobuildpacks/ubuntu-noble-builder": "docker.io/paketobuildpacks/ubuntu-noble-builder"} {
+	own := "canyon-builder:" + fmt.Sprintf("%x", sha256.Sum256([]byte(tag+"\n"+ownBuilderDockerfile)))[:12] // built FROM tag
+	if builderImage.repo != tag || ownBuilder.repo != own {
+		t.Fatalf("canyon-builder is %s and its own %s, want %s and %s", builderImage.repo, ownBuilder.repo, tag, own)
+	}
+	for configured, want := range map[string]string{"": own, "paketobuildpacks/ubuntu-noble-builder": "docker.io/paketobuildpacks/ubuntu-noble-builder"} {
 		e, dir := fakes(t)
-		e.Builder, builderImage.id = configured, ""
+		e.Builder, builderImage.id, ownBuilder.id = configured, "", ""
 		if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f"}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
 			t.Fatal(err)
 		}
@@ -205,14 +247,15 @@ func TestBuildNeverTrustsTheBuilder(t *testing.T) {
 }
 
 // Every app runs on canyon-run (contracts/executor.md): the executor builds it from run.Dockerfile, fed
-// on stdin under the tag its hash names, before pack runs, names it canyon-run:noble, and hands pack that
-// name as the run image: the name the lifecycle records, and a later rebase must match.
+// on stdin under the tag its hash names, before pack runs, names it canyon-run:noble, and pack builds onto that
+// name, the name the lifecycle records and a later rebase must match: canyon-builder's own names it as its run image,
+// and a build on canyon-builder hands pack it as --run-image.
 // The file is Paketo's noble run image by digest plus libatomic1, libsqlite3-0 and libpq5 at no pinned version (#1754), ending as the
 // stack's non-root user.
 func TestBuildRunsTheAppOnCanyonRun(t *testing.T) {
 	e, dir := fakes(t)
 	runImage.id = "" // built by this test's docker, whatever another test left
-	if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f"}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
+	if _, err := e.Build(context.Background(), BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f", BuildValues: map[string]string{"NODE_ENV": "test"}}, bytes.NewReader(tarOf(t, map[string]string{"package.json": "{}"})), io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	tag := "canyon-run:" + fmt.Sprintf("%x", sha256.Sum256([]byte(runDockerfile)))[:12]

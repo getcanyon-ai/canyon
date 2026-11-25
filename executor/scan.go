@@ -94,9 +94,11 @@ type scanImage struct {
 	repo       string
 	about      string        // what the log says of a build beyond its name, where its size and time are worth knowing
 	deadline   time.Duration // one build's, dbDeadline when unset
-	mu         sync.Mutex
-	id         string
-	ready      time.Time // when this executor last built it: a call that began before then waited for it (#2711)
+	// args, when set, are what docker build is handed besides the Dockerfile, worked out as a build begins
+	args  func(ctx context.Context, docker string) ([]string, error)
+	mu    sync.Mutex
+	id    string
+	ready time.Time // when this executor last built it: a call that began before then waited for it (#2711)
 }
 
 // builtAt is when this executor last built the image, zero when it never did: it found it on the daemon.
@@ -172,8 +174,16 @@ func (s *scanImage) built(ctx context.Context, docker string) (string, error) {
 	deadline := cmp.Or(s.deadline, dbDeadline)
 	ctx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
+	build := []string{"build", "--quiet", "--tag", s.repo}
+	if s.args != nil {
+		more, err := s.args(ctx, docker)
+		if err != nil {
+			return "", err
+		}
+		build = append(build, more...)
+	}
 	var stderr strings.Builder
-	cmd := child(ctx, docker, "build", "--quiet", "--tag", s.repo, "-")
+	cmd := child(ctx, docker, append(build, "-")...)
 	cmd.Stdin, cmd.Stderr = strings.NewReader(s.dockerfile), &stderr
 	log.Printf("executor: building %s%s", s.repo, s.about)
 	began, stop := time.Now(), still("building "+s.repo)

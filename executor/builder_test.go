@@ -44,11 +44,13 @@ func TestClientRunImageReadsGetBuilder(t *testing.T) {
 	}
 }
 
-// builderFake is a docker that holds no canyon-builder and builds one by running build, a shell command.
+// builderFake is a docker that holds no canyon-builder and builds one by running build, a shell command; it answers
+// the builder's metadata as Paketo's builder carries it.
 func builderFake(t *testing.T, build string) *Executor {
 	t.Helper()
+	builderImage.id, ownBuilder.id = "", ""
 	docker := filepath.Join(t.TempDir(), "docker")
-	must(t, os.WriteFile(docker, []byte("#!/bin/sh\n[ \"$1 $2\" = 'image inspect' ] && exit 1\n[ \"$1\" = build ] && { cat >/dev/null; "+build+"; exit 0; }\nexit 1\n"), 0o700)) //nolint:gosec // a test fake must be executable
+	must(t, os.WriteFile(docker, []byte("#!/bin/sh\ncase \"$*\" in *io.buildpacks.builder.metadata*) echo '"+builderMetadataFake+"'; exit 0;; esac\n[ \"$1 $2\" = 'image inspect' ] && exit 1\n[ \"$1\" = build ] && { cat >/dev/null; "+build+"; exit 0; }\nexit 1\n"), 0o700)) //nolint:gosec // a test fake must be executable
 	return &Executor{Docker: docker}
 }
 
@@ -129,7 +131,7 @@ func TestGetBuilderSaysHowLongItWaitedForCanyonsImages(t *testing.T) {
 	dir := t.TempDir()
 	id, run := "sha256:"+strings.Repeat("ab", 32), "sha256:"+strings.Repeat("cd", 32)
 	docker := filepath.Join(dir, "docker")
-	must(t, os.WriteFile(docker, []byte("#!/bin/sh\ncase \"$*\" in *canyon-run:*) echo "+run+"; exit 0;; esac\n"+ //nolint:gosec // a test fake must be executable
+	must(t, os.WriteFile(docker, []byte("#!/bin/sh\ncase \"$*\" in *canyon-run:*) echo "+run+"; exit 0;; *io.buildpacks.builder.metadata*) echo '"+builderMetadataFake+"'; exit 0;; esac\n"+ //nolint:gosec // a test fake must be executable
 		"[ \"$1 $2\" = 'image inspect' ] && [ -e '"+dir+"/built' ] && { echo "+id+"; exit 0; }\n"+
 		"[ \"$1\" = build ] && { cat >/dev/null; sleep 0.3; : > '"+dir+"/built'; echo "+id+"; exit 0; }\nexit 1\n"), 0o700))
 	builderImage.id = ""

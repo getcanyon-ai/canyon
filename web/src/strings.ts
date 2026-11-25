@@ -1153,6 +1153,9 @@ export const CONNECT = {
   stepInstall: "Install the CLI",
   stepLogin: "Sign in to this Canyon",
   stepSkill: "Set up your coding agents",
+  // What to say to an agent once it's connected (#192): on a laptop, in the app's folder; in the cloud, of what's pushed.
+  askLaptop: "Then open your agent in the app's folder and ask it: Deploy this app to Canyon.",
+  askCloud: "Then push the app to GitHub and ask the agent: Deploy this repository to Canyon.",
   laptopNote: "The last step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools. They load the next time each agent starts.",
   cloud: "In the cloud",
   cloudNote: "For agents that run on their vendor's machines. They review and deploy what you've pushed to GitHub. On a laptop, use the CLI above: one way per agent.",

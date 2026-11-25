@@ -3935,7 +3935,10 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
 **The five stages of `canyon demo up`.**
 
 1. **Preflight, as one list.** Docker answers and is 28 or newer; Compose v2; 4 CPUs and 6 GB of memory; 18 GB of free
-   disk on the engine's own disk, read by `df` in the busybox image the compose file pins; no Canyon started another
+   disk on the engine's own disk, read by `df` in the busybox image the compose file pins, or 30 GB where `docker info`'s
+   `DriverStatus` names the containerd snapshotter (`driver-type` `io.containerd.snapshotter.v1`), or can't be read
+   (**amended 2026-11-25**: a cold up peaked at 22.1 GB on that store, 10.1 GB on overlay2, #165). The gap names the
+   store as Docker does, and its fix never tells anyone to switch stores: that is the person's Docker; no Canyon started another
    way holds the names the demo's containers take; nothing else holds `127.0.0.1:7777`. Each gap is a numbered line with one `Fix:` under it, on stderr, and the verb exits 1 having
    fetched and started nothing. **It never installs, deletes or repairs anything**, and the fix for a machine with no
    engine is a command the person runs, not one Canyon runs:
@@ -3968,7 +3971,8 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
    `✓ Canyon is ready at http://localhost:7777` and the one next step, `Next, take the guided tour: canyon demo tour`
    (§6.14.1).
 
-The minimums are the ones the laptop page and the README name: 4 CPUs, 6 GB of memory, 18 GB of free disk. A
+The minimums are the ones the laptop page and the README name: 4 CPUs, 6 GB of memory, 18 GB of free disk (30 GB
+with Docker's containerd image store). A
 `CANYON_DEMO_FROM` in the environment names where the bundle and its `SHA256SUMS` are served, in place of this CLI's
 release: CI starts the demo from a release built from its tree. `--help` does not offer it.
 

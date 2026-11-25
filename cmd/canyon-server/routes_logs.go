@@ -45,20 +45,29 @@ func routesLogs(api *http.ServeMux, a *app) {
 // redaction=masked is the dashboard's read (#2744): the last lines, never followed, masked as the status
 // read masks an app's last line; any other redaction is 400, never a raw read (fail closed).
 func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
+	// A security responder below contributor reads production's masked logs alone: any other read of theirs, one this
+	// parse refuses included, is the team's refusal, never the reason it is malformed.
+	refuse := func(code, message string) {
+		if responderLogs(r.Context()) {
+			a.teamRequired(r.Context(), w, a.pool, r.PathValue("id"))
+			return
+		}
+		writeErr(w, http.StatusBadRequest, code, message, nil)
+	}
 	env := r.URL.Query().Get("env")
 	switch env {
 	case "":
 		env = "preview"
 	case "preview", "prod":
 	default:
-		writeErr(w, http.StatusBadRequest, "invalid_env", "env is preview or prod", nil)
+		refuse("invalid_env", "env is preview or prod")
 		return
 	}
 	lines := logsTail
 	if s := r.URL.Query().Get("lines"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 1 || n > maxLogsLines {
-			writeErr(w, http.StatusBadRequest, "invalid_lines", "lines is 1 to 10000", nil)
+			refuse("invalid_lines", "lines is 1 to 10000")
 			return
 		}
 		lines = n
@@ -69,11 +78,11 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 	case "masked":
 		masked = true
 	default:
-		writeErr(w, http.StatusBadRequest, "invalid_redaction", "redaction is none or masked", nil)
+		refuse("invalid_redaction", "redaction is none or masked")
 		return
 	}
 	if masked && lines > maxMaskedLines {
-		writeErr(w, http.StatusBadRequest, "invalid_lines", "a masked read is 1 to 200 lines", nil)
+		refuse("invalid_lines", "a masked read is 1 to 200 lines")
 		return
 	}
 	live := !masked // follow=false: the last lines and the end of the body
@@ -81,14 +90,14 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 	case "":
 	case "true":
 		if masked {
-			writeErr(w, http.StatusBadRequest, "invalid_follow", "a masked read ends after its lines: follow is false", nil)
+			refuse("invalid_follow", "a masked read ends after its lines: follow is false")
 			return
 		}
 		live = true
 	case "false":
 		live = false
 	default:
-		writeErr(w, http.StatusBadRequest, "invalid_follow", "follow is true or false", nil)
+		refuse("invalid_follow", "follow is true or false")
 		return
 	}
 	ctx, id := r.Context(), r.PathValue("id")

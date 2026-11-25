@@ -338,6 +338,8 @@ func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
 		"?env=preview&env=prod&redaction=masked",    // the first env is the read's
 		"?env=prod&redaction=none&redaction=masked", // the first redaction is the read's
 		"?env=prod;x=1&redaction=masked",            // a pair with a semicolon is no pair: no env
+		"?env=nope",                                 // a read the parse refuses is the team's refusal, never a 400
+		"?env=prod&redaction=masked&follow=true",
 	} {
 		refused("a responder", rex, query)
 	}

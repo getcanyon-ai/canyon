@@ -1313,3 +1313,35 @@ func TestShortSeesEveryTextMaskReplaces(t *testing.T) {
 		}
 	}
 }
+
+// A container /run made and hasn't started, or one it set aside while its successor starts, is starting: never stopped,
+// never running, and the one set aside is no answer of its own (contracts/executor.md, POST /running, Starting; #230: a
+// promotion's switch read as stopped, and the app page said production was down).
+func TestRunningOfSaysStartingForASwitch(t *testing.T) {
+	e, dir := fakes(t)
+	ab := " sha256:" + strings.Repeat("ab", 32)
+	script := `#!/bin/sh
+printf '%s\n' "$*" >> "` + dir + `/calls"
+case "$1 $2" in
+"container ls") printf '%s\n' "claims-portal-prod created` + ab + `" "fnol-intake-prod-previous running` + ab + `" "claims-archive-prod exited` + ab + `" "claims-portal-preview running` + ab + `";;
+"container inspect") echo "/claims-portal-preview 0";;
+esac
+exit 0
+`
+	must(t, os.WriteFile(e.Docker, []byte(script), 0o700)) //nolint:gosec // test fake
+	asked := []Container{{"claims-portal", "prod"}, {"fnol-intake", "prod"}, {"claims-archive", "prod"}, {"claims-portal", "preview"}, {"quote-engine", "prod"}}
+	got, err := e.RunningOf(context.Background(), asked, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Container{{"claims-portal", "prod"}, {"fnol-intake", "prod"}}; !slices.Equal(got.Starting, want) {
+		t.Errorf("starting %v, want %v: made and not started, and set aside while its successor starts", got.Starting, want)
+	}
+	if want := []Container{{"claims-portal", "preview"}}; !slices.Equal(got.Running, want) {
+		t.Errorf("running %v, want %v: the one set aside runs, but is no answer of its own", got.Running, want)
+	}
+	calls, _ := os.ReadFile(filepath.Join(dir, "calls")) //nolint:gosec // test dir
+	if strings.Contains(string(calls), "-previous") {
+		t.Errorf("docker %q: the container set aside is never inspected", calls)
+	}
+}

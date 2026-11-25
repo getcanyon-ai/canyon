@@ -216,6 +216,7 @@ type Restarting struct {
 type Runs struct {
 	Running    []Container  `json:"running"`
 	Restarting []Restarting `json:"restarting"`
+	Starting   []Container  `json:"starting"` // a /run is starting it (contracts/executor.md, POST /running, Starting): never stopped
 	Stopped    []Stopped    `json:"stopped"`
 }
 
@@ -1154,16 +1155,24 @@ func (e *Executor) RunningOf(ctx context.Context, containers []Container, why bo
 	if len(containers) == 0 || len(containers) > MaxRunningOf {
 		return Runs{}, fmt.Errorf("%w: ask for 1 to %d containers", ErrRequest, MaxRunningOf)
 	}
-	var names []string
+	var names, aside []string
 	for _, c := range containers {
 		if !validApp(c.App) || (c.Target != "preview" && c.Target != "prod") {
 			return Runs{}, fmt.Errorf("%w: app must match %s and target be preview or prod", ErrRequest, appPattern)
 		}
-		names = append(names, c.App+"-"+c.Target)
+		names, aside = append(names, c.App+"-"+c.Target), append(aside, c.App+"-"+c.Target+"-previous")
 	}
-	listed, err := e.containersOf(ctx, names) // a name the daemon has not is not listed
+	listed, err := e.containersOf(ctx, append(names, aside...)) // a name the daemon has not is not listed
 	if err != nil {
 		return Runs{}, err
+	}
+	// a container /run set aside while its successor starts (Run): it says the asked one is starting, and is no answer of its own
+	switching := map[string]bool{}
+	for _, n := range aside {
+		if _, ok := listed[n]; ok {
+			switching[strings.TrimSuffix(n, "-previous")] = true
+			delete(listed, n)
+		}
 	}
 	restarts, err := e.restarts(ctx, listed)
 	if err != nil {
@@ -1171,11 +1180,15 @@ func (e *Executor) RunningOf(ctx context.Context, containers []Container, why bo
 	}
 	running := map[string]bool{}
 	var exited []Container
-	restarting := []Restarting{}
+	restarting, starting := []Restarting{}, []Container{}
 	for _, c := range containers {
 		n := c.App + "-" + c.Target
 		l, ok := listed[n]
 		switch {
+		case !ok && switching[n], ok && l[0] == "created": // set aside while its successor is made, or made and not yet started (#230)
+			if !slices.Contains(starting, c) {
+				starting = append(starting, c)
+			}
 		case !ok:
 		case (restarts[n] > 0 || l[0] == "restarting") && !slices.ContainsFunc(restarting, func(r Restarting) bool { return r.App == c.App && r.Target == c.Target }):
 			restarting = append(restarting, Restarting{App: c.App, Target: c.Target, Restarts: max(restarts[n], 1)}) // docker counts a restart before it says restarting
@@ -1189,7 +1202,7 @@ func (e *Executor) RunningOf(ctx context.Context, containers []Container, why bo
 	for n, l := range listed {
 		running[n] = runs(l[0], l[1]) && restarts[n] == 0
 	}
-	return Runs{Running: Asked(containers, running), Restarting: restarting, Stopped: e.why(ctx, exited)}, nil
+	return Runs{Running: Asked(containers, running), Restarting: restarting, Starting: starting, Stopped: e.why(ctx, exited)}, nil
 }
 
 // restarts is how often docker started each listed container that is up or waiting to start again since

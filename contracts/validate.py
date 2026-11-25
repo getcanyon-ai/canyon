@@ -3503,6 +3503,13 @@ def seam4():
         errors.append(f"executor: POST /running answers {again} restarting; each asked once, in the order asked, never running or stopped too")
     if not restarting:
         errors.append("selftest: the executor fixture answers no restarting container, so the checks above check nothing")
+    # Starting (executor.md, POST /running, #230): those asked that a /run is starting, each once, in the order asked,
+    # never running, restarting or stopped too.
+    starting = [(a["app"], a["target"]) for a in doc["running_batch_result"].get("starting", [])]
+    if starting != [a for a in asked if a in starting] or len(set(starting)) != len(starting) or set(starting) & (set(answered) | set(again) | set(stopped)):
+        errors.append(f"executor: POST /running answers {starting} starting; each asked once, in the order asked, never running, restarting or stopped too")
+    if not starting:
+        errors.append("selftest: the executor fixture answers no starting container, so the check above checks nothing")
     # The app's own network and identity (executor.md, /run): canyon-app-<app>, the token's audience the app.
     if run["network"] != f"canyon-app-{run['app']}":
         errors.append(f"executor: /run joins {run['network']}; an app's containers join canyon-app-<app>, never another app's")

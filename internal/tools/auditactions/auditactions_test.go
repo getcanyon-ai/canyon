@@ -56,12 +56,15 @@ var variable = map[string][]string{
 	`runs/watch.go revert "revert patch "+env`:                          {"revert patch preview", "revert patch prod"},
 }
 
-// recorded is every action events.AuditTx is called with in the repository's Go, outside tests, and the calls it can't
-// read an action off.
-func recorded(t *testing.T) (actions []string, unread []string) {
+// recorded is every action events.AuditTx is called with in the repository's Go, outside tests, those of them only
+// Canyon Enterprise's ee/ records, and the calls it can't read an action off.
+func recorded(t *testing.T) (actions, eeOnly, unread []string) {
 	t.Helper()
 	set := token.NewFileSet()
-	seen := map[string]bool{}
+	seen := map[string]bool{} // an action, and whether a call outside ee/ records it
+	mark := func(action, rel string) {
+		seen[action] = seen[action] || !strings.HasPrefix(filepath.ToSlash(rel), "ee/")
+	}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -95,7 +98,7 @@ func recorded(t *testing.T) (actions []string, unread []string) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					seen[action] = true
+					mark(action, rel)
 					return true
 				}
 				site := filepath.ToSlash(rel) + " " + fn.Name.Name + " " + expr(set, call.Args[3])
@@ -104,7 +107,7 @@ func recorded(t *testing.T) (actions []string, unread []string) {
 					unread = append(unread, site)
 				}
 				for _, action := range names {
-					seen[action] = true
+					mark(action, rel)
 				}
 				return true
 			})
@@ -114,11 +117,15 @@ func recorded(t *testing.T) (actions []string, unread []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for action := range seen {
+	for action, core := range seen {
 		actions = append(actions, action)
+		if !core {
+			eeOnly = append(eeOnly, action)
+		}
 	}
 	slices.Sort(actions)
-	return actions, unread
+	slices.Sort(eeOnly)
+	return actions, eeOnly, unread
 }
 
 // auditTx is whether a call's function is events.AuditTx: from any package, or within events.
@@ -145,34 +152,60 @@ func expr(set *token.FileSet, e ast.Expr) string {
 	return b.String()
 }
 
+// actions.txt is every action, which the dashboard has words for; ee-actions.txt those only Canyon Enterprise's ee/
+// records. Built without ee/ (the noee job deletes it), the source records the first less the second; with it, both are
+// demanded exactly, so an action ee/ alone records is always marked.
 func TestEveryRecordedActionIsListed(t *testing.T) {
-	actions, unread := recorded(t)
+	actions, eeOnly, unread := recorded(t)
 	for _, site := range unread {
 		t.Errorf("events.AuditTx is called with an action this test can't read: %s. Name it in variable, with every action it can be", site)
 	}
-	got := strings.Join(actions, "\n") + "\n"
+	_, err := os.Stat(filepath.Join(root, "ee"))
+	withEE := err == nil
 	if *update {
-		if err := os.WriteFile("testdata/actions.txt", []byte(got), 0o600); err != nil {
-			t.Fatal(err)
+		if !withEE {
+			t.Fatal("-update needs ee/: without it the lists can't be told apart")
+		}
+		for name, list := range map[string][]string{"actions.txt": actions, "ee-actions.txt": eeOnly} {
+			if err := os.WriteFile("testdata/"+name, []byte(strings.Join(list, "\n")+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
-	want, err := os.ReadFile("testdata/actions.txt")
+	listed, eeListed := lines(t, "actions.txt"), lines(t, "ee-actions.txt")
+	if withEE {
+		same(t, "testdata/ee-actions.txt isn't the actions only ee/ records", eeOnly, eeListed)
+	} else {
+		listed = slices.DeleteFunc(listed, func(a string) bool { return slices.Contains(eeListed, a) })
+	}
+	same(t, "testdata/actions.txt isn't the actions the source records", actions, listed)
+}
+
+// lines is a testdata list, one action a line.
+func lines(t *testing.T, name string) []string {
+	t.Helper()
+	raw, err := os.ReadFile("testdata/" + name) //nolint:gosec // one of this test's two lists
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(want) != got {
-		listed := strings.Split(strings.TrimSpace(string(want)), "\n")
-		var added, gone []string
-		for _, a := range actions {
-			if !slices.Contains(listed, a) {
-				added = append(added, a)
-			}
+	return strings.Split(strings.TrimSpace(string(raw)), "\n")
+}
+
+// same fails unless got is listed, naming what each lacks.
+func same(t *testing.T, what string, got, listed []string) {
+	t.Helper()
+	var added, gone []string
+	for _, a := range got {
+		if !slices.Contains(listed, a) {
+			added = append(added, a)
 		}
-		for _, a := range listed {
-			if !slices.Contains(actions, a) {
-				gone = append(gone, a)
-			}
+	}
+	for _, a := range listed {
+		if !slices.Contains(got, a) {
+			gone = append(gone, a)
 		}
-		t.Errorf("testdata/actions.txt isn't the actions the source records: new %q, gone %q. Run go test ./internal/tools/auditactions -update, and give each new one words in web/src/strings.ts", added, gone)
+	}
+	if len(added) > 0 || len(gone) > 0 {
+		t.Errorf("%s: new %q, gone %q. Run go test ./internal/tools/auditactions -update with ee/ in place, and give each new one words in web/src/strings.ts", what, added, gone)
 	}
 }

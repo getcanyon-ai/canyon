@@ -550,6 +550,19 @@ describe("the headline of a production that's down", () => {
   };
   const band = async () => within(await screen.findByRole("region", { name: "Where it stands" }));
 
+  // Stopped with no exit the executor names is a switch under way, a promotion's new container not yet started: nothing
+  // crashed, so neither the band nor a card reads the lines, an audited read, until the person opens them (#199's
+  // putback journey: a logs row nobody asked for).
+  it.each([["production", "prod"], ["preview", "preview"]] as const)("reads no lines while %s is stopped with no exit named", async (_name, key) => {
+    const sent = server({ ...reads(reviewed("clean")), "GET /api/v1/projects/claims-portal/status": { body: { ...bare, envs: { ...bare.envs, [key]: { ...(bare.envs[key] as Env), state: "stopped" } } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    await production();
+    await flush();
+    await flush();
+    expect(sent().some((one) => one.includes("/logs?"))).toBe(false);
+    expect(screen.queryByText(S.lastLines)).toBeNull();
+  });
+
   it.each([["stopped", stopped], ["restarting", restarting]])("shows a %s production's last lines and puts the newest kept version back", async (_state, prod) => {
     const sent = server({ ...reads(reviewed("pending")), "GET /api/v1/projects/claims-portal/status": { body: down(prod) } });
     logs("prod");

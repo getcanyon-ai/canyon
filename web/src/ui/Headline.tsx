@@ -88,6 +88,9 @@ const restarted = (env: Env, at: "preview" | "prod", after: string) => {
   const text = (code === undefined ? S.restartedWayOut : S.restartedLastExit.replace("<code>", String(code)).replace("<below>", said === undefined ? "" : " The app's last line is below.")).replace("<env>", at) + after;
   return { text: text + (code === undefined ? S.restartedHasWhy.replace("<env>", at) : ""), lined: text, said, tail: at };
 };
+// A stopped environment's lines are read, an audited read, only where the executor named how it exited: stopped with no
+// exit is a switch under way, a deploy's new container not yet started, and nothing crashed (#199's putback journey).
+const exited = (env: Env, at: "preview" | "prod"): { tail?: "preview" | "prod" } => (env.stopped === undefined ? {} : { tail: at });
 // Where a production that's down can go back to: the newest earlier version Canyon kept, else, where the read carries
 // earlier[], why none can (#188).
 const back = (f: Facts) => {
@@ -112,7 +115,7 @@ export function headline(f: Facts): Band {
     const twin = f.preview !== null && f.preview.package === f.prod.package && f.preview.state === "running" ? "Preview runs the same version and is still up." : "";
     const { back: row, none } = back(f);
     return { tone: "red", title: `Production is down: ${f.prodName} stopped${code}`, text: sentences(twin, `${f.prod.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env prod has the rest.`, none),
-      lined: sentences(twin, none), said: f.prod.stopped?.said || undefined, tail: "prod", back: row, covers: ["down:prod"] };
+      lined: sentences(twin, none), said: f.prod.stopped?.said || undefined, ...exited(f.prod, "prod"), back: row, covers: ["down:prod"] };
   }
   // One started again since its deploy is not running, up or not at this instant, and the way out is a new deploy (#1722).
   if (f.prod?.state === "restarting") {
@@ -179,7 +182,7 @@ export function headline(f: Facts): Band {
   if (f.preview !== null && f.preview.package === f.latest.package && f.preview.state === "stopped") {
     const code = f.preview.stopped === undefined ? "" : ` with exit code ${f.preview.stopped.exit_code}`;
     return { tone: "red", title: `${v} stopped in preview${code}`, text: `${f.preview.stopped?.said ? "The app's last line is below; " : ""}canyon logs --env preview has the rest.${keeps}`,
-      lined: keeps.trim(), said: f.preview.stopped?.said || undefined, tail: "preview", covers: ["down:preview"] };
+      lined: keeps.trim(), said: f.preview.stopped?.said || undefined, ...exited(f.preview, "preview"), covers: ["down:preview"] };
   }
   if (f.preview !== null && f.preview.package === f.latest.package && f.preview.state === "unknown") {
     return { tone: "amber", title: `${v} is in preview, but Canyon couldn't check whether it runs`, text: `canyon logs --env preview shows what it is doing.${keeps}` };

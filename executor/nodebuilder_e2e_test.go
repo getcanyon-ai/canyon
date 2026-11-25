@@ -90,12 +90,13 @@ func TestEndToEndTheNodeBuilderKeepsTheBuildVariablesPrecedence(t *testing.T) {
 	defer cancel()
 	e := &Executor{Join: []string{}, NodeBuilder: e2eNodeBuilder}
 	var log bytes.Buffer
+	since := time.Now()
 	res, err := e.Build(ctx, BuildRequest{App: "next16-node", Package: "pkg_e2e4"}, treeOf(t, filepath.Join("testdata", "apps", "next16-stock")), &log)
 	if err != nil {
 		t.Fatalf("build: %v\n%s", err, tail(log.String(), 60))
 	}
 	defer exec.Command("docker", "image", "rm", "-f", strings.TrimPrefix(res.Image, "canyon/next16-node@")).Run()
-	if !strings.Contains(log.String(), "Next.js 16.3.8 (Turbopack)") || strings.Contains(log.String(), "Builder creation completed") {
+	if !strings.Contains(log.String(), "Next.js 16.3.8 (Turbopack)") || ephemeralSince(t, since) {
 		t.Fatalf("not Turbopack on the Node builder itself:\n%s", tail(log.String(), 60))
 	}
 	run, err := e.Run(ctx, RunRequest{App: "next16-node", Target: "preview", Image: res.Image, Network: "canyon-app-next16-node"})

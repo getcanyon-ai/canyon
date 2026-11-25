@@ -297,6 +297,8 @@ func (a *app) env(app fleetApp, now time.Time) (string, string) {
 			return name + " restarting", ansiRed
 		case "stopped":
 			return name + " stopped", ansiRed
+		case "starting": // a deploy or a promotion starting it: not down (#230)
+			return name + " starting", ansiAmber
 		case "running":
 			return name, ""
 		case "": // the org runs it: its pods' check-in says what Canyon can know of it (envs.<env>.seen_at)

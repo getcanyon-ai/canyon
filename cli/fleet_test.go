@@ -228,7 +228,7 @@ func TestAnEnvironmentWaitingOnItsFirstReleaseIsNoEnv(t *testing.T) {
 // name alone.
 func TestTheEnvColumnSaysAStoppedAppStopped(t *testing.T) {
 	a := &app{out: io.Discard}
-	for state, want := range map[string][2]string{"running": {"prod", ""}, "restarting": {"prod restarting", ansiRed}, "stopped": {"prod stopped", ansiRed}, "unknown": {"prod couldn't check", ansiAmber}, "paused": {"prod couldn't check", ansiAmber}} {
+	for state, want := range map[string][2]string{"running": {"prod", ""}, "restarting": {"prod restarting", ansiRed}, "stopped": {"prod stopped", ansiRed}, "starting": {"prod starting", ansiAmber}, "unknown": {"prod couldn't check", ansiAmber}, "paused": {"prod couldn't check", ansiAmber}} {
 		prod := json.RawMessage(`{"url":"http://claims-archive.prod.localhost:7777","package":"pkg_8b21","deployed_at":"2026-08-24T13:55:02Z","run_by":"canyon","state":"` + state + `"}`)
 		if got, colour := a.env(fleetApp{Envs: map[string]json.RawMessage{"prod": prod}}, at); got != want[0] || colour != want[1] {
 			t.Errorf("a prod that is %s is ENV %q in %q, want %q in %q", state, got, colour, want[0], want[1])

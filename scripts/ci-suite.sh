@@ -52,6 +52,7 @@ export PATH="$HOME/.local/bin:$PATH"
 # sets it for the private runners, and a cut-short download in an image's build failed #197's backup suite
 [ -n "${GOPROXY:-}" ] || GOPROXY=$(.github/actions/go-cache/goproxy.sh https://proxy.golang.org)
 export GOPROXY
+echo "ci-suite.sh: GOPROXY=$GOPROXY, for the Go commands and every image this suite builds" # (#180)
 tmp=${RUNNER_TEMP:-$(mktemp -d)}
 compose=(docker compose -f docker-compose.yml -f e2e/compose.e2e.yml)
 dbs="$HOME/.cache/canyon-scandb"

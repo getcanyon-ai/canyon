@@ -6,8 +6,10 @@
 //	                                  ci issue. RUN_ID is the workflow run that asks.
 //
 // GitHub's answers are files, each `gh api --paginate --slurp`: RELEASES (and DIR/releases.json) of
-// repos/getcanyon-ai/canyon-releases/releases, and in DIR check-runs.json and runs.json of the commit's
-// check-runs?filter=latest and actions/runs?head_sha=, and issues.json of issues?labels=ci&state=open.
+// repos/getcanyon-ai/canyon-releases/releases, and in DIR check-runs.json of the commit's check-runs?filter=latest,
+// runs-push.json, runs-schedule.json and runs-workflow_dispatch.json of its actions/runs?head_sha=&event= for each of
+// those events, and issues.json of issues?labels=ci&state=open. A check run of none of those runs is looked up by gh
+// api, in GITHUB_REPOSITORY.
 package main
 
 import (
@@ -229,13 +231,23 @@ var good = []string{"success", "skipped", "neutral"}
 // runID is the workflow run a check run's details_url names.
 var runID = regexp.MustCompile(`/actions/runs/([0-9]+)/`)
 
-// badRuns are the commit's runs that aren't done and good. Of its workflow runs, only main's own count, a push's, a
-// schedule's or one run by hand (a stranger's comment starts a run on main's head too), and of those the newest of each
-// workflow, so a later run passes for an earlier one that failed; a newest that hasn't finished refuses. A check run
-// counts through its workflow run; one whose run isn't among the commit's refuses. self, the run that asks, is aside.
-// An answer that doesn't parse, or holds less than it says, refuses, and so does one with no run but self.
-func badRuns(checkRuns, workflowRuns []byte, self string) (problems []string) {
-	runs, err := pages[struct {
+// mainEvents are the events of main's own runs: a push's, a schedule's and one run by hand. Each is listed apart
+// (actions/runs?head_sha=&event=), so the listing is bounded by main's own activity: GitHub returns at most 1,000 runs
+// for a head_sha, and every comment anyone makes starts a run on main's head (#181).
+var mainEvents = []string{"push", "schedule", "workflow_dispatch"}
+
+// strangers are the events of a run anyone starts on main's head, a comment's: a check run of one is no check of the
+// commit's.
+var strangers = []string{"issue_comment", "pull_request_target"}
+
+// badRuns are the commit's runs that aren't done and good. Of its workflow runs, only main's own count (mainEvents, one
+// listing each, in that order), and of those the newest of each workflow, so a later run passes for an earlier one that
+// failed; a newest that hasn't finished refuses. A check run counts through its workflow run; one whose run isn't among
+// main's own is looked up by event, and passes only as a stranger's run, never when the lookup fails. self, the run
+// that asks, is aside. An answer that doesn't parse, or holds less than it says, refuses, and so does one with no run
+// but self.
+func badRuns(checkRuns []byte, workflowRuns [][]byte, self string, event func(id string) (string, error)) (problems []string) {
+	type listing struct {
 		Total int `json:"total_count"`
 		Runs  []struct {
 			ID                       int64
@@ -245,37 +257,47 @@ func badRuns(checkRuns, workflowRuns []byte, self string) (problems []string) {
 			Created                  string `json:"created_at"` // RFC 3339 in UTC, so it sorts as text
 			URL                      string `json:"html_url"`
 		} `json:"workflow_runs"`
-	}](workflowRuns)
-	checks, cerr := pages[struct {
+	}
+	checks, err := pages[struct {
 		Total int `json:"total_count"`
 		Runs  []struct {
 			Name, Status, Conclusion string
 			URL                      string `json:"details_url"`
 		} `json:"check_runs"`
 	}](checkRuns)
-	if err = errors.Join(err, cerr); err != nil {
-		return []string{"the commit's runs: " + err.Error()}
+	if err != nil {
+		return []string{"the commit's check runs: " + err.Error()}
+	}
+	if len(workflowRuns) != len(mainEvents) {
+		return []string{fmt.Sprintf("%d listings of the commit's workflow runs, not one for each of %s", len(workflowRuns), strings.Join(mainEvents, ", "))}
 	}
 	listed, newest := map[string]bool{}, map[int64]int{} // every run's id; each workflow's newest of main's own, by index
 	type run struct{ id, line, conclusion, created string }
 	var all []run
-	total := 0
-	for _, p := range runs {
-		for _, r := range p.Runs {
-			total++
-			id := strconv.FormatInt(r.ID, 10)
-			listed[id] = true
-			if !slices.Contains([]string{"push", "schedule", "workflow_dispatch"}, r.Event) {
-				continue
-			}
-			all = append(all, run{id, fmt.Sprintf("workflow run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL), r.Conclusion, r.Created})
-			if at, seen := newest[r.WorkflowID]; !seen || r.Created > all[at].created {
-				newest[r.WorkflowID] = len(all) - 1
+	for i, raw := range workflowRuns {
+		runs, err := pages[listing](raw)
+		if err != nil {
+			return []string{"the commit's " + mainEvents[i] + " runs: " + err.Error()}
+		}
+		total := 0
+		for _, p := range runs {
+			for _, r := range p.Runs {
+				total++
+				if r.Event != mainEvents[i] { // the listing GitHub filtered: anything else isn't what was asked
+					problems = append(problems, fmt.Sprintf("the commit's %s runs list a %s run: %s", mainEvents[i], r.Event, r.URL))
+					continue
+				}
+				id := strconv.FormatInt(r.ID, 10)
+				listed[id] = true
+				all = append(all, run{id, fmt.Sprintf("workflow run %s: %s %s %s", r.Name, r.Status, r.Conclusion, r.URL), r.Conclusion, r.Created})
+				if at, seen := newest[r.WorkflowID]; !seen || r.Created > all[at].created {
+					newest[r.WorkflowID] = len(all) - 1
+				}
 			}
 		}
-	}
-	if total != runs[0].Total {
-		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d workflow runs", total, runs[0].Total))
+		if total != runs[0].Total {
+			problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d %s runs", total, runs[0].Total, mainEvents[i]))
+		}
 	}
 	counted := map[string]bool{}
 	for _, at := range newest {
@@ -289,15 +311,32 @@ func badRuns(checkRuns, workflowRuns []byte, self string) (problems []string) {
 	if len(counted) == 0 {
 		problems = append(problems, "the commit has no run of main's own but this one")
 	}
-	total = 0
+	looked := map[string]string{} // a run's id: its event, or "" when the lookup failed
+	total := 0
 	for _, p := range checks {
 		for _, c := range p.Runs {
 			total++
 			m := runID.FindStringSubmatch(c.URL)
-			switch {
-			case m == nil || !listed[m[1]]:
-				problems = append(problems, fmt.Sprintf("check run %s belongs to no workflow run of the commit's: %s", c.Name, c.URL))
-			case counted[m[1]] && !slices.Contains(good, c.Conclusion):
+			if m == nil {
+				problems = append(problems, fmt.Sprintf("check run %s belongs to no workflow run: %s", c.Name, c.URL))
+				continue
+			}
+			if !listed[m[1]] {
+				e, seen := looked[m[1]]
+				if !seen {
+					var err error
+					if e, err = event(m[1]); err != nil {
+						e = ""
+						problems = append(problems, fmt.Sprintf("check run %s: its workflow run %s can't be looked up: %v", c.Name, m[1], err))
+					}
+					looked[m[1]] = e
+				}
+				if e != "" && !slices.Contains(strangers, e) {
+					problems = append(problems, fmt.Sprintf("check run %s belongs to a %s run, not one of main's own: %s", c.Name, e, c.URL))
+				}
+				continue
+			}
+			if counted[m[1]] && !slices.Contains(good, c.Conclusion) {
 				problems = append(problems, fmt.Sprintf("check run %s: %s %s %s", c.Name, c.Status, c.Conclusion, c.URL))
 			}
 		}
@@ -306,6 +345,23 @@ func badRuns(checkRuns, workflowRuns []byte, self string) (problems []string) {
 		problems = append(problems, fmt.Sprintf("GitHub listed %d of the commit's %d check runs", total, checks[0].Total))
 	}
 	return problems
+}
+
+// ghEvent is a workflow run's event, as GitHub answers it for the repository the workflow runs in.
+func ghEvent(id string) (string, error) {
+	repo := os.Getenv("GITHUB_REPOSITORY")
+	if repo == "" {
+		return "", errors.New("GITHUB_REPOSITORY is unset")
+	}
+	out, err := exec.Command("gh", "api", "repos/"+repo+"/actions/runs/"+id, "--jq", ".event").Output() //nolint:gosec // a run id runID matched, digits
+	if err != nil {
+		return "", fmt.Errorf("gh api: %w", err)
+	}
+	e := strings.TrimSpace(string(out))
+	if e == "" {
+		return "", errors.New("GitHub named no event")
+	}
+	return e, nil
 }
 
 // openCI are the open issues labelled ci, which main-health opens for a red run on main: one earlier in the range
@@ -395,8 +451,8 @@ func run(args []string) error {
 		}
 		return err
 	case len(args) == 4 && args[0] == "check":
-		var raw [4][]byte
-		for i, name := range []string{"releases.json", "check-runs.json", "runs.json", "issues.json"} {
+		var raw [6][]byte
+		for i, name := range []string{"releases.json", "check-runs.json", "issues.json", "runs-push.json", "runs-schedule.json", "runs-workflow_dispatch.json"} {
 			var err error
 			if raw[i], err = read(args[2], name); err != nil {
 				return err
@@ -410,7 +466,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		problems = append(append(problems, badRuns(raw[1], raw[2], args[3])...), openCI(raw[3])...)
+		problems = append(append(problems, badRuns(raw[1], raw[3:], args[3], ghEvent)...), openCI(raw[2])...)
 		if len(problems) > 0 {
 			return fmt.Errorf("%s is refused (qa/release/README.md):\n  %s", args[1], strings.Join(problems, "\n  "))
 		}

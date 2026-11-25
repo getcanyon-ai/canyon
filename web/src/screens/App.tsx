@@ -592,7 +592,8 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // #188), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
     const at = status?.envs[key];
-    return mayRead(key) && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped") && top.band?.tail !== key;
+    // stopped with no exit named is a switch under way, nothing crashed: its lines wait for Show logs (#199's putback journey)
+    return mayRead(key) && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped" && at.stopped !== undefined) && top.band?.tail !== key;
   };
   // Put back from the headline is the card's own Put back of that version (#188): the card opens and follows its review.
   const toPutBack = (row: Earlier) => {

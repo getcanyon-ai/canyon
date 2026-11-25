@@ -47,7 +47,12 @@ journey("put an earlier version back in production", {
     {
       name: "promote it, and production runs the first version again",
       do: async (page, { v1 }) => {
-        await page.getByRole("button", { name: `Promote ${v1}` }).click();
+        const card = page.getByRole("region", { name: "Production", exact: true });
+        await card.getByRole("button", { name: `Promote ${v1}`, exact: true }).click();
+        // the question before production changes, the keyboard on Cancel, as every promote's (#157, #188)
+        await expect(card.getByText(/^Put .+ back in production(, replacing .+)?\?$/)).toBeVisible();
+        await expect(card.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+        await card.getByRole("button", { name: `Promote ${v1}`, exact: true }).click();
       },
       see: async (page, { v1 }) => {
         // what production runs is named on the card's first line; the earlier rows carry a date after theirs

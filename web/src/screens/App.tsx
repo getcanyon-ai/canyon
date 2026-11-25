@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
+import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Earlier, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
 import { AUTH, RENAME, S, TEARDOWN } from "../strings";
 import { Actor, actorName } from "../ui/Actor";
 import { Age } from "../ui/Age";
@@ -501,7 +501,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     run: pinned === null && fromCheck === null && reading !== null && reading.package === project.latest.package ? reading : null,
     preview, prod, previewName: preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label), prodName: prod === null ? null : version(prod.package, prod.label), receipt: status.receipt, hold: status.hold,
     broke: broke === null || broke instanceof Error ? undefined : broke,
-    progress: progressWords(steps), refused,
+    progress: progressWords(steps), refused, earlier: status.earlier,
     secret: (status.needs ?? []).some((need) => need.kind === "secret" && (need.version === undefined || need.version === newest)),
   });
   // What an empty preview says: where the newest version stopped, else how something gets there.
@@ -580,13 +580,27 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
     ? <CopyFix app={id} findings={reading.findings.filter((one) => one.properties.canyon.blocks && one.approval === undefined)} /> : null;
-  // A restarting environment the band doesn't show the lines of shows them on its card, to whoever may read its logs
-  // (#2744), so the need's "Its last log lines, on its page" holds wherever the band stands.
+  // Who may read an environment's last lines: the logs route's minimum, contributor (design/PERMISSIONS.md).
+  const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
+  // A down environment the band doesn't show the lines of shows them on its card, to whoever may read its logs (#2744,
+  // #188), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
     const at = status?.envs[key];
-    const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
-    return mayRead && at !== undefined && !waiting(at) && at.state === "restarting" && top.band?.tail !== key;
+    return mayRead && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped") && top.band?.tail !== key;
   };
+  // Put back from the headline is the card's own Put back of that version (#188): the card opens and follows its review.
+  const toPutBack = (row: Earlier) => {
+    const shelf = document.querySelector<HTMLElement>('section[aria-label="Earlier versions"]')?.closest("details");
+    if (shelf === null || shelf === undefined) return;
+    shelf.open = true;
+    shelf.querySelector<HTMLButtonElement>(`button[aria-label="Put back ${CSS.escape(row.version)}"]`)?.click();
+    shelf.parentElement?.scrollIntoView?.({ block: "nearest" });
+  };
+  const putBack = top.band?.back === undefined ? null : (
+    <span key="back" className="max-[620px]:order-first max-[620px]:basis-full max-[620px]:*:w-full">
+      <Button variant="primary" onClick={() => toPutBack(top.band!.back!)}>{S.putBackNamed.replace("<version>", () => top.band!.back!.version)}</Button>
+    </span>
+  );
   // What a running environment calls out to, on its card (D15): how many destinations, how many refused on their last call,
   // the Outbound card a click away; red while one of its requests is refused now (the refused tile's predicate).
   const calls = (key: "preview" | "prod") => {
@@ -724,9 +738,9 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <>
             {(() => {
               const headed = top.band === null ? null : (
-                <Headline key="headline" band={top.band} app={admin || project.access.level === "owner" || project.access.level === "contributor" ? id : undefined}>
-                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && (lift === null || status.receipt.held === undefined) ? undefined
-                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
+                <Headline key="headline" band={top.band} app={mayRead ? id : undefined}>
+                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && putBack === null && (lift === null || status.receipt.held === undefined) ? undefined
+                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{putBack}{fixing}</>}
                 </Headline>
               );
               const listed = top.needs.length === 0 ? null : (
@@ -742,12 +756,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 {untailed("preview") && <LastLines app={id} env="preview" />}
               </EnvCard>
               {/* Held, it says who held it and who lets it run again: Promote is disabled, so it never says to promote. */}
-              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")}
+              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")} lined={mayRead && top.band?.tail === "prod"}
                 {...(status.hold === undefined ? { empty: "Promote a version from preview to run it here." } : { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" })}
                 who={prod?.promoted_by === undefined || prod.promoted_by === null ? undefined : <>promoted by <Actor actor={prod.promoted_by} /></>}>
                 {untailed("prod") && <LastLines app={id} env="prod" />}
                 {/* a host from before earlier[] answers none */}
-                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
+                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} name={project.name} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
               </EnvCard>
             </div>
             {rows(project, status).length > 0 && <Versions rows={rows(project, status)} />}

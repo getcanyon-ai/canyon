@@ -48,8 +48,9 @@ const (
 )
 
 // The fixture apps built on each side: Paketo's Node, Python and Java samples, whose images
-// design/PATCHING.md §2's class table is checked against (executor/e2e_test.go).
-var apps = []string{"node-engines", "django-sqlite", "spring-maven"}
+// design/PATCHING.md §2's class table is checked against (executor/e2e_test.go), and a Ruby and an ASP.NET app,
+// which no other check builds (#133).
+var apps = []string{"node-engines", "django-sqlite", "spring-maven", "ruby-rack", "aspnet-minimal"}
 
 // pinRE is a Paketo image pinned by digest, as Canyon names one in its Dockerfiles, its manifests and its tests.
 var pinRE = regexp.MustCompile(`docker\.io/paketobuildpacks/([a-z0-9-]+)@(sha256:[0-9a-f]{64})`)

@@ -49,7 +49,7 @@ index=$(mktemp -d)
 trap 'rm -rf "$index"' EXIT
 export GIT_INDEX_FILE=$index/index
 empty=$(git hash-object -t blob --stdin < /dev/null)
-sort -zu | while IFS= read -r -d '' f; do printf '100644 %s\t%s\0' "$empty" "$f"; done > "$index/info"
+LC_ALL=C sort -zu | while IFS= read -r -d '' f; do printf '100644 %s\t%s\0' "$empty" "$f"; done > "$index/info"
 asked=$(tr -cd '\0' < "$index/info" | wc -c | tr -d ' ')
 [ "$asked" -gt 0 ] || all "no changed path"
 git update-index -z --index-info < "$index/info" 2> /dev/null || all "git could not take the changed paths as paths"

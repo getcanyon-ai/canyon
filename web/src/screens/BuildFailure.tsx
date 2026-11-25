@@ -53,7 +53,7 @@ export function BuildFailure({ run, broke }: { run: RunRead; broke: Broke | Erro
     <details open className="group grid gap-1.5">
       <summary className="cursor-pointer text-md font-semibold text-text-dim">
         {start ? "The app's last lines" : "The build's last lines"}
-        <span className="font-normal text-text-faint">{start ? " · build output, then the app's own" : ""}</span>
+        <span className="font-regular text-text-faint">{start ? " · build output, then the app's own" : ""}</span>
       </summary>
       <pre className="mt-1.5 overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm whitespace-pre-wrap text-text">
         {broke.lines.map((line, at) => (

@@ -1,11 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { SignIn, takeReturn } from "./SignIn";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SignIn, signedOutHere, takeReturn } from "./SignIn";
 
 const config = () => {
   const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ canyon: true, auth: "oidc", org: "Meridian Insurance", device: true }) }) as unknown as Response);
   vi.stubGlobal("fetch", fetch);
 };
+
+// The browser's own storage, which its tabs share: Node 25's localStorage global shadows jsdom's (Fleet.test.tsx).
+const browser = () => {
+  const held = new Map<string, string>();
+  vi.stubGlobal("localStorage", { getItem: (key: string) => held.get(key) ?? null, setItem: (key: string, value: string) => { held.set(key, value); } });
+};
+
+beforeEach(browser);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -197,6 +205,30 @@ describe("the sign-in screen", () => {
   });
 
   // A tab can hold a page an earlier release kept, with no time: it is dropped, never an error, as no sign-in is known to own it.
+  // A sign-out chosen in any tab of this browser ends what a sign-in begun earlier in this one kept: the next person to
+  // sign in here may be another (#154). A sign-in begun after it keeps its page as ever.
+  it("takes back no page kept before a sign-out in another tab", async () => {
+    config();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      for (const [order, want] of [["kept, then signed out", null], ["signed out, then kept", "#/apps/claims-portal"]] as const) {
+        sessionStorage.clear();
+        browser();
+        window.location.hash = "#/apps/claims-portal";
+        if (order === "signed out, then kept") signedOutHere();
+        vi.setSystemTime(Date.now() + 1000);
+        const { unmount } = render(<SignIn />);
+        fireEvent.click(await screen.findByRole("link", { name: "Continue to company sign-in" }));
+        unmount();
+        vi.setSystemTime(Date.now() + 1000);
+        if (order === "kept, then signed out") signedOutHere(); // in another tab: the storage is the browser's, not the tab's
+        expect(takeReturn(), order).toBe(want);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("drops a page kept by an earlier release", () => {
     sessionStorage.setItem("canyon_return", "#/apps/claims-portal");
     expect(takeReturn()).toBeNull();

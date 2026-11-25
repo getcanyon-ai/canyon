@@ -780,7 +780,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                     const advisories = `${others} ${others === 1 ? "advisory" : "advisories"}`;
                     // Beside what blocks production, "no advisories" is no news: it's said only with nothing blocking.
                     const blocks = S.blocksProduction.replace("<n>", () => String(atProd));
-                    return <span className="mt-0.5 block text-md font-normal text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
+                    return <span className="mt-0.5 block text-md font-regular text-text-faint">{atProd > 0 ? (others === 0 ? blocks : `${blocks} · ${advisories}`) : `nothing blocking · ${others === 0 ? "no advisories" : advisories}`}</span>;
                   })()}
                 </h2>
               )}
@@ -835,7 +835,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                   ));
                   return (fix.length > 0 || stopsProd.length > 0) && advisory.length > 0 ? (
                     <details className="mt-2 grid gap-3">
-                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>{S.doesntBlock}<span className="ml-2 text-md font-normal text-text-faint">{`${shown(advisory).length} ${shown(advisory).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
+                      <summary className="cursor-pointer"><h3 className={`${H2} inline`}>{S.doesntBlock}<span className="ml-2 text-md font-regular text-text-faint">{`${shown(advisory).length} ${shown(advisory).length === 1 ? "finding" : "findings"}`}</span></h3></summary>
                       {advisories}
                     </details>
                   ) : advisories;

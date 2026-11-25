@@ -35,8 +35,8 @@ export function OwnerApps({ apps }: { apps: (App | Reduced)[] }) {
           <li key={app.id} className={CARD}>
             <h2 className="flex flex-wrap items-baseline gap-2 text-2xl font-semibold">
               <a className="text-link no-underline hover:underline" href={`#/apps/${app.id}`}>{app.name}</a>
-              {!reduced(app) && <span className="text-md font-normal text-text-dim">{app.stack}</span>}
-              {!reduced(app) && app.gate_state === "never_reviewed" && <span className="text-md font-normal text-amber">{S.neverReviewedMark}</span>}
+              {!reduced(app) && <span className="text-md font-regular text-text-dim">{app.stack}</span>}
+              {!reduced(app) && app.gate_state === "never_reviewed" && <span className="text-md font-regular text-amber">{S.neverReviewedMark}</span>}
             </h2>
             {/* An app off the viewer's teams is its name, owners and summary, and nothing of the team's. */}
             {reduced(app) ? <p className="mt-1 text-base text-text-dim">{app.summary || S.noDescription}</p> : (

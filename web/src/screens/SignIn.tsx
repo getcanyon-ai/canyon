@@ -40,14 +40,36 @@ function keep(hash: string, reason: Reason | undefined) {
   } catch { /* the fleet is where a sign-in lands without it */ }
 }
 
-// takeReturn is the page a sign-in began on, read once and cleared, or null: within the sign-in's 10 minutes alone.
+// When a sign-out was last chosen in this browser, in ms: in the storage its tabs share, so a page a tab kept before it,
+// for a sign-in never finished, isn't opened for whoever signs in next (#154).
+const SIGNED_OUT_AT = "canyon_signed_out_at";
+
+// signedOutHere marks a sign-out the person chose, for every tab of the browser.
+export function signedOutHere() {
+  try {
+    localStorage.setItem(SIGNED_OUT_AT, String(Date.now()));
+  } catch { /* a browser that keeps nothing: each tab's page still ends with its sign-in's 10 minutes */ }
+}
+
+// signedOutAt is that time, or 0 when none was marked or it can't be read.
+function signedOutAt(): number {
+  try {
+    return Number(localStorage.getItem(SIGNED_OUT_AT) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// takeReturn is the page a sign-in began on, read once and cleared, or null: within the sign-in's 10 minutes alone, and
+// never one kept before a sign-out chosen in any tab.
 export function takeReturn(): string | null {
   try {
     const hash = sessionStorage.getItem(RETURN);
-    const age = Date.now() - Number(sessionStorage.getItem(RETURN_AT) ?? NaN);
+    const at = Number(sessionStorage.getItem(RETURN_AT) ?? NaN);
+    const age = Date.now() - at;
     sessionStorage.removeItem(RETURN);
     sessionStorage.removeItem(RETURN_AT);
-    return hash !== null && returnable(hash) && age >= 0 && age <= SIGN_IN_MS ? hash : null;
+    return hash !== null && returnable(hash) && age >= 0 && age <= SIGN_IN_MS && at > signedOutAt() ? hash : null;
   } catch {
     return null; // nothing could be kept, so there is nothing to come back to
   }

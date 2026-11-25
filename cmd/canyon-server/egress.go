@@ -261,6 +261,7 @@ type egressReceiver struct {
 	tunnels map[tunnel]streamCaller // run's alone
 	gaps    map[string]egressGap    // run's alone: by reason, and a dropped and an envoy_dropped one no one counted apart, those no flush has written yet — at most six
 	last    time.Time               // run's alone: the previous flush, where this one's gaps start
+	warned  time.Time               // run's alone: when unrecorded last said calls out may not be recorded
 }
 
 // envoyLost is what egress-control reported Envoy lost (POST /egress/dropped) until a flush takes it, and whether
@@ -479,26 +480,17 @@ func (r *egressReceiver) run(ctx context.Context) {
 			if err := r.prune(ctx); err != nil {
 				r.log.Printf("egress: ageing out: %v", err)
 			}
-			r.unrecorded(ctx)
 		}
 	}
 }
 
-// unrecorded warns that no call out is being recorded when no Envoy stream is open while egress is in use: the
-// host's via is canyon, or an app env still runs under it (egress_envs; design/EGRESS.md §2.5). Off by design, as
-// the laptop demo starts — via off and no env under canyon — no call goes through Envoy, and a warning a minute
-// says nothing (#2697). A state that cannot be read warns, as egress in use does.
-func (r *egressReceiver) unrecorded(ctx context.Context) {
-	if r.streams() > 0 {
-		return
-	}
-	var used bool
-	err := r.pool.QueryRow(ctx, "SELECT coalesce((SELECT via FROM egress_settings) <> 'off', true) OR EXISTS (SELECT 1 FROM egress_envs)").Scan(&used)
-	if err != nil {
-		r.log.Printf("egress: whether any app's calls go through Envoy: %v", err)
-	}
-	if err != nil || used {
-		r.log.Print("egress: no Envoy stream is open, so no call out is being recorded")
+// unrecorded says calls out may not be recorded, at most once a minute, when a flush has a sign of it: what Envoy or
+// egress-control reported lost, or a stream the receiver refused or couldn't read. Never for no stream open alone:
+// Envoy opens one when it has a call to send, so a host nobody calls out from has none, which is no fault (#146).
+func (r *egressReceiver) unrecorded() {
+	if now := r.now(); r.warned.IsZero() || now.Sub(r.warned) >= time.Minute {
+		r.warned = now
+		r.log.Print("egress: calls out may not be recorded: Envoy lost entries, or Canyon couldn't take them, so each span is kept as a gap")
 	}
 }
 
@@ -605,7 +597,8 @@ func (r *egressReceiver) flush(ctx context.Context, batch []call) error {
 	if n := r.dropped.Swap(0); n > 0 {
 		r.gap(egressGap{from: from, to: to, reason: "dropped", calls: n})
 	}
-	if unread, refused := r.unread.Swap(0), r.refused.Swap(0); unread > 0 || refused > 0 {
+	unread, shut := r.unread.Swap(0), r.refused.Swap(0)
+	if unread > 0 || shut > 0 {
 		r.gap(egressGap{from: from, to: to, reason: "dropped", uncounted: true})
 	}
 	lost, uncounted := r.envoy.take()
@@ -614,6 +607,9 @@ func (r *egressReceiver) flush(ctx context.Context, batch []call) error {
 	}
 	if uncounted {
 		r.gap(egressGap{from: from, to: to, reason: "envoy_dropped", uncounted: true})
+	}
+	if unread > 0 || shut > 0 || lost > 0 || uncounted {
+		r.unrecorded()
 	}
 	named := r.byAddress(ctx, batch)
 	var keys []destKey

@@ -726,7 +726,7 @@ function OutboundSettings() {
           a person, so a warning is never folded by itself. */}
       {read !== null && ((caps !== null && read.caps !== undefined) || (read.replicas?.length ?? 0) > 0 || caOf(read) !== null) && (
         <details className="mt-6 rounded-[10px] border border-border bg-surface px-4 py-3" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
-          <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-normal text-text-dim">{S.advancedWhat}</span></summary>
+          <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-regular text-text-dim">{S.advancedWhat}</span></summary>
           <fieldset disabled={busy !== null} className="min-w-0">
             {/* The limits, an admin's (#2691): a server from before them names none, and then none is shown. */}
             {caps !== null && read.caps !== undefined && (() => {

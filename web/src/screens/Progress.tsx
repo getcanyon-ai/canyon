@@ -136,7 +136,7 @@ export function Progress({ steps }: { steps: Step[] }) {
   );
   return (
     <section aria-label="Progress" className="grid gap-2">
-      <h3 className="text-base font-semibold">Progress <span className="text-md font-normal text-text-faint">updates as it happens</span></h3>
+      <h3 className="text-base font-semibold">Progress <span className="text-md font-regular text-text-faint">updates as it happens</span></h3>
       <div className="grid gap-1.5 rounded-[10px] border border-border bg-surface px-4 py-3">
         {group("Review", steps.filter((step) => step.kind === "check"))}
         {group("After review", steps.filter((step) => step.kind === "after"))}

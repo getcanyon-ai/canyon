@@ -356,10 +356,10 @@ describe("the app page", () => {
     const LOGS = "GET /api/v1/projects/claims-portal/logs?env=prod&lines=20&redaction=masked";
     for (const [status, redaction, text, want] of [
       [200, "masked", "GET /login 200 12ms\nlost the queue at <API_TOKEN>: exiting\n", null],
-      [200, "none", "lost the queue at tok-91c2: exiting\n", S.lastLinesUnread.replaceAll("<env>", "prod")],
-      [409, null, "", S.lastLinesUnmasked.replaceAll("<env>", "prod")],
-      [422, null, "", S.lastLinesTooLong.replaceAll("<env>", "prod")], // over 1 MiB: never cut and masked
-      [500, null, "", S.lastLinesUnread.replaceAll("<env>", "prod")],
+      [200, "none", "lost the queue at tok-91c2: exiting\n", (S.lastLinesUnread + S.lastLinesCli).replaceAll("<env>", "prod")],
+      [409, null, "", (S.lastLinesUnmasked + S.lastLinesCli).replaceAll("<env>", "prod")],
+      [422, null, "", (S.lastLinesTooLong + S.lastLinesCli).replaceAll("<env>", "prod")], // over 1 MiB: never cut and masked
+      [500, null, "", (S.lastLinesUnread + S.lastLinesCli).replaceAll("<env>", "prod")],
       [403, null, "", ""], // the reader's access, never a fault: the one line alone
     ] as const) {
       const calls = server({ ...reads(() => ({ ...promoted, envs: { ...promoted.envs, prod: { ...(promoted.envs.prod as Env), state: "restarting", restarting } } })), [PACKAGES]: { body: pages[0] }, ...NO_RUNS });

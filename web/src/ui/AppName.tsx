@@ -4,7 +4,7 @@ export function AppName({ app }: { app: { id: string; name: string } }) {
   return (
     <>
       {app.name}
-      {app.name !== app.id && <>{" "}<span className="ml-1 font-mono text-md font-normal tracking-normal text-text-faint">{app.id}</span></>}
+      {app.name !== app.id && <>{" "}<span className="ml-1 font-mono text-md font-regular tracking-normal text-text-faint">{app.id}</span></>}
     </>
   );
 }

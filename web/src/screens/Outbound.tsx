@@ -301,7 +301,7 @@ export function Outbound({ id, envs, level = "contributor", shown = false, told,
   const [listed, afterList] = S.allowlist.split("<entries>");
   return (
     <section ref={intoView} aria-label="Outbound" className="grid grid-cols-[minmax(0,1fr)] gap-2.5">
-      <h2 className="flex flex-wrap items-center gap-x-2 text-base font-semibold">Outbound<Chip tone="beta">{S.beta}</Chip><span className="text-md font-normal text-text-faint">Destinations called in the last 30 days{off && ` · ${S.outboundOffNote}`}</span></h2>
+      <h2 className="flex flex-wrap items-center gap-x-2 text-base font-semibold">Outbound<Chip tone="beta">{S.beta}</Chip><span className="text-md font-regular text-text-faint">Destinations called in the last 30 days{off && ` · ${S.outboundOffNote}`}</span></h2>
       {/* The card's own line, the app its subject; an env's label keeps the fragment canyon status says (#2723). */}
       {open && !perEnv && <p role="note" className="text-md text-amber">{runtime === null ? S.floorCardUnread : runtime === "kubernetes" ? S.floorCardKube : linked(admin ? S.floorCardAdmin : S.floorCard, admin)}</p>}
       {stuck && <p role="note" className="text-md text-amber">{linked(admin ? S.offStillThrough : S.offStillThroughAsk, admin)}</p>}
@@ -329,11 +329,11 @@ export function Outbound({ id, envs, level = "contributor", shown = false, told,
           <section key={key} aria-label={`${name} outbound`} className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
             <h3 className="text-md font-medium">
               {name}
-              {org(key) ? <span className="ml-2 font-normal text-text-faint">{OUTBOUND.platform}</span>
-                : perEnv && env.via !== "canyon" ? <span className="ml-2 font-normal text-amber">{OUTBOUND.floorKube}</span>
+              {org(key) ? <span className="ml-2 font-regular text-text-faint">{OUTBOUND.platform}</span>
+                : perEnv && env.via !== "canyon" ? <span className="ml-2 font-regular text-amber">{OUTBOUND.floorKube}</span>
                   : stuck ? null
-                  : !open && !off && env.via !== "canyon" ? <span className="ml-2 font-normal text-text-faint">{OUTBOUND.deployAgain}</span>
-                    : <span className="ml-2 font-normal text-text-dim">{(env.app_mode === null ? S.modeOrgs : S.modeOwn).replace("<mode>", () => modeWord(env.mode))}</span>}
+                  : !open && !off && env.via !== "canyon" ? <span className="ml-2 font-regular text-text-faint">{OUTBOUND.deployAgain}</span>
+                    : <span className="ml-2 font-regular text-text-dim">{(env.app_mode === null ? S.modeOrgs : S.modeOwn).replace("<mode>", () => modeWord(env.mode))}</span>}
             </h3>
             {/* What waits on a person opens the env (D15), before its allowlist and its calls. */}
             {!org(key) && pending.length > 0 && <Requests heading={S.needsAPerson} rows={pending} allow={allow(key)} dismiss={dismiss(key)} />}

@@ -159,7 +159,7 @@ func TestStopMidSwitchStopsAfterIt(t *testing.T) {
 	}
 	var detail string
 	if err := p.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = $1 AND actor_subject = $2 AND run_id = $3", UndeployAction, lee.Subject, run).Scan(&detail); err != nil ||
-		detail != `{"env": "prod", "run": "`+run+`", "package": "`+pkg+`"}` {
+		detail != `{"env": "prod", "run": "`+run+`", "stop": "stopped", "package": "`+pkg+`"}` {
 		t.Fatalf("the undeploy's audit row: %q (%v)", detail, err)
 	}
 }

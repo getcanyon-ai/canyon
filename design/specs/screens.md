@@ -1142,6 +1142,10 @@ production.` The keyboard lands on `Cancel`, so the Enter that asked can't also 
 2026-11-23, #145). Where the question warns, of what preview answered, what production will refuse,
 or a secret production lacks or that couldn't be read, the button reads `Promote v1.4 anyway`, secondary.
 
+When preview runs an older version than the newest, and the newest is blocked, failed or not reviewed yet, that
+older version's Promote is a plain button, never the page's main step: what the newest will be isn't known
+(amended 2026-11-24, #175).
+
 **When preview answered an error** (amended 2026-10-08, the owner; QA round 4, django-400 was promoted
 answering 400): when preview's `answered` is an answer to say beside readiness (contracts/routes.md,
 `envs.<env>.answered`), the confirm says so in amber under the question —

@@ -1172,15 +1172,22 @@ func TestKindCallWithoutTokenRefused(t *testing.T) {
 		t.Fatalf("/run with egress: %d %s", status, out)
 	}
 	allow(t, app, "example.com")
-	forwarded := func() error { // through the app's proxy variables: canyon-identity's forwarder, the pod's token
+	forwarded := func() (string, error) { // through the app's proxy variables: canyon-identity's forwarder, the pod's token; what wget -S said
 		out, err := kubectl("-n", Namespace, "exec", pod.Name, "-c", "app", "--", "wget", "-S", "-O", "/dev/null", "-T", "15", "http://example.com/")
-		if err != nil { // what wget said, the app's record and the forwarder's log: where the call ended (#143)
-			identity, _ := kubectl("-n", Namespace, "logs", pod.Name, "-c", "canyon-identity", "--tail=50")
-			return fmt.Errorf("%w\nwget -S said:\n%s\nthe app's egress_destinations: %s\ncanyon-identity's last lines:\n%s", err, out, ledger(t, `SELECT coalesce(string_agg(
-				destination || ':' || port || ' ' || env || ' calls ' || calls || ' ' || last_outcome || ' ' || last_status_class || ' ' || last_protocol || ' [' ||
-				array_to_string(last_response_flags, ',') || '] last ' || last_seen_at, '; '), 'none') FROM egress_destinations WHERE app = '`+app+`'`), identity)
+		return string(out), err
+	}
+	// why is where a forwarded call that failed ended (#143): what wget -S said; the app's egress_destinations, once an
+	// entry of the call made since since has reached the receiver (Envoy sends its access log in batches, seconds apart),
+	// or after 30 s without one; and canyon-identity's last lines.
+	why := func(said string, since time.Time) string {
+		after := "SELECT count(*) FROM egress_destinations WHERE app = '" + app + "' AND last_seen_at >= '" + since.UTC().Format(time.RFC3339Nano) + "'"
+		for deadline := time.Now().Add(30 * time.Second); ledger(t, after) == "0" && time.Now().Before(deadline); time.Sleep(time.Second) {
 		}
-		return nil
+		rows := ledger(t, `SELECT coalesce(string_agg(destination || ':' || port || ' ' || env || ' calls ' || calls || ' ' || last_outcome || ' ' ||
+			last_status_class || ' ' || last_protocol || ' [' || array_to_string(last_response_flags, ',') || '] last ' || last_seen_at, '; '), 'none')
+			FROM egress_destinations WHERE app = '`+app+`'`)
+		identity, _ := kubectl("-n", Namespace, "logs", pod.Name, "-c", "canyon-identity", "--tail=50")
+		return fmt.Sprintf("wget -S said:\n%s\nthe app's egress_destinations: %s\ncanyon-identity's last lines:\n%s", said, rows, identity)
 	}
 	direct := func() string { // straight to the gateway, no Proxy-Authorization: the check's refusal header, or ""
 		out, _ := kubectl("-n", Namespace, "exec", pod.Name, "-c", "app", "--", "sh", "-c",
@@ -1188,13 +1195,16 @@ func TestKindCallWithoutTokenRefused(t *testing.T) {
 		return strings.ToLower(strings.TrimSpace(string(out)))
 	}
 	var err error
+	var said string
+	var since time.Time
 	for deadline := time.Now().Add(time.Minute); ; time.Sleep(2 * time.Second) { // the allowlist reaches the check with the policy's next version
-		if err = forwarded(); err == nil || time.Now().After(deadline) {
+		since = time.Now()
+		if said, err = forwarded(); err == nil || time.Now().After(deadline) {
 			break
 		}
 	}
 	if err != nil {
-		t.Fatalf("the floored app did not reach http://example.com/, on its allowlist, through its forwarder: %v", err)
+		t.Fatalf("the floored app did not reach http://example.com/, on its allowlist, through its forwarder: %v\n%s", err, why(said, since))
 	}
 	if refused := direct(); refused != "" {
 		t.Fatalf("before the mark, a call from the pod's own address with no token was refused (%s): the address fallback stands until the server marks the env", refused)
@@ -1207,8 +1217,9 @@ func TestKindCallWithoutTokenRefused(t *testing.T) {
 		}
 		refused = direct()
 	}
-	if err := forwarded(); err != nil {
-		t.Errorf("after the mark, the forwarder's call with the pod's token failed: %v; want it through, the token naming the env", err)
+	since = time.Now()
+	if said, err := forwarded(); err != nil {
+		t.Errorf("after the mark, the forwarder's call with the pod's token failed: %v; want it through, the token naming the env\n%s", err, why(said, since))
 	}
 }
 

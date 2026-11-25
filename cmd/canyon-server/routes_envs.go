@@ -94,7 +94,7 @@ func (a *app) undeploy(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not_found", "nothing deployed in "+env, nil)
 		return
 	}
-	detail := map[string]any{"env": env, "package": pkg} // null when only the run it ended or asked to end was writing env
+	detail := map[string]any{"env": env, "package": pkg, "stop": runs.StopOf(runBy == "canyon", handedOff)} // package null when only the run it ended or asked to end was writing env
 	if pkg == nil && open.Event == "deploy" {
 		detail["package"] = open.Package
 	}

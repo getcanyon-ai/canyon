@@ -310,7 +310,7 @@ func TestOwnerCannotHold(t *testing.T) {
 		t.Fatalf("the responder holds: %d %s, %d stop(s)", code, lastBody, fake.Stops.Load())
 	}
 	if n := count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'stop app' AND actor_subject = 'sub-rhea' AND project_id = 'claims-portal'
-		AND detail = jsonb_build_object('env', 'prod', 'reason', 'Exports claimant SSNs unauthenticated (INC-2231)', 'cancelled', '[]'::jsonb, 'package', (SELECT package_id FROM prod_holds), 'image_digest', '`+executortest.Digest+`')`); n != 1 {
+		AND detail = jsonb_build_object('env', 'prod', 'reason', 'Exports claimant SSNs unauthenticated (INC-2231)', 'cancelled', '[]'::jsonb, 'package', (SELECT package_id FROM prod_holds), 'image_digest', '`+executortest.Digest+`', 'stop', 'stopped')`); n != 1 {
 		t.Fatalf("the stop app row: %d", n)
 	}
 	if code, body, _ := do(t, rhea, http.MethodPost, base+holdPath, holdReason); code != 409 || body["error"] != "held" {
@@ -401,7 +401,7 @@ func TestLiftFromCLIIsDashboardRequired(t *testing.T) {
 		t.Fatalf("lifting what is not held: %d %s", code, lastBody)
 	}
 	dana := signedIn(t, ctx, pool, base, "sub-dana", "dana@meridian.example", false)
-	if code, _, _ := do(t, dana, http.MethodPost, base+holdPath, holdReason); code != 204 || count(t, ctx, pool, "SELECT count(*) FROM audit_events WHERE action = 'stop app' AND actor_subject = 'sub-dana' AND NOT detail ? 'package'") != 1 {
+	if code, _, _ := do(t, dana, http.MethodPost, base+holdPath, holdReason); code != 204 || count(t, ctx, pool, "SELECT count(*) FROM audit_events WHERE action = 'stop app' AND actor_subject = 'sub-dana' AND NOT detail ? 'package' AND detail->>'stop' = 'nothing'") != 1 {
 		t.Fatalf("an admin holds production running nothing: %d %s", code, lastBody)
 	}
 	if code, body, _ := do(t, dana, http.MethodDelete, liftPath(t, ctx, pool, base, "start=true"), ""); code != 409 || body["error"] != "nothing_held" {
@@ -671,7 +671,7 @@ func TestAHoldMeetingAPromotionIsCarriedOutByTheRun(t *testing.T) {
 	if state := waitVerdict(t, c, base, run)["state"]; state != "failed" {
 		t.Fatalf("the promotion the hold met: %s", lastBody)
 	}
-	if n := count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'stop app' AND run_id = '`+run+`' AND detail->'cancelled' = '["`+run+`"]'`); n != 1 || count(t, ctx, pool, "SELECT count(*) FROM audit_events WHERE action = 'stop app'") != 1 {
+	if n := count(t, ctx, pool, `SELECT count(*) FROM audit_events WHERE action = 'stop app' AND run_id = '`+run+`' AND detail->'cancelled' = '["`+run+`"]' AND detail->>'stop' = 'stopped'`); n != 1 || count(t, ctx, pool, "SELECT count(*) FROM audit_events WHERE action = 'stop app'") != 1 {
 		t.Fatalf("the stop app row: %d", n)
 	}
 	if n := count(t, ctx, pool, "SELECT count(*) FROM deploys WHERE env = 'prod'"); n != 0 {

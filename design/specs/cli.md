@@ -2041,7 +2041,9 @@ and names the log that says why: `preview      v1.3   ✗ stopped   canyon logs 
 in red. One the host could not check keeps its URL and says so in amber: `! couldn't check whether it
 runs`. **Amended 2026-10-05** (#1722): one that keeps restarting has no URL either — it may be down
 between two restarts — and says how often, in red: `preview      v1.3   ✗ keeps restarting (7 times since
-5 Oct 09:12)   canyon logs --env preview says why`, `once` for one restart.
+5 Oct 09:12)   canyon logs --env preview says why`, `once` for one restart. **Amended 2026-11-26** (#230):
+one a deploy or a promotion is starting has no URL yet and says so in amber, with no log to read:
+`prod         v1.3   ! starting`.
 
 **Amended 2026-10-08** (QA round 3: a preview answering `400` read as running here, and only deploy's
 step to production said so): a row that shows its URL carries what the app answered there when it is
@@ -2485,7 +2487,7 @@ it, never the identity provider's subject id.
 
 **Amended 2026-10-03** (#1241): ENV says whether the environment runs now (`envs.<env>.state`,
 contracts/routes.md): `prod stopped` and `prod restarting` in red for an app whose container stopped or
-keeps restarting (#1722), `prod couldn't check` in amber when the host could not ask — status's words, cut to the column, and the name alone only while it runs.
+keeps restarting (#1722), `prod starting` in amber while a deploy or a promotion starts it (#230), `prod couldn't check` in amber when the host could not ask — status's words, cut to the column, and the name alone only while it runs.
 
 **Amended 2026-10-27** (#2455): where the org runs the environment, ENV is `prod no check-in` in amber
 once its pods have stopped checking in, or never began — `canyon status`'s `your platform hasn't reported

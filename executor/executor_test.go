@@ -47,7 +47,7 @@ func fakes(t *testing.T) (*Executor, string) {
 [ "$1" = cp ] && cat > "`+dir+`/cp-tar"
 [ "$1" = run ] && [ "$2" = --rm ] && env > "`+dir+`/helper-env"
 [ "$1" = build ] && : > "`+dir+`/built-$4"
-[ "$1" = tag ] && : > "`+dir+`/built-$3"
+[ "$1" = tag ] && : > "`+dir+`/built-$(printf '%s' "$3" | tr / _)"
 [ "$1 $2" = "network ls" ] && exit 0
 [ "$1 $2" = "image inspect" ] && case "$5" in canyon-run:*|canyon-builder:*) [ -f "`+dir+`/built-$5" ] || exit 1;; esac
 while [ $# -gt 0 ]; do case "$1" in *Repository*) echo sha256:abababababababababababababababababababababababababababababababab canyon/claims-portal:pkg_7d3e8f-abcd; echo sha256:4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c4f1c0b9a7e2a9d3c canyon/claims-portal:pkg_7d3e8f-fixture; exit 0;; *.Names*) for a; do case "$a" in name=*) n=${a#name=^}; echo "${n%?} running sha256:abababababababababababababababababababababababababababababababab";; esac; done; exit 0;; *State.Status*) echo running 0 sha256:`+strings.Repeat("ab", 32)+`; exit 0;; esac; shift; done

@@ -185,11 +185,6 @@ func (a *app) demoReady(ctx context.Context, dir string) int {
 	if code := runLogin(ctx, a, []string{demoURL}); code != exitOK {
 		return code
 	}
-	if project, _, found, err := demoServer(ctx); err == nil && found && project == demoProject && demoServing(ctx) { // only the demo's own server, running, is asked
-		if apps, err := demoApps(ctx); err == nil { // kept for down, which may run when the server no longer can answer (#170)
-			a.demoKeep(dir, apps)
-		}
-	}
 	a.printf("  %s Canyon is ready at %s\n", a.render.paint(ansiGreen, a.render.glyph(statePass)), demoURL)
 	a.printf("\n  Next, take the guided tour: canyon demo tour\n")
 	if before != "" && before != demoURL {

@@ -246,6 +246,48 @@ func TestEndToEndBuildsAndServesAPHPAppOnPostgres(t *testing.T) {
 	}
 }
 
+// TestEndToEndBuildsAndServesARubyRackApp builds executor/testdata/apps/ruby-rack, a config.ru on rack, rackup and
+// webrick (pure Ruby: no gem compiles), with its Gemfile.lock: Paketo's Ruby group on the default Ruby, started by
+// rackup on $PORT. No other e2e app reaches Ruby, so a Paketo bump that breaks it would pass every check (#133).
+func TestEndToEndBuildsAndServesARubyRackApp(t *testing.T) {
+	e2eBuildsAndServes(t, "ruby-rack", "pkg_e2e8", "paketo-buildpacks/rackup", "ruby ")
+}
+
+// TestEndToEndBuildsAndServesAnASPNETApp builds executor/testdata/apps/aspnet-minimal, a minimal API on the default
+// .NET SDK: Paketo's .NET group, its runtime and the port its launcher picks from $PORT. No other e2e app reaches
+// .NET, so a Paketo bump that breaks it would pass every check (#133).
+func TestEndToEndBuildsAndServesAnASPNETApp(t *testing.T) {
+	e2eBuildsAndServes(t, "aspnet-minimal", "pkg_e2e9", "paketo-buildpacks/dotnet-publish", "dotnet 10.")
+}
+
+// e2eBuildsAndServes builds the fixture app named app, holds that buildpack among those that ran, runs the image, and
+// holds that GET / begins with body.
+func e2eBuildsAndServes(t *testing.T, app, pkg, buildpack, body string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	e := &Executor{Join: []string{}}
+	var log bytes.Buffer
+	res, err := e.Build(ctx, BuildRequest{App: app, Package: pkg}, treeOf(t, filepath.Join("testdata", "apps", app)), &log)
+	if err != nil {
+		t.Fatalf("build: %v\n%s", err, tail(log.String(), 60))
+	}
+	defer exec.Command("docker", "image", "rm", "-f", strings.TrimPrefix(res.Image, "canyon/"+app+"@")).Run()
+	if !slices.ContainsFunc(res.Buildpacks, func(bp Buildpack) bool { return bp.ID == buildpack }) {
+		t.Fatalf("%s did not run: %+v\n%s", buildpack, res.Buildpacks, tail(log.String(), 40))
+	}
+	run, err := e.Run(ctx, RunRequest{App: app, Target: "preview", Image: res.Image, Network: "canyon-app-" + app})
+	var exited *Exited
+	if errors.As(err, &exited) {
+		t.Fatalf("%s did not start: %s\n%s", app, exited.Reason, exited.Output)
+	}
+	must(t, err)
+	defer func() { _ = e.Stop(context.Background(), app, "preview") }()
+	if got := get(ctx, t, app, run, "/"); !strings.HasPrefix(got, body) {
+		t.Fatalf("GET / is not %s's answer, %q…: %q", app, body, tail(got, 10))
+	}
+}
+
 // TestEndToEndABuildReachesNoPrivateNorLinkLocalAddress is invariant 12 on Docker: executor/testdata/apps/egress-probe's
 // postinstall, the app's own build step, opens TCP to the cloud's metadata address, a link-local stand-in and a
 // private one and a public address of the host's own, each on 80, and Azure's WireServer — every one refused — and to

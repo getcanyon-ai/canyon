@@ -18,10 +18,12 @@
   :focus-visible  { outline: var(--focus-width) solid var(--color-accent);
                     outline-offset: var(--focus-offset); border-radius: var(--focus-radius) }
   ::selection     { background: var(--color-accent-dim) }
-  .tnum           { font-variant-numeric: tabular-nums }
   /* Reduced motion is respected once, here, never per component (ds/tailwind.md rule 5). */
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
 }
+
+/* Figures of one width, so a count or an age doesn't jitter as it changes: a utility, so the class makes a rule (#142). */
+@utility tnum { font-variant-numeric: tabular-nums }
 
 /* The unlock (D6): a checklist row that has just turned ✓ swells once, and the promote button
    fills 160ms later — cause visibly precedes effect. The base layer's one reduced-motion rule

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UNAUTHENTICATED, type FleetPage, type Preferences } from "../api";
 import { AUTH, S } from "../strings";
 import { Shell } from "./Shell";
@@ -38,6 +38,12 @@ const keptNow = (hash: string, ago = 0) => {
   sessionStorage.setItem("canyon_return", hash);
   sessionStorage.setItem("canyon_return_at", String(Date.now() - ago));
 };
+
+// The browser's own storage, which its tabs share: Node 25's localStorage global shadows jsdom's (Fleet.test.tsx).
+beforeEach(() => {
+  const held = new Map<string, string>();
+  vi.stubGlobal("localStorage", { getItem: (key: string) => held.get(key) ?? null, setItem: (key: string, value: string) => { held.set(key, value); } });
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -274,6 +280,22 @@ describe("the shell", () => {
     render(<Shell />);
     fireEvent.click(await screen.findByRole("link", { name: "Continue to company sign-in" }));
     expect(sessionStorage.getItem("canyon_return")).toBeNull();
+  });
+
+  // A sign-in begun in one tab and given up keeps its page in that tab; a sign-out chosen in another tab of the browser ends
+  // it, so whoever signs in next in the first tab opens the fleet (#154). The test's tabs share one window's storage.
+  it("a sign-out chosen in another tab leaves the page a tab kept no way back", async () => {
+    keptNow("#/apps/claims-portal", 1000); // the first tab's sign-in, a second ago, never finished
+    window.location.hash = "#/audit?range=7d"; // the other tab, signed in
+    server(prefs, () => answer(200, signedIn));
+    const other = render(<Shell />);
+    fireEvent.click(await screen.findByRole("button", { name: AUTH.signOut }));
+    expect(await screen.findByText("You're signed out of Canyon")).toBeDefined();
+    other.unmount();
+    window.history.replaceState(null, "", "/"); // the first tab: the callback lands on /, someone signed in
+    render(<Shell />);
+    expect(await screen.findByRole("heading", { name: "Meridian Insurance" })).toBeDefined();
+    expect(window.location.hash).toBe("#/fleet");
   });
 
   it("a sign-out of a session that had already ended is still one the person chose", async () => {

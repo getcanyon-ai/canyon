@@ -14,7 +14,7 @@ import { Onboarding } from "./Onboarding";
 import { hashQuery } from "./query";
 import { Settings } from "./Settings";
 import { SetupNotice } from "./SetupNotice";
-import { SignIn, signingIn, takeReturn } from "./SignIn";
+import { SignIn, signedOutHere, signingIn, takeReturn } from "./SignIn";
 
 // The dashboard, and the one question asked before any of it is drawn: is this a host nobody has
 // configured? Both halves are needed. `auth` alone says nothing about whether somebody has finished
@@ -166,6 +166,7 @@ export function Shell() {
       const chosen = (event as CustomEvent).detail === "signed-out";
       // The address it was chosen on leaves the bar, so a reload keeps no page of theirs for whoever signs in next (#145).
       if (chosen && !signingIn(window.location.hash)) window.history.replaceState(null, "", "#/fleet");
+      if (chosen) signedOutHere(); // and every tab of the browser keeps no page from before it (#154)
       setSignedOut((was) => (chosen ? "signed-out" : was ?? (hadSession.current ? "ended" : "none")));
     };
     window.addEventListener("hashchange", follow);

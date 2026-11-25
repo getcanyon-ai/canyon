@@ -14,7 +14,8 @@ import { Icon, Mark, Wordmark } from "./Icon";
 // to sign out of. `admin` is whether the reader may open Guardrails, an admin's screen
 // (design/specs/screens.md, A4b): the shell answers false until it knows, so a member is never offered
 // it; the default is only a tree rendered without the shell's.
-export const RailContext = createContext<{ org: string | null; viewer: Viewer | null; admin: boolean; needs?: number | "?" | "unread" }>({ org: null, viewer: null, admin: true });
+// publicURL is the host's (/auth/config's public), unknown until read: an app's link is made from it, never the page's address.
+export const RailContext = createContext<{ org: string | null; viewer: Viewer | null; admin: boolean; needs?: number | "?" | "unread"; publicURL?: string | null }>({ org: null, viewer: null, admin: true });
 
 // Canyon's source: the AGPL-3.0's offer to the people who use it over a network (LICENSE, section 13), on every host.
 export const SOURCE = "https://github.com/getcanyon-ai/canyon";

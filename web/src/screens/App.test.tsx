@@ -2465,6 +2465,41 @@ describe("the blocked-then-fixed story", () => {
   });
 });
 
+// An app's link, for everyone who opens its page (#193): its own address from the host's public URL, never the page's,
+// which may pin a run or be reached by another name. Opened signed out it comes back after sign-in (SignIn's list).
+describe("copying an app's link", () => {
+  const PUBLIC = "https://canyon.meridian.example";
+  const copyLink = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
+  };
+  it("copies the app's own address for an admin and for a read-only member", async () => {
+    for (const [read, id] of [[{ ...reads(() => page.status) }, "claims-portal"],
+      [{ "GET /api/v1/projects/pricing-lab": { body: { project: { id: "pricing-lab", name: "pricing-lab", owners: [], summary: "x", access: { level: "viewer" } } } } }, "pricing-lab"]] as const) {
+      server(read);
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const { unmount } = render(<RailContext value={{ org: null, viewer: null, admin: true, publicURL: PUBLIC }}><App id={id} run="gr_8f2a" auth="oidc" /></RailContext>);
+      await copyLink();
+      expect(await screen.findByText("Link copied")).toBeDefined();
+      expect(writeText).toHaveBeenCalledWith(`${PUBLIC}/#/apps/${id}`);
+      unmount();
+    }
+  });
+  it("says when the browser won't copy, and offers no link before the host's address is known", async () => {
+    server(reads(() => page.status));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) }, configurable: true });
+    const { unmount } = render(<RailContext value={{ org: null, viewer: null, admin: true, publicURL: PUBLIC }}><App id="claims-portal" auth="oidc" /></RailContext>);
+    await copyLink();
+    expect((await screen.findByRole("alert")).textContent).toBe(S.copyFailed);
+    unmount();
+    server(reads(() => page.status));
+    render(<App id="claims-portal" auth="oidc" />);
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).toBeNull();
+  });
+});
+
 // Renaming is managing the app (design/specs/screens.md, Renaming it; #1909): only the display name
 // changes, and the page reads the app again so the title follows.
 describe("renaming the app", () => {

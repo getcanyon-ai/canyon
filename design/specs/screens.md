@@ -664,6 +664,12 @@ Two columns. Left 62% is the gate. Right 38% is state and the promote decision. 
 
 ### Renaming it (#1909)
 
+The header's ⋯ offers **Copy link** first, to everyone who opens the page, a read-only member and a responder
+included (amended 2026-11-24, #193): it copies `<public URL>/#/apps/<app>`, the host's public URL as `/auth/config`
+names it, never the page's own address with its pinned run or section, and says `Link copied` beside the ⋯, or
+`Couldn't copy. The browser did not allow it.` Until that URL is read it isn't offered. A link opened signed out comes
+back to the app after sign-in (A0), and one opened without access is the no-access screen.
+
 The header's ⋯ offers **Rename…** to the app's owners and admins, above **Delete app…**, and to nobody
 else. It opens a panel under the ⋯: `Name` and a field holding the current name, `Save` and `Cancel`,
 and under them `Only the name changes. Its address, canyon.toml and the CLI keep <id>.` Save sends

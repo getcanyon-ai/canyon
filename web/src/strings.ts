@@ -537,6 +537,9 @@ export const S = {
   revealTickBoth: "Tick the box once both are stored.",
   revealTickOne: "Tick the box once it is stored.",
   copyFailed: "Couldn't copy. The browser did not allow it.",
+  // An app's link to share, from its page's ⋯ (#193): the app's own address at the host's public URL.
+  copyLink: "Copy link",
+  linkCopied: "Link copied",
   onAsk: "Hand apps to your platform? From the next deploy or promotion, your platform runs every app Canyon builds, previews included. Apps running now stay where they are until their next deploy.",
   offAsk: "Run apps on this cluster again? From the next deploy or promotion Canyon runs each app here. What your platform runs now stays with it until then, and nothing moves: a database your platform made stays where it is.",
   revealTitle: "Store these now",

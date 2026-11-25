@@ -102,7 +102,9 @@ A maintainer's own pull request can run its stack suites on Canyon's private run
   number and exact head commit. That workflow checks the pull request again, fetches the commit as plain files
   and runs the suites. Nothing of the pull request's `.github` runs there, and the script pushes no git ref.
 - It labels the pull request `ci:private`, so the stack suites here skip, the way a suite the change doesn't
-  reach skips.
+  reach skips. From the next push on, which carries the label, every other job here skips too, since the private
+  runners run them all; only the paths jobs, the secret scan and the CLA check run here. A run already going, or
+  re-run, keeps the labels its push had.
 - It prints the private run's address.
 
 `scripts/ci-private-status.sh <pr>` says whether that run passed for the head as it is now. It exits 0 only when

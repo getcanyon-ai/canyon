@@ -5,7 +5,8 @@
 # which that workflow checks again and fetches as plain files: nothing of the pull request's .github runs there, and
 # this pushes no git ref anywhere. Then it labels the pull request ci:private, so its stack suites here skip as a
 # suite its change doesn't reach skips (.github/suites/reach.sh), and re-runs this commit's runs that have a paths
-# job, so a run already going stops using GitHub's runners. It prints the private run's address.
+# job, so a run already going stops using GitHub's runners. Every other job but gitleaks and cla skips from the next
+# push on, by the labels the push carries: a re-run keeps the ones its push had. It prints the private run's address.
 #
 # scripts/ci-private.sh --off <pr>: the fallback, when the private runners are down: the label comes off, and the same
 # runs here run again, every suite on GitHub's runners as before.

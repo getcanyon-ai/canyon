@@ -28,6 +28,7 @@ concurrency:
 
 jobs:
   smoke:
+    if: github.event_name != 'schedule' || vars.CANYON_GITHUB_HEAVY == '1' # the nightly runs here only when the repository's CANYON_GITHUB_HEAVY is 1: else the private CI repository's sweep of main
     runs-on: ${{ vars.CANYON_RUNNERS == 'self-hosted' && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # our own runners where the repository's CANYON_RUNNERS variable says so; anywhere else, GitHub's: Docker, and the release's linux/arm64 CLI and images
     timeout-minutes: 45 # the four sample apps' builds and two deploys of the test's own app
     steps:

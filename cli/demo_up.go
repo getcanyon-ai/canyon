@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/internal/names"
 )
 
 // What the demo needs of this machine (docs: Try it on your laptop, What you need). The disk is the
@@ -119,7 +121,22 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 		}
 		return a.demoFailed("The sample apps did not finish deploying", why)
 	}
+	a.demoDropCaches(ctx)
 	return a.demoReady(ctx, dir)
+}
+
+// demoDropCaches removes the sample apps' build caches once their deploys are done: nothing needs them, and a visitor's
+// redeploy of one without them takes a few seconds more (#186). One already gone is no matter; one Docker won't remove
+// stays, with a warning, and the demo starts all the same.
+func (a *app) demoDropCaches(ctx context.Context) {
+	for _, app := range demoSampleApps {
+		for _, kind := range []string{"build", "launch"} {
+			v := names.CacheVolume(app, kind)
+			if _, err := demoDocker(ctx, "", nil, "volume", "rm", v); err != nil && !strings.Contains(err.Error(), "no such volume") {
+				a.errf("\n  %s Couldn't remove %s, a sample app's build cache: %s\n", a.render.glyph(stateWarn), v, plainly(err))
+			}
+		}
+	}
 }
 
 // demoDeployed is the deployer's exit status, "" while it runs or when there is none.

@@ -426,6 +426,41 @@ func TestDemoUpNamesACanyonStartedAnotherWay(t *testing.T) {
 }
 
 // The acceptance's second line: the five stages in order, ending on the one line.
+// Once the sample apps are deployed, up removes their build caches, which nothing needs (#186): any other app's stay,
+// a cache already gone is no matter, and one Docker won't remove is a warning, never a failed start.
+func TestDemoUpKeepsNoBuildCachesForTheSampleApps(t *testing.T) {
+	m := demoOn(t)
+	m.apps = append(slices.Clone(demoSampleApps), "visitor-app")
+	m.docker = func(line string) (string, error, bool) {
+		switch line {
+		case "volume rm canyon-cache-claims-archive-launch": // gone already
+			m.vols = slices.DeleteFunc(m.vols, func(v string) bool { return v == "canyon-cache-claims-archive-launch" })
+			return "", errors.New("exit status 1: Error response from daemon: get canyon-cache-claims-archive-launch: no such volume"), true
+		case "volume rm canyon-cache-premium-ledger-build":
+			return "", errors.New("exit status 1: Error response from daemon: remove canyon-cache-premium-ledger-build: volume is in use"), true
+		}
+		return "", nil, false
+	}
+	m.vols = nil
+	out, errs, code := m.run("up")
+	if code != exitOK || !strings.Contains(out, "Canyon is ready at") {
+		t.Fatalf("exit %d, stderr %q\n%s", code, errs, out)
+	}
+	for _, app := range demoSampleApps {
+		for _, kind := range []string{"build", "launch"} {
+			if v := names.CacheVolume(app, kind); slices.Contains(m.vols, v) != (v == "canyon-cache-premium-ledger-build") {
+				t.Errorf("after up the volumes are %q: %s should be gone unless Docker kept it", m.vols, v)
+			}
+		}
+	}
+	if !slices.Contains(m.vols, "canyon-cache-visitor-app-build") || !slices.Contains(m.vols, "canyon-cache-visitor-app-launch") {
+		t.Errorf("up took another app's caches: %q", m.vols)
+	}
+	if want := "Couldn't remove canyon-cache-premium-ledger-build, a sample app's build cache: "; !strings.Contains(errs, want) || strings.Contains(errs, "claims-archive") {
+		t.Errorf("stderr %q, want one warning: %s…", errs, want)
+	}
+}
+
 func TestDemoUpFetchesDownloadsStartsAndSignsIn(t *testing.T) {
 	m := demoOn(t)
 	failed := false
@@ -610,7 +645,7 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 	}
 	if m.ran(compose("down -v")) != 1 || m.ran("rm -f canyon-build-1a2b3c4d claims-portal-preview witty-wren-preview") != 1 ||
 		m.ran("network rm canyon-app-claims-portal canyon-app-witty-wren") != 1 ||
-		m.ran("volume rm canyon-cache-claims-portal-build canyon-cache-claims-portal-launch canyon-cache-witty-wren-build canyon-cache-witty-wren-launch") != 1 ||
+		m.ran("volume rm canyon-cache-witty-wren-build canyon-cache-witty-wren-launch") != 1 || // claims-portal's, a sample app's, went at up (#186)
 		m.ran("image rm") != 0 {
 		t.Errorf("down ran %q", m.calls)
 	}
@@ -638,7 +673,7 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 	removed := slices.Sorted(slices.Values([]string{names.LifecyclePlatforms[1], names.CheckovImage, names.TrivyImage, "docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd",
 		"ghcr.io/getcanyon-ai/canyon-executor@sha256:bb", "ghcr.io/getcanyon-ai/canyon-server@sha256:aa", "id-builder", "id-claims-portal", "id-scan", "id-witty-wren"}))
 	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f "+strings.Join(removed, " ")) != 1 ||
-		m.ran("volume rm canyon-cache-claims-portal-build canyon-cache-claims-portal-launch canyon-cache-witty-wren-build canyon-cache-witty-wren-launch canyon-scandb-trivy") != 1 {
+		m.ran("volume rm canyon-cache-witty-wren-build canyon-cache-witty-wren-launch canyon-scandb-trivy") != 1 {
 		t.Errorf("down --purge ran %q", m.calls)
 	}
 	if _, ok := m.images["id-ux-data"]; !ok {

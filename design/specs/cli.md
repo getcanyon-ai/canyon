@@ -3961,6 +3961,9 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
    Its deploys build Canyon's build image and download the scanners' databases, so nothing is left to download in the
    middle of the visitor's first review. A deployer that exits non-zero ends the verb with exit 1 and
    `To carry on, run: canyon demo up`; one whose log ended with no exit status to name says that instead.
+   A deployer that exits 0 leaves its four sample apps' build caches (`canyon-cache-<app>-build`, `-launch`), which
+   nothing needs, so up removes them by those names (**amended 2026-11-25**, #186). A visitor's redeploy of a sample app
+   then takes a few seconds more. A cache already gone is no matter, and one Docker won't remove stays, with a warning.
 5. **Sign in and report.** `canyon login http://localhost:7777`'s `✓ Connected to` line without its next step, then
    `✓ Canyon is ready at http://localhost:7777` and the one next step, `Next, take the guided tour: canyon demo tour`
    (§6.14.1).

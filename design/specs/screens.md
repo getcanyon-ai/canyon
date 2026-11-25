@@ -967,6 +967,15 @@ stop and show the user the remaining findings. Do not keep looping.
 
 `blocks`, the required end state, the do-not list and the steps after the fix are the words `canyon check --ai` prints for the same finding, so an agent gets one instruction whichever surface it was copied from. A finding that does not block copies `blocks: no`, a required end state of "Not required. This severity does not block deployment.", and no do-not list. The column and the source line stay on the command line.
 
+A version that passed its review and then didn't build, or didn't stay up, offers the same button in its headline
+(amended 2026-11-24, #191). It copies the block `canyon deploy` prints an agent for that run (cli.md §5.3, *A failed run
+opens `CANYON REVIEW — RESULT: FAILED`*), word for word: `app:`, `env:`, `host:`, `gate run:`, the review line,
+`reason:`, `outcome:`, the page's own last lines under `LAST LINES` and D5's line that they come from the app, and the
+reason's `NEXT STEPS`. It leaves out what the run read doesn't carry, the run's start time and a path left unpacked, and
+the advisories, which the page lists beside it. After the block, the line every copy ends with: `If it still fails
+after two full rounds of fixes, stop and show the user these lines. Do not keep looping.` A run Canyon itself failed
+offers none: its next step is to tell a person.
+
 Harness-agnostic by construction — it's plain English with file:line, which is the one interface every AI coding tool shares.
 
 ### Review provenance

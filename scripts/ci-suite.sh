@@ -5,7 +5,10 @@
 # nothing of a pull request's .github but its scripts. The stack suites:
 #   journeys-<1..8>   a shard of the browser journeys (make e2e-ui), on the compose stack
 #   probes            the probe apps never read clean (TestProbesNeverReadClean), on the compose stack
-#   kind-calico       the kind suite on Calico, Envoy's lost access-log entries, and the hand-off journey
+#   kind-calico       the kind suite on Calico, Envoy's lost access-log entries, and the hand-off journey, all on one cluster
+#   kind-calico-<n>   one part of it, on a cluster of its own: the tests .github/kind/calico-parts.txt lists for part n,
+#                     Envoy's lost entries, and in the last part the hand-off journey; kube.yml's and the private CI's
+#                     runs
 #   kind-kindnet      the probe on a cluster that enforces nothing, and run_by canyon there
 #   kind-canyon       run_by canyon on Calico: a deploy through the server builds and runs
 #   handoff-argocd    hand-off through a deploy repository, under Argo CD
@@ -170,6 +173,25 @@ kind_calico() {
   kind_suite TestKind enforced || rc=$?
   envoy_lost || rc=1 # whether the suite passed or not: a check of its own
   [ "$rc" = 0 ] || return "$rc"
+  chromium || return
+  handoff_db || return
+  make e2e-handoff
+}
+
+# kind_calico_part is kind_calico's part $1 (.github/kind/calico-parts.txt), on a cluster of its own: the tests listed
+# for it, anchored, so a name inside another's runs nothing extra; Envoy's lost entries whether they passed or not; and
+# in the last part, the hand-off journey
+kind_calico_part() {
+  local parts=.github/kind/calico-parts.txt rc=0 run last
+  run=$(awk -v p="$1" '!/^#/ && $1 == p { printf "%s%s", (n++ ? "|" : ""), $2 }' "$parts") || return
+  last=$(awk '!/^#/ && NF { if ($1 > m) m = $1 } END { print m }' "$parts") || return
+  [ -n "$run" ] || { echo "::error::$parts lists no test for part $1"; return 1; }
+  .github/kind/up.sh calico || return
+  helm_pinned || return # TestKindSigninRuleFromTheChart applies the chart's canyon-apps-signin
+  kind_suite "^($run)\$\$" enforced || rc=$? # $$: make reads RUN, and its $ is make's
+  envoy_lost || rc=1 # whether the tests passed or not: a check of its own
+  [ "$rc" = 0 ] || return "$rc"
+  [ "$1" = "$last" ] || return 0
   chromium || return
   handoff_db || return
   make e2e-handoff
@@ -394,6 +416,7 @@ case $suite in
   journeys-[1-8]) chromium && stack journeys "${suite#journeys-}" ;;
   probes) stack probes ;;
   kind-calico) kind kind_calico ;;
+  kind-calico-[0-9]*) kind kind_calico_part "${suite#kind-calico-}" ;;
   kind-kindnet) kind kind_kindnet ;;
   kind-canyon) kind kind_canyon ;;
   handoff-argocd | handoff-flux) kind handoff "${suite#handoff-}" ;;

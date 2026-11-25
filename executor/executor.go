@@ -33,6 +33,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/getcanyon-ai/canyon/internal/answered"
 	"github.com/getcanyon-ai/canyon/internal/names"
@@ -325,27 +326,40 @@ func NewExited(reason, lines string, env map[string]string) *Exited {
 // multi-line value too, and a URL value's userinfo password on its own as <NAME password>: /run's rule,
 // which the server applies to POST /running's lines too (contracts/executor.md).
 func Mask(text string, env map[string]string) string {
-	type value struct{ text, name string }
-	var values []value
+	values := maskValues(env)
+	slices.SortFunc(values, func(a, b maskValue) int { return cmp.Or(len(b.text)-len(a.text), strings.Compare(a.name, b.name)) })
+	for _, v := range values {
+		text = strings.ReplaceAll(text, v.text, "<"+v.name+">")
+	}
+	return text
+}
+
+// Short says whether Mask would replace a text of env's shorter than n characters: where it stands in what was masked,
+// the name in its place would give a short value away.
+func Short(env map[string]string, n int) bool {
+	return slices.ContainsFunc(maskValues(env), func(v maskValue) bool { return utf8.RuneCountInString(v.text) < n })
+}
+
+type maskValue struct{ text, name string }
+
+// maskValues is each text Mask replaces, with the name it stands for.
+func maskValues(env map[string]string) []maskValue {
+	var values []maskValue
 	for name, v := range env {
 		for _, t := range append(strings.Split(v, "\n"), v) { // the value, and each line as it is and without its carriage return
 			for _, t := range []string{t, strings.TrimSuffix(t, "\r")} {
 				if t != "" {
-					values = append(values, value{t, name})
+					values = append(values, maskValue{t, name})
 				}
 			}
 		}
 		if u, err := url.Parse(v); err == nil && u.User != nil {
 			if password, ok := u.User.Password(); ok && password != "" {
-				values = append(values, value{password, name + " password"})
+				values = append(values, maskValue{password, name + " password"})
 			}
 		}
 	}
-	slices.SortFunc(values, func(a, b value) int { return cmp.Or(len(b.text)-len(a.text), strings.Compare(a.name, b.name)) })
-	for _, v := range values {
-		text = strings.ReplaceAll(text, v.text, "<"+v.name+">")
-	}
-	return text
+	return values
 }
 
 const appPort = "3000"

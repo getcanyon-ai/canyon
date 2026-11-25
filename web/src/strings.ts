@@ -71,9 +71,23 @@ export const S = {
   // A restarting environment's last log lines under the app page's band, masked (#2744); the second when a secret of
   // the environment changed since what runs there started, the third when the read fails.
   lastLines: "The app's last lines, each secret's value replaced by its name:",
-  lastLinesUnmasked: "Canyon can't show the app's last lines here: it can't tell which secret values the app started with, so it can't hide them. canyon logs --env <env> shows them.",
-  lastLinesTooLong: "Canyon can't show the app's last lines here: they're over 1 MiB, too much to check for secrets. canyon logs --env <env> shows them.",
-  lastLinesUnread: "Canyon couldn't read the app's last lines. canyon logs --env <env> shows them.",
+  // lastLinesCli follows each to the app's team, whose canyon logs reads it raw; never to a responder, whose read is masked.
+  lastLinesUnmasked: "Canyon can't show the app's last lines here: it can't tell which secret values the app started with, so it can't hide them.",
+  lastLinesTooLong: "Canyon can't show the app's last lines here: they're over 1 MiB, too much to check for secrets.",
+  lastLinesUnread: "Canyon couldn't read the app's last lines.",
+  lastLinesCli: " canyon logs --env <env> shows them.",
+  // An environment's logs on its card (A of incidents and logs): its last 200 lines, masked, read again on Refresh, never followed.
+  showLogs: "Show logs",
+  logsOf: "<app>'s logs in <env>",
+  // What masked hides, said plainly (#223's security review).
+  logsLines: "The last 200 lines. Only the secrets set in Canyon are hidden, each shown as its name: anything else the app printed shows, its users' tokens included.",
+  // A security responder's read where a value is too short to hide by its name (409 too_short_to_mask).
+  logsTooShort: "Canyon can't show you the app's last lines: a secret in them is too short to hide by its name.",
+  logsReading: "Reading…",
+  logsNone: "No log lines yet.",
+  logsCopied: "Copied.",
+  logsUncopied: "Couldn't copy: select the lines and copy them yourself.",
+  logsTeamOnly: "Only the app's contributors see its logs.",
   signInForCli: "Sign in to approve the Canyon CLI",
   signInForCliLine: "Then you'll come back here to approve the code from your terminal.",
   signInForAgent: "Sign in to connect an agent to Canyon",

@@ -288,7 +288,12 @@ func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
 	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH", `{"value":"/api/claims","where":"build"}`); code != 204 {
 		t.Fatalf("the build value: %d %s", code, lastBody)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO deploys (project_id, env, package_id, image, url, gate_run, run_started_at) SELECT 'claims-portal', e, package_id, 'canyon/claims-portal@`+executortest.Digest+`', 'http://x', 'gr_seed', now() + interval '1 second' FROM runs, unnest(ARRAY['preview', 'prod']) e WHERE id = 'gr_seed'`); err != nil {
+	// the run that built the image both environments run, after that value was set
+	image := "canyon/claims-portal@" + executortest.Digest
+	if _, err := pool.Exec(ctx, "UPDATE runs SET build_image = $1, created_at = now() WHERE id = 'gr_seed'", image); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO deploys (project_id, env, package_id, image, url, gate_run, run_started_at) SELECT 'claims-portal', e, package_id, $1, 'http://x', 'gr_seed', now() + interval '1 second' FROM runs, unnest(ARRAY['preview', 'prod']) e WHERE id = 'gr_seed'`, image); err != nil {
 		t.Fatal(err)
 	}
 	started := func() { // what runs started after every value set so far: the masked read's rule can mask it
@@ -349,10 +354,21 @@ func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
 		t.Fatalf("the short value: %d %s", code, lastBody)
 	}
 	started()
-	if code, body, _ := do(t, rex, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 409 || body["error"] != "not_maskable" {
-		t.Errorf("a responder's read with a short value: %d %s, want 409 not_maskable", code, lastBody)
+	if code, body, _ := do(t, rex, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 409 || body["error"] != "too_short_to_mask" {
+		t.Errorf("a responder's read with a short value: %d %s, want 409 too_short_to_mask", code, lastBody)
 	}
 	read("a contributor, with a short value", carl, "?env=prod&redaction=masked")
+	// a build value rotated after the image was built, then promoted: the image holds the old one, which the vault no
+	// longer has, so nobody's masked read can hide it
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH", `{"value":"/api/claims/v2","where":"build"}`); code != 204 {
+		t.Fatalf("the rotated build value: %d %s", code, lastBody)
+	}
+	started()
+	for who, c := range map[string]*http.Client{"a contributor": carl, "a responder": rex} {
+		if code, body, _ := do(t, c, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 409 || body["error"] != "not_maskable" {
+			t.Errorf("%s, a build value rotated since the build: %d %s, want 409 not_maskable", who, code, lastBody)
+		}
+	}
 	if n := count(t, ctx, pool, logsAudited); n != reads {
 		t.Fatalf("%d rows for %d reads served", n, reads)
 	}

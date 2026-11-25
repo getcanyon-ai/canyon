@@ -148,7 +148,7 @@ func (a *app) projectLogs(w http.ResponseWriter, r *http.Request) {
 // (runs.Pipeline.Masked), so a value Canyon knows is a secret never reaches the answer. A log Canyon can't
 // mask that way, a secret of env set or removed since what runs there started or a start with no record, is 409 and
 // no line. One over maxMaskedBytes is 422 and no line: it is never cut to fit.
-// It masks with env's build values too (pipe.LogValues). A security responder's read below contributor is 409 too where a
+// It masks with preview's build values too (pipe.LogValues). A security responder's read below contributor is 409 too_short_to_mask where a
 // value is under responderMaskMin characters, which the name in its place would give away, and its 422 names no canyon
 // logs, whose raw read isn't theirs (#223's security review).
 func (a *app) maskedLogs(w http.ResponseWriter, r *http.Request, id, env string, stream io.Reader) {
@@ -172,7 +172,7 @@ func (a *app) maskedLogs(w http.ResponseWriter, r *http.Request, id, env string,
 		return
 	}
 	if err == nil && responder && executor.Short(values, responderMaskMin) {
-		writeErr(w, http.StatusConflict, "not_maskable", "a secret of "+env+" is too short to hide by its name, so Canyon doesn't show its log to a security responder", nil)
+		writeErr(w, http.StatusConflict, "too_short_to_mask", "a secret of "+env+" is too short to hide by its name, so Canyon doesn't show its log to a security responder", nil)
 		return
 	}
 	said := executor.Mask(string(raw), values)

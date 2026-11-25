@@ -97,10 +97,14 @@ describe("an environment's logs on its card", () => {
     expect(await within(await screen.findByRole("dialog")).findByText("pool: reconnecting to <DATABASE_URL>")).toBeDefined();
     expect(sent()).not.toContain(logs("preview"));
     cleanup();
-    server({ "GET /api/v1/projects/claims-portal": { body: { project: row("none") } }, ...RESPONDER, [logs("prod")]: { status: 409, body: { error: "not_maskable" } } });
-    render(asResponder());
-    fireEvent.click(await (await card("Production")).findByRole("button", { name: "Show production's logs" }));
-    expect(await screen.findByText(S.logsUnmaskedResponder)).toBeDefined(); // a short value too: a responder is never pointed at canyon logs
+    // a responder is never pointed at canyon logs, whose raw read isn't theirs; a value too short to hide is said as such
+    for (const [error, said] of [["not_maskable", S.lastLinesUnmasked], ["too_short_to_mask", S.logsTooShort]] as const) {
+      server({ "GET /api/v1/projects/claims-portal": { body: { project: row("none") } }, ...RESPONDER, [logs("prod")]: { status: 409, body: { error } } });
+      render(asResponder());
+      fireEvent.click(await (await card("Production")).findByRole("button", { name: "Show production's logs" }));
+      expect(await screen.findByText(said)).toBeDefined();
+      cleanup();
+    }
   });
 
   // Below contributor, a member who isn't a responder reads no logs: the card says who does, and nothing is asked.

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { type ApiError, getMaskedLogs } from "../api";
+import { getMaskedLogs } from "../api";
 import { S } from "../strings";
 import { Button } from "./Button";
 import { unread } from "./Headline";
@@ -33,7 +33,7 @@ function Sheet({ app, name, env, where, team, close }: { app: string; name: stri
     setRead(null);
     setCopied(null);
     getMaskedLogs(app, env, 200).then((lines) => { if (live) setRead({ lines: lines.trimEnd() }); },
-      (err) => { if (live) setRead({ failed: unread((err as ApiError).status, env, team) }); });
+      (err) => { if (live) setRead({ failed: unread(err, env, team) }); });
     return () => { live = false; };
   }, [app, env, team, asked]);
   // The newest line is the last, in view as the lines are drawn, as the band's are.

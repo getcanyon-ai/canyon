@@ -34,6 +34,8 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // setup gate below awaits this same read before drawing the app page at all, but nothing here
   // should have to trust that ordering to stay a card that never asks too early.
   const [auth, setAuth] = useState<"oidc" | "off" | null>(null);
+  // The host's public URL, from the same read: an app's link to share is the address everyone reaches it by (#193).
+  const [publicURL, setPublicURL] = useState<string | null>(null);
   // Who is reading, for the foot of the rail on every page. Only a host with sign-in has somebody to
   // name; the fleet read is where the contract answers it (routes.md, `viewer` on GET /fleet).
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -55,7 +57,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
     let live = true;
     const ask = async () => {
       const config = await getAuthConfig();
-      if (live) { setOrg(config.org); setAuth(config.auth); }
+      if (live) { setOrg(config.org); setAuth(config.auth); setPublicURL(typeof config.public === "string" && config.public !== "" ? config.public : null); }
       if (config.auth !== "oidc") return null;
       const record = await getPreferences();
       if (live) setRole(record.viewer?.role ?? null);
@@ -101,7 +103,7 @@ function Dashboard({ hash, answered }: { hash: string; answered: () => void }) {
   // Finishing writes the row, so the host has left the setup state and the fleet is served.
   if (setup !== null) return <Onboarding record={setup} done={() => setSetup(null)} />;
   // Guardrails is offered once the reader is known to be an admin: everyone is, on a host with sign-in off.
-  return <RailContext value={{ org, viewer, admin: auth === "off" || (viewer?.role ?? role) === "admin", needs }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
+  return <RailContext value={{ org, viewer, admin: auth === "off" || (viewer?.role ?? role) === "admin", needs, publicURL }}><Screen hash={hash} org={org} auth={auth} /></RailContext>;
 }
 
 function Screen({ hash, org, auth }: { hash: string; org: string | null; auth: "oidc" | "off" | null }) {

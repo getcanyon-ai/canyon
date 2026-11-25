@@ -1,6 +1,6 @@
 import { version, type Actor as ActorRef, type AuditEvent } from "../api";
 import { tableWords } from "../screens/AuditTable";
-import { ACCESS_WORD, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_HELD_RUNNING, AUDIT_LIFT_STARTED, AUDIT_MORE, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, DB_CLOSED_WHY, PATCHING, S } from "../strings";
+import { ACCESS_WORD, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_HELD_RUNNING, AUDIT_LIFT_STARTED, AUDIT_MORE, AUDIT_STOP, AUDIT_UNDEPLOY, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, DB_CLOSED_WHY, PATCHING, S } from "../strings";
 import { Actor, actorName } from "./Actor";
 import { Age } from "./Age";
 import { Icon } from "./Icon";
@@ -86,7 +86,9 @@ function policySet(detail: Record<string, unknown>): string {
 
 function worded(action: string, detail: Record<string, unknown>, picked?: string): string {
   const words = picked !== undefined ? picked : detail.kind === "check" ? AUDIT_CHECK : action === "lift hold" && detail.started === true && typeof detail.package === "string" ? AUDIT_LIFT_STARTED
+    : action === "stop app" && AUDIT_STOP[text(detail.stop)] !== undefined ? AUDIT_STOP[text(detail.stop)]
     : action === "stop app" && detail.stopped === false ? AUDIT_HELD_RUNNING
+    : action === "DELETE /api/v1/projects/{id}/envs/{env}" && AUDIT_UNDEPLOY[text(detail.stop)] !== undefined ? AUDIT_UNDEPLOY[text(detail.stop)]
     : action === "egress.networks.recreate" && detail.failed !== null && detail.failed !== undefined ? AUDIT_RECREATE_FAILED
     : action === "egress.route.set" && typeof detail.secret === "string" ? AUDIT_ROUTE_MOVED
     : action === "egress.ca.rotate" && detail.byo === true ? AUDIT_CA_BYO : AUDIT_ACTIONS[action];

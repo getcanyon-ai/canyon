@@ -1,0 +1,106 @@
+# scripts/ci-select.txt: scripts/ci-select.sh's table. Each line is a path pattern, then the suites of
+# scripts/ci-suite.sh a change to it runs, as shell patterns of their names: * for every suite, - for none beyond the
+# five every change runs (lint, tidy, web, test-rest, gitleaks) and the stack suites whose .github/suites list it
+# reaches. A pattern is a git :(glob) pathspec, as in .github/suites: ** crosses directories, * stays within one, and
+# no pattern holds a space. A changed path no line matches runs every suite. internal/tools/suites keeps it honest:
+# every tracked file matches a line, and the Go each suite's tests compile is on lines that name it.
+
+# every suite: what decides what runs, what every suite is built from, and the stack every journey runs on
+.github/**                          *
+scripts/ci-*.sh                     *
+scripts/ci-select.txt               *
+scripts/telemetry-off-check.sh      *   # e2e-up's check and demo-check's
+Makefile                            *
+go.mod                              *
+go.sum                              *
+.dockerignore                       *
+**/Dockerfile*                      *
+**/*.Dockerfile                     *
+db/migrations/**                    *
+e2e/**                              *
+
+# Go, as the suites' tests compile it (go list -deps -test): the server's, built with and without Canyon Enterprise,
+# runs' and provisioners'. noee-rest builds and tests every package without it.
+cmd/**                              noee-rest
+cmd/canyon-server/**                server-* noee-*
+cli/**                              server-* noee-*
+contracts/**                        server-* noee-* runs-* docs
+db/**                               server-* noee-* runs-* provisioners-*
+demo/**                             noee-rest deploy-bundle
+ee/**                               server-*
+ee/outboundkeys/**                  runs-*
+ee/patching/**                      runs-*
+events/**                           server-* noee-* runs-*
+executor/**                         server-* noee-* runs-*
+executor/*                          provisioners-*
+gate/**                             server-* noee-* runs-*
+github-app/**                       server-* noee-*
+gitops/**                           server-* noee-* runs-*
+identity/**                         server-* noee-* runs-*
+ingest/**                           server-* noee-* runs-*
+internal/**                         server-* noee-*
+internal/answered/**                runs-* provisioners-*
+internal/enterprise/**              runs-*
+internal/executortest/**            runs-*
+internal/gitopstest/**              runs-*
+internal/gitpush/**                 runs-*
+internal/names/**                   runs-* provisioners-*
+internal/pgtest/**                  runs-* provisioners-*
+internal/place/**                   runs-*
+internal/subjecthash/**             runs-* provisioners-*
+internal/trivy/**                   runs-*
+provisioners/**                     server-* noee-* runs-* provisioners-*
+qa/**                               noee-rest
+runs/**                             server-* noee-* runs-*
+vault/**                            server-* noee-* runs-*
+web/*.go                            server-* noee-*
+webhook/**                          server-* noee-* runs-*
+
+# what the server's tests read besides Go: the shipped configuration and a docs page
+deploy/**                           server-* noee-* deploy-bundle
+docker-compose.yml                  server-* noee-* compose-up deploy-bundle
+docs/src/content/docs/org/who-can-do-what.md  server-* noee-*
+
+# ci.yml's compose-up, images and deploy-bundle: the paths their jobs there diff
+deploy/egress/**                    compose-up
+cmd/canyon-server/localpeer.go      compose-up
+cmd/canyon-server/published.go      compose-up
+cmd/canyon-server/main.go           compose-up
+executor/published.go               compose-up
+executor/http.go                    compose-up
+executor/executor.go                compose-up
+executor/appfloor.go                compose-up
+executor/appfloor.sh                compose-up
+LICENSE                             images
+NOTICE                              images
+THIRD_PARTY_NOTICES                 images
+scripts/builder-node.sh             images deploy-bundle
+deploy/k8s/builds.yaml              images
+internal/tools/paketobump/**        images
+scripts/deploy-bundle.sh            deploy-bundle
+scripts/deploy-bundle-check.sh      deploy-bundle
+scripts/guide-block.sh              deploy-bundle
+scripts/guide-download-check.sh     deploy-bundle
+scripts/tarball.sh                  deploy-bundle
+scripts/release-archives-check.sh   deploy-bundle
+scripts/publish-release.sh          deploy-bundle
+scripts/opengrep-source.sh          deploy-bundle
+docs/src/content/docs/self-host/docker.md  deploy-bundle
+
+# docs.yml: the links of every Markdown file, and the site
+**/*.md                             docs
+docs/**                             docs
+designsystem/**                     docs
+web/src/fonts/**                    docs
+scripts/publish-docs.sh             docs
+scripts/docs-live.sh                docs
+
+# no suite beyond the five and the .github/suites lists: the dashboard, the release's own scripts, the linters' settings
+web/**                              -
+scripts/chart-package.sh            -
+scripts/release-smoke.sh            -
+scripts/tour-check.sh               -
+.gitignore                          -
+.gitleaks.toml                      -
+.gitleaksignore                     -
+.golangci.yml                       -

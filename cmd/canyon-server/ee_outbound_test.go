@@ -26,6 +26,8 @@ import (
 // turning credentials back on are 409 licence_required.
 func TestALapsedLicenceKeepsCredentials(t *testing.T) {
 	h := outboundHost(t)
+	egressWait = time.Second // rawPolicy reads the policy as a replica that never asks again: a change no longer waits it out (#136)
+	t.Cleanup(func() { egressWait = egressDefault })
 	if code, _, _ := do(t, h.carl, http.MethodPut, h.base+routePath("preview", "api.stripe.com"), routeBody("Authorization", "bearer", routeValue)); code != 204 {
 		t.Fatalf("a credential under the licence: %d %s", code, lastBody)
 	}
@@ -492,6 +494,8 @@ func TestBYOKeyIsSealedAndNeverReadBack(t *testing.T) {
 //     once, the route kept.
 func TestCredentialRoutesGateRoutesAndTrust(t *testing.T) {
 	h := outboundHost(t)
+	egressWait = time.Second // rawPolicy reads the policy as a replica that never asks again: a change no longer waits it out (#136)
+	t.Cleanup(func() { egressWait = egressDefault })
 	h.exec(t, "UPDATE egress_settings SET credential_routes = false")
 	for who, s := range map[string]*http.Client{"a contributor": h.carl, "the admin": h.dana} {
 		if code, out, _ := do(t, s, http.MethodGet, h.base+"/api/v1/egress", ""); code != 200 || out["credential_routes"] != false {

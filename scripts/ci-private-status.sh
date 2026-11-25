@@ -5,7 +5,8 @@
 # exact commit (the line private-ci-inputs pr=<pr> sha=<sha>): never the run's name, which a run of another branch's
 # copy of the workflow could fake. Of those, the newest decides, by its last job, private-ci. It prints one line and
 # exits 0 when that job succeeded, 1 when the run failed or was cancelled, 2 while it runs, and 3 when there is none
-# for this commit: run scripts/ci-private.sh <pr>, or the head moved since it last ran. Merge on 0 alone.
+# for this commit: run scripts/ci-private.sh <pr>, or the head moved since it last ran. Merge on 0 alone. The line
+# says how many suites ran and which ones scripts/ci-select.sh skipped, as the run's select job's log says it.
 #
 # gh signs in to this repository as GH_CONFIG_DIR says and to the private repository CANYON_PRIVATE_REPO as
 # CANYON_PRIVATE_GH_CONFIG_DIR says (GH_CONFIG_DIR's when unset), as scripts/ci-private.sh does. It needs gh and jq.
@@ -47,10 +48,21 @@ if [ "$status" != completed ]; then
   echo "running: #$pr at $sha is $status on the private runners, $url"
   exit 2
 fi
-gate=$(priv api "repos/$CANYON_PRIVATE_REPO/actions/runs/$id/jobs?filter=latest&per_page=100" --jq '[.jobs[] | select(.name == "private-ci")][0].conclusion // "none"')
+jobs=$(priv api "repos/$CANYON_PRIVATE_REPO/actions/runs/$id/jobs?filter=latest&per_page=100")
+gate=$(printf '%s' "$jobs" | jq -r '[.jobs[] | select(.name == "private-ci")][0].conclusion // "none"')
+# what ran: the one line the select job prints, private-ci-selected ran=<n> of=<all> skipped=<suite,...|none>
+ran=""
+selector=$(printf '%s' "$jobs" | jq -r '[.jobs[] | select(.name == "select")][0].id // empty')
+if [ -n "$selector" ] && log=$(priv api --allow-escape-sequences "repos/$CANYON_PRIVATE_REPO/actions/jobs/$selector/logs" 2>/dev/null); then
+  line=$(printf '%s\n' "$log" | sed 's/^[^ ]* //' | grep -m1 '^private-ci-selected ran=[0-9]* of=[0-9]* skipped=[a-z0-9,-]*$' || true)
+  if [ -n "$line" ]; then
+    set -- $line
+    ran=" (${2#ran=} of ${3#of=} suites ran; skipped by scripts/ci-select.sh: $(printf '%s' "${4#skipped=}" | sed 's/,/, /g'))"
+  fi
+fi
 if [ "$gate" = success ]; then
-  echo "green: #$pr at $sha passed on the private runners, $url"
+  echo "green: #$pr at $sha passed on the private runners$ran, $url"
   exit 0
 fi
-echo "red: #$pr at $sha ended with private-ci $gate on the private runners, $url"
+echo "red: #$pr at $sha ended with private-ci $gate on the private runners$ran, $url"
 exit 1

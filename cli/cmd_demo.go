@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +27,9 @@ var (
 	demoDocker = func(ctx context.Context, dir string, out io.Writer, args ...string) (string, error) {
 		cmd := exec.CommandContext(ctx, "docker", args...) //nolint:gosec // docker by name, with this file's own arguments
 		cmd.Dir = dir
+		if ctx.Value(demoNoImageEnv{}) != nil {
+			cmd.Env = demoWithoutImageEnv(os.Environ())
+		}
 		var answer, said bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &answer, &said
 		if out != nil {
@@ -43,6 +45,15 @@ var (
 	demoURL      = defaultHost      // the demo's address, which compose publishes
 	demoPort     = "127.0.0.1:7777" // the same, as a program holding it is found
 )
+
+// demoNoImageEnv, as a context's value, has demoDocker run docker without the shell's CANYON_IMAGE_* variables: the
+// compose file then names its own pins, never an image this shell names (#170).
+type demoNoImageEnv struct{}
+
+// demoWithoutImageEnv is environ without any CANYON_IMAGE_* variable.
+func demoWithoutImageEnv(environ []string) []string {
+	return slices.DeleteFunc(slices.Clone(environ), func(kv string) bool { return strings.HasPrefix(kv, "CANYON_IMAGE_") })
+}
 
 // The compose file's profile for the sample apps, and the service that deploys them and exits.
 const (
@@ -167,6 +178,13 @@ func demoListed(ctx context.Context, dir string, args ...string) ([]string, erro
 // demoServer is the Compose project, and its folder, of the container named canyon-server: every
 // Canyon started from docker-compose.yml runs one by that name, so two cannot run on one Docker.
 // found is false when there is none.
+// demoServing is whether the container named canyon-server is running: only then is what answers on the demo's port
+// its server (#170). A Docker that can't say is taken as no.
+func demoServing(ctx context.Context) bool {
+	running, err := demoListed(ctx, "", "ps", "-q", "--filter", "name=^canyon-server$")
+	return err == nil && len(running) > 0
+}
+
 func demoServer(ctx context.Context) (project, dir string, found bool, err error) {
 	ids, err := demoListed(ctx, "", "ps", "-aq", "--filter", "name=^canyon-server$")
 	if err != nil || len(ids) == 0 {
@@ -206,31 +224,6 @@ func demoStopping(fix string) string {
 	return ": " + fix
 }
 
-// demoApps is the ids of the apps the demo's own server has, read before it stops: their containers,
-// networks, caches and images are the demo's, and every other canyon.app on this Docker is not.
-func demoApps(ctx context.Context) ([]string, error) {
-	client := newClient(demoURL)
-	auth, err := firstContact(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-	if auth.Auth != "off" {
-		return nil, fmt.Errorf("%s has sign-in on, so it is not the demo", demoURL)
-	}
-	if _, err := anonymousSession(ctx, client); err != nil {
-		return nil, err
-	}
-	page, err := readFleet(ctx, client, url.Values{})
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, row := range page.Apps {
-		ids = append(ids, row.ID)
-	}
-	return ids, nil
-}
-
 // demoHostBefore is the file that keeps the host canyon demo up replaced as this machine's default,
 // for down to name the way back to it.
 func demoHostBefore(dir string) string { return filepath.Join(dir, "host-before") }
@@ -241,21 +234,9 @@ func demoHostBefore(dir string) string { return filepath.Join(dir, "host-before"
 // and a name, and removing them takes the names in the order they come.
 type demoThing struct{ kind, name string }
 
-func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoThing, error) {
-	ours := func(app string) bool { return slices.Contains(apps, app) }
-	var made []demoThing
-	labelled := func(kind string, args ...string) error {
-		rows, err := demoListed(ctx, "", args...)
-		if err != nil {
-			return fmt.Errorf("could not list the demo's %ss: %w", kind, err)
-		}
-		for _, row := range rows {
-			if name, app, _ := strings.Cut(row, " "); ours(app) {
-				made = append(made, demoThing{kind, name})
-			}
-		}
-		return nil
-	}
+// demoMade answers what is the demo's to remove, and with purge what of it stays because something else on this
+// Docker holds it, each with why.
+func demoMade(ctx context.Context, stack string, transit []string, purge bool) (made, kept []demoThing, err error) {
 	named := func(kind string, keep func(string) bool, args ...string) error {
 		rows, err := demoListed(ctx, "", args...)
 		if err != nil {
@@ -269,20 +250,16 @@ func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoTh
 		return nil
 	}
 	every := func(string) bool { return true }
+	// What the demo's executor made for its apps, by the label it put on each (contracts/executor.md; #178): their
+	// containers and floors' holders, networks and build caches. No other Canyon's executor runs in the demo's
+	// compose project, so none of its things carries it.
+	own := "label=canyon.project=" + demoProject
 	steps := []func() error{
+		func() error { return named("container", every, "ps", "-a", "--filter", own, "--format", "{{.Names}}") },
 		func() error {
-			return labelled("container", "ps", "-a", "--filter", "label=canyon.app", "--format", `{{.Names}} {{.Label "canyon.app"}}`)
+			return named("network", every, "network", "ls", "--filter", own, "--format", "{{.Name}}")
 		},
-		func() error {
-			return labelled("network", "network", "ls", "--filter", "label=canyon.app", "--format", `{{.Name}} {{.Label "canyon.app"}}`)
-		},
-		func() error {
-			return named("volume", func(v string) bool {
-				return slices.ContainsFunc(apps, func(app string) bool {
-					return v == names.CacheVolume(app, "build") || v == names.CacheVolume(app, "launch")
-				})
-			}, "volume", "ls", "-q", "--filter", "name=canyon-cache-")
-		},
+		func() error { return named("volume", every, "volume", "ls", "-q", "--filter", own) },
 	}
 	for _, label := range []string{"canyon.build", "canyon.scan"} { // the builds and scans the demo's executor started
 		steps = append(steps, func() error {
@@ -304,11 +281,61 @@ func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoTh
 				return nil
 			}
 		}
-		steps = append(steps,
-			image(func(ref string) bool {
-				repo, _, _ := strings.Cut(ref, ":")
-				return ours(strings.TrimPrefix(repo, "canyon/"))
-			}, "--filter", "reference=canyon/*"),
+		// The images pulled by digest: the compose file's, which compose's own down --rmi all left behind, those the
+		// executor pulls for its scans, and the lifecycle pack pulls by its platform's digest. Each is looked for, and
+		// removed, by its own reference (#170), unless something else on this Docker still holds it (demoHeld).
+		pulled := func() error {
+			refs, err := demoComposeImages(ctx, stack)
+			if err != nil {
+				return fmt.Errorf("could not list the demo's images: %w", err)
+			}
+			for _, ref := range slices.Concat(refs, names.PulledImages, names.LifecyclePlatforms) {
+				id, err := demoDocker(ctx, "", nil, "image", "inspect", "--format", "{{.Id}}", ref)
+				switch {
+				case err != nil && strings.Contains(err.Error(), "No such image"):
+					continue // not on this Docker: Docker's own answer, and no other, says so
+				case err != nil:
+					return fmt.Errorf("could not read the demo's image %s: %w", ref, err)
+				}
+				why, err := demoHeld(ctx, ref, id)
+				switch {
+				case err != nil:
+					return err
+				case why != "":
+					kept = append(kept, demoThing{"image", ref + " (" + why + ")"})
+				default:
+					made = append(made, demoThing{"image", ref})
+				}
+			}
+			return nil
+		}
+		// The images the demo's executor built for its apps, by the second name it gives each in its project
+		// (canyon-demo/<app>:<tag>; #178): removed by ID, which takes canyon/<app>:<tag> too, unless a container that
+		// isn't the demo's uses it.
+		built := func() error {
+			rows, err := demoListed(ctx, "", "images", "--filter", "reference="+demoProject+"/*", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}")
+			if err != nil {
+				return fmt.Errorf("could not list the demo's images: %w", err)
+			}
+			seen := map[string]bool{}
+			for _, row := range rows {
+				id, ref, _ := strings.Cut(row, " ")
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				switch why, err := demoUsed(ctx, id); {
+				case err != nil:
+					return err
+				case why != "":
+					kept = append(kept, demoThing{"image", ref + " (" + why + ")"})
+				default:
+					made = append(made, demoThing{"image", id})
+				}
+			}
+			return nil
+		}
+		steps = append(steps, pulled, built,
 			image(every, "--filter", "reference=canyon-scan/*", "--filter", "reference=canyon-run", "--filter", "reference=canyon-builder"),
 			func() error {
 				return named("volume", func(v string) bool { return strings.HasPrefix(v, "canyon-scandb-") }, "volume", "ls", "-q", "--filter", "dangling=true", "--filter", "name=canyon-scandb-")
@@ -319,10 +346,63 @@ func demoMade(ctx context.Context, apps, transit []string, purge bool) ([]demoTh
 	}
 	for _, step := range steps {
 		if err := step(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return made, nil
+	return made, kept, nil
+}
+
+// demoImagesKept is the file that keeps the images the demo's compose file named when up started it, one a line, as
+// the shell's CANYON_IMAGE_* variables made them then: purge removes those, whatever this shell sets (#170).
+func demoImagesKept(dir string) string { return filepath.Join(dir, "images") }
+
+// demoComposeImages is what up kept of the compose file's images, else the file's own pins, read without this shell's
+// CANYON_IMAGE_* variables (a demo an older CLI started kept none).
+func demoComposeImages(ctx context.Context, stack string) ([]string, error) {
+	if b, err := os.ReadFile(demoImagesKept(filepath.Dir(stack))); err == nil { //nolint:gosec // this CLI's own file, under ~/.canyon
+		return strings.Fields(string(b)), nil
+	}
+	return demoListed(context.WithValue(ctx, demoNoImageEnv{}, true), stack, demoCompose("config", "--images")...)
+}
+
+// demoHeld is why an image the demo pulled by digest stays: on Docker's containerd image store, removing that reference
+// takes every tag of its repository at that digest with it (#170). So it stays when a container outside the demo's
+// compose project uses it, running or stopped, or when it carries a tag. "" removes it.
+func demoHeld(ctx context.Context, ref, id string) (string, error) {
+	if why, err := demoUsed(ctx, id); why != "" || err != nil {
+		return why, err
+	}
+	out, err := demoDocker(ctx, "", nil, "image", "inspect", "--format", "{{json .RepoTags}}", ref)
+	if err != nil {
+		return "", fmt.Errorf("could not read the tags of %s: %w", ref, err)
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(out), &tags); err != nil {
+		return "", fmt.Errorf("docker answered the tags of %s as Canyon cannot read: %w", ref, err)
+	}
+	for _, tag := range tags {
+		// the containerd store names an image pulled by digest by that very reference: no tag. Any other is someone's,
+		// even one the compose file writes before its digest: the demo's pull by digest makes none.
+		if !strings.Contains(tag, "@") {
+			return "it is also tagged " + tag, nil
+		}
+	}
+	return "", nil
+}
+
+// demoUsed is why the image id stays because a container that isn't the demo's uses it, running or stopped: "" when
+// none does. A container is the demo's in its compose project, or labelled canyon.project=canyon-demo by its executor.
+func demoUsed(ctx context.Context, id string) (string, error) {
+	users, err := demoListed(ctx, "", "ps", "-a", "--filter", "ancestor="+id, "--format", `{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "canyon.project"}}`)
+	if err != nil {
+		return "", fmt.Errorf("could not list what uses the demo's images: %w", err)
+	}
+	for _, row := range users {
+		if f := strings.Split(row, "|"); len(f) != 3 || f[1] != demoProject && f[2] != demoProject {
+			return "the container " + f[0] + " uses it", nil
+		}
+	}
+	return "", nil
 }
 
 // demoTransit is the builds and scans the demo's executor started, labelled but naming no app: the
@@ -373,8 +453,8 @@ func demoRemove(ctx context.Context, made []demoThing) {
 
 // demoDown is make demo-down for a machine with no checkout, on the demo alone: its compose project
 // with its volumes first, so nothing starts another app; then what its executor made, which Compose
-// did not create and so leaves running. Nothing another Canyon on this Docker made is touched: the
-// apps are the ones the demo's own server lists. With purge, the images go too, and the bundle. It
+// did not create and so leaves running. Nothing another Canyon on this Docker made is touched: what
+// the demo's executor made carries its project (#178). With purge, the images go too, and the bundle. It
 // says the demo is gone only once Docker holds none of it.
 func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 	stack := demoStack(dir)
@@ -383,20 +463,19 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		a.errf("\n  %s Docker could not say what runs here: %s\n\n  Is Docker running? Start it, then run: canyon %s\n", a.render.glyph(stateFail), plainly(err), a.form)
 		return exitError
 	}
-	if _, err := os.Stat(filepath.Join(stack, "docker-compose.yml")); err != nil {
-		if found && project != demoProject {
-			at, fix := demoAnother(project, where, "down -v")
-			if where == "" && project != "" {
-				at, fix = demoAnother(project, where, "down")
-			}
-			a.errf("\n  %s This Canyon wasn't started by canyon demo up: %s.\n  To stop it%s\n", a.render.glyph(stateFail), at, demoStopping(fix))
-			return exitError
+	if found && project != demoProject { // another Canyon holds canyon-server, whatever ~/.canyon/demo holds: never asked, never touched (#170)
+		at, fix := demoAnother(project, where, "down -v")
+		if where == "" && project != "" {
+			at, fix = demoAnother(project, where, "down")
 		}
+		a.errf("\n  %s This Canyon wasn't started by canyon demo up: %s.\n  To stop it%s\n", a.render.glyph(stateFail), at, demoStopping(fix))
+		return exitError
+	}
+	if _, err := os.Stat(filepath.Join(stack, "docker-compose.yml")); err != nil {
 		a.printf("\n  %s Nothing to stop: no demo is running (looked in ~/.canyon/demo and for a container named canyon-server).\n", a.render.glyph(statePass))
 		return exitOK
 	}
 	before, _ := os.ReadFile(demoHostBefore(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
-	apps, asked := demoApps(ctx)                  // before the server stops
 	transit, err := demoTransit(ctx, stack)       // while the executor's container is there for since= to name
 	if err != nil {
 		a.errf("\n  %s Docker %s\n\n  Is Docker running? Start it, then run: canyon %s\n", a.render.glyph(stateFail), plainly(err), a.form)
@@ -413,10 +492,10 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		return exitError
 	}
 	a.demoStep("Removing the apps Canyon started")
-	made, err := demoMade(ctx, apps, transit, purge)
+	made, kept, err := demoMade(ctx, stack, transit, purge)
 	if err == nil {
 		demoRemove(ctx, made)
-		made, err = demoMade(ctx, apps, transit, purge)
+		made, kept, err = demoMade(ctx, stack, transit, purge)
 	}
 	if err == nil {
 		var rows []string
@@ -432,27 +511,6 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		a.errf("\n  %s Docker %s\n\n  Is Docker running? Start it, then run: canyon %s\n", a.render.glyph(stateFail), plainly(err), a.form)
 		return exitError
 	}
-	if asked != nil { // the server could not say which apps are its own, so none was removed
-		rows, err := demoListed(ctx, "", "ps", "-a", "--filter", "label=canyon.app", "--format", `{{.Names}} {{.Label "canyon.app"}}`)
-		var others []string
-		for _, row := range rows {
-			name, _, _ := strings.Cut(row, " ")
-			others = append(others, name)
-		}
-		if err != nil {
-			a.errf("\n  %s Docker could not list the demo's containers: %s\n\n  Is Docker running? Start it, then run: canyon %s\n", a.render.glyph(stateFail), plainly(err), a.form)
-			return exitError
-		}
-		if len(others) == 0 && len(made) == 0 {
-			return a.demoGone(dir, purge, string(before))
-		}
-		a.errf("\n  %s The demo's server didn't answer, so no app was removed. These may be the demo's:\n", a.render.glyph(stateFail))
-		for _, name := range others {
-			a.errf("    container %s\n", name)
-		}
-		a.errf("\n  Start the demo again and run canyon %s, or remove them with docker rm -f.\n", a.form)
-		return exitError
-	}
 	if len(made) > 0 {
 		a.errf("\n  %s The demo is stopped, but these are left:\n", a.render.glyph(stateFail))
 		for _, t := range made {
@@ -461,18 +519,24 @@ func (a *app) demoDown(ctx context.Context, dir string, purge bool) int {
 		a.errf("\n  To try again, run: canyon %s\n", a.form)
 		return exitError
 	}
-	return a.demoGone(dir, purge, string(before))
+	return a.demoGone(dir, purge, string(before), kept)
 }
 
-// demoGone is the end of a down that left nothing: the one line, and the way back to the host up
-// replaced, when it replaced one.
-func (a *app) demoGone(dir string, purge bool, before string) int {
+// demoGone is the end of a down that left nothing of the demo's: the one line, the images it kept because something
+// else on this Docker holds them, each with why, and the way back to the host up replaced, when it replaced one.
+func (a *app) demoGone(dir string, purge bool, before string, kept []demoThing) int {
 	if purge {
 		if err := os.RemoveAll(dir); err != nil {
 			a.errf("\n  %s %s could not be removed: %s\n", a.render.glyph(stateFail), dir, plainly(err))
 			return exitError
 		}
 		a.printf("\n  %s The demo is gone: its containers, data and images, and its files in ~/.canyon/demo.\n", a.render.paint(ansiGreen, a.render.glyph(statePass)))
+		if len(kept) > 0 {
+			a.printf("\n  These images stay, because something else on this Docker holds them:\n")
+			for _, t := range kept {
+				a.printf("    %s %s\n", t.kind, t.name)
+			}
+		}
 	} else {
 		_ = os.Remove(demoHostBefore(dir)) // said below, once
 		a.printf("\n  %s The demo is stopped and its data is gone. Its images stay, so the next start is quick.\n\n", a.render.paint(ansiGreen, a.render.glyph(statePass)))

@@ -147,6 +147,9 @@ func (e *Executor) Rebase(ctx context.Context, req RebaseRequest) (RebaseResult,
 	if after.RunImage != req.RunImage {
 		return RebaseResult{}, fmt.Errorf("the rebased image is on run image %s, not %s: the run image moved under pack", after.RunImage, req.RunImage)
 	}
+	if err := e.projectTag(ctx, tag); err != nil {
+		return RebaseResult{}, err
+	}
 	done = true
 	return RebaseResult{Image: "canyon/" + req.App + "@" + rebased, Before: before, After: after, DurationMS: time.Since(start).Milliseconds()}, nil
 }

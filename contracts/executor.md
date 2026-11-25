@@ -180,6 +180,32 @@ Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `exec
 `paketobuildpacks/ubuntu-noble-build` pinned by digest with `libpq5`, ending as `1001:1001`, which the
 deploy names by digest as it names `canyon-run`.
 
+**A Node app builds on Canyon's Node builder, on Docker** (**amended 2026-11-24**, #174). `CANYON_BUILDER_NODE`, in
+the executor's environment, names `canyon-builder-node`, as `CANYON_BUILDER` names a builder. Each release publishes it
+by digest beside its other images (`images.txt`), and the laptop demo's bundle names it so. It is made from `canyon-build` (above), Paketo's `nodejs`
+buildpack at the digest `deploy/k8s/builds.yaml` pins, and the lifecycle the pinned `canyon-builder` carries. Its run
+image is `canyon-run:noble`, and the executor's own two build variables (*Every build runs with*, below) are the
+builder's own build environment. A build with no build values therefore hands pack neither `--run-image` nor
+`--env`, so pack builds on the builder itself, never on an ephemeral copy it saves to the daemon. Saving that copy
+takes about 85 s a build on Docker's containerd image store, and leaves about 1.3 GB that nothing frees.
+
+- **Which builder.** `/build` uses it for a tree when both hold:
+  - (a) the tree and its build environment (its build values, and the `project.toml` Canyon reads) carry none of the
+    entries `executor/choose.go` lists;
+  - and no build value names either of those two variables, which only `--env` can replace;
+  - (b) the Node builder's detect passes, as pack's `detect` phase reports it. Its log is held until it has, so a
+    tree it detects nothing in shows `canyon-builder`'s build alone. When this host doesn't have `canyon-builder` yet,
+    that build's log says so and what it downloads, once.
+- **Otherwise `canyon-builder`**, which then decides exactly as today, its failed-detect answer included.
+- **(a)'s list.** It is read from the detect code of every buildpack group the full builder orders before `nodejs`,
+  at the versions `deploy/k8s/builds.yaml` pins: entry names and globs in the tree, and build variables set at all.
+  It never names the app's language. It is a superset of what could make an earlier group pass, so a tree it
+  can't rule out goes to today's builder.
+- **Keeping it true.** `choose.go` carries the pins it was read for, written so the Paketo bump never moves them. A
+  test fails while any of them differs from what the tree pins, until the detect code is read again.
+- **Unset, or with `CANYON_BUILDER` set:** every app builds on the one builder, as before.
+- **On Kubernetes** the ClusterBuilder is unchanged.
+
 **Every build runs with `NODE_ENV=production`**, the executor's own build variable, which a build value
 of that name replaces. Paketo's npm-install installs devDependencies under `NODE_ENV=development` and
 hands that value to the buildpacks after it; a build variable is applied over what an earlier buildpack
@@ -442,6 +468,19 @@ address*): which app a container or network belongs to stays its name. They let 
 what the executor made, and only that, with `docker ps -a --filter label=canyon.app` and
 `docker network ls --filter label=canyon.app` — which is how the demo's `make demo-down` removes it,
 since compose did not create it and cannot.
+
+**What an app's things are labelled with: the executor's own compose project** (**amended 2026-11-25**, #178). At
+start the executor reads the `com.docker.compose.project` label of its own container, found by its hostname, which
+Docker sets to the container's ID; outside a container, in one compose didn't start, or with Docker not answering,
+it has none. With one, everything it makes for an app also carries `canyon.project=<that project>`: the container
+`<app>-<target>`, its floor holder, the network `canyon-app-<app>`, and the two build cache volumes, which it now
+creates with `canyon.app=<app>` (and `canyon.project`) before pack, which would make them unlabelled. pack can't
+label the image it builds, so the executor gives each image a build or a `/rebase` makes, tagged
+`canyon/<app>:<package>-<nonce>`, a second name on the same ID, `<project>/<app>:<package>-<nonce>`. Every name an
+app is read by stays `canyon/<app>`, and the executor's own cleanup of an app's images (after a `/run`, and
+`/forget`) removes both names. `canyon demo down` finds what the demo's executor made by
+`canyon.project=canyon-demo` and its images by `canyon-demo/*`, never by an app's id, which another Canyon on the
+same Docker can share (cli.md §6.14).
 
 **Egress** (**amended 2026-10-11**, #2085; design/EGRESS.md §2.2–2.3). `run` is the server's id of
 the run that asked for this `/run`, `gr_` and hex (contracts/events.md, `run`), and the executor writes
@@ -1130,7 +1169,15 @@ and no buildpack goes in, and nothing above the run image's layers changes.
 // 502 when the executor cannot tell (its daemon or the cluster API did not answer)
 ```
 
-Which builder a `/build` now would use (#1244): on Docker the builder image's ID (`docker image inspect
+Which builder a `/build` now would use (#1244). With `CANYON_BUILDER_NODE` set (**amended 2026-11-24**, #174), the
+SHA-256 of the Node builder's image ID, a newline, and `canyon-builder`'s name, the tag its file's hash makes, as
+`sha256:<64 hex>`. The Node builder is pulled first when the daemon has none. A new Node builder, or a change to
+`executor/builder.Dockerfile`, a pin bump among them, is a new identity.
+- **The full builder's part is its Dockerfile's hash, not its image ID.** So a `canyon-builder` built again from
+  the same file, with newer packages from apt, is not a new identity, where without a Node builder it is.
+- **Why:** the image ID exists only once the full builder is built, which means downloading it. Asking for it here
+  would download the full builder at the first deploy's reuse check, when a Node app never needs it.
+Otherwise, on Docker the builder image's ID (`docker image inspect
 --format {{.Id}}` of `CANYON_BUILDER`, pulled first when the daemon has none, as a build would pull it,
 else of `canyon-builder`, built first when the daemon has none, as a build would build it); on Kubernetes the ClusterBuilder `canyon`'s
 `status.latestImage`, a reference by digest, and `502` while it has none. A builder patched or replaced —
@@ -1156,7 +1203,9 @@ moves it. An executor from before it answers `builder` alone, and the server pla
 the first build on a host, and again when a Canyon release changes either image, `canyon-builder` up to a
 1.4 GB download. It runs from the call's start to the moment the later of the two was built during it.
 Absent when neither was built while it waited: both on the daemon already, `CANYON_BUILDER` and
-`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. The server turns it
+`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. With `CANYON_BUILDER_NODE`
+set it counts the Node builder's pull in place of `canyon-builder`'s build, which only a tree that needs it starts,
+inside its `/build`, whose log says what it downloads. The server turns it
 into the run's `build.image` row (events.md), which the CLI adds to the build's time.
 
 ## `GET /scandb`
@@ -1295,6 +1344,38 @@ the app's first byte: a quiet app still answers at once, and a read that fails �
 there, or cut off — ends on its reason instead of silently. Both executors write the line; on Docker,
 `docker logs` also writes its own error into the stream before it (**amended 2026-09-30**,
 `canyonv2-qlsd`).
+
+**A container that isn't running** (**amended 2026-11-24**, #184: a crash's lines are what a person
+needs, and they are the run that ended). On Docker an exited container is read as a running one is:
+`docker logs` answers every run since `/run` made it, its restarts' included, and a `follow` ends with
+the body. On Kubernetes, when the newest pod's `app` container isn't running, the executor reads its
+last run: that run's log (`previous`) while the container waits to start again, its own log once it has
+ended for good, and `follow` as `false`, since nothing runs to follow. Where the kubelet no longer holds
+that log, the executor writes the run's termination message, the tail of its log the pod's status keeps
+(`FallbackToLogsOnError`, *On Kubernetes*): its last `tail` lines, from a whole line, as `/run` reads
+it (a first line at the kubelet's 2 KiB bound begins cut and is left out), then one line of its own:
+
+```
+canyon: the cluster kept only the end of the app's last run
+```
+
+The kubelet no longer holds it when the read is refused, or when it answers `200` with exactly its own
+sentence `unable to retrieve container logs for <containerID>`, naming that run's container, as it can
+once the dead container is gone from the node, before its status sees it gone (amended 2026-11-24, #185's
+review: kubelet v1.33.0, `kuberuntime_container.go`; it refuses after that, as kind's v1.34.11 did); that
+sentence is never passed on as the app's. A container that is still running can have its log file missing
+on the node: the kubelet then answers `200` with the same sentence naming that container, and the executor
+passes it on as written, since no run has ended and there is no kept end to fall back to. It is the
+kubelet's line, not the app's. A run the kubelet lost track
+of (`reason` `ContainerStatusUnknown`) carries the kubelet's message, not the app's, and a run whose
+status kept nothing has none: for either the executor writes only
+
+```
+canyon: the cluster kept nothing of the app's last run
+```
+
+A container that isn't running and never ended — waiting for its image, say — is read as today: its log
+is empty, or the read fails on its reason.
 
 ## `POST /scan`
 

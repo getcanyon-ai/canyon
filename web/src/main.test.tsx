@@ -18,6 +18,7 @@ it("comes back from the callback to the device page the sign-in began on", async
   document.body.innerHTML = '<div id="root"></div>';
   window.history.replaceState(null, "", "/");
   sessionStorage.setItem("canyon_return", "#/device?code=K7QP-4RXM");
+  sessionStorage.setItem("canyon_return_at", String(Date.now())); // kept as the sign-in began, within its 10 minutes (#154)
   const { root } = await import("./main");
   await waitFor(() => expect(window.location.hash).toBe("#/device?code=K7QP-4RXM"));
   expect(sessionStorage.getItem("canyon_return")).toBeNull();

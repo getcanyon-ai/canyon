@@ -21,3 +21,5 @@ gate/design.go
 gate/opengrep/**
 scripts/deploy-bundle.sh
 scripts/tour-check.sh
+scripts/builder-node.sh
+deploy/k8s/builds.yaml

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
+import { ApiError, approve, approveFindings, askForAccess, cancelRun, getPolicies, getPreferences, getProject, getRun, getStatus, listPackages, listRuns, promote, pullRequestName, redeploy, reduced, said, startReview, version, waiting, type App as AppRead, type Earlier, type Env, type FleetRow, type Need, type Policy, type ProjectEgress, type PolicyState, type Receipt as ReceiptRead, type Reduced, type Finding as FindingRead, type RunRead, type RunRow, type Status } from "../api";
 import { AUTH, RENAME, S, TEARDOWN } from "../strings";
 import { Actor, actorName } from "../ui/Actor";
 import { Age } from "../ui/Age";
@@ -501,7 +501,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
     run: pinned === null && fromCheck === null && reading !== null && reading.package === project.latest.package ? reading : null,
     preview, prod, previewName: preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label), prodName: prod === null ? null : version(prod.package, prod.label), receipt: status.receipt, hold: status.hold,
     broke: broke === null || broke instanceof Error ? undefined : broke,
-    progress: progressWords(steps), refused,
+    progress: progressWords(steps), refused, earlier: status.earlier,
     secret: (status.needs ?? []).some((need) => need.kind === "secret" && (need.version === undefined || need.version === newest)),
   });
   // What an empty preview says: where the newest version stopped, else how something gets there.
@@ -543,7 +543,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
       case "approve": return reading?.approvable !== true ? null : <Button key={one} variant="secondary" label="Approve with a reason: go to the findings" onClick={toApprove}>Approve with a reason</Button>;
       case "cancel": return <Button key={one} variant="ghost" onClick={() => { if (reading !== null) void cancelRun(reading.id).then(() => tick.current(), (err) => setReviewFailure(said(err))); }}>Cancel review</Button>;
       case "open": return prod === null ? null : <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={prod.url} target="_blank" rel="noreferrer">Open production<Icon name="external" size={14} /></a>;
-      case "copy": return broke === null || broke instanceof Error || band === null ? null : <CopyForAgent key={one} app={id} title={band.title} text={band.text} broke={broke} />;
+      case "copy": return broke === null || broke instanceof Error || reading === null ? null : <CopyForAgent key={one} app={id} env="preview" run={reading} broke={broke} />; // a deploy's run: preview, as the CLI's deploy names it
       case "outbound": return <a key={one} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-accent px-3 text-base font-semibold text-accent-ink no-underline hover:brightness-110" href={`#/apps/${id}/outbound`}>{S.openOutbound}</a>;
       case "promote": return <Promote key={one} id={id} name={project?.name} replaces={prod === null ? null : version(prod.package, prod.label)} pullRequest={preview?.pull_request !== undefined} shown={preview === null ? null : preview.pull_request ? pullRequestName(preview.pull_request) : version(preview.package, preview.label)} live={false} receipt={status.receipt} hold={status.hold} answered={preview?.answered} gateRun={status.promote_run} refuses={refuses} send={send} ended={() => void tick.current()} />;
     }
@@ -580,13 +580,27 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"
     ? <CopyFix app={id} findings={reading.findings.filter((one) => one.properties.canyon.blocks && one.approval === undefined)} /> : null;
-  // A restarting environment the band doesn't show the lines of shows them on its card, to whoever may read its logs
-  // (#2744), so the need's "Its last log lines, on its page" holds wherever the band stands.
+  // Who may read an environment's last lines: the logs route's minimum, contributor (design/PERMISSIONS.md).
+  const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
+  // A down environment the band doesn't show the lines of shows them on its card, to whoever may read its logs (#2744,
+  // #188), so the need's "Its last log lines, on its page" holds wherever the band stands.
   const untailed = (key: "preview" | "prod") => {
     const at = status?.envs[key];
-    const mayRead = project !== null && !reduced(project) && (admin || project.access.level === "owner" || project.access.level === "contributor");
-    return mayRead && at !== undefined && !waiting(at) && at.state === "restarting" && top.band?.tail !== key;
+    return mayRead && at !== undefined && !waiting(at) && (at.state === "restarting" || at.state === "stopped") && top.band?.tail !== key;
   };
+  // Put back from the headline is the card's own Put back of that version (#188): the card opens and follows its review.
+  const toPutBack = (row: Earlier) => {
+    const shelf = document.querySelector<HTMLElement>('section[aria-label="Earlier versions"]')?.closest("details");
+    if (shelf === null || shelf === undefined) return;
+    shelf.open = true;
+    shelf.querySelector<HTMLButtonElement>(`button[aria-label="Put back ${CSS.escape(row.version)}"]`)?.click();
+    shelf.parentElement?.scrollIntoView?.({ block: "nearest" });
+  };
+  const putBack = top.band?.back === undefined ? null : (
+    <span key="back" className="max-[620px]:order-first max-[620px]:basis-full max-[620px]:*:w-full">
+      <Button variant="primary" onClick={() => toPutBack(top.band!.back!)}>{S.putBackNamed.replace("<version>", () => top.band!.back!.version)}</Button>
+    </span>
+  );
   // What a running environment calls out to, on its card (D15): how many destinations, how many refused on their last call,
   // the Outbound card a click away; red while one of its requests is refused now (the refused tile's predicate).
   const calls = (key: "preview" | "prod") => {
@@ -650,7 +664,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
               )}
               {project !== null && !reduced(project) && project.repository !== undefined && <AppSource id={id} link={project.repository} autoDeploy={project.auto_deploy ?? false} owner={project.access.level === "owner"} team={project.access.level === "owner" || project.access.level === "contributor"} changed={() => tick.current()} />}
             </div>
-            {project !== null && reduced(project) && stopping !== null && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={{ word: stopWord, act: stopping }} done={() => tick.current()} />}
+            {project !== null && reduced(project) && <More id={id} name={project.name} preview={false} prod={false} manage={false} stop={stopping === null ? undefined : { word: stopWord, act: stopping }} done={() => tick.current()} />}
             {project !== null && !reduced(project) && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 {preview !== null && !down(preview) && <a className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium text-text no-underline hover:bg-surface-2" href={preview.url} target="_blank" rel="noreferrer">Open preview<Icon name="external" size={14} /></a>}
@@ -724,9 +738,9 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <>
             {(() => {
               const headed = top.band === null ? null : (
-                <Headline key="headline" band={top.band} app={admin || project.access.level === "owner" || project.access.level === "contributor" ? id : undefined}>
-                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && (lift === null || status.receipt.held === undefined) ? undefined
-                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{fixing}</>}
+                <Headline key="headline" band={top.band} app={mayRead ? id : undefined}>
+                  {top.band.primary === undefined && top.band.secondary === undefined && headStop === null && putBack === null && (lift === null || status.receipt.held === undefined) ? undefined
+                    : <>{status.receipt.held !== undefined && lift}{headStop}{act(top.band.secondary, false)}{act(top.band.primary, true)}{putBack}{fixing}</>}
                 </Headline>
               );
               const listed = top.needs.length === 0 ? null : (
@@ -742,12 +756,12 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
                 {untailed("preview") && <LastLines app={id} env="preview" />}
               </EnvCard>
               {/* Held, it says who held it and who lets it run again: Promote is disabled, so it never says to promote. */}
-              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")}
+              <EnvCard name="Production" env={status.envs.prod} note={prodNote} preview={status.envs.preview} calls={calls("prod")} lined={mayRead && top.band?.tail === "prod"}
                 {...(status.hold === undefined ? { empty: "Promote a version from preview to run it here." } : { blank: S.heldSince.replace("<date>", () => status.hold!.at.slice(0, 10)), empty: "" })}
                 who={prod?.promoted_by === undefined || prod.promoted_by === null ? undefined : <>promoted by <Actor actor={prod.promoted_by} /></>}>
                 {untailed("prod") && <LastLines app={id} env="prod" />}
                 {/* a host from before earlier[] answers none */}
-                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
+                {status.earlier !== undefined && status.earlier.length > 0 && <EarlierVersions id={id} name={project.name} earlier={status.earlier} prod={prod} hold={status.hold} ended={() => void tick.current()} />}
               </EnvCard>
             </div>
             {rows(project, status).length > 0 && <Versions rows={rows(project, status)} />}
@@ -873,26 +887,36 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
 
 // The ⋯ in the header: taking an environment offline is rare and risky, so it is not in the reading
 // flow (the redesign: "Take offline and Delete live in the ⋯ menu"). Each item asks before it acts.
-// Renaming and deleting are managing the app, its owners' and admins' (manage).
+// Renaming and deleting are managing the app, its owners' and admins' (manage). Copy link is everyone's who opens the
+// page, made from the host's public URL once it is known (#193).
 function More({ id, name, preview, prod, manage, stop, live, done }: { id: string; name: string; preview: boolean; prod: boolean; manage: boolean; stop?: { word: string; act: (from: HTMLElement | null) => void }; live?: string; done: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<"preview" | "prod" | "rename" | "delete" | null>(null);
+  const [linked, setLinked] = useState<boolean | null>(null); // the link copied, or the browser refused
+  const { publicURL } = useContext(RailContext);
+  const link = typeof publicURL === "string" ? `${publicURL.replace(/\/+$/, "")}/#/apps/${encodeURIComponent(id)}` : null;
   const button = useRef<HTMLButtonElement>(null);
   const renaming = useRef<HTMLDivElement>(null);
   useInWindow(renaming, env === "rename");
   // An environment gone from under an open question takes the question with it.
   if ((env === "preview" && !preview) || (env === "prod" && !prod) || ((env === "rename" || env === "delete") && !manage)) setEnv(null);
-  if (!preview && !prod && !manage && stop === undefined) return null;
+  if (!preview && !prod && !manage && stop === undefined && link === null) return null;
   const close = () => { setOpen(false); setEnv(null); button.current?.focus(); };
+  // navigator.clipboard is absent outside a secure context, a plain-http host: that is a refusal too.
+  const copyLink = (to: string) => { setOpen(false); Promise.resolve().then(() => navigator.clipboard.writeText(to)).then(() => setLinked(true), () => setLinked(false)); button.current?.focus(); };
   return (
-    <div className="relative" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    <div className="relative flex items-center gap-2" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+      {linked === true && <span role="status" className="text-md text-ok">{S.linkCopied}</span>}
+      {linked === false && <span role="alert" className="text-md text-critical">{S.copyFailed}</span>}
       <button type="button" ref={button} aria-label="More actions" aria-expanded={open} onClick={() => { setOpen(!open); setEnv(null); }}
         className={`grid size-[34px] place-items-center rounded-[7px] border border-border-strong hover:bg-surface-2 ${open || env !== null ? "bg-surface-2 text-text" : "bg-surface text-text-dim"}`}>
         <Icon name="more" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
-          {preview && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
+        <div role="menu" className="absolute top-full right-0 z-10 mt-1.5 grid w-[220px] rounded-[10px] border border-border-strong bg-surface p-1.5 shadow-overlay">
+          {link !== null && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => copyLink(link)}>{S.copyLink}</button>}
+          {link !== null && (preview || prod || stop !== undefined || manage) && <div role="separator" className="my-1 h-px bg-border" />}
+          {preview &&<button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("preview"); setOpen(false); }}>Take preview offline</button>}
           {prod && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2" onClick={() => { setEnv("prod"); setOpen(false); }}>Take production offline</button>}
           {stop !== undefined && <button type="button" role="menuitem" className="rounded-[7px] px-2.5 py-2 text-left text-base text-critical hover:bg-surface-2" onClick={() => { setOpen(false); stop.act(button.current); }}>{`${stop.word}…`}</button>}
           {(preview || prod || stop !== undefined) && manage && <div role="separator" className="my-1 h-px bg-border" />}
@@ -908,7 +932,7 @@ function More({ id, name, preview, prod, manage, stop, live, done }: { id: strin
         </Modal>
       )}
       {env === "rename" && (
-        <div ref={renaming} className="absolute right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
+        <div ref={renaming} className="absolute top-full right-0 z-10 mt-1.5 w-[360px] overflow-y-auto rounded-[10px] border border-border-strong bg-surface p-3.5 shadow-overlay max-[520px]:w-[calc(100vw-2rem)]">
           <RenameApp id={id} name={name} done={async () => { await done(); close(); }} cancel={close} />
         </div>
       )}

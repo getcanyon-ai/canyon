@@ -50,10 +50,10 @@ func main() {
 // those directories, relative to the repository: no import graph shows such a read. A test that
 // starts reading another directory's source is added here (AGENTS.md, Conventions).
 var readers = map[string][]string{
-	"deploy/k8s":                  {"cmd/canyon-server", "cmd/canyon-executor", "executor", "cmd/canyon-executor-kube", "executor/kube"},              // config_docs_test.go
-	"cmd/canyon-server":           {"executor"},                                                                                                       // routes_secrets_reserved_test.go reads executor.go's reserved names
-	"internal/tools/suites":       {"e2e", "e2e/handoff", "e2e/oidc", "executor", "executor/kube", "cmd/canyon-executor-kube", "cmd/canyon-identity"}, // suites_test.go lists what these compile
-	"internal/tools/auditactions": {"cmd/canyon-server", "ee/outboundkeys", "ee/patching", "events", "github-app", "runs"},                            // auditactions_test.go reads every events.AuditTx call's action
+	"deploy/k8s":                  {"cmd/canyon-server", "cmd/canyon-executor", "executor", "cmd/canyon-executor-kube", "executor/kube"},                                                           // config_docs_test.go
+	"cmd/canyon-server":           {"executor"},                                                                                                                                                    // routes_secrets_reserved_test.go reads executor.go's reserved names
+	"internal/tools/suites":       {"e2e", "e2e/handoff", "e2e/oidc", "executor", "executor/kube", "cmd/canyon-executor-kube", "cmd/canyon-identity", "cmd/canyon-server", "runs", "provisioners"}, // suites_test.go and select_test.go list what these compile
+	"internal/tools/auditactions": {"cmd/canyon-server", "ee/outboundkeys", "ee/patching", "events", "github-app", "runs"},                                                                         // auditactions_test.go reads every events.AuditTx call's action
 }
 
 // pkg is the part of go list -json's Package that affected reads.

@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,9 +17,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/internal/names"
 )
 
 // What the demo needs of this machine (docs: Try it on your laptop, What you need). The disk is the
@@ -28,8 +32,10 @@ const (
 	demoCPUs        = 4
 	demoMemoryGB    = 6
 	demoDiskGB      = 18
-	demoTries       = 3
-	demoTail        = 20 // lines of the deployer's log a failed start shows
+	// On Docker's containerd image store a cold up peaked at 22.1 GB, against 10.1 GB on overlay2 (#165): 12 GB more.
+	demoContainerdDiskGB = demoDiskGB + 12
+	demoTries            = 3
+	demoTail             = 20 // lines of the deployer's log a failed start shows
 )
 
 // demoProbe is the image the disk check runs df in: docker-compose.yml's own busybox pin, which the
@@ -69,6 +75,13 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 		return a.demoFailed("The demo could not be downloaded", err)
 	}
 	a.demoStep("Downloading Canyon's images")
+	if refs, err := demoListed(ctx, stack, demoCompose("config", "--images")...); err == nil { // what purge removes, as this shell named them (#170)
+		kept, _ := os.ReadFile(demoImagesKept(dir)) //nolint:gosec // this CLI's own file, under ~/.canyon
+		all := slices.Compact(slices.Sorted(slices.Values(append(strings.Fields(string(kept)), refs...))))
+		if err := atomicWrite(demoImagesKept(dir), []byte(strings.Join(all, "\n")+"\n"), true); err != nil {
+			a.errf("\n  %s Couldn't save which images are the demo's (~/.canyon/demo/images): %s\n", a.render.glyph(stateWarn), plainly(err))
+		}
+	}
 	if err := demoRetry(ctx, func() error {
 		_, err := demoDocker(ctx, stack, nil, demoCompose("pull", "--quiet")...)
 		return err
@@ -111,7 +124,22 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 		}
 		return a.demoFailed("The sample apps did not finish deploying", why)
 	}
+	a.demoDropCaches(ctx)
 	return a.demoReady(ctx, dir)
+}
+
+// demoDropCaches removes the sample apps' build caches once their deploys are done: nothing needs them, and a visitor's
+// redeploy of one without them takes a few seconds more (#186). One already gone is no matter; one Docker won't remove
+// stays, with a warning, and the demo starts all the same.
+func (a *app) demoDropCaches(ctx context.Context) {
+	for _, app := range demoSampleApps {
+		for _, kind := range []string{"build", "launch"} {
+			v := names.CacheVolume(app, kind)
+			if _, err := demoDocker(ctx, "", nil, "volume", "rm", v); err != nil && !strings.Contains(err.Error(), "no such volume") {
+				a.errf("\n  %s Couldn't remove %s, a sample app's build cache: %s\n", a.render.glyph(stateWarn), v, plainly(err))
+			}
+		}
+	}
 }
 
 // demoDeployed is the deployer's exit status, "" while it runs or when there is none.
@@ -130,8 +158,7 @@ func (a *app) demoRunning(ctx context.Context, stack string) bool {
 	if _, err := os.Stat(filepath.Join(stack, "docker-compose.yml")); err != nil {
 		return false
 	}
-	running, err := demoListed(ctx, "", "ps", "-q", "--filter", "name=^canyon-server$")
-	if err != nil || len(running) == 0 {
+	if !demoServing(ctx) {
 		return false
 	}
 	project, _, _, err := demoServer(ctx)
@@ -201,8 +228,8 @@ func (a *app) demoPreflight(ctx context.Context, stack string) []gap {
 			gaps = append(gaps, gap{fmt.Sprintf("CANYON_HOST is set to %s, so canyon commands would go there instead of the demo.", cell(set)), "unset CANYON_HOST, then run canyon demo up again."})
 		}
 	}
-	info, err := demoDocker(ctx, "", nil, "info", "--format", "{{.ServerVersion}} {{.NCPU}} {{.MemTotal}} {{.Name}}")
-	engine := strings.Fields(info)
+	info, err := demoDocker(ctx, "", nil, "info", "--format", "{{.ServerVersion}} {{.NCPU}} {{.MemTotal}} {{.Name}} {{json .DriverStatus}}")
+	engine := strings.SplitN(info, " ", 5)                   // DriverStatus last, whole: its JSON has spaces
 	if err == nil && (len(engine) < 4 || engine[1] == "0") { // docker info exits 0 with no engine behind it, and answers an empty version and no CPUs
 		err = errors.New("docker info named no engine")
 	}
@@ -252,12 +279,10 @@ func (a *app) demoPreflight(ctx context.Context, stack string) []gap {
 	case err != nil || !ok:
 		gaps = append(gaps, gap{"Docker could not download and run a small image: " + cell(plainly(cmp.Or(err, errors.New("df answered nothing Canyon can read")))) + ".",
 			"check this machine's network connection and that Docker can reach docker.io."})
+	case demoContainerd(engine) && free < demoContainerdDiskGB:
+		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB with Docker's containerd image store, which this Docker uses.", free, demoContainerdDiskGB), demoDiskFix(colima)})
 	case free < demoDiskGB:
-		fix := "free disk space, or give Docker's VM a larger disk in its settings."
-		if colima {
-			fix = "free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60"
-		}
-		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB.", free, demoDiskGB), fix})
+		gaps = append(gaps, gap{fmt.Sprintf("Docker has %d GB of free disk, and the demo needs about %d GB.", free, demoDiskGB), demoDiskFix(colima)})
 	}
 	return append(gaps, a.demoNamesTaken(ctx)...)
 }
@@ -333,6 +358,27 @@ func (p *demoProgress) Write(b []byte) (int, error) {
 
 // demoSampleApps are the apps demo/apps/run.sh deploys, in its order.
 var demoSampleApps = []string{"claims-portal", "endorsement-hub", "claims-archive", "premium-ledger"}
+
+// demoDiskFix is the one fix for too little free disk. It never names the image store: that is the person's Docker.
+func demoDiskFix(colima bool) string {
+	if colima {
+		return "free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60"
+	}
+	return "free disk space, or give Docker's VM a larger disk in its settings."
+}
+
+// demoContainerd is whether this Docker stores its images with containerd (Docker Desktop's default on a new install
+// since 4.34, Colima's since 0.10), as docker info's DriverStatus, engine's fifth part, names its snapshotter. A status
+// Canyon can't read counts as containerd, the store that needs more disk.
+func demoContainerd(engine []string) bool {
+	var status [][]string
+	if len(engine) < 5 || json.Unmarshal([]byte(engine[4]), &status) != nil {
+		return true
+	}
+	return slices.ContainsFunc(status, func(kv []string) bool {
+		return len(kv) == 2 && kv[0] == "driver-type" && kv[1] == "io.containerd.snapshotter.v1"
+	})
+}
 
 // demoFreeGB reads df -k's second line: the kilobytes available on the filesystem.
 func demoFreeGB(df string) (int, bool) {

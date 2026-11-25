@@ -31,7 +31,7 @@ jobs:
 
   tour:
     needs: paths
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.tour == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && ((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.tour == 'true') # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the demo builds or pulls is multi-arch
     timeout-minutes: 45 # the stack's images, the four sample apps' builds and two tours
     steps:
@@ -46,4 +46,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false # .github/actions/go-cache instead: main writes, a pull request reads
+      - run: make pack-install # pack makes the Node builder the demo's executor builds Node apps on (scripts/builder-node.sh)
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - run: make tour-check

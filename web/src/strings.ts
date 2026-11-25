@@ -155,6 +155,9 @@ export const S = {
   putBackImage: "Production gets the image it ran on <date>.",
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
   putBackCodeBare: "Canyon puts back the code, not the data, the secrets or the outbound rules.",
+  // The headline of a production that's down (#188): the newest kept earlier version, or why none can go back.
+  putBackNamed: "Put <version> back",
+  putBackNone: "No earlier version can be put back as it ran: fix it, deploy to preview, then promote.",
   imageGone: "<version>'s image is no longer on this Canyon, so it can't be put back as it ran. Deploy <version> to preview and promote it if you want it rebuilt.",
   patched: "<version> · patched <date>",
   noDescription: "No description yet",
@@ -534,6 +537,9 @@ export const S = {
   revealTickBoth: "Tick the box once both are stored.",
   revealTickOne: "Tick the box once it is stored.",
   copyFailed: "Couldn't copy. The browser did not allow it.",
+  // An app's link to share, from its page's ⋯ (#193): the app's own address at the host's public URL.
+  copyLink: "Copy link",
+  linkCopied: "Link copied",
   onAsk: "Hand apps to your platform? From the next deploy or promotion, your platform runs every app Canyon builds, previews included. Apps running now stay where they are until their next deploy.",
   offAsk: "Run apps on this cluster again? From the next deploy or promotion Canyon runs each app here. What your platform runs now stays with it until then, and nothing moves: a database your platform made stays where it is.",
   revealTitle: "Store these now",
@@ -661,11 +667,9 @@ export const S = {
   needHeldWho: "An admin, or a security responder who isn't on its team, can lift it.",
   needDown: "<app> is down in <env>.",
   needRestarting: "<app> keeps restarting in <env>.",
-  needDownFixPreview: "canyon logs --env preview says why. Fix the cause, then deploy again.",
-  needDownFixProd: "canyon logs --env prod says why. Fix the cause, deploy to preview, then promote.",
-  // A restarting environment's fix: its page shows its last log lines, masked (#2744).
-  needRestartingFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
-  needRestartingFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
+  // A down environment's fix: its page shows its last log lines, masked, stopped or restarting (#2744, #188).
+  needDownFixPreview: "Its last log lines, on its page, say why. Fix the cause, then deploy again.",
+  needDownFixProd: "Its last log lines, on its page, say why. Fix the cause, deploy to preview, then promote.",
   needRefused: "<app> can't reach <destination> in <env>.",
   needRefusedWhy: "Nobody has allowed it for <env> yet, so Canyon refused <calls>, the last <age>.",
   needRefusedOther: "<other> tried to reach it <times> in the last 30 days.",
@@ -1153,6 +1157,9 @@ export const CONNECT = {
   stepInstall: "Install the CLI",
   stepLogin: "Sign in to this Canyon",
   stepSkill: "Set up your coding agents",
+  // What to say to an agent once it's connected (#192): on a laptop, in the app's folder; in the cloud, of what's pushed.
+  askLaptop: "Then open your agent in the app's folder and ask it: Deploy this app to Canyon.",
+  askCloud: "Then push the app to GitHub and ask the agent: Deploy this repository to Canyon.",
   laptopNote: "The last step sets up every coding agent on your machine: Canyon's skill, your org's rules at each session start, and Canyon's tools. They load the next time each agent starts.",
   cloud: "In the cloud",
   cloudNote: "For agents that run on their vendor's machines. They review and deploy what you've pushed to GitHub. On a laptop, use the CLI above: one way per agent.",
@@ -1386,6 +1393,18 @@ export const DB_CLOSED_WHY: Record<string, string> = {
 // A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
 // platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
 export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";
+// What a hold's and an undeploy's rows say happened to what ran, by their stop (contracts/routes.md; #156). "stopped" only
+// of what Canyon ran; a row written before stop reads as AUDIT_ACTIONS has it.
+export const AUDIT_STOP: Record<string, string> = {
+  stopped: "stopped and held production: <reason>",
+  remove_sent: "held production and asked your platform to remove it: <reason>",
+  nothing: "held production, where nothing ran: <reason>",
+  failed: AUDIT_HELD_RUNNING,
+};
+export const AUDIT_UNDEPLOY: Record<string, string> = {
+  remove_sent: "asked your platform to take <env> offline, keeping its data",
+  nothing: "stopped the deploy to <env>; nothing ran there",
+};
 // egress.networks.recreate when its row's failed names the step that failed (#2563).
 export const AUDIT_RECREATE_FAILED = "tried to recreate the app's network, but it failed";
 // egress.route.set when its row names the secret it moved (detail.secret), and egress.ca.rotate onto an admin's sub-CA

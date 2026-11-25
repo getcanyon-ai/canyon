@@ -167,7 +167,7 @@ func TestAHoldMidSwitchStopsAfterItAndWritesStopApp(t *testing.T) {
 	}
 	var detail string
 	if err := p.QueryRow(ctx, "SELECT detail::text FROM audit_events WHERE action = 'stop app' AND actor_subject = $1 AND run_id = $2", rhea.Subject, run).Scan(&detail); err != nil ||
-		detail != `{"env": "prod", "reason": "Exports claimant SSNs unauthenticated (INC-2231)", "package": "`+pkg+`", "cancelled": ["`+run+`"], "image_digest": "`+digestOf(image)+`"}` {
+		detail != `{"env": "prod", "stop": "stopped", "reason": "Exports claimant SSNs unauthenticated (INC-2231)", "package": "`+pkg+`", "cancelled": ["`+run+`"], "image_digest": "`+digestOf(image)+`"}` {
 		t.Fatalf("the stop app row: %q (%v)", detail, err)
 	}
 	if n := countOf(t, ctx, p, "SELECT count(*) FROM audit_events WHERE action IN ('request undeploy', '"+UndeployAction+"')") + countOf(t, ctx, p, "SELECT count(*) FROM deploys WHERE env = 'prod'"); n != 0 {
@@ -197,7 +197,7 @@ func TestAHeldStopThatFailsSendsItToAnAdmin(t *testing.T) {
 		t.Fatal("the hold went with the failed stop")
 	}
 	if n := countOf(t, ctx, p, `SELECT count(*) FROM audit_events WHERE action = 'stop app' AND run_id = '`+run+`' AND actor_subject = '`+rhea.Subject+`'
-		AND detail @> '{"stopped": false, "env": "prod", "package": "`+pkg+`"}' AND detail->'cancelled' = '["`+run+`"]'`); n != 1 {
+		AND detail @> '{"stop": "failed", "stopped": false, "env": "prod", "package": "`+pkg+`"}' AND detail->'cancelled' = '["`+run+`"]'`); n != 1 {
 		t.Fatalf("the stop app row saying the stop failed: %d", n)
 	}
 }

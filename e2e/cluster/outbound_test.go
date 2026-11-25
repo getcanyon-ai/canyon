@@ -14,10 +14,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -250,17 +252,41 @@ func TestUnitOutboundAppSays(t *testing.T) {
 	if fetch != "204" || dial != "unresolved" || asked.Load() != "CONNECT outbound.invalid:80" {
 		t.Errorf("through a proxy: fetch %q, dial %q, the proxy asked %v; want 204, unresolved and CONNECT outbound.invalid:80", fetch, dial, asked.Load())
 	}
-	// Nothing listening: the local port of a connection this test holds open, where nothing listens, so a connection
-	// to it is refused. A port listened on and closed again was free for the next bind to port 0, the fixture's own
-	// server on PORT=0 among them, which then answered 200 there (#2712); on Linux, where CI runs this, nothing else
-	// can bind the port this connection holds.
-	hold, err := net.Dial("tcp", direct.Listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
+	// Nothing listening: a port this test binds and never listens on, so a connection to it is refused. Not a port
+	// listened on and closed again, which the next bind to port 0 may take, the fixture's own server on PORT=0 among
+	// them, which then answered 200 there (#2712). Not the local port of a connection either: Linux may pick that
+	// port as a client's own, and the client then connects to itself and reads its request back (#163). A bound
+	// port is neither listened on nor ever picked for another socket. That refusal is Linux's, where CI runs this: macOS
+	// answers a bound port that never listened with nothing, and the calls time out.
+	if runtime.GOOS != "linux" {
+		t.Log("nothing listening: checked on Linux alone: here a bound port that never listened is not refused")
+		return
 	}
-	defer func() { _ = hold.Close() }()
-	held := hold.LocalAddr().String()
+	held := boundPort(t)
 	if fetch, dial := outboundApp(t, "http://"+held+"/"); fetch != "ECONNREFUSED" || dial != "refused" {
 		t.Errorf("nothing listening: fetch %q, dial %q; want ECONNREFUSED and refused", fetch, dial)
 	}
+}
+
+// boundPort is 127.0.0.1:<port> of a socket bound and never listened on, held until the test ends: a connection to
+// it is refused, and no other socket is given its port.
+func boundPort(t *testing.T) string {
+	t.Helper()
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Close(fd) })
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Addr: [4]byte{127, 0, 0, 1}}); err != nil {
+		t.Fatal(err)
+	}
+	sa, err := syscall.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, ok := sa.(*syscall.SockaddrInet4)
+	if !ok {
+		t.Fatalf("the bound socket's address is %T", sa)
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(in.Port))
 }

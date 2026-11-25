@@ -23,12 +23,14 @@ image() { grep -E "/$1[@:]" "$images" || fail "$images names no $1"; }
 server=$(image canyon-server)
 executor=$(image canyon-executor)
 demo_apps=$(image canyon-demo-apps)
+builder_node=$(image canyon-builder-node)
 cat > "$work/canyon/docker-compose.override.yml" <<YAML
 # The release's images, in place of every build docker-compose.yml has (scripts/deploy-bundle.sh):
-# egress-control is canyon-server's image, run as its subcommand.
+# egress-control is canyon-server's image, run as its subcommand. The executor builds a Node app on the release's
+# Node builder (contracts/executor.md, A Node app builds on Canyon's Node builder).
 services:
   server: {image: $server, build: !reset null}
-  executor: {image: $executor, build: !reset null}
+  executor: {image: $executor, build: !reset null, environment: {CANYON_BUILDER_NODE: $builder_node}}
   demo-apps: {image: $demo_apps, build: !reset null}
   egress-control: {image: $server, build: !reset null}
 YAML

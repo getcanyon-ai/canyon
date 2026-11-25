@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   test-rest:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
     timeout-minutes: 30
     services:
@@ -75,6 +76,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
   server-shard:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     # ./cmd/canyon-server's tests, most of the suite's time, split by name across the matrix (make
     # test-shards): each shard first checks that every test the package lists is in exactly one
     # shard, so a test in none fails here. On main and on a pull request alike: never affected-only.
@@ -114,6 +116,7 @@ jobs:
       - run: make test-shards SHARD_PKG=./cmd/canyon-server SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
 
   noee-rest:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     # Canyon built without Canyon Enterprise (design/ARCHITECTURE.md §8): ee/ deleted, the module built and vetted
     # under -tags noee, and every package test-rest runs tested so; a core change that leans on ee/ fails here.
     # runs' code carries no build constraint and imports no ee/ (internal/enterprise's import test); its Enterprise
@@ -153,6 +156,7 @@ jobs:
       - run: make test-rest
 
   noee-server-shard:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     # ./cmd/canyon-server's tests built without Canyon Enterprise, as noee-rest, in server-shard's shards:
     # noee_test.go among them, which holds what such a server answers (contracts/routes.md, Licence).
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # as server-shard
@@ -191,6 +195,7 @@ jobs:
       - run: make test-shards SHARD_PKG=./cmd/canyon-server SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
 
   runs-shard:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     # ./runs' tests, ~16 minutes in one go test process under -race (#2232), split by name as server-shard's,
     # with the same exactly-once check. Two shards ran 421 s and 535 s of tests on #2727's head, close to go
     # test's own 10-minute timeout (#2733); three ran 343 s, 309 s and 324 s on #2734's. test-shards gives a
@@ -222,6 +227,7 @@ jobs:
       - run: make test-shards SHARD_PKG=./runs SHARD=${{ matrix.shard }}/${{ strategy.job-total }} # runs embeds no dashboard: no make web
 
   provisioners:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     # the built-in driver's tests on every Postgres it supports (design/DATABASE-SESSIONS.md §4): 15 to
     # 18 under the non-superuser admin provisioners/builtin_test.go makes, 14 under the superuser (the
     # test picks by the server's version). test-rest runs them on 16 too, with every other package.
@@ -259,7 +265,7 @@ jobs:
     # green only when test-rest, every server-shard, every runs-shard, every provisioners job and
     # the build without Canyon Enterprise (noee-rest, every noee-server-shard) succeeded (a matrix's result is failure when any of its jobs failed); a failed, cancelled or
     # skipped one reddens it
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private'))
     needs: [test-rest, server-shard, runs-shard, provisioners, noee-rest, noee-server-shard]
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 2
@@ -283,7 +289,7 @@ jobs:
             xargs -r -n1 gh cache delete -R "$GITHUB_REPOSITORY"
 
   lint:
-    if: github.event_name == 'pull_request' # a merge that lints on its PR lints on main: no re-run
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && (github.event_name == 'pull_request') # a merge that lints on its PR lints on main: no re-run
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
     timeout-minutes: 20
     steps:
@@ -315,7 +321,7 @@ jobs:
         run: make vendor-sast-rules && git diff --exit-code gate/opengrep/sast-rules.tar
 
   web:
-    if: github.event_name == 'pull_request' # as lint
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && (github.event_name == 'pull_request') # as lint
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
     timeout-minutes: 15
     steps:
@@ -334,7 +340,7 @@ jobs:
       - run: make e2e-ui-typecheck # e2e/ui, its own package.json; a run only transforms what it loads, so nothing else catches this
 
   tidy:
-    if: github.event_name == 'pull_request' # as lint
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) && (github.event_name == 'pull_request') # as lint
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; nothing here is amd64-only
     timeout-minutes: 10
     steps:
@@ -381,6 +387,7 @@ jobs:
             go mod download -x github.com/jackc/pgx/v5
 
   compose-up: # the stack boots and Envoy's bootstrap validates: checked once per merge on main, and on a pull request only when it changes the compose file, deploy/egress, the Makefile that holds demo-check, the peer rule and published-port check it proves (#2491), or the app floor it probes (#2503)
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 20
     steps:
@@ -404,7 +411,8 @@ jobs:
         run: make demo-check
 
 
-  images: # the nine release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
+  images: # the ten release images build, each carries its licence label, and Canyon's carry LICENSE, NOTICE and THIRD_PARTY_NOTICES: on a pull request or a merge that changes an image, its notices or the Makefile that labels it
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image is multi-arch
     timeout-minutes: 40
     steps:
@@ -412,11 +420,21 @@ jobs:
         with:
           fetch-depth: 2 # the merge commit and its base, which the next step diffs
       - id: images
-        run: git diff --quiet HEAD^1 HEAD -- 'Dockerfile*' 'executor/*.Dockerfile' Makefile LICENSE NOTICE THIRD_PARTY_NOTICES || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+        run: git diff --quiet HEAD^1 HEAD -- 'Dockerfile*' 'executor/*.Dockerfile' Makefile LICENSE NOTICE THIRD_PARTY_NOTICES scripts/builder-node.sh deploy/k8s/builds.yaml internal/tools/paketobump || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change; builds.yaml pins the Node builder's buildpack
+      - if: steps.images.outputs.changed == 'true'
+        uses: actions/setup-go@v5 # canyon-builder-node reads its nodejs pin with this tree's own tool
+        with:
+          go-version-file: go.mod
+          cache: false
+      - if: steps.images.outputs.changed == 'true'
+        run: make pack-install # pack makes canyon-builder-node
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - if: steps.images.outputs.changed == 'true'
         run: make images-load
 
   deploy-bundle: # canyon-deploy.tar.gz starts with no source (make deploy-bundle-check), and Opengrep's complete source still builds from its pinned commit: on a pull request or a merge that changes what they are built from
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's; every image the bundle runs is multi-arch
     timeout-minutes: 40
     steps:
@@ -425,7 +443,16 @@ jobs:
           fetch-depth: 2 # the merge commit and its base, which the next steps diff
       - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)
       - id: bundle
-        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+        run: git diff --quiet HEAD^1 HEAD -- docker-compose.yml deploy 'Dockerfile*' scripts/deploy-bundle.sh scripts/deploy-bundle-check.sh scripts/guide-block.sh scripts/guide-download-check.sh docs/src/content/docs/self-host/docker.md scripts/tarball.sh scripts/release-archives-check.sh scripts/publish-release.sh Makefile scripts/builder-node.sh deploy/k8s/builds.yaml || echo changed=true >> "$GITHUB_OUTPUT" # a diff that cannot run counts as a change
+      - if: steps.bundle.outputs.changed == 'true'
+        uses: actions/setup-go@v5 # the Node builder the bundle names reads its nodejs pin with this tree's own tool
+        with:
+          go-version-file: go.mod
+          cache: false
+      - if: steps.bundle.outputs.changed == 'true'
+        run: make pack-install # pack makes that builder
+        env:
+          GH_TOKEN: ${{ github.token }} # an authenticated release download, sent to github.com alone (.github/fetch.sh)
       - if: steps.bundle.outputs.changed == 'true'
         run: make deploy-bundle-check
       - id: source

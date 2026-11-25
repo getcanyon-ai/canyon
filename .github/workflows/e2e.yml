@@ -54,7 +54,7 @@ jobs:
     needs: paths
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.paths.outputs.executor-e2e == 'true' # a stack suite: never on a fork's pull request, which runs the fast checks alone
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # canyon-arm-ondemand: our own arm64 VMs, on demand for a long job (AGENTS.md, Commands); a fork's pull request stays on GitHub's; the builder, paketobuildpacks/ubuntu-noble-builder, is multi-arch (#1025)
-    timeout-minutes: 45 # ten real buildpack builds, a stock Next 16 among them (#1240), and the Paketo samples' image scans (#2216): the test step ran 23 min
+    timeout-minutes: 60 # the Node builder's eleven trees built on each builder (#174), ten real buildpack builds, a stock Next 16 among them (#1240), and the Paketo samples' image scans (#2216): the test step ran 23 min
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/hosted-docker # GitHub's hosted runners: Docker resolves a build's lookups from the host (its action.yml)

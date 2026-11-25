@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   links:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 5
     steps:
@@ -29,6 +30,7 @@ jobs:
       - run: make docs-links
 
   site:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.labels.*.name, 'ci:private')) # a pull request of ours labelled ci:private runs it on Canyon's private runners instead (CONTRIBUTING.md, Maintainers)
     runs-on: ${{ (vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm"]') || 'ubuntu-24.04-arm' }} # canyon-arm: our own arm64 VMs (AGENTS.md, Commands); a fork's pull request stays on GitHub's
     timeout-minutes: 15
     env:

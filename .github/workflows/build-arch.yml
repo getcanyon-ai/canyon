@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [arm64, amd64]
+        arch: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ci:private')) && '["amd64"]' || '["arm64", "amd64"]') }} # under ci:private, arm64 is the private runners' build-arch suite; amd64 runs only here
     name: kind (a build on ${{ matrix.arch }})
     # arm64 on our own VMs (AGENTS.md, Commands), a fork's on GitHub's arm runner; amd64 on GitHub's, as executor-e2e
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-latest' || ((vars.CANYON_RUNNERS == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm') }}

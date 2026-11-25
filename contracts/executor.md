@@ -1332,6 +1332,38 @@ there, or cut off — ends on its reason instead of silently. Both executors wri
 `docker logs` also writes its own error into the stream before it (**amended 2026-09-30**,
 `canyonv2-qlsd`).
 
+**A container that isn't running** (**amended 2026-11-24**, #184: a crash's lines are what a person
+needs, and they are the run that ended). On Docker an exited container is read as a running one is:
+`docker logs` answers every run since `/run` made it, its restarts' included, and a `follow` ends with
+the body. On Kubernetes, when the newest pod's `app` container isn't running, the executor reads its
+last run: that run's log (`previous`) while the container waits to start again, its own log once it has
+ended for good, and `follow` as `false`, since nothing runs to follow. Where the kubelet no longer holds
+that log, the executor writes the run's termination message, the tail of its log the pod's status keeps
+(`FallbackToLogsOnError`, *On Kubernetes*): its last `tail` lines, from a whole line, as `/run` reads
+it (a first line at the kubelet's 2 KiB bound begins cut and is left out), then one line of its own:
+
+```
+canyon: the cluster kept only the end of the app's last run
+```
+
+The kubelet no longer holds it when the read is refused, or when it answers `200` with exactly its own
+sentence `unable to retrieve container logs for <containerID>`, naming that run's container, as it can
+once the dead container is gone from the node, before its status sees it gone (amended 2026-11-24, #185's
+review: kubelet v1.33.0, `kuberuntime_container.go`; it refuses after that, as kind's v1.34.11 did); that
+sentence is never passed on as the app's. A container that is still running can have its log file missing
+on the node: the kubelet then answers `200` with the same sentence naming that container, and the executor
+passes it on as written, since no run has ended and there is no kept end to fall back to. It is the
+kubelet's line, not the app's. A run the kubelet lost track
+of (`reason` `ContainerStatusUnknown`) carries the kubelet's message, not the app's, and a run whose
+status kept nothing has none: for either the executor writes only
+
+```
+canyon: the cluster kept nothing of the app's last run
+```
+
+A container that isn't running and never ended — waiting for its image, say — is read as today: its log
+is empty, or the read fails on its reason.
+
 ## `POST /scan`
 
 ```jsonc

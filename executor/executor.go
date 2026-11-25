@@ -573,7 +573,7 @@ func (e *Executor) BuilderImage(ctx context.Context) (string, error) {
 // named after whatever lifecycle the builder carries: canyon-builder's base, the pinned
 // paketobuildpacks/ubuntu-noble-builder, carries 0.21.22, whose platform APIs 0.21.20's are.
 // pack still asks its registry for its manifest on every build (contracts/executor.md).
-const lifecycleImage = "buildpacksio/lifecycle@sha256:ffdceee500cbd55cdaed0c05f63271d801d124e4c81cdb2e46ae958e98f4df91"
+const lifecycleImage = names.LifecycleRepository + "@sha256:ffdceee500cbd55cdaed0c05f63271d801d124e4c81cdb2e46ae958e98f4df91"
 
 // untrusted names a Docker Hub builder with its registry. pack 0.40.3 trusts a builder whose name
 // string-equals an entry of its built-in list (paketobuildpacks/builder-jammy-base,

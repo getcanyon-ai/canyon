@@ -15,7 +15,8 @@ opens an issue as before.
 - **One exception, `ci:private`:** a maintainer's pull request labelled `ci:private` runs journeys, probes and kind on
   Canyon's private runners instead (CONTRIBUTING.md, Maintainers), so `reach.sh` answers false for those three. It does
   so only for a pull request from this repository, by an author in the repository's `CANYON_PRIVATE_AUTHORS`, whose
-  label GitHub answers for when the paths job asks. Any doubt runs them here.
+  label GitHub answers for when the paths job asks. Any doubt runs them here. Every other job but the paths jobs,
+  the secret scan and the CLA check skips on such a pull request too, by the labels its push carries.
 - **Kept honest by `internal/tools/suites`.**
   - Each suite's paths must cover every package of this module that its Go tests and the non-server binaries it
     builds compile, by `go list -deps`.
@@ -23,5 +24,7 @@ opens an issue as before.
   - `foundation.txt` must hold the shared foundation.
 - **The server:** the server's own code is listed by area, the route files a suite drives. Its core is in
   `foundation.txt`.
+- **On Canyon's private runners:** `scripts/ci-select.sh` reads these lists for the stack suites, beside its own
+  table for the rest (`scripts/ci-select.txt`; CONTRIBUTING.md, Maintainers).
 - **What a diff would run:** `SUITES_BASE=<base> SUITES_HEAD=<head> .github/suites/reach.sh <suite>…`, with the
   diff the pull request's own paths job reads.

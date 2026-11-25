@@ -102,11 +102,20 @@ A maintainer's own pull request can run its stack suites on Canyon's private run
   number and exact head commit. That workflow checks the pull request again, fetches the commit as plain files
   and runs the suites. Nothing of the pull request's `.github` runs there, and the script pushes no git ref.
 - It labels the pull request `ci:private`, so the stack suites here skip, the way a suite the change doesn't
-  reach skips.
+  reach skips. From the next push on, which carries the label, every other job here skips too, since the private
+  runners run them all; only the paths jobs, the secret scan and the CLA check run here. A run already going, or
+  re-run, keeps the labels its push had.
 - It prints the private run's address.
 
-`scripts/ci-private-status.sh <pr>` says whether that run passed for the head as it is now. It exits 0 only when
-it did, so merge on 0. Each new push needs `scripts/ci-private.sh <pr>` again; the label stays.
+The run reaches only the suites the change can: `scripts/ci-select.sh` reads the pull request's changed paths and
+its table, `scripts/ci-select.txt`, beside the `.github/suites` lists. The private workflow runs both as main holds
+them, never the pull request's copy. Every change runs lint, tidy, web, test-rest and gitleaks. Every suite runs
+when a changed path is on no line of the table, or touches `.github/`, the Makefile, `go.mod`, a Dockerfile,
+`db/migrations/`, `e2e/` or the selector. A run of main runs every suite. What a change would run:
+`git diff -z --name-only --no-renames origin/main...HEAD | scripts/ci-select.sh`.
+
+`scripts/ci-private-status.sh <pr>` says whether that run passed for the head as it is now, how many suites ran
+and which ones the selector skipped. It exits 0 only when it did, so merge on 0. Each new push needs `scripts/ci-private.sh <pr>` again; the label stays.
 
 If the private runners are down, `scripts/ci-private.sh --off <pr>` takes the label off and runs the suites here
 again.

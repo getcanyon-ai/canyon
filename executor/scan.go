@@ -27,6 +27,8 @@ import (
 	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/getcanyon-ai/canyon/internal/names"
 )
 
 // ScanRequest is the json part of POST /scan.
@@ -221,15 +223,12 @@ type toolDB struct {
 	read atomic.Pointer[time.Time]
 }
 
-// grypeImage is grype 0.119.0's multi-arch index (the same digest as docker.io/anchore/grype:v0.119.0),
-// syft 1.52.0 inside.
-const grypeImage = "ghcr.io/anchore/grype@sha256:8c2c9234a345577a6d321a4753aa3ee1276d8975c8452d2344a56b57733ecad3"
-
-// trivyImage is trivy 0.74.0's multi-arch index (the same digest as docker.io/aquasec/trivy:0.74.0).
-const trivyImage = "ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"
-
-// checkovImage is checkov 3.3.19's multi-arch index (docker.io/bridgecrew/checkov:3.3.19).
-const checkovImage = "docker.io/bridgecrew/checkov@sha256:d3e96adafdb315ca82e792ca8708c01adae85292800fb064c8b309b3d0cb7b80"
+// The scanners' images, pinned per release where canyon demo down --purge reads them too (internal/names).
+const (
+	grypeImage   = names.GrypeImage
+	trivyImage   = names.TrivyImage
+	checkovImage = names.CheckovImage
+)
 
 // checkovFrameworks is checkov's allow-list and its default: what trivy leaves to it.
 var checkovFrameworks = []string{"terraform", "cloudformation", "dockerfile"}

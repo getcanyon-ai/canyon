@@ -18,6 +18,8 @@
 #   oidc              e2e-ui.yml's oidc job: the team setup's sign-in, deploy and sharing
 #   patch             patch-e2e.yml: a rebase patch and its revert, on the team setup
 #   tour              tour.yml: the docs' tour on the laptop demo
+#   tour-classic      the same on Docker's classic image store (overlay2), where the runners' Docker keeps images in
+#                     containerd: the laptop demo runs on both, and the tour prints what it takes on each
 #   backup            backup.yml: one k3s host backed up and restored, on kind
 #   build-arch        build-arch.yml's arm64 job: a real build and /run through the executor, on kind
 # and the rest of a pull request's checks, the jobs GitHub runs on its own runners, for when it can't (the owner,
@@ -62,6 +64,18 @@ dbs="$HOME/.cache/canyon-scandb"
 
 # pack_cli is the pinned pack CLI in ~/.local/bin, checked against its sha256 (make pack-fetch), which makes
 # canyon-builder-node for the images, deploy-bundle and tour suites, as their public jobs' make pack-install does
+# classic_store is this runner's Docker on its classic image store, overlay2, as e2e.yml's executor-e2e sets it:
+# containerd-snapshotter off in daemon.json, every other setting there kept, Docker restarted, the driver checked.
+classic_store() {
+  local current
+  current=$(sudo cat /etc/docker/daemon.json 2>/dev/null || true)
+  [ -n "$current" ] || current='{}'
+  jq '.features["containerd-snapshotter"] = false' <<<"$current" | sudo tee /etc/docker/daemon.json >/dev/null || return
+  sudo systemctl restart docker || return
+  for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+  [ "$(docker info --format '{{.Driver}}')" = overlay2 ] || { echo "ci-suite: Docker's store is not overlay2 after the switch" >&2; return 1; }
+}
+
 pack_cli() {
   local tgz
   tgz=$(mktemp -d)/pack.tgz
@@ -425,6 +439,7 @@ case $suite in
   oidc) stack oidc_suite oidc . 30m ;;
   patch) stack oidc_suite oidc,patch '^TestRebasePatch' 65m ;;
   tour) pack_cli && make tour-check ;;
+  tour-classic) classic_store && pack_cli && make tour-check ;;
   backup) kind kind_backup ;;
   build-arch) kind kind_build_arch ;;
   test-rest) test_rest ;;

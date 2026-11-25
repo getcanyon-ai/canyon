@@ -78,11 +78,11 @@ func TestSelectPicksTheSuitesAChangeReaches(t *testing.T) {
 		{"a dashboard screen", []string{"web/src/screens/Versions.tsx"}, []string{"journeys-*"}},
 		{"the fleet, which the menus check opens", []string{"web/src/screens/Fleet.tsx"}, []string{"journeys-*", "oidc"}},
 		{"a docs page", []string{"docs/src/content/docs/org/usage-reports.md"}, []string{"docs"}},
-		{"the tour's page", []string{"docs/src/content/docs/start/take-the-tour.md"}, []string{"docs", "tour"}},
+		{"the tour's page", []string{"docs/src/content/docs/start/take-the-tour.md"}, []string{"docs", "tour*"}}, // tour and tour-classic
 		{"a page the server's tests read", []string{"docs/src/content/docs/org/who-can-do-what.md"}, []string{"docs", "server-*", "noee-*"}},
 		{"a design note", []string{"design/EGRESS.md"}, []string{"docs"}},
 		{"the CLI", []string{"cli/cmd_status.go"}, []string{"server-*", "noee-*"}},
-		{"canyon mcp", []string{"cli/mcp.go"}, []string{"server-*", "noee-*", "tour", "oidc"}},
+		{"canyon mcp", []string{"cli/mcp.go"}, []string{"server-*", "noee-*", "tour*", "oidc"}},
 		{"the CLI's binary", []string{"cmd/canyon/main.go"}, []string{"noee-rest", "oidc"}},
 		{"a route", []string{"cmd/canyon-server/routes_gate.go"}, []string{"server-*", "noee-*", "probes"}},
 		{"the server's usage report", []string{"cmd/canyon-server/telemetry_v2.go"}, []string{"server-*", "noee-*"}},

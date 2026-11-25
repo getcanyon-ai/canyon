@@ -19,6 +19,7 @@ stack=$work/home/.canyon/demo/canyon # where canyon demo up unpacks the demo
 mkdir -p "$work/home/.claude" # ~/.claude is there once Claude Code has started, and canyon skill install looks for it
 finish() {
   rc=$?
+  [ -z "${sampler:-}" ] || kill "$sampler" 2>/dev/null || true # demo up failed while the size sampler ran
   cd "$repo"
   [ "$rc" -eq 0 ] || [ ! -d "$stack" ] || (cd "$stack" && docker compose -p canyon-demo --profile demo-apps logs --no-color --tail=60 server executor demo-apps) || true
   [ ! -d "$stack" ] || HOME=$work/home "$repo/bin/canyon" demo down --purge || true
@@ -134,7 +135,22 @@ run 0 demo --help
 says '^  canyon demo tour  '
 
 step "the demo, as a visitor starts it: canyon demo up"
+# What the demo takes on this Docker's image store, for the laptop page's figures: the bytes used on the filesystems
+# of Docker's and containerd's directories before up, at their peak while it runs (every 5 s) and once it ends, and
+# docker system df then. Canyon's own four images were built above, so their layers were on disk before up pulled
+# them: the difference leaves them out, and docker system df names their sizes. It decides nothing.
+used() { df -B1 --output=used,target "$(docker info --format '{{.DockerRootDir}}')" /var/lib/containerd 2>/dev/null | tail -n +2 | sort -u -k2 | awk '{s += $1} END {print s}'; }
+store=$(docker info --format '{{.Driver}} {{json .DriverStatus}}')
+before=$(used)
+(while :; do used; sleep 5; done >"$work/used") &
+sampler=$!
 run 0 demo up
+kill "$sampler" 2>/dev/null || true
+sampler=
+after=$(used)
+peak=$( (cat "$work/used"; echo "$after") | sort -n | tail -1)
+echo "demo size: store=$store before=$before up=$after peak=$peak (bytes used)"
+docker system df -v
 grep -qF "$ready" "$work/out" || fail "canyon demo up never showed: $ready"
 says 'Canyon is ready at http://localhost:7777$'
 says '^  Next, take the guided tour: canyon demo tour$'

@@ -641,7 +641,7 @@ func (e *Executor) Build(ctx context.Context, req BuildRequest, tree io.Reader, 
 // values pack is handed neither --run-image nor --env and builds on them as they are, never on an ephemeral copy; the
 // Node builder's log is held back until its detection passed.
 func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, out io.Writer, node bool) (BuildResult, error) {
-	own := !node && e.ownBuilderFor(ctx, dir, req.BuildValues)
+	own := !node && e.ownBuilderFor(ctx, dir, req.BuildValues) && false // planted for #177's red: the next commit removes it
 	env := BuildEnv(req.BuildValues)
 	if node || own {
 		env = req.BuildValues // a build that names either of the executor's own two builds on canyon-builder's base

@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+# .github/helm/chart-check.sh: the demo chart (deploy/helm/canyon) renders and keeps deploy/k8s's invariants, and a
+# release packs it under the release's version, checked without a cluster: what helm.yml's chart job runs, in one
+# place for the two that run it, that job and scripts/ci-suite.sh's helm-chart suite (Canyon's private runners). The
+# caller puts the pinned helm on PATH. Each check is a subshell of its own, as each was a step of the job, its own
+# shell under -e and pipefail: a check's exit ends the script, failed.
+set -eo pipefail
+cd "$(dirname "$0")/../.."
+RUNNER_TEMP=${RUNNER_TEMP:-$(mktemp -d)}
+export RUNNER_TEMP
+# as ci.yml's jsonschema
+(
+set -eo pipefail
+python3 -m pip install --break-system-packages pyyaml==6.0.2
+)
+# the bootstrap's front-door step against a stub of Canyon (#2514)
+(
+set -eo pipefail
+PYTHONDONTWRITEBYTECODE=1 python3 deploy/helm/bootstrap_test.py -v
+)
+# the release's chart is versioned as its tag, less the v, and carries its notices; a tag that leaves no SemVer 2 version is refused (must-fail)
+(
+set -eo pipefail
+set -euo pipefail
+d=$RUNNER_TEMP/chart
+for tag in v0.2.3 v0.2.0-rc.1; do
+  rm -rf "$d" && mkdir "$d"
+  scripts/chart-package.sh HEAD "$tag" "$d/canyon-chart.tgz"
+  helm show chart "$d/canyon-chart.tgz" >"$d/Chart.yaml"
+  grep -Fqx "version: ${tag#v}" "$d/Chart.yaml" || { echo "$tag packed a chart whose version is not ${tag#v}:"; cat "$d/Chart.yaml"; exit 1; }
+  grep -Fqx "appVersion: $tag" "$d/Chart.yaml" || { echo "$tag packed a chart whose appVersion is not $tag:"; cat "$d/Chart.yaml"; exit 1; }
+  scripts/release-archives-check.sh "$d"
+  echo "$tag: chart $(grep -x 'version: .*' "$d/Chart.yaml")"
+done
+refused=(0.2.3 v1.2 v01.2.3 v0.2.x v0.2.3-rc..1 v1.0.0+b $'v0.2.3\n--output=x')
+for tag in "${refused[@]}"; do
+  if out=$(scripts/chart-package.sh HEAD "$tag" "$d/refused.tgz" 2>&1); then
+    echo "$tag packed a chart: it must be refused"; exit 1
+  fi
+  grep -F "is not a release tag" <<<"$out" || { echo "$tag failed for another reason: $out"; exit 1; }
+  [ ! -e "$d/refused.tgz" ] || { echo "$tag was refused but left a chart behind"; exit 1; }
+done
+)
+(
+set -eo pipefail
+helm lint deploy/helm/canyon -f deploy/helm/check-values.yaml
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml | deploy/helm/check-rendered.py
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set canyon.egress.token=synthetic.egress.token.for.check-rendered.0000 | deploy/helm/check-rendered.py --egress-token synthetic.egress.token.for.check-rendered.0000
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set canyon.egress.existingSecret=true | deploy/helm/check-rendered.py --existing-egress-secret
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set gateway.askToken=synthetic.tls-ask.token.for.check-rendered.0000 | deploy/helm/check-rendered.py --ask-token synthetic.tls-ask.token.for.check-rendered.0000
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set gateway.enabled=false | deploy/helm/check-rendered.py
+)
+# telemetry is off exactly when telemetry.enabled is not true, with canyon.existingSecret or not, and the notes say it's on exactly then
+(
+set -eo pipefail
+set -euo pipefail
+for secret in "" my-env; do
+  render() { helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "canyon.existingSecret=$secret" "$@"; }
+  notes() { helm install canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --dry-run=client --set "canyon.existingSecret=$secret" "$@" | grep -c "^Turn it off with telemetry.enabled: false." || true; }
+  render | deploy/helm/check-rendered.py
+  [ "$(notes)" = 1 ] || { echo "existingSecret=$secret: the notes don't say telemetry is on"; exit 1; }
+  for off in --set=telemetry.enabled=false --set-string=telemetry.enabled=false --set=telemetry.enabled=null; do
+    render "$off" | deploy/helm/check-rendered.py --telemetry-off
+    [ "$(notes "$off")" = 0 ] || { echo "existingSecret=$secret $off: the notes say telemetry is on"; exit 1; }
+  done
+  if out=$(render --set=telemetry.enabled=false | grep -v 'name: CANYON_TELEMETRY' | deploy/helm/check-rendered.py --telemetry-off 2>&1); then
+    echo "existingSecret=$secret: an off switch that sets nothing passed check-rendered: it must fail"; exit 1
+  fi
+  grep -F "the server's env turns telemetry off by {}" <<<"$out" || { echo "the missing off switch failed for another reason: $out"; exit 1; }
+done
+)
+# a bundled part that breaks Pod Security restricted fails check-rendered, each on its own line (must-fail; issue 2772)
+(
+set -eo pipefail
+while IFS='|' read -r plant want; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml | sed "$plant" | deploy/helm/check-rendered.py 2>&1); then
+    echo "the render with $plant passed check-rendered: it must fail"; exit 1
+  fi
+  grep -F "$want" <<<"$out" || { echo "$plant failed for another reason: $out"; exit 1; }
+done <<'EOF'
+s/add: \[NET_BIND_SERVICE\]/add: [NET_BIND_SERVICE, NET_ADMIN]/|Deployment canyon-gateway/caddy breaks Pod Security restricted: caddy adds a capability restricted refuses
+s/runAsNonRoot: true, runAsUser: 70,/runAsUser: 70,/|Deployment canyon-infra/canyon-postgres breaks Pod Security restricted: postgres may run as root (runAsNonRoot)
+s/fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}/fsGroup: 65532, fsGroupChangePolicy: OnRootMismatch}/|breaks Pod Security restricted: registry runs under no seccomp profile
+s/claimName: pocket-id-data}}\]/claimName: pocket-id-data}}, {name: host, hostPath: {path: \/var}}]/|Deployment canyon-auth/pocket-id breaks Pod Security restricted: a hostPath volume
+/command: \[sh, -c, "d=\/data;/d|Deployment canyon-gateway/caddy starts without checking its user can write /data
+s#canyon/caddyfile: .*#container.apparmor.security.beta.kubernetes.io/caddy: unconfined#|Deployment canyon-gateway/caddy breaks Pod Security restricted: caddy's AppArmor annotation unconfined
+EOF
+)
+# an ask token outside the server's rule fails the render (must-fail)
+(
+set -eo pipefail
+for token in short "synthetic+tls/ask=token.for.check-rendered.0000"; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "gateway.askToken=$token" 2>&1); then
+    echo "gateway.askToken=$token rendered: it must fail"; exit 1
+  fi
+  grep -F "gateway.askToken must be 32 to 512 of [A-Za-z0-9._~-]" <<<"$out" || { echo "gateway.askToken=$token failed for another reason: $out"; exit 1; }
+done
+)
+# a token outside the server's rule, or a token beside existingSecret, fails the render (must-fail)
+(
+set -eo pipefail
+for set in "canyon.egress.token=short" "canyon.egress.token=synthetic.egress.token.for.check-rendered.0000,canyon.egress.existingSecret=true"; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "$set" 2>&1); then
+    echo "--set $set rendered: it must fail"; exit 1
+  fi
+  grep -E "canyon.egress.token must be 32 to 512|canyon.egress.token and canyon.egress.existingSecret: set one" <<<"$out" || { echo "--set $set failed for another reason: $out"; exit 1; }
+done
+)
+# a canyon.auth.mode but oidc, existingSecret or not, fails the render (must-fail)
+(
+set -eo pipefail
+for set in "canyon.auth.mode=off" "canyon.auth.mode=demo" "canyon.auth.mode=demo,canyon.existingSecret=my-canyon-server"; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "$set" 2>&1); then
+    echo "--set $set rendered: it must fail"; exit 1
+  fi
+  grep -F "the chart runs oidc only" <<<"$out" || { echo "--set $set failed for another reason: $out"; exit 1; }
+done
+)
+# no API server's addresses off k3s, the old canyon.kubeAPI.cidr anywhere, or egress-control's metrics admitted from where code Canyon did not write runs, fails the render (must-fail)
+(
+set -eo pipefail
+for set in "canyon.kubeAPI.cidrs=" "canyon.kubeAPI.cidrs={}" "canyon.kubeAPI.cidr=192.0.2.20/32" "platform.k3s.enabled=true,platform.k3s.apiServer=192.0.2.10,canyon.kubeAPI.cidr=192.0.2.20/32" "canyon.egress.metrics.namespace=canyon-apps" "canyon.egress.metrics.namespace=canyon-builds" "canyon.egress.metrics.namespace=canyon-scans"; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "$set" 2>&1); then
+    echo "--set $set rendered: it must fail"; exit 1
+  fi
+  grep -E "canyon.kubeAPI.cidrs is empty|canyon.kubeAPI.cidr became canyon.kubeAPI.cidrs|canyon.egress.metrics.namespace: never" <<<"$out" || { echo "--set $set failed for another reason: $out"; exit 1; }
+done
+)
+# on k3s, its API server
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set platform.k3s.enabled=true --set platform.k3s.apiServer=192.0.2.10 --set gateway.enabled=true --set canyon.kubeAPI.cidrs= | deploy/helm/check-rendered.py
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set 'canyon.egress.signin.hosts={sso.corp.example=10.0.4.20/32,keycloak.idp.svc.cluster.local}' | deploy/helm/check-rendered.py
+)
+# a sign-in entry the executor would refuse fails check-rendered (must-fail)
+(
+set -eo pipefail
+for entries in "{sso.corp.example=999.1.2.3/32}" "{sso.corp.example=10.0.4.0/24}" "{sso.corp.example=10.0.4.20}" "{*.corp.example}" "{sso.corp.example=169.254.169.254/32}" "{sso.corp.example=10.0.4.20/32,sso.corp.example}"; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set "canyon.egress.signin.hosts=$entries" | deploy/helm/check-rendered.py 2>&1); then
+    echo "signin.hosts=$entries passed check-rendered: it must fail"; exit 1
+  fi
+  grep -E "CANYON_KUBE_SIGNIN_DIRECT (holds|names)" <<<"$out" || { echo "signin.hosts=$entries failed for another reason: $out"; exit 1; }
+done
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set platform.k3s.enabled=true --set platform.k3s.apiServer=192.0.2.10 --set gateway.enabled=true --set canyon.existingSecret=my-canyon-server | deploy/helm/check-rendered.py
+)
+# a builds policy that lets a build pod reach link-local, or one more policy of canyon-builds that does, fails check-rendered (must-fail)
+(
+set -eo pipefail
+base() { helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml; }
+wider='{"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"name":"wider","namespace":"canyon-builds"},"spec":{"podSelector":{},"policyTypes":["Egress"],"egress":[{"to":[{"ipBlock":{"cidr":"169.254.0.0/16"}}],"ports":[{"protocol":"TCP","port":80}]}]}}'
+for render in "base | sed '/name: canyon-builds\$/,/^---/ s/169.254.0.0\/16, //'" "{ base; echo ---; echo '$wider'; }"; do
+  if out=$(eval "$render" | deploy/helm/check-rendered.py 2>&1); then
+    echo "$render passed check-rendered: it must fail"; exit 1
+  fi
+  grep -F "lets a build pod reach 169.254.169.254" <<<"$out" || { echo "$render failed for another reason: $out"; exit 1; }
+done
+)
+# a k3s render whose gateway policy selects floored pods, or whose server lacks the gateway sign-in, existingSecret or not, fails check-rendered (must-fail)
+(
+set -eo pipefail
+k3s() { helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set platform.k3s.enabled=true --set platform.k3s.apiServer=192.0.2.10 --set gateway.enabled=true "$@"; }
+if out=$(k3s | sed 's/podSelector: {matchExpressions: \[{key: canyon.floor, operator: DoesNotExist}\]}/podSelector: {}/' | deploy/helm/check-rendered.py 2>&1); then
+  echo "a gateway policy selecting floored pods passed check-rendered: it must fail"; exit 1
+fi
+grep -F "canyon-apps/canyon-apps-gateway selects floored pods" <<<"$out" || { echo "failed for another reason: $out"; exit 1; }
+for secret in "" "--set canyon.existingSecret=my-canyon-server"; do
+  if out=$(k3s $secret | grep -v CANYON_KUBE_GATEWAY_SIGNIN | deploy/helm/check-rendered.py 2>&1); then
+    echo "a k3s server ($secret) without CANYON_KUBE_GATEWAY_SIGNIN passed check-rendered: it must fail"; exit 1
+  fi
+  grep -F "CANYON_KUBE_GATEWAY_SIGNIN must be set" <<<"$out" || { echo "failed for another reason: $out"; exit 1; }
+done
+)
+(
+set -eo pipefail
+helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set-json 'canyon.egress.signin={"hosts":["keycloak.idp.svc.cluster.local"],"inCluster":{"namespace":"idp","podLabels":{"app.kubernetes.io/name":"keycloak"},"port":8443}}' | deploy/helm/check-rendered.py --in-cluster-signin
+)
+# an in-cluster sign-in rule the chart must not write fails the render, each on its own message (must-fail)
+(
+set -eo pipefail
+ok='"hosts":["k.idp.svc.cluster.local"]'
+rule() { printf '{"namespace":"%s","podLabels":%s,"port":%s}' "$1" "$2" "$3"; }
+while IFS='|' read -r signin want; do
+  if out=$(helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set-json "canyon.egress.signin=$signin" 2>&1); then
+    echo "signin=$signin rendered: it must fail"; exit 1
+  fi
+  grep -F -- "$want" <<<"$out" || { echo "signin=$signin failed for another reason, not \"$want\": $out"; exit 1; }
+done <<EOF
+{$ok,"inCluster":$(rule "" '{"app":"keycloak"}' 8443)}|canyon.egress.signin.inCluster needs namespace and podLabels
+{$ok,"inCluster":$(rule idp '{}' 8443)}|canyon.egress.signin.inCluster needs namespace and podLabels
+{$ok,"inCluster":$(rule canyon-gateway '{"app":"caddy"}' 443)}|canyon.egress.signin.inCluster names canyon-gateway, a namespace of Canyon's or the cluster's own
+{$ok,"inCluster":$(rule canyon-auth '{"app":"pocket-id"}' 1411)}|canyon.egress.signin.inCluster names canyon-auth, a namespace of Canyon's or the cluster's own
+{$ok,"inCluster":$(rule kpack '{"app":"kpack-webhook"}' 8443)}|canyon.egress.signin.inCluster names kpack, a namespace of Canyon's or the cluster's own
+{$ok,"inCluster":$(rule headlamp '{"app.kubernetes.io/name":"headlamp"}' 4466)}|canyon.egress.signin.inCluster names headlamp, a namespace of Canyon's or the cluster's own
+{$ok,"inCluster":$(rule idp '{"app":"keycloak"}' 0)}|canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535
+{$ok,"inCluster":$(rule idp '{"app":"keycloak"}' -1)}|canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535
+{$ok,"inCluster":$(rule idp '{"app":"keycloak"}' 70000)}|canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535
+{$ok,"inCluster":$(rule idp '{"app":"keycloak"}' 443.5)}|canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535
+{$ok,"inCluster":$(rule idp '{"app":"keycloak"}' true)}|canyon.egress.signin.inCluster.port is a TCP port, a whole number from 1 to 65535
+{$ok,"inCluster":$(rule idp '{"app":true}' 8443)}|canyon.egress.signin.inCluster.podLabels holds app, whose value is not a string
+{"hosts":["sso.corp.example=10.0.4.20/32"],"inCluster":$(rule idp '{"app":"keycloak"}' 8443)}|canyon.egress.signin.inCluster needs its host in canyon.egress.signin.hosts, listed without an address
+{"hosts":[""],"inCluster":$(rule idp '{"app":"keycloak"}' 8443)}|canyon.egress.signin.hosts holds an empty entry
+{"hosts":[" "]}|canyon.egress.signin.hosts holds an empty entry
+EOF
+)
+# a canyon-apps-signin wider than its one rule, to a namespace of the chart's, without its in-cluster host, or one check-rendered was not told of, fails check-rendered (must-fail)
+(
+set -eo pipefail
+signin() { helm template canyon deploy/helm/canyon -f deploy/helm/check-values.yaml --set-json 'canyon.egress.signin={"hosts":["keycloak.idp.svc.cluster.local"],"inCluster":{"namespace":"idp","podLabels":{"app.kubernetes.io/name":"keycloak"},"port":8443}}'; }
+while IFS='|' read -r edit want; do
+  if out=$(signin | sed "$edit" | deploy/helm/check-rendered.py --in-cluster-signin 2>&1); then
+    echo "the render edited by $edit passed check-rendered: it must fail"; exit 1
+  fi
+  grep -F -- "$want" <<<"$out" || { echo "the render edited by $edit failed for another reason, not \"$want\": $out"; exit 1; }
+done <<'EOF'
+s/podSelector: {matchLabels: {"app.kubernetes.io\/name":"keycloak"}}/podSelector: {}/|canyon-apps-signin is not floored pods to one namespace's labelled pods on one TCP port
+s/kubernetes.io\/metadata.name: "idp"/kubernetes.io\/metadata.name: "kpack"/|canyon-apps-signin admits floored pods to kpack, a namespace of Canyon's or the cluster's own
+s/kubernetes.io\/metadata.name: "idp"/kubernetes.io\/metadata.name: "canyon"/|canyon-apps-signin admits floored pods to canyon, a namespace of Canyon's or the cluster's own
+s/value: "keycloak.idp.svc.cluster.local"/value: "keycloak.idp.svc.cluster.local=10.0.4.20\/32"/|canyon-apps-signin without a host CANYON_KUBE_SIGNIN_DIRECT lists in-cluster
+EOF
+if out=$(signin | deploy/helm/check-rendered.py 2>&1); then
+  echo "a canyon-apps-signin check-rendered was not told of passed: it must fail"; exit 1
+fi
+grep -F "NetworkPolicy canyon-apps-signin rendered" <<<"$out" || { echo "failed for another reason: $out"; exit 1; }
+)

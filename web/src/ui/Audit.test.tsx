@@ -13,6 +13,14 @@ const event = (action: string, detail: Record<string, unknown> = {}): AuditEvent
 
 afterEach(() => vi.useRealTimers());
 
+// Every action the server records has words here (#152): internal/tools/auditactions reads the server's source for them,
+// and fails when its list isn't the source's. A row with no words is said as the action, which is no sentence.
+it("has words for every action the server records", () => {
+  const recorded = readFileSync(join(import.meta.dirname, "../../../internal/tools/auditactions/testdata/actions.txt"), "utf8").trim().split("\n");
+  expect(recorded.length).toBeGreaterThan(100);
+  expect(recorded.filter((action) => sentence(event(action)) === action)).toEqual([]);
+});
+
 // One dependency's findings approved together read as one row naming it (screens.md, The approval).
 it("an approval of one dependency's findings names the dependency and how many", () => {
   const row = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/app-page/birthday-list-dependency-approval.json"), "utf8")).audit as AuditEvent;
@@ -88,6 +96,49 @@ describe("an audit row's sentence", () => {
     ["stop app", { env: "prod", reason: "Exports claimant SSNs (INC-2231)", cancelled: [] }, "held production: Exports claimant SSNs (INC-2231)"], // it ran nothing (contracts/routes.md: image_digest absent)
     ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: false }, "lifted the hold without starting production"],
     ["lift hold", { held_by: dana, held_at: "2026-10-11T09:40:00Z", reason: "Exports claimant SSNs (INC-2231)", started: true, package: "pkg_9e40", label: "v1.4" }, "lifted the hold and started v1.4"],
+    // The rows the trail had no words for until #152, each in its detail's form.
+    ["link repository", { repo_id: 1, folder: "apps/web", full_name: "meridian/claims" }, "linked the GitHub repository meridian/claims, folder apps/web"],
+    ["unlink repository", { repo_id: 1, folder: "", full_name: "meridian/claims" }, "unlinked the GitHub repository meridian/claims"],
+    ["import repository", { repo_id: 1, folder: "", full_name: "meridian/claims" }, "made the app from the GitHub repository meridian/claims"],
+    ["hand over repository", { repo_id: 1, full_name: "meridian/claims-kept" }, "handed meridian/claims-kept over to the developers: Canyon no longer commits to it"],
+    ["repository changed", { repo_id: 1, full_name: "meridian/claims", state: "archived" }, "archived meridian/claims on GitHub"],
+    ["repository changed", { repo_id: 1, full_name: "meridian/claims", state: "deleted" }, "deleted meridian/claims on GitHub"],
+    ["repository changed", { repo_id: 1, full_name: "meridian/claims", state: "removed" }, "took meridian/claims away from Canyon's GitHub App"],
+    ["repository changed", { repo_id: 1, full_name: "meridian/claims", state: "linked" }, "gave Canyon's GitHub App access to meridian/claims again"],
+    ["set auto-deploy", { auto_deploy: true }, "turned on deploying each push to preview"],
+    ["set auto-deploy", { auto_deploy: false }, "turned off deploying each push to preview"],
+    ["deploy from github", { package: "pkg_9e40" }, "started a deploy of 9e40 from GitHub"],
+    ["create kept repository", { repo_id: 2, full_name: "meridian/claims-kept" }, "made the GitHub repository meridian/claims-kept to keep the app's code in"],
+    ["keep version in github", { package: "pkg_9e40", commit: "3f2a9c81d0b4e6f7a8b9" }, "kept 9e40 in GitHub as commit 3f2a9c81d0b4"],
+    ["link github account", { github_id: 7, login: "dana-w" }, "linked the GitHub account dana-w"],
+    ["set github org", { account: "meridian", imports_new: true }, "set the GitHub organization meridian, importing its new repositories"],
+    ["set github org", { account: "meridian", imports_new: false }, "set the GitHub organization meridian, not importing its new repositories"],
+    ["set github client secret", { account: "meridian" }, "set the GitHub App's client secret for meridian"],
+    ["connect agent", { client: "Claude", client_host: "claude.ai", scopes: ["read"] }, "connected the agent Claude from claude.ai, allowed to read"],
+    ["connect agent", { client: "Claude", client_host: "claude.ai", scopes: ["read", "act"] }, "connected the agent Claude from claude.ai, allowed to read, check, deploy and promote"],
+    ["disconnect agent", { session: "ses_1", flow: "oauth", client: "Claude" }, "disconnected the agent Claude"],
+    ["disconnect agent", { session: "ses_1", flow: "oauth", client: "Claude", subject: "bob@meridian.example" }, "disconnected bob@meridian.example's agent Claude"],
+    ["revoke session", { session: "ses_1", flow: "browser" }, "ended a browser sign-in"],
+    ["revoke session", { session: "ses_1", flow: "device" }, "ended a CLI sign-in"],
+    ["revoke session", { session: "ses_1", flow: "device", subject: "bob@meridian.example" }, "ended bob@meridian.example's CLI sign-in"],
+    ["bind grants", { email: "dana@meridian.example", issuer: "https://id.meridian.example", projects: ["claims-portal", "quote-engine"] }, "accepted the access shared with dana@meridian.example: claims-portal, quote-engine"],
+    ["db session opened", { db_session: "dbs_1", env: "prod", resource: "db", mode: "read" }, "opened a read session on the database db in production"],
+    ["db write session opened", { db_session: "dbs_1", env: "prod", resource: "db", mode: "write", reason: "INC-2231" }, "opened a write session on the database db in production: INC-2231"],
+    ["db session attached", { db_session: "dbs_1", env: "preview", resource: "db", mode: "read", reason: "from the terminal" }, "joined the read session on the database db in preview: from the terminal"],
+    ["db session closed", { db_session: "dbs_1", person: { subject: "bob", display: "Bob Lindqvist" }, reason: "idle" }, "ended Bob Lindqvist's database session: it was idle"],
+    ["db session closed", { db_session: "dbs_1", person: { subject: "dana", display: "Dana Whitfield" }, reason: "closed" }, "closed their database session"],
+    ["integration.channel.set", { id: "ch_1", name: "#incidents", kind: "slack", host: "hooks.slack.com" }, "set the Slack channel #incidents"],
+    ["integration.channel.removed", { id: "ch_1", name: "Ops", kind: "teams", host: "x.webhook.office.com" }, "removed the Teams channel Ops"],
+    ["integration.channel.tested", { id: "ch_1", name: "#incidents", kind: "slack", status: 200 }, "sent a test to the Slack channel #incidents: it answered 200"],
+    ["integration.channel.failing", { id: "ch_1", name: "#incidents", kind: "slack", status: 404 }, "couldn't post to the Slack channel #incidents: it answered 404"],
+    ["rename app", { from: "claims-portal", to: "Claims portal" }, "renamed the app from claims-portal to Claims portal"],
+    ["attach image report", { tool: "grype", replaced: true }, "attached grype's report on the app's image, replacing the one before"],
+    ["platform reported deployed without resources", { release: "rel_1", env: "prod", missing: ["db", "files"] }, "reported a release deployed in production without saying where db, files are: nothing went live"],
+    ["PUT /api/v1/licence", { customer: "Meridian Insurance", expires: "2027-11-30T00:00:00Z" }, "set the Enterprise licence for Meridian Insurance, until 30 Nov 2027"],
+    ["PUT /api/v1/telemetry", { enabled: false }, "turned telemetry off"],
+    ["replace platform repo host token", {}, "replaced the deploy repo's host token"],
+    // A row the table words itself reads in its words in a sentence too, as an app's Activity shows it.
+    ["commit release", { env: "prod" }, "committed a release to production"],
     ["POST /api/v1/nothing/{id}", {}, "POST /api/v1/nothing/{id}"], // a route the bundle was built before: shown as written, never blank
   ] as const) {
     it(`says "${said}"`, () => expect(sentence(event(action, detail))).toBe(said));

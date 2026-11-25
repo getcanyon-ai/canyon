@@ -1327,6 +1327,62 @@ export const AUDIT_ACTIONS: Record<string, string> = {
 };
 // lift hold when it started production again (detail.started), naming the version it started.
 export const AUDIT_LIFT_STARTED = "lifted the hold and started <version>";
+// The rows the trail had no words for until #152, and the forms of them a row's detail picks (ui/Audit.tsx, more).
+export const AUDIT_MORE = {
+  linkRepo: "linked the GitHub repository <repo>",
+  unlinkRepo: "unlinked the GitHub repository <repo>",
+  importRepo: "made the app from the GitHub repository <repo>",
+  folder: ", folder <folder>",
+  handOver: "handed <repo> over to the developers: Canyon no longer commits to it",
+  archived: "archived <repo> on GitHub",
+  deleted: "deleted <repo> on GitHub",
+  removed: "took <repo> away from Canyon's GitHub App",
+  relinked: "gave Canyon's GitHub App access to <repo> again",
+  changed: "changed <repo> on GitHub", // a state this bundle doesn't know
+  autoOn: "turned on deploying each push to preview",
+  autoOff: "turned off deploying each push to preview",
+  deployFromGitHub: "started a deploy of <version> from GitHub",
+  keptRepo: "made the GitHub repository <repo> to keep the app's code in",
+  keptVersion: "kept <version> in GitHub as commit <commit>",
+  githubAccount: "linked the GitHub account <login>",
+  githubOrgImports: "set the GitHub organization <account>, importing its new repositories",
+  githubOrg: "set the GitHub organization <account>, not importing its new repositories",
+  githubSecret: "set the GitHub App's client secret for <account>",
+  connectRead: "connected the agent <client> from <client_host>, allowed to read",
+  connectAct: "connected the agent <client> from <client_host>, allowed to read, check, deploy and promote",
+  disconnect: "disconnected the agent <client>",
+  disconnectTheirs: "disconnected <subject>'s agent <client>",
+  disconnectCanyon: "disconnected <subject>'s agent: <reason>",
+  revokeBrowser: "ended a browser sign-in",
+  revokeCLI: "ended a CLI sign-in",
+  revokeTheirsBrowser: "ended <subject>'s browser sign-in",
+  revokeTheirsCLI: "ended <subject>'s CLI sign-in",
+  bindGrants: "accepted the access shared with <email>: <apps>",
+  dbRead: "opened a read session on the database <resource> in <env>",
+  dbWrite: "opened a write session on the database <resource> in <env>",
+  dbAttached: "joined the <db_mode> session on the database <resource> in <env>",
+  dbReason: ": <reason>",
+  dbClosed: "ended <person>'s database session: <why>",
+  dbClosedOwn: "closed their database session",
+  channelSet: "set the <kind> channel <channel>",
+  channelRemoved: "removed the <kind> channel <channel>",
+  channelTested: "sent a test to the <kind> channel <channel>: it answered <status>",
+  channelFailing: "couldn't post to the <kind> channel <channel>: it answered <status>",
+  rename: "renamed the app from <from> to <to>",
+  imageReport: "attached <tool>'s report on the app's image",
+  imageReplaced: ", replacing the one before",
+  noResources: "reported a release deployed in <env> without saying where <missing>: nothing went live",
+  licence: "set the Enterprise licence for <customer>, until <until>",
+  telemetryOn: "turned telemetry on",
+  telemetryOff: "turned telemetry off",
+  hostToken: "replaced the deploy repo's host token",
+};
+// A database session's close_reason, in the words its closed row says it with (contracts/routes.md, Database sessions).
+export const DB_CLOSED_WHY: Record<string, string> = {
+  signed_out: "they signed out", access_changed: "their access changed", setting_changed: "a setting changed", database_gone: "the database is gone",
+  expired: "it expired", held: "production is held", idle: "it was idle", turned_off: "database sessions were turned off",
+  closed: "they closed it", ended: "an owner or admin ended it", replaced: "a newer one replaced it",
+};
 // A hold whose stop Canyon could not carry out (detail.stopped false). No other row says production stopped: one the org's
 // platform runs is written as its remove is sent, and nothing in it tells the two apart (contracts/routes.md, The hold; #145).
 export const AUDIT_HELD_RUNNING = "held production, but Canyon couldn't stop it: <reason>";

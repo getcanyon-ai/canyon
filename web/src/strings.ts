@@ -79,7 +79,10 @@ export const S = {
   // An environment's logs on its card (A of incidents and logs): its last 200 lines, masked, read again on Refresh, never followed.
   showLogs: "Show logs",
   logsOf: "<app>'s logs in <env>",
-  logsLines: "The last 200 lines, each secret's value replaced by its name.",
+  // What masked hides, said plainly (#223's security review; the owner's call on the words is pending).
+  logsLines: "The last 200 lines. Only the secrets set in Canyon are hidden, each shown as its name: anything else the app printed shows, its users' tokens included.",
+  // A security responder's 409: a value Canyon can't tell, or one too short to hide by its name, which theirs refuses too.
+  logsUnmaskedResponder: "Canyon can't show you the app's last lines: it can't hide every secret in them.",
   logsReading: "Reading…",
   logsNone: "No log lines yet.",
   logsCopied: "Copied.",

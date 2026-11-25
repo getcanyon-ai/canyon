@@ -259,7 +259,8 @@ export function goLive(receipt: Receipt): { set: number; met: number } {
 // What a failed masked read of an environment's lines says: a log it can't mask (409), one too long to (422), else unread;
 // to the app's team, canyon logs after it, which reads it raw. A responder's read is masked alone, so theirs names no CLI.
 export const unread = (status: number | undefined, env: "preview" | "prod", team: boolean) =>
-  (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread) + (team ? S.lastLinesCli.replaceAll("<env>", env) : "");
+  !team && status === 409 ? S.logsUnmaskedResponder // also where a value is too short to hide by its name, which a responder's read refuses
+    : (status === 409 ? S.lastLinesUnmasked : status === 422 ? S.lastLinesTooLong : S.lastLinesUnread) + (team ? S.lastLinesCli.replaceAll("<env>", env) : "");
 
 // A down environment's last log lines, masked by the server (#2744, #188), for a contributor and above, who may read
 // its logs: the caller never draws it for a reader below. They stand in for said, the one line the status read

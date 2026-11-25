@@ -167,8 +167,9 @@ and nothing else:
   whether it is held;
 - on the app's page: its reviews, each one's findings with their few lines of code, and the go-live
   checks;
-- production's last 200 log lines, with each secret's value replaced by its name, so they can see why
-  production is failing before they stop it. Each read is in the audit trail.
+- production's last 200 log lines, so they can see why production is failing before they stop it. Only the
+  secrets set in Canyon are hidden, each shown as its name: anything else the app prints shows, its users'
+  tokens included. Each read is in the audit trail.
 
 A responder doesn't see preview, earlier versions, who deployed them, preview's logs, production's
 logs unmasked, secret names, or anything else of the app.

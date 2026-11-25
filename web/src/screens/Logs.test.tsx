@@ -100,7 +100,7 @@ describe("an environment's logs on its card", () => {
     server({ "GET /api/v1/projects/claims-portal": { body: { project: row("none") } }, ...RESPONDER, [logs("prod")]: { status: 409, body: { error: "not_maskable" } } });
     render(asResponder());
     fireEvent.click(await (await card("Production")).findByRole("button", { name: "Show production's logs" }));
-    expect(await screen.findByText(S.lastLinesUnmasked)).toBeDefined();
+    expect(await screen.findByText(S.logsUnmaskedResponder)).toBeDefined(); // a short value too: a responder is never pointed at canyon logs
   });
 
   // Below contributor, a member who isn't a responder reads no logs: the card says who does, and nothing is asked.

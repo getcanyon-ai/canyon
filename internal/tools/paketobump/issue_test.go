@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -89,5 +91,41 @@ func TestIssueDedupesOntoTheOpenIssue(t *testing.T) {
 				t.Errorf("the filed body does not link the pins' own branch %s alone:\n%s", r.branch(), body)
 			}
 		})
+	}
+}
+
+// gh as GitHub answers it for a repository with no labels: label create makes one, and issue create refuses a label
+// that isn't made, as run 45178472835 was refused (#132).
+const fakeGH = `#!/bin/sh
+state=$FAKE_GH_STATE
+case "$1 $2" in
+"label create")
+  [ ! -e "$state/label-$3" ] || { echo "label already exists" >&2; exit 1; }
+  : > "$state/label-$3" ;;
+"issue create")
+  while [ $# -gt 0 ]; do
+    if [ "$1" = --label ]; then [ -e "$state/label-$2" ] || { echo "could not add label: '$2' not found" >&2; exit 1; }; fi
+    shift
+  done
+  cat > "$state/issue" ;;
+*) echo "unexpected gh $*" >&2; exit 1 ;;
+esac
+`
+
+// An issue in a repository without its labels makes them, then the issue; with them made, the next issue is opened too.
+func TestCreateMakesItsLabelsFirst(t *testing.T) {
+	bin, state := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fakeGH), 0o700); err != nil { //nolint:gosec // an executable stub
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FAKE_GH_STATE", state)
+	for _, attempt := range []string{"no label made yet", "every label made"} {
+		if err := (ghCLI{repo: "acme/canyon"}).create("chore(ci): Paketo pins are behind (1 fixes)", "the body\n"); err != nil {
+			t.Fatalf("%s: create: %v", attempt, err)
+		}
+		if got, err := os.ReadFile(filepath.Join(state, "issue")); err != nil || string(got) != "the body\n" { //nolint:gosec // this test's own file
+			t.Fatalf("%s: the issue's body %q (%v)", attempt, got, err)
+		}
 	}
 }

@@ -65,12 +65,17 @@ jobs:
           d=$RUNNER_TEMP/answers && mkdir -p "$d"
           gh api "repos/getcanyon-ai/canyon-releases/releases?per_page=100" --paginate --slurp > "$d/releases.json"
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?filter=latest&per_page=100" --paginate --slurp > "$d/check-runs.json"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" --paginate --slurp > "$d/runs.json"
+          # main's own runs, each event apart: a head_sha listing holds at most 1,000 runs, and a comment starts one (#181)
+          for event in push schedule workflow_dispatch; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&event=$event&per_page=100" --paginate --slurp > "$d/runs-$event.json"
+          done
           gh api "repos/$GITHUB_REPOSITORY/issues?labels=ci&state=open&per_page=100" --paginate --slurp > "$d/issues.json"
       - name: the checks the changes since the last release call for
         run: go run ./internal/tools/release needs "$RUNNER_TEMP/answers/releases.json"
       - name: each has a result at this commit, its runs are done and good, and no ci issue is open
         if: env.REHEARSAL != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }} # the event of a check run's workflow run that isn't main's own
         run: go run ./internal/tools/release check "$TAG" "$RUNNER_TEMP/answers" "$GITHUB_RUN_ID"
 
   release:

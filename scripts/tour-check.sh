@@ -107,7 +107,7 @@ go build -o "$work/mcpcall" ./internal/tools/mcpcall
 
 step "a release built from this tree: its images in a registry on this runner, its bundle and SHA256SUMS served beside it"
 cd "$repo"
-docker compose --profile demo-apps build server executor demo-apps
+docker compose --profile demo-apps build ${GOPROXY:+--build-arg "GOPROXY=$GOPROXY"} server executor demo-apps
 p=$(docker compose config --format json | jq -r .name)
 docker run -d --name canyon-tour-registry -p 127.0.0.1:5000:5000 docker.io/library/registry:2.8.3 >/dev/null
 for i in canyon-server canyon-executor canyon-demo-apps; do

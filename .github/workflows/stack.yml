@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   journeys:
-    if: github.repository == 'getcanyon-ai/canyon'
+    if: github.repository == 'getcanyon-ai/canyon' && (github.event_name == 'workflow_dispatch' || vars.CANYON_GITHUB_HEAVY == '1') # push and nightly run here only when the repository's CANYON_GITHUB_HEAVY is 1: else the private CI repository's sweep of main
     runs-on: ${{ vars.CANYON_RUNNERS == 'self-hosted' && fromJSON('["self-hosted","canyon-arm-ondemand"]') || 'ubuntu-24.04-arm' }} # our own runners where the repository's CANYON_RUNNERS variable says so; anywhere else, GitHub's; every image the stack builds or pulls is multi-arch
     timeout-minutes: 80 # under make e2e's own 90m: a hung journey is cut here, and the steps below still keep its logs
     permissions:
@@ -54,7 +54,7 @@ jobs:
           path: e2e/.work/log
           retention-days: 7
   e2e-ui:
-    if: github.repository == 'getcanyon-ai/canyon'
+    if: github.repository == 'getcanyon-ai/canyon' && (github.event_name == 'workflow_dispatch' || vars.CANYON_GITHUB_HEAVY == '1') # push and nightly run here only when the repository's CANYON_GITHUB_HEAVY is 1: else the private CI repository's sweep of main
     uses: ./.github/workflows/e2e-ui.yml
     permissions: # what its jobs ask for, and no more: a called job asking beyond these fails the whole run at startup (#70)
       contents: read
@@ -62,14 +62,14 @@ jobs:
       pull-requests: read # its paths job reads a pull request's labels (reach.sh)
 
   patch-e2e:
-    if: github.repository == 'getcanyon-ai/canyon'
+    if: github.repository == 'getcanyon-ai/canyon' && (github.event_name == 'workflow_dispatch' || vars.CANYON_GITHUB_HEAVY == '1') # push and nightly run here only when the repository's CANYON_GITHUB_HEAVY is 1: else the private CI repository's sweep of main
     uses: ./.github/workflows/patch-e2e.yml
     permissions:
       contents: read
       actions: read # its stack's job reads the run's jobs (.github/actions/scan-dbs)
 
   tour:
-    if: github.repository == 'getcanyon-ai/canyon'
+    if: github.repository == 'getcanyon-ai/canyon' && (github.event_name == 'workflow_dispatch' || vars.CANYON_GITHUB_HEAVY == '1') # push and nightly run here only when the repository's CANYON_GITHUB_HEAVY is 1: else the private CI repository's sweep of main
     uses: ./.github/workflows/tour.yml
     permissions:
       contents: read

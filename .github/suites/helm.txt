@@ -6,3 +6,4 @@ scripts/release-archives-check.sh
 .github/kind/chart.sh
 .github/fetch.sh
 docs/src/content/docs/self-host/backup-and-upgrade.md
+.github/helm/**

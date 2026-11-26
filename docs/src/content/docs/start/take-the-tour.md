@@ -62,7 +62,7 @@ canyon demo up
 ```
 
 `canyon demo up` checks your machine, then starts the demo and names each stage as it goes. A first
-start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower line, and a restart 5 to 10 minutes.
+start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower line, and a restart 5 to 10 minutes.
 It ends on these two lines, and then you tell the agent Canyon is ready:
 
 ```text

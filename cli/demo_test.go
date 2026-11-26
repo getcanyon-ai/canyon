@@ -579,7 +579,7 @@ func TestDemoUpFetchesDownloadsStartsAndSignsIn(t *testing.T) {
 	if code != exitOK || !strings.HasSuffix(out, "\n  ✓ Canyon is ready at "+demoURL+"\n\n  Next, take the guided tour: canyon demo tour\n") {
 		t.Fatalf("exit %d, stderr %q, stdout\n%s", code, errs, out)
 	}
-	for _, step := range []string{"Checking this machine", "Fetching the demo into ~/.canyon/demo", "Downloading Canyon's images", "Starting Canyon and its sample apps. A first start takes 20 to 30 minutes.", "Connected to " + demoURL} {
+	for _, step := range []string{"Checking this machine", "Fetching the demo into ~/.canyon/demo", "Downloading Canyon's images", "Starting Canyon and its sample apps. A first start takes 15 to 20 minutes.", "Connected to " + demoURL} {
 		if !strings.Contains(out, step) {
 			t.Errorf("the run does not say %q:\n%s", step, out)
 		}

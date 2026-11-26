@@ -162,7 +162,7 @@ func (a *app) demoFailed(doing string, err error) int {
 	return exitError
 }
 
-// demoStep is one line of the run, said as the stage starts: the first start takes 20 to 30 minutes,
+// demoStep is one line of the run, said as the stage starts: the first start takes 15 to 20 minutes,
 // and a reader, an agent's user among them, should see which part of it they are in.
 func (a *app) demoStep(f string, v ...any) { a.printf("  "+f+"\n", v...) }
 

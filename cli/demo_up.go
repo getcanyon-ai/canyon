@@ -92,7 +92,7 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 	}); err != nil {
 		return a.demoFailed("Canyon's images could not be downloaded", err)
 	}
-	a.demoStep("Starting Canyon and its sample apps. A first start takes 20 to 30 minutes.")
+	a.demoStep("Starting Canyon and its sample apps. A first start takes 15 to 20 minutes.")
 	if _, err := demoDocker(ctx, stack, nil, demoCompose("up", "-d")...); err != nil {
 		return a.demoFailed("docker compose up failed", err)
 	}

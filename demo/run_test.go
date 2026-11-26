@@ -42,7 +42,7 @@ func runDemo(t *testing.T, deploy, fail, status string, env ...string) (string, 
 
 const (
 	building = "Building the sample apps: claims-portal, endorsement-hub, claims-archive and premium-ledger.\n" +
-		"A first start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower line: it downloads about 3.5 GB, most of it Canyon's build image and the scanners' databases (and the databases again after canyon demo down). The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes.\n"
+		"A first start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower line: it downloads about 1.5 GB, most of it Canyon's images and its Node build image. The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes.\n"
 	carryOn = "To carry on, start the demo again (canyon demo up, or make demo in a checkout).\n"
 	// running is the line each sample app's deploy ends on, which canyon demo up says as progress.
 	running = "canyon-demo: running claims-portal\ncanyon-demo: running endorsement-hub\ncanyon-demo: running claims-archive\ncanyon-demo: running premium-ledger\n"

@@ -5,7 +5,7 @@ description: Run Canyon and its sample org on one Docker host, watch it block a 
 
 | | |
 |---|---|
-| **Time** | The first start: 20 to 30 minutes at 25 Mbit/s, longer on a slower line, while it downloads about 3.5 GB. A restart: 5 to 10 minutes |
+| **Time** | The first start: 15 to 20 minutes at 25 Mbit/s, longer on a slower line, while it downloads about 1.5 GB. A restart: 5 to 10 minutes |
 | **You need** | The `canyon` CLI · Docker 28 or newer, with Compose v2 · 4 CPUs and 6 GB of memory for Docker · about 18 GB of free disk (21 GB with Docker's containerd image store) · port 7777 free. Details: [What you need](#what-you-need) |
 | **You get** | Canyon at `http://localhost:7777`, with a sample org of seven apps, sign-in off, and apps at `http://<app>.preview.localhost:7777` |
 | **Not covered** | Other people: it listens on your laptop alone. Keeping anything: it's a demo |
@@ -17,11 +17,11 @@ shows it blocking a SQL injection, deploys an app of your own, and cleans up.
 ## What you need
 
 - Docker 28 or newer, with Compose v2.
-- About 18 GB of free disk. A first start takes about 6.4 GB of it once it's up, and up to 8.9 GB
-  while the sample apps build: Canyon's images, its Node build image (1.1 GB), trivy's database
-  (1.8 GB) and the sample apps. The rest is room for the apps you deploy. Where Docker uses its
-  containerd image store, the demo needs about 21 GB, and a first start takes about 9.4 GB, up to
-  11.7 GB: that's the default on new installs of Docker Desktop since 4.34 and of Colima since 0.10,
+- About 18 GB of free disk. A first start takes about 4.3 GB of it once it's up, and up to 6.5 GB
+  while the sample apps build: Canyon's images, its Node build image (1.1 GB) and the sample apps.
+  The rest is room for the apps you deploy, and for Trivy if you turn it on: `canyon demo up
+  --with-trivy` takes about 2 GB more. Where Docker uses its containerd image store, the demo needs
+  about 21 GB, and a first start takes about 7.3 GB, up to 9.6 GB: that's the default on new installs of Docker Desktop since 4.34 and of Colima since 0.10,
   and an option in OrbStack. `canyon demo up` checks which yours uses. On Docker Desktop or Colima,
   that space is on the Docker VM's disk. Colima 0.5.3 and later give their VM a bigger disk with
   `colima stop && colima start --disk 60`.
@@ -42,10 +42,10 @@ canyon demo up
 and starts nothing; it never installs or changes anything itself. Then it downloads the demo into
 `~/.canyon/demo` and starts it. The first start builds four of the sample apps (claims-portal,
 endorsement-hub, claims-archive and premium-ledger) through Canyon itself, so the fleet shows real
-running apps and a real blocked version. It takes 20 to 30 minutes at 25 Mbit/s, longer on a slower
-line, because it downloads about 3.5 GB on the way, most of it Canyon's build image and the scanners'
-databases. A restart: 5 to 10 minutes. After `canyon demo down --purge`, nearer the first: the
-scanners' databases download again and the apps build again.
+running apps and a real blocked version. It takes 15 to 20 minutes at 25 Mbit/s, longer on a slower
+line, because it downloads about 1.5 GB on the way, most of it Canyon's images and its Node build
+image. A restart: 5 to 10 minutes. After `canyon demo down --purge`, about as long as the first: the
+images download again and the apps build again.
 
 It names each stage and each sample app as it goes, signs the CLI in to the demo, and ends on:
 

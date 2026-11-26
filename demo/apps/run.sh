@@ -24,7 +24,7 @@ if [ "${CANYON_DEMO_TRIVY:-}" != on ]; then
     { echo "The demo could not leave Trivy off: PUT /api/v1/policies/sarif.trivy failed."; echo "$carry_on"; exit 1; }
 fi
 echo "Building the sample apps: claims-portal, endorsement-hub, claims-archive and premium-ledger."
-echo "A first start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower line: it downloads about 3.5 GB, most of it Canyon's build image and the scanners' databases (and the databases again after canyon demo down). The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes."
+echo "A first start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower line: it downloads about 1.5 GB, most of it Canyon's images and its Node build image. The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes."
 for app in claims-portal endorsement-hub claims-archive premium-ledger; do
   (cd "$demo/$app" && canyon deploy --force --host "$host") || again # --force: it replaces the seeded record of the app, which no copy started from
   echo "canyon-demo: running $app" # canyon demo up says each as a line of progress (cli/demo_up.go, demoReadyPrefix)

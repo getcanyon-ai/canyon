@@ -203,7 +203,7 @@ EOF
 helm lint canyon-chart.tgz -f values.yaml
 helm template canyon canyon-chart.tgz -f values.yaml >rendered.yaml
 grep -oE 'ghcr\.io/getcanyon-ai/[a-z-]+@sha256:[0-9a-f]{64}' rendered.yaml | sort -u >chart-images
-grep -vE '/canyon-(executor|demo-apps)@' images.txt | sort >chart-want # those two are the compose demo's
+grep -vE '/canyon-(executor|demo-apps|builder-node)@' images.txt | sort >chart-want # those three are Docker's alone
 cmp -s chart-images chart-want || { diff chart-want chart-images >&2 || true; fail "the chart renders other Canyon images than images.txt's"; }
 echo "the chart renders $(($(wc -l <chart-images))) of images.txt's images, each by digest"
 

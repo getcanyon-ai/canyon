@@ -113,7 +113,7 @@ export function AppSections({ project, envs, refreshed }: { project: AppRead; en
   // where a version is deployed, said as the cells say it: only one that runs is named alone
   // (contracts/routes.md, envs.<env>.state); one waiting on its first release runs nothing
   const at = (name: string, env: Status["envs"]["preview"], pkg: string) =>
-    env === undefined || waiting(env) || env.package !== pkg ? null : env.state === "stopped" ? `${name} · stopped${exited(env) === null ? "" : `: ${exited(env)}`}` : env.state === "restarting" ? `${name} · keeps restarting${restarts(env) === null ? "" : `: ${restarts(env)}`}${lastExited(env) === null ? "" : ` · ${lastExited(env)}`}` : env.state === "unknown" ? `${name} · couldn't check` : name;
+    env === undefined || waiting(env) || env.package !== pkg ? null : env.state === "stopped" ? `${name} · stopped${exited(env) === null ? "" : `: ${exited(env)}`}` : env.state === "restarting" ? `${name} · keeps restarting${restarts(env) === null ? "" : `: ${restarts(env)}`}${lastExited(env) === null ? "" : ` · ${lastExited(env)}`}` : env.state === "starting" ? `${name} · starting` : env.state === "unknown" ? `${name} · couldn't check` : name;
   const where = (pkg: string) => [at("Preview", envs.preview, pkg), at("Production", envs.prod, pkg)].filter(Boolean).join(" · ") || "—";
   return (
     <section aria-label="History">

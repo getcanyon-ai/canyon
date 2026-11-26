@@ -194,6 +194,9 @@ func evaluate(in receiptInput) receipt {
 		}
 		out.Waiting = in.preview.version() + " restarted" + times + " since it was deployed; deploy again once it's fixed (the build is reused)."
 		return out
+	case in.previewState == "starting": // nor from one a deploy is still starting (#230)
+		out.Waiting = in.preview.version() + " is starting in preview: promote it once it runs."
+		return out
 	case in.previewState == "stopped": // fail closed: nothing is promoted from a preview that isn't running
 		out.Waiting = in.preview.version() + " isn't running in preview: canyon logs says why."
 		return out

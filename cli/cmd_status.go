@@ -644,6 +644,8 @@ func (a *app) envRow(label, flag string, e *env, width int, absent string, now t
 		a.row(label, version, a.render.paint(ansiRed, a.render.glyph(stateFail)+" keeps restarting"+e.restarts()), a.faint("canyon logs --env "+flag+" says why"))
 	case "stopped":
 		a.row(label, version, a.render.paint(ansiRed, a.render.glyph(stateFail)+" stopped"), a.faint("canyon logs --env "+flag+" says why"))
+	case "starting": // a deploy or a promotion starting it: no URL yet, and no crash to read (#230)
+		a.row(label, version, a.render.paint(ansiAmber, a.render.glyph(stateWarn)+" starting"))
 	case "running", "": // "": the org runs it, and Canyon has no state to say
 		a.row(label, version, a.render.paint(ansiCyan+ansiUnderline, cell(e.URL)), a.faint(a.ago(e.DeployedAt, now)), e.answered(), a.patchedBy(e, now))
 	default: // unknown, or a state this build does not know: never drawn live
@@ -1201,6 +1203,8 @@ func (a *app) aiEnv(label, flag string, e *env, absent string, now time.Time) {
 		parts = append(parts, "keeps restarting"+e.restarts(), "canyon logs --env "+flag+" says why")
 	case "stopped":
 		parts = append(parts, "stopped", "canyon logs --env "+flag+" says why")
+	case "starting":
+		parts = append(parts, "starting")
 	case "running", "":
 		if e.State == "running" {
 			parts = append(parts, "running")

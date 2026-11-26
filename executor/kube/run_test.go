@@ -645,3 +645,42 @@ func TestRunAnswersWhatTheAppAnsweredItsSidecar(t *testing.T) {
 		}
 	}
 }
+
+// A /run's pod on its way up is starting (contracts/executor.md, POST /running, Starting; #230): its app container being
+// made, or up and not yet ready, with no restart; never one whose image can't be pulled, which reads stopped as before.
+func TestRunningOfSaysStartingForAPodOnItsWayUp(t *testing.T) {
+	e, req, _ := fixture(t)
+	c := cluster(t, e, healthy)
+	if _, err := e.Run(t.Context(), req); err != nil {
+		t.Fatal(err)
+	}
+	asked := []executor.Container{{App: req.App, Target: req.Target}}
+	pods, err := c.CoreV1().Pods(Namespace).List(t.Context(), metav1.ListOptions{})
+	if err != nil || len(pods.Items) != 1 {
+		t.Fatalf("pods %v %v", pods, err)
+	}
+	notReady := []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse, Reason: "ContainersNotReady"}}
+	for name, c2 := range map[string]struct {
+		app      corev1.ContainerState
+		starting bool
+	}{
+		"its container being made":    {corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}}, true},
+		"up and not yet ready":        {corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}, true},
+		"its image can't be pulled":   {corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ErrImagePull"}}, false},
+		"ended and not started again": {corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}, false},
+	} {
+		p := pods.Items[0]
+		p.Status.Phase, p.Status.Conditions = corev1.PodPending, notReady
+		p.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", State: c2.app}}
+		if _, err := c.CoreV1().Pods(Namespace).UpdateStatus(t.Context(), &p, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := e.RunningOf(t.Context(), asked, true)
+		if err != nil || len(got.Running) != 0 || slices.Equal(got.Starting, asked) != c2.starting {
+			t.Errorf("%s: %+v %v, want starting %v", name, got, err, c2.starting)
+		}
+		if c2.starting && len(got.Stopped) != 0 {
+			t.Errorf("%s: %+v, a pod on its way up says no why", name, got)
+		}
+	}
+}

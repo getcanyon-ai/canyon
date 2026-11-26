@@ -61,7 +61,7 @@ export function EnvCard({ name, env, empty, blank = "Nothing running", who, note
         {state}
         {shown !== null && <span className="tnum font-medium"><bdi>{shown}</bdi></span>}
       </p>
-      {!stopped && (
+      {!stopped && at.state !== "starting" && ( // starting: nothing answers there yet (#230)
         <a className="row-span-2 inline-flex items-center gap-1 text-base text-link no-underline hover:underline" href={at.url} target="_blank" rel="noreferrer" aria-label={shown === null ? `Open ${name.toLowerCase()}` : `Open ${shown} in ${name.toLowerCase()}`}>
           Open<Icon name="external" size={14} />
         </a>

@@ -141,7 +141,7 @@
         "patch": { "$ref": "patch.schema.json#/definitions/env_patch" },
         "run_by": { "description": "Who runs it (the hand-off design §1), recorded when the row is written; a row written before the column answers canyon.", "enum": ["canyon", "org"] },
         "pending": { "$ref": "release.schema.json#/properties/env_pending/properties/pending" },
-        "state": { "description": "Whether its container runs now, as the executor answers on this read (routes.md, envs.<env>.state): on the status read and the fleet row, never on an environment the org runs.", "enum": ["running", "restarting", "stopped", "unknown"] },
+        "state": { "description": "Whether its container runs now, as the executor answers on this read (routes.md, envs.<env>.state): on the status read and the fleet row, never on an environment the org runs.", "enum": ["running", "restarting", "starting", "stopped", "unknown"] },
         "seen_at": { "description": "When a pod of the release that put it live last pulled its access list (routes.md, envs.<env>.seen_at; #2452): on an environment the org runs, absent until one has; never on one Canyon runs. The pod's sign-in sidecar checking in, never the app answering, and never a gate.", "$ref": "#/definitions/ts" },
         "answered": {
           "description": "What the app answered the one GET / of its url Canyon made after the deploy (routes.md, envs.<env>.answered): its status and, for a text/plain or application/json body, its first line, masked and cut to 200; or why nothing answered. On the status read alone.",

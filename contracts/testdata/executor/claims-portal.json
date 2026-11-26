@@ -88,7 +88,8 @@
     "containers": [
       { "app": "claims-portal", "target": "preview" },
       { "app": "claims-portal", "target": "prod" },
-      { "app": "case-dies-later", "target": "preview" }
+      { "app": "case-dies-later", "target": "preview" },
+      { "app": "claims-archive", "target": "preview" }
     ],
     "why": true
   },
@@ -98,6 +99,9 @@
     ],
     "restarting": [
       { "app": "case-dies-later", "target": "preview", "restarts": 7 }
+    ],
+    "starting": [
+      { "app": "claims-archive", "target": "preview" }
     ],
     "stopped": [
       { "app": "claims-portal", "target": "prod", "exit_code": 1, "said": "Error: password authentication failed for user \"claims_portal\" (redacted)" }

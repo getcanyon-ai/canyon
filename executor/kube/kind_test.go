@@ -187,8 +187,8 @@ func app(t *testing.T, app string) *running {
 	if status, out := call(t, http.MethodGet, "/running?app="+app+"&target=preview", nil); status != http.StatusOK || !strings.Contains(string(out), image) {
 		t.Errorf("/running %s: %d %s, not %s", app, status, out, image)
 	}
-	asked := map[string]any{"containers": []map[string]string{{"app": app, "target": "preview"}, {"app": app, "target": "prod"}}}                                                                     // under the executor's own Role: its lists are allowed
-	if status, out := call(t, http.MethodPost, "/running", asked); status != http.StatusOK || string(out) != `{"running":[{"app":"`+app+`","target":"preview"}],"restarting":[],"stopped":[]}`+"\n" { // without why, never a line
+	asked := map[string]any{"containers": []map[string]string{{"app": app, "target": "preview"}, {"app": app, "target": "prod"}}}                                                                                   // under the executor's own Role: its lists are allowed
+	if status, out := call(t, http.MethodPost, "/running", asked); status != http.StatusOK || string(out) != `{"running":[{"app":"`+app+`","target":"preview"}],"restarting":[],"starting":[],"stopped":[]}`+"\n" { // without why, never a line
 		t.Errorf("POST /running %s: %d %s", app, status, out)
 	}
 	apps[app] = r

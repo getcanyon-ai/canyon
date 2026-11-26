@@ -1260,11 +1260,12 @@ attempt always starts the container, so prod's current values reach it.
 // why those that have exited stopped (below), and only the status read asks it
 { "containers": [ { "app": "claims-portal", "target": "preview" }, { "app": "claims-archive", "target": "prod" } ], "why": true }
 // response: 200 — those asked whose app runs, each once, in the order asked; those asked whose
-// container has been started again and is up or waiting to start (below); and those asked
-// whose container is there and has exited, with its last exit code and its last line, raw, when why was
-// asked, and [] when it was not (below)
+// container has been started again and is up or waiting to start (below); those asked that a /run is
+// starting (below); and those asked whose container is there and has exited, with its last exit code and
+// its last line, raw, when why was asked, and [] when it was not (below)
 { "running": [ { "app": "claims-portal", "target": "preview" } ],
   "restarting": [ { "app": "case-dies-later", "target": "preview", "restarts": 7 } ],
+  "starting": [ { "app": "claims-archive", "target": "preview" } ],
   "stopped": [ { "app": "claims-archive", "target": "prod", "exit_code": 1, "said": "Error: connect ECONNREFUSED 10.0.4.7:5432" } ] }
 // 400 on an app or target the naming pattern refuses, on none or more than 400;
 // 502 when the executor cannot tell — never a 200 naming fewer, which a caller reads as stopped
@@ -1283,6 +1284,16 @@ asked once each (label selector `canyon.app in (…)`), and answers a Deployment
 pod, whatever its template: during a redeploy or a promotion the previous pod serves until the new
 one is available, and the app runs all along, unless the new pod has restarted (*Restarting*)
 (`GET /running` keeps its template rule, which the promote retry needs).
+
+**Starting** (**amended 2026-11-26**, #230: a promotion's switch read as stopped, and the app page said
+"Production is down" the moment a person pressed Promote). Each asked that a `/run` is starting, and that
+neither runs, restarts nor has exited, is in `starting` and nowhere else: never `stopped`, since nothing
+stopped. On Docker it is a `<app>-<target>` the daemon lists as `created`, the new container `/run` made and
+has not yet started, or one it doesn't list while it lists `<app>-<target>-previous`, the container `/run`
+set aside while its successor starts. On Kubernetes it is a Deployment with no available pod, not
+restarting, whose current template's newest pod has not ended: pending, or its `app` container waiting to
+be created (`ContainerCreating`, `PodInitializing`). An image the kubelet can't pull is not starting. A
+client that reads an answer with no `starting` reads none.
 
 **Restarting** (**amended 2026-10-05**, #1722). Each asked whose container has been started again and
 is up or waiting to start is in `restarting` and nowhere else — **never in `running`, even while it is

@@ -576,7 +576,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const top = leads(band, needs);
   // Stop leads a responder's headline, whose step it is; an admin's only where the headline is about production itself,
   // down or refusing, and otherwise waits in ⋯ (#102: it led an admin's blocked headline).
-  const headStop = role === "responder" || top.band?.covers?.includes("down:prod") === true || top.band?.repeats?.includes("refused:prod") === true ? stop : null;
+  const headStop = role === "responder" || top.band?.covers?.some((key) => key === "down:prod" || key === "starting:prod") === true || top.band?.repeats?.includes("refused:prod") === true ? stop : null;
   // A blocked version's step for whoever fixes it, the headline's one filled button (#102): every open blocking finding,
   // copied for their coding agent. The run read's findings are a team member's alone, as the page's full read is.
   const fixing = top.band?.covers?.includes("blocked") === true && top.band.primary === undefined && reading !== null && reading.state === "blocked"

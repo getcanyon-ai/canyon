@@ -308,7 +308,7 @@ func (a *app) startRun(ctx context.Context, r *http.Request, id, pkg string, dep
 		}
 		requests = level == "owner"
 	}
-	run, superseded, err = runs.StartTx(ctx, tx, a.durable, runs.StartInput{Project: id, Package: pkg, Deploy: deploy, Actor: actorOf(ctx), RollbackTo: rollbackTo, Reason: reason, Policy: snap, Requests: requests})
+	run, superseded, err = runs.StartTx(ctx, tx, a.durable, runs.StartInput{Project: id, Package: pkg, Deploy: deploy, Actor: actorOf(ctx), RollbackTo: rollbackTo, Reason: reason, Policy: snap, Requests: requests, Laptop: a.telemetry.mode == "laptop"}) // CANYON_INSTALL_MODE: the demo's host (#237)
 	if errors.Is(err, runs.ErrUndeploying) {
 		return runs.Run{}, "", nil, undeploying(id)
 	}

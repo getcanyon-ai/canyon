@@ -156,9 +156,6 @@ type Pipeline struct {
 	// SignInOff is a host with sign-in off (CANYON_AUTH off or demo), where anyone who reaches it opens every app: a
 	// deploy says so in place of the shared line (contracts/events.md, build.log; #2498). Zero, a host with sign-in.
 	SignInOff bool
-	// Laptop is a host whose CANYON_INSTALL_MODE is laptop, the demo's: a scan the demo leaves off is said as
-	// skipped there (contracts/events.md, progress; #237). Zero, any other host.
-	Laptop    bool
 	Pool      *pgxpool.Pool
 	Repos     string // <Repos>/<project>.git is the project's bare repository
 	Gate      GateFunc
@@ -706,11 +703,6 @@ func (p *Pipeline) scanAll(ctx dbos.Context, in Input) (ids []int64, missed []un
 	slices.SortFunc(pending, func(a, b policy.Rule) int { return strings.Compare(a.ID, b.ID) })
 	if stop, err := p.cancelled(ctx, in, false); err != nil || stop {
 		return nil, nil, true, err
-	}
-	for _, tool := range skippedScans(in.Policy, p.Laptop) { // said, never scanned: its rules stay not checked on this host
-		if err := p.skippedScan(ctx, in, tool, "laptop_demo"); err != nil {
-			return nil, nil, false, err
-		}
 	}
 	handles := make([]dbos.WorkflowHandle[scanned], len(pending))
 	for i, rule := range pending {

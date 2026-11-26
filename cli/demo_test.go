@@ -535,7 +535,7 @@ func TestDemoUpKeepsNoBuildCachesForTheSampleApps(t *testing.T) {
 // it on and starts nothing; with Trivy on, or without the flag, it says nothing of Trivy.
 func TestDemoUpWithTrivyIsTheDeployersToTurnOn(t *testing.T) {
 	m := demoOn(t)
-	if out, _, code := m.run("up", "--help"); code != exitOK || !strings.Contains(out, "  --with-trivy      also run Trivy, which the demo leaves off: about 2 GB more to download and keep\n") {
+	if out, _, code := m.run("up", "--help"); code != exitOK || !strings.Contains(out, "  --with-trivy      Also run Trivy, which the demo leaves off: about 2 GB more to download and keep\n") {
 		t.Fatalf("up --help: exit %d\n%s", code, out)
 	}
 	if _, errs, code := m.run("up"); code != exitOK {

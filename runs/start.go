@@ -148,6 +148,10 @@ type StartInput struct {
 	Policy policy.Snapshot // composed once at run start, under the ledger lock a policy apply also takes: the gate derives every finding's blocks from it, and a replay reads it back from the journal
 
 	Requests bool // the caller owns the app or is an admin, judged by the request that starts the run: its deploy names the app's pending access requests
+
+	// Laptop is a host whose CANYON_INSTALL_MODE is laptop, the demo's: a scan the demo leaves off is said as skipped
+	// as the run starts (contracts/events.md, progress; #237). Zero, any other host.
+	Laptop bool
 }
 
 // Input is what the gate-run workflow receives: everything a replay needs, frozen at start.
@@ -296,6 +300,13 @@ func StartTx(ctx context.Context, tx pgx.Tx, dc dbos.Client, in StartInput) (run
 	}
 	if _, err := events.AppendRunTx(ctx, tx, id, in.Project, events.RunState, "state:pending", map[string]any{"state": "pending"}); err != nil {
 		return Run{}, "", err
+	}
+	if in.Promote == nil { // a review's scans: one the demo leaves off is said now, in the start's own transaction, so no workflow step writes it
+		for _, tool := range skippedScans(in.Policy, in.Laptop) {
+			if _, err := events.AppendRunTx(ctx, tx, id, in.Project, events.Progress, "skipped:"+tool, map[string]any{"step": "scan", "tool": tool, "status": "skipped", "reason": "laptop_demo"}); err != nil {
+				return Run{}, "", err
+			}
+		}
 	}
 	var reports []int64
 	if in.Promote == nil {

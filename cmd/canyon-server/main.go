@@ -242,7 +242,7 @@ func main() {
 		log.Fatal(err)
 	}
 	review.Pool, review.SignedIn = pool, mode == authOIDC
-	pipe := &runs.Pipeline{SignInOff: mode != authOIDC, Laptop: os.Getenv("CANYON_INSTALL_MODE") == "laptop", Pool: pool, Repos: repos, Gate: review.Review, Executor: executorClient(executorURL), PublicURL: public.Scheme + "://" + public.Host, JWKSURL: jwksURL, Vault: keys, IdentityImage: identityImage} // the public URL as the token's issuer
+	pipe := &runs.Pipeline{SignInOff: mode != authOIDC, Pool: pool, Repos: repos, Gate: review.Review, Executor: executorClient(executorURL), PublicURL: public.Scheme + "://" + public.Host, JWKSURL: jwksURL, Vault: keys, IdentityImage: identityImage} // the public URL as the token's issuer
 	if err := refuseHandOffUnserved(ctx, pool, pipe); err != nil {
 		log.Fatal(err)
 	}

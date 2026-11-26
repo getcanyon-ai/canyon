@@ -122,7 +122,7 @@ func runDemo(ctx context.Context, a *app, args []string) int {
 		if form == "down" {
 			fs.BoolVar(&purge, "purge", false, "Also remove the demo's images and its files in ~/.canyon/demo")
 		} else {
-			fs.BoolVar(&trivy, "with-trivy", false, "also run Trivy, which the demo leaves off: about 2 GB more to download and keep")
+			fs.BoolVar(&trivy, "with-trivy", false, "Also run Trivy, which the demo leaves off: about 2 GB more to download and keep")
 		}
 	})
 	if err != nil {

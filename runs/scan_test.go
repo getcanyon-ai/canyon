@@ -242,18 +242,16 @@ func TestABusyExecutorIsWaitedOutNeverAFinding(t *testing.T) {
 	}
 }
 
-// The laptop demo leaves trivy's run off (#237): a laptop host's run writes its scan skipped, with laptop_demo, once,
-// asks the executor for no scan, and names deps.known-vuln not checked on this host, never clean; another host writes
+// The laptop demo leaves trivy's run off (#237): a laptop host's run writes its scan skipped, with laptop_demo, once, as
+// it starts, asks the executor for no scan, and names deps.known-vuln not checked on this host, never clean; another host writes
 // no skipped row, only that line.
 func TestALaptopRunSaysTrivySkippedAndItsRuleNotChecked(t *testing.T) {
 	for _, laptop := range []bool{true, false} {
 		p, ctx, f, snap := scanning(t)
 		i := slices.IndexFunc(snap.Rules, func(r policy.Rule) bool { return r.ID == "sarif.trivy" })
 		snap.Rules[i].Run, snap.Rules[i].State = false, policy.Advisory
-		pipe.Laptop = laptop
-		t.Cleanup(func() { pipe.Laptop = false })
 		before := f.Scans.Load()
-		run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap})
+		run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap, Laptop: laptop})
 		if err != nil {
 			t.Fatal(err)
 		}

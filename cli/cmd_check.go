@@ -55,11 +55,12 @@ type runFix struct {
 // checkRun is everything one canyon check learned, and the one value a renderer takes.
 type checkRun struct {
 	App, Host, Run, StartedAt string
-	Force                     bool     // deploy --force: send this tree even if the app's current package is not this copy's base
-	Create                    bool     // deploy --create, or §3.2's setup: an app this host doesn't have is made, never refused
-	Base                      string   // the package .canyon/base names for this app, which a deploy's upload sends; "" for none
-	Reports                   []string // --sarif: the reports to attach to the package before the run
-	Package                   string   // the package the upload named: the one the reports attach to and the run reviews
+	Force                     bool          // deploy --force: send this tree even if the app's current package is not this copy's base
+	Create                    bool          // deploy --create, or §3.2's setup: an app this host doesn't have is made, never refused
+	Base                      string        // the package .canyon/base names for this app, which a deploy's upload sends; "" for none
+	Reports                   []string      // --sarif: the reports to attach to the package before the run
+	Package                   string        // the package the upload named: the one the reports attach to and the run reviews
+	Skipped                   []progressRow // the scans the run said it skipped, each said on a line of its own among the tools'
 	Files                     int
 	Bytes                     int64
 	Elapsed                   time.Duration

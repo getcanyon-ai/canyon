@@ -140,8 +140,12 @@ step "the demo, as a visitor starts it: canyon demo up"
 # docker system df then. Canyon's own four images were built above, so their layers were on disk before up pulled
 # them: the difference leaves them out, and docker system df names their sizes. It decides nothing.
 used() { df -B1 --output=used,target "$(docker info --format '{{.DockerRootDir}}')" /var/lib/containerd 2>/dev/null | tail -n +2 | sort -u -k2 | awk '{s += $1} END {print s}'; }
+# What the runner's own interfaces received: what up downloaded, the release's images aside, which come from the
+# registry above over loopback (#237). Docker's bridges and the containers' veth pairs carry the same bytes again.
+received() { awk 'NR > 2 { gsub(":", " "); if ($1 !~ /^(lo|docker|br-|veth)/) s += $2 } END { print s + 0 }' /proc/net/dev 2>/dev/null; }
 store=$(docker info --format '{{.Driver}} {{json .DriverStatus}}')
 before=$(used)
+got=$(received)
 (while :; do used; sleep 5; done >"$work/used") &
 sampler=$!
 run 0 demo up
@@ -149,7 +153,7 @@ kill "$sampler" 2>/dev/null || true
 sampler=
 after=$(used)
 peak=$( (cat "$work/used"; echo "$after") | sort -n | tail -1)
-echo "demo size: store=$store before=$before up=$after peak=$peak (bytes used)"
+echo "demo size: store=$store before=$before up=$after peak=$peak (bytes used) downloaded=$(($(received) - got))"
 docker system df -v
 grep -qF "$ready" "$work/out" || fail "canyon demo up never showed: $ready"
 says 'Canyon is ready at http://localhost:7777$'

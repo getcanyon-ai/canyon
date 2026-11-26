@@ -412,9 +412,10 @@
               "allOf": [
                 { "if": { "properties": { "step": { "const": "scan" } } }, "then": { "required": ["tool"] }, "else": { "not": { "required": ["tool"] } } },
                 { "if": { "required": ["position"] }, "then": { "properties": { "status": { "const": "queued" } } } },
-                { "if": { "required": ["duration_ms"] }, "then": { "properties": { "status": { "enum": ["done", "failed"] } } } } ],
+                { "if": { "required": ["duration_ms"] }, "then": { "properties": { "status": { "enum": ["done", "failed"] } } } },
+                { "if": { "properties": { "status": { "const": "skipped" } } }, "then": { "required": ["reason"], "properties": { "step": { "const": "scan" } } }, "else": { "not": { "required": ["reason"] } } } ],
               "properties": { "step": { "enum": ["scan", "build", "start", "rebase", "image-sbom", "watch"] }, "tool": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
-                "status": { "enum": ["queued", "running", "done", "failed"] }, "position": { "type": "integer", "minimum": 1 }, "duration_ms": { "type": "integer", "minimum": 0 } } } },
+                "status": { "enum": ["queued", "running", "done", "failed", "skipped"] }, "reason": { "enum": ["laptop_demo"] }, "position": { "type": "integer", "minimum": 1 }, "duration_ms": { "type": "integer", "minimum": 0 } } } },
             "builds": { "type": "array", "uniqueItems": true, "maxItems": 64, "items": { "type": "string", "pattern": "^[A-Za-z0-9][ -~]{0,127}$" } },
             "errored": { "const": true },
             "fix": {

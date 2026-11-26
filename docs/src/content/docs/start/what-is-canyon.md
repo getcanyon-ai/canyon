@@ -59,7 +59,7 @@ provider, and you back up what Canyon holds.
 
 | | Where | You need | People sign in | What it keeps | Guide |
 |---|---|---|---|---|---|
-| **Try it** | Your laptop | Docker. 20 to 30 minutes the first time, one `docker compose up` | Nobody: sign-in is off, on localhost only | Throwaway | [Try it on your laptop](/start/try-it-on-your-laptop/) |
+| **Try it** | Your laptop | Docker. 15 to 20 minutes the first time, one `docker compose up` | Nobody: sign-in is off, on localhost only | Throwaway | [Try it on your laptop](/start/try-it-on-your-laptop/) |
 | | One Kubernetes or k3s node (Helm chart) | A node and a domain. `helm install`, then three commands | Through the Pocket ID the chart brings, or your provider | Throwaway: no backups | [Try it on Kubernetes (Helm)](/self-host/helm/) |
 | **Run it** | One server, plain Docker | A Linux server with Docker, a domain and an OIDC client | Through your identity provider | You back it up | [One Docker server](/self-host/docker/) |
 | | One server, step by step (k3s) | A Linux server, a domain and an OIDC client | Through your identity provider | You back it up | [One k3s host](/self-host/k3s/) |
@@ -92,6 +92,6 @@ to that endpoint.
   multi-tenant.
 
 **Next:** [Try it on your laptop](/start/try-it-on-your-laptop/): Canyon blocks a SQL injection, then
-runs an app of your own. The first start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower
+runs an app of your own. The first start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower
 line. If your company already runs Canyon,
 [deploy on it](/start/deploy-on-your-companys-canyon/) instead.

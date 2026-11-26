@@ -16,8 +16,15 @@ again() {
 }
 until canyon fleet --host "$host" >/dev/null 2>&1; do sleep 2; done # the server answers once it is ready
 canyon login "$host" >/dev/null # keeps the host's public URL, so the deploys below link the app's page where the host's browser opens it, not at server:7777 (#2019)
+# The laptop demo runs without Trivy unless canyon demo up --with-trivy asked for it (cli.md §6.14; #237): its image and
+# its vulnerability database, about 2 GB, are never fetched. Its rule stays on, so each review names what it left
+# unchecked (deps.known-vuln), never clean. Before the first deploy, so none scans with it. Sign-in is off: no session.
+if [ "${CANYON_DEMO_TRIVY:-}" != on ]; then
+  curl -fsS -o /dev/null -X PUT -H 'Content-Type: application/json' -d '{"run":false}' "$host/api/v1/policies/sarif.trivy?apply=true" ||
+    { echo "The demo could not leave Trivy off: PUT /api/v1/policies/sarif.trivy failed."; echo "$carry_on"; exit 1; }
+fi
 echo "Building the sample apps: claims-portal, endorsement-hub, claims-archive and premium-ledger."
-echo "A first start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower line: it downloads about 3.5 GB, most of it Canyon's build image and the scanners' databases (and the databases again after canyon demo down). The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes."
+echo "A first start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower line: it downloads about 1.5 GB, most of it Canyon's images and its Node build image. The executor-1 lines below show how it's going. Once everything is here, a start takes 5 to 10 minutes."
 for app in claims-portal endorsement-hub claims-archive premium-ledger; do
   (cd "$demo/$app" && canyon deploy --force --host "$host") || again # --force: it replaces the seeded record of the app, which no copy started from
   echo "canyon-demo: running $app" # canyon demo up says each as a line of progress (cli/demo_up.go, demoReadyPrefix)

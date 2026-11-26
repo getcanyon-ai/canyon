@@ -221,6 +221,21 @@ describe("the app page", () => {
     expect(region("What Canyon checked").getAllByText("skipped, no AI model set up")).toHaveLength(2);
   });
 
+  // The laptop demo leaves trivy off (#237): its skipped scan is trivy's row, skipped, never clean, with why under it once.
+  it("shows a scan the laptop demo leaves off as skipped, with how to turn it on", async () => {
+    const off = { id: 63, kind: "progress", data: { step: "scan", tool: "trivy", status: "skipped", reason: "laptop_demo" } };
+    server({ ...reads(() => page.status), [TIMELINE]: { body: { rows: [skipped, off], next: null } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    await screen.findByText(BLOCKED);
+    const checked = await screen.findByRole("region", { name: "What Canyon checked" });
+    const note = await within(checked).findByText("Off in the laptop demo. canyon demo up --with-trivy turns it on.");
+    const row = note.closest("li");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("trivy")).toBeDefined();
+    expect(within(row as HTMLElement).getByText("skipped")).toBeDefined(); // the word, the note never repeating it
+    expect(within(checked).getAllByText("Off in the laptop demo. canyon demo up --with-trivy turns it on.")).toHaveLength(1);
+  });
+
   // An audit row's view → pins the page to the run it ruled on: its findings, not the newest run's.
   it("shows the pinned run's verdict and links back to the newest run", async () => {
     const older: RunRead = { id: "gr_6c12", package: "pkg_7a1c", state: "clean", blocking: 0, warnings: 0, findings: [] };

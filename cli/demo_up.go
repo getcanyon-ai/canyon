@@ -68,7 +68,11 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 		if demoStale(ctx, dir, base) {
 			a.printf("\n  %s The demo running here is from a different release than this CLI (%s). To switch: canyon demo down, then canyon demo up.\n", a.render.glyph(stateWarn), Version)
 		}
-		return a.demoReady(ctx, dir)
+		code := a.demoReady(ctx, dir)
+		if code == exitOK && ctx.Value(demoTrivyEnv{}) == "on" && demoTrivyOff(ctx) { // a running demo deploys nothing again
+			a.printf("\n  Trivy is off in this demo. To turn it on, run canyon demo down, then canyon demo up --with-trivy. Or turn it on in Guardrails › Scanners.\n")
+		}
+		return code
 	}
 	a.demoStep("Fetching the demo into ~/.canyon/demo")
 	if err := demoFetch(ctx, dir, base); err != nil {
@@ -88,7 +92,7 @@ func (a *app) demoUp(ctx context.Context, dir string) int {
 	}); err != nil {
 		return a.demoFailed("Canyon's images could not be downloaded", err)
 	}
-	a.demoStep("Starting Canyon and its sample apps. A first start takes 20 to 30 minutes.")
+	a.demoStep("Starting Canyon and its sample apps. A first start takes 15 to 20 minutes.")
 	if _, err := demoDocker(ctx, stack, nil, demoCompose("up", "-d")...); err != nil {
 		return a.demoFailed("docker compose up failed", err)
 	}
@@ -140,6 +144,30 @@ func (a *app) demoDropCaches(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// demoTrivyOff is whether the demo's org has trivy's run off, as its deployer leaves it without --with-trivy (#237).
+// An answer it can't read counts as off: a person who asked for Trivy is then told how to have it.
+func demoTrivyOff(ctx context.Context) bool {
+	c := newClient(demoURL)
+	if _, err := anonymousSession(ctx, c); err != nil { // sign-in is off: anyone who reaches it reads its policies
+		return true
+	}
+	var read struct {
+		Policies []struct {
+			ID  string `json:"id"`
+			Run bool   `json:"run"`
+		} `json:"policies"`
+	}
+	if err := c.get(ctx, "/api/v1/policies", &read); err != nil {
+		return true
+	}
+	for _, p := range read.Policies {
+		if p.ID == "sarif.trivy" {
+			return !p.Run
+		}
+	}
+	return true
 }
 
 // demoDeployed is the deployer's exit status, "" while it runs or when there is none.

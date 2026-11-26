@@ -399,7 +399,11 @@ func (a *app) sayRunning(ctx context.Context, envs map[string]map[string]any, wh
 			m["state"] = "running"
 		}
 	}
-	_ = runs.Starting // planted, to be reverted: the executor's starting is not read, so a switch reads stopped (#230's red)
+	for _, s := range runs.Starting { // a /run's switch, never down (#230): after running, so an executor naming both is read as starting
+		if m, ok := envs[s.App][s.Target].(map[string]any); ok {
+			m["state"] = "starting"
+		}
+	}
 	for _, r := range runs.Restarting { // after running: an executor naming both is read as restarting, which fails closed
 		if m, ok := envs[r.App][r.Target].(map[string]any); ok {
 			m["state"] = "restarting"

@@ -32,8 +32,8 @@ const (
 	demoCPUs        = 4
 	demoMemoryGB    = 6
 	demoDiskGB      = 18
-	// On Docker's containerd image store a cold up peaked at 22.1 GB, against 10.1 GB on overlay2 (#165): 12 GB more.
-	demoContainerdDiskGB = demoDiskGB + 12
+	// On Docker's containerd image store a cold up peaked at 11.7 GB, against 8.9 GB on overlay2 (#235): 3 GB more.
+	demoContainerdDiskGB = demoDiskGB + 3
 	demoTries            = 3
 	demoTail             = 20 // lines of the deployer's log a failed start shows
 )
@@ -362,7 +362,7 @@ var demoSampleApps = []string{"claims-portal", "endorsement-hub", "claims-archiv
 // demoDiskFix is the one fix for too little free disk. It never names the image store: that is the person's Docker.
 func demoDiskFix(colima bool) string {
 	if colima {
-		return "free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60"
+		return "free disk space in the VM, or give it a bigger disk: colima stop && colima start --disk 60" // Colima 0.5.3 and later grow the VM's disk at start (its FAQ)
 	}
 	return "free disk space, or give Docker's VM a larger disk in its settings."
 }

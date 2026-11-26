@@ -11,7 +11,7 @@
      Fix: colima stop && colima start --cpu 4 --memory 8
 
   4. Docker has 11 GB of free disk, and the demo needs about 18 GB.
-     Fix: free disk space in the VM, or make a larger one. A new VM loses what the old one holds: colima delete && colima start --cpu 4 --memory 8 --disk 60
+     Fix: free disk space in the VM, or give it a bigger disk: colima stop && colima start --disk 60
 
   5. Port 7777 on 127.0.0.1 is in use by another program, and Canyon's dashboard needs it.
      Fix: stop that program. To see which it is: lsof -nP -iTCP:7777 -sTCP:LISTEN

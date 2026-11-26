@@ -412,8 +412,8 @@ func TestDemoUpAsksTheDiskItsImageStoreNeeds(t *testing.T) {
 		name, store, want string
 	}{
 		{"overlay2", overlay2Status, ""},
-		{"containerd", containerdStatus, "1. Docker has 20 GB of free disk, and the demo needs about 30 GB with Docker's containerd image store, which this Docker uses."},
-		{"unread", `"not a list"`, "1. Docker has 20 GB of free disk, and the demo needs about 30 GB with Docker's containerd image store, which this Docker uses."},
+		{"containerd", containerdStatus, "1. Docker has 20 GB of free disk, and the demo needs about 21 GB with Docker's containerd image store, which this Docker uses."},
+		{"unread", `"not a list"`, "1. Docker has 20 GB of free disk, and the demo needs about 21 GB with Docker's containerd image store, which this Docker uses."},
 		{"no status", "null", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -59,6 +59,8 @@ type demoMachine struct {
 	cleanEnv int                 // compose config --images asked without the shell's CANYON_IMAGE_* variables
 	store    string              // docker info's DriverStatus, as JSON: overlay2's unless a case says otherwise
 	theirs   map[string]bool     // the containers, networks and volumes another project's executor labelled as its own
+	trivy    []string            // CANYON_DEMO_TRIVY as each compose up -d was handed it, "unset" when it wasn't
+	trivyRun bool                // the demo's org has sarif.trivy's run on
 }
 
 // docker info's DriverStatus on each of Docker's two image stores, as hosted runners answered it (#165).
@@ -100,6 +102,8 @@ func demoOn(t *testing.T) *demoMachine {
 		switch r.URL.Path {
 		case "/auth/config":
 			_, _ = io.WriteString(w, `{"canyon":true,"auth":"off","org":"","device":false}`)
+		case "/api/v1/policies":
+			must(t, json.NewEncoder(w).Encode(map[string]any{"policies": []map[string]any{{"id": "sarif.trivy", "run": m.trivyRun}}}))
 		case "/api/v1/fleet":
 			rows := []map[string]string{}
 			for _, app := range m.apps {
@@ -128,6 +132,10 @@ func demoOn(t *testing.T) *demoMachine {
 			if answer, err, ok := m.docker(line); ok {
 				return answer, err
 			}
+		}
+		if line == compose("up -d") {
+			trivy, ok := ctx.Value(demoTrivyEnv{}).(string)
+			m.trivy = append(m.trivy, map[bool]string{true: trivy, false: "unset"}[ok])
 		}
 		if line == compose("config --images") && ctx.Value(demoNoImageEnv{}) != nil {
 			m.cleanEnv++ // asked without the shell's CANYON_IMAGE_* variables
@@ -519,6 +527,41 @@ func TestDemoUpKeepsNoBuildCachesForTheSampleApps(t *testing.T) {
 	}
 	if want := "Couldn't remove canyon-cache-premium-ledger-build, a sample app's build cache: "; !strings.Contains(errs, want) || strings.Contains(errs, "claims-archive") {
 		t.Errorf("stderr %q, want one warning: %s…", errs, want)
+	}
+}
+
+// The laptop demo runs without Trivy unless asked (#237): up hands compose CANYON_DEMO_TRIVY, on with --with-trivy and
+// empty without, so the shell's own never decides; on a running demo whose Trivy is off, --with-trivy says how to turn
+// it on and starts nothing; with Trivy on, or without the flag, it says nothing of Trivy.
+func TestDemoUpWithTrivyIsTheDeployersToTurnOn(t *testing.T) {
+	m := demoOn(t)
+	if out, _, code := m.run("up", "--help"); code != exitOK || !strings.Contains(out, "  --with-trivy      also run Trivy, which the demo leaves off: about 2 GB more to download and keep\n") {
+		t.Fatalf("up --help: exit %d\n%s", code, out)
+	}
+	if _, errs, code := m.run("up"); code != exitOK {
+		t.Fatalf("up: exit %d, %s", code, errs)
+	}
+	if _, errs, code := m.run("down"); code != exitOK {
+		t.Fatalf("down: exit %d, %s", code, errs)
+	}
+	if _, errs, code := m.run("up", "--with-trivy"); code != exitOK || !slices.Equal(m.trivy, []string{"", "on"}) {
+		t.Fatalf("up --with-trivy: exit %d, %s; compose up -d was handed CANYON_DEMO_TRIVY %q", code, errs, m.trivy)
+	}
+	const said = "\n  Trivy is off in this demo. To turn it on, run canyon demo down, then canyon demo up --with-trivy. Or turn it on in Guardrails › Scanners.\n"
+	for _, c := range []struct {
+		args []string
+		run  bool
+		want bool
+	}{
+		{[]string{"up", "--with-trivy"}, false, true},
+		{[]string{"up", "--with-trivy"}, true, false},
+		{[]string{"up"}, false, false},
+	} {
+		m.trivyRun = c.run
+		out, errs, code := m.run(c.args...)
+		if code != exitOK || strings.Contains(out, said) != c.want || len(m.trivy) != 2 {
+			t.Errorf("%v on a running demo, trivy's run %v: exit %d, stderr %q, compose up -d %d times\n%s", c.args, c.run, code, errs, len(m.trivy), out)
+		}
 	}
 }
 
@@ -1072,6 +1115,34 @@ func TestTheDeployerSaysEachSampleAppTheWayUpReadsIt(t *testing.T) {
 	for _, want := range []string{"for app in " + strings.Join(demoSampleApps, " ") + "; do", `echo "` + demoReadyPrefix + `$app"`} {
 		if !strings.Contains(string(script), want) {
 			t.Errorf("demo/apps/run.sh does not say %q", want)
+		}
+	}
+}
+
+// demo/apps/run.sh leaves Trivy off unless canyon demo up --with-trivy asked for it (#237): before its first deploy it
+// turns sarif.trivy's run off, so no scan fetches Trivy's image or database; with CANYON_DEMO_TRIVY=on it leaves the
+// rule as it ships. Run with stand-ins for canyon and curl, which say what each was asked, in order.
+func TestTheDeployerLeavesTrivyOffUnlessAskedFor(t *testing.T) {
+	script, err := filepath.Abs(filepath.Join("..", "demo", "apps", "run.sh"))
+	must(t, err)
+	for _, trivy := range []string{"", "on"} {
+		bin, said := t.TempDir(), filepath.Join(t.TempDir(), "said")
+		must(t, os.WriteFile(filepath.Join(bin, "canyon"), []byte("#!/bin/sh\necho \"canyon $1\" >> '"+said+"'\ncase \"$1 $PWD\" in deploy*claims-portal-next) exit 2;; esac\n"), 0o700)) //nolint:gosec // a test fake must be executable
+		must(t, os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\necho \"curl $*\" >> '"+said+"'\ncase \"$*\" in *http_code*) printf 200;; esac\n"), 0o700))                    //nolint:gosec // a test fake must be executable
+		cmd := exec.Command("/bin/sh", script)                                                                                                                                            //nolint:gosec // this tree's own deployer script, run with stand-ins
+		cmd.Env = []string{"PATH=" + bin + ":/usr/bin:/bin", "CANYON_DEMO_TRIVY=" + trivy}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("CANYON_DEMO_TRIVY=%q: run.sh: %v\n%s", trivy, err, out)
+		}
+		b, err := os.ReadFile(said) //nolint:gosec // the test's own file
+		must(t, err)
+		lines := strings.Split(string(b), "\n")
+		put := slices.IndexFunc(lines, func(l string) bool {
+			return strings.Contains(l, "-X PUT") && strings.Contains(l, `-d {"run":false}`) && strings.HasSuffix(l, "/api/v1/policies/sarif.trivy?apply=true")
+		})
+		deploy := slices.IndexFunc(lines, func(l string) bool { return l == "canyon deploy" })
+		if trivy == "on" && put >= 0 || trivy == "" && (put < 0 || deploy < put) {
+			t.Errorf("CANYON_DEMO_TRIVY=%q: the deployer asked, in order:\n%s", trivy, b)
 		}
 	}
 }

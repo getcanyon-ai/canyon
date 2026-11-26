@@ -51,11 +51,12 @@ Blocked: the agent built SQL from the request. · Passed: after the agent's one-
 ```text
   ✗ Review blocked · 1 blocking finding
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✗ opengrep           1 blocking finding
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ────────────────────────────────────────────────────────────────────────────
 

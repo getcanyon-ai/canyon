@@ -242,6 +242,52 @@ func TestABusyExecutorIsWaitedOutNeverAFinding(t *testing.T) {
 	}
 }
 
+// The laptop demo leaves trivy's run off (#237): a laptop host's run writes its scan skipped, with laptop_demo, once,
+// asks the executor for no scan, and names deps.known-vuln not checked on this host, never clean; another host writes
+// no skipped row, only that line.
+func TestALaptopRunSaysTrivySkippedAndItsRuleNotChecked(t *testing.T) {
+	for _, laptop := range []bool{true, false} {
+		p, ctx, f, snap := scanning(t)
+		i := slices.IndexFunc(snap.Rules, func(r policy.Rule) bool { return r.ID == "sarif.trivy" })
+		snap.Rules[i].Run, snap.Rules[i].State = false, policy.Advisory
+		pipe.Laptop = laptop
+		t.Cleanup(func() { pipe.Laptop = false })
+		before := f.Scans.Load()
+		run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state, failure := waitEnded(t, ctx, p, run.ID); state == "failed" {
+			t.Fatalf("laptop %v: the run ended %s %s", laptop, state, why(failure))
+		}
+		var reasons []string
+		rows, err := p.Query(ctx, "SELECT data->>'reason' FROM timeline_rows WHERE run_id = $1 AND kind = 'progress' AND data->>'tool' = 'trivy' AND data->>'status' = 'skipped'", run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var r string
+			must(t, rows.Scan(&r))
+			reasons = append(reasons, r)
+		}
+		rows.Close()
+		if want := map[bool][]string{true: {"laptop_demo"}, false: nil}[laptop]; !slices.Equal(reasons, want) || f.Scans.Load() != before {
+			t.Fatalf("laptop %v: skipped rows %q, want %q; %d scans asked", laptop, reasons, want, f.Scans.Load()-before)
+		}
+		said := false
+		for _, r := range verdictOf(t, ctx, p, run.ID).Runs {
+			for _, inv := range r.Invocations {
+				for _, n := range inv.ToolExecutionNotifications {
+					said = said || strings.Contains(n.Message.Text, "not checked on this host: ") && strings.Contains(n.Message.Text, "deps.known-vuln")
+				}
+			}
+		}
+		if !said {
+			t.Fatalf("laptop %v: deps.known-vuln was not named not checked on this host", laptop)
+		}
+	}
+}
+
 // progressOf is a scan's progress statuses, oldest first (contracts/events.md, progress).
 func progressOf(t *testing.T, ctx context.Context, p *pgxpool.Pool, run, tool string) []string {
 	t.Helper()

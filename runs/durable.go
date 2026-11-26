@@ -25,7 +25,7 @@ import (
 // stopped (#2271). Left at DBOS's default, a hash of the binary, every build would be a version of its
 // own. handOver moves queued work across versions. DBOS__APPVERSION and DBOS__VMID in the environment
 // would override this and the executor id; neither is ever set for the server.
-const durableVersion = "canyon-v12"
+const durableVersion = "canyon-v13"
 
 // workflowSets records, sorted, the workflows each application version names; a recorded set never
 // changes. Launch refuses a server whose workflows are not its version's set.
@@ -48,6 +48,11 @@ var workflowSets = map[string][]string{
 	// rebuild patch queued or under way then fails on it with nothing deployed, so let rebuild patches end before rolling
 	// back (#2117)
 	"canyon-v12": {"build", "gate-run", "github-check", "github-keep", "image.sbom", "patch.rescan", "patch.watch", "release-remove", "scan"},
+	// a laptop host's gate-run writes a skipped scan's progress row in a step of its own before its scans start
+	// (#237), a step a v12 gate-run has not: the version keeps a v12 server from claiming one while a v13 server runs.
+	// Back, a v12 server takes a laptop host's queued runs about 30 s after the last v13 server stops, and writes no
+	// skipped row: Trivy's row is then missing from the check list, and its rules are still named not checked.
+	"canyon-v13": {"build", "gate-run", "github-check", "github-keep", "image.sbom", "patch.rescan", "patch.watch", "release-remove", "scan"},
 }
 
 // beatEvery is how often a server writes its durable_executors row, and staleAfter how long another's

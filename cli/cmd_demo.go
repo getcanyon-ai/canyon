@@ -30,6 +30,12 @@ var (
 		if ctx.Value(demoNoImageEnv{}) != nil {
 			cmd.Env = demoWithoutImageEnv(os.Environ())
 		}
+		if trivy, ok := ctx.Value(demoTrivyEnv{}).(string); ok { // set either way: the shell's own never decides (#237)
+			if cmd.Env == nil {
+				cmd.Env = os.Environ()
+			}
+			cmd.Env = append(cmd.Env, "CANYON_DEMO_TRIVY="+trivy)
+		}
 		var answer, said bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &answer, &said
 		if out != nil {
@@ -49,6 +55,10 @@ var (
 // demoNoImageEnv, as a context's value, has demoDocker run docker without the shell's CANYON_IMAGE_* variables: the
 // compose file then names its own pins, never an image this shell names (#170).
 type demoNoImageEnv struct{}
+
+// demoTrivyEnv, as a context's value, is what demoDocker sets CANYON_DEMO_TRIVY to for docker: "on" for canyon demo up
+// --with-trivy, "" without, which docker-compose.yml's demo-apps service hands its deployer (cli.md §6.14; #237).
+type demoTrivyEnv struct{}
 
 // demoWithoutImageEnv is environ without any CANYON_IMAGE_* variable.
 func demoWithoutImageEnv(environ []string) []string {
@@ -107,10 +117,12 @@ func runDemo(ctx context.Context, a *app, args []string) int {
 		a.demoForms(a.err)
 		return exitError
 	}
-	var purge bool
+	var purge, trivy bool
 	rest, err := a.parse(args, func(fs *flag.FlagSet) {
 		if form == "down" {
 			fs.BoolVar(&purge, "purge", false, "Also remove the demo's images and its files in ~/.canyon/demo")
+		} else {
+			fs.BoolVar(&trivy, "with-trivy", false, "also run Trivy, which the demo leaves off: about 2 GB more to download and keep")
 		}
 	})
 	if err != nil {
@@ -126,7 +138,7 @@ func runDemo(ctx context.Context, a *app, args []string) int {
 	if form == "down" {
 		return a.demoDown(ctx, dir, purge)
 	}
-	return a.demoUp(ctx, dir)
+	return a.demoUp(context.WithValue(ctx, demoTrivyEnv{}, map[bool]string{true: "on"}[trivy]), dir)
 }
 
 // demoForms is the forms this binary runs, as skillForms is skill's: `canyon --help` has one row.

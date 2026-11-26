@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -254,6 +255,10 @@ func (a *app) narrate(run *checkRun) (func(timelineRow), func()) {
 			if json.Unmarshal(row.Data, &p) != nil {
 				return
 			}
+			if p.Status == "skipped" { // said among the tools' lines once the verdict names them
+				run.Skipped = append(run.Skipped, p)
+				return
+			}
 			run.Built = run.Built || p.Step == "build" // every build reports its progress (contracts/events.md)
 			if p.Step == "start" && p.Status == "running" {
 				run.AppLines = len(run.Build) // what the start writes from here is the app's and why it stopped; a start after a rebuild begins again
@@ -288,6 +293,9 @@ func (a *app) narrate(run *checkRun) (func(timelineRow), func()) {
 						run.Notes = append(run.Notes, producerNote{Producer: r.Tool.Driver.Name, Text: text})
 					}
 				}
+			}
+			for _, p := range run.Skipped { // ponytail: after the tools that ran, trivy last as in tool-name order; sort them all if another tool is ever skipped
+				run.Rows = append(run.Rows, func() { a.skippedLine(p) })
 			}
 		case "build.image": // the run waited for Canyon to build its own images before the build wrote a line (#2711)
 			var waited struct {
@@ -557,6 +565,15 @@ type progressRow struct {
 	Tool     string `json:"tool"`
 	Status   string `json:"status"`
 	Position int    `json:"position"`
+	Reason   string `json:"reason"` // a skipped scan's (contracts/events.md, progress)
+}
+
+// skippedWords are what a skipped scan's line says for its reason (design/EXPERIENCE.md; #237).
+var skippedWords = map[string]string{"laptop_demo": "skipped: off in the laptop demo; canyon demo up --with-trivy turns it on"}
+
+// skippedLine is a tool the run didn't scan, on its own line among the tools': never a clean one.
+func (a *app) skippedLine(p progressRow) {
+	a.gateLine(a.render.glyph(statePending), ansiDim, p.Tool, cmp.Or(skippedWords[p.Reason], "skipped"), "", 0)
 }
 
 func (p progressRow) key() string { return p.Step + "/" + p.Tool }

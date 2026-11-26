@@ -41,6 +41,35 @@ func verdictRow(runs ...string) timelineRow {
 
 var snykMissing = toolRun("snyk", "", []string{"snyk · no report for this package"})
 
+// The laptop demo leaves trivy off (#237): its skipped scan is a line among the tools', in Canyon's words, never a
+// clean one, under ASCII's glyphs too; a reason the CLI doesn't know reads skipped alone.
+func TestASkippedScanIsALineAmongTheTools(t *testing.T) {
+	skipped := func(reason string) timelineRow {
+		return timelineRow{ID: 70, Kind: "progress", Data: json.RawMessage(`{"step":"scan","tool":"trivy","status":"skipped","reason":"` + reason + `"}`)}
+	}
+	for _, c := range []struct {
+		ascii  bool
+		reason string
+		want   string
+	}{
+		{false, "laptop_demo", "    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on\n"},
+		{true, "laptop_demo", "    - trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on\n"},
+		{false, "another_reason", "    · trivy              skipped\n"},
+	} {
+		var b strings.Builder
+		a := &app{out: &b, verb: command{name: "check"}, render: Render{ASCII: c.ascii}}
+		run := checkRun{App: "claims-portal", Run: "gr_8f2a", Result: runResult{ID: "gr_8f2a", Package: "pkg_1", State: "clean"}}
+		watch, _ := a.narrate(&run)
+		for _, row := range []timelineRow{skipped(c.reason), verdictRow(toolRun("opengrep", "", nil))} {
+			watch(row)
+		}
+		a.reviewRows(run)
+		if out := b.String(); !strings.Contains(out, c.want) || strings.Index(out, "opengrep") > strings.Index(out, "trivy") {
+			t.Errorf("ascii %v, reason %s: the rows read\n%s\nwant, after opengrep's\n%s", c.ascii, c.reason, out, c.want)
+		}
+	}
+}
+
 // An imported tool's line counts what blocks, never what is severe (contracts/finding.md).
 const (
 	highBlocker      = `{"ruleId":"sarif.codeql.js-sql-injection",` + where + `"properties":{"canyon":{"severity":"high","blocks":true}}}`

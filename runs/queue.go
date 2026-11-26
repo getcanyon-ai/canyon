@@ -93,6 +93,15 @@ func (p *Pipeline) progress(ctx dbos.Context, in Input, step, tool, status strin
 	return err
 }
 
+// skippedScan writes the progress row of a scan the run doesn't ask for, and why (contracts/events.md, progress).
+func (p *Pipeline) skippedScan(ctx dbos.Context, in Input, tool, reason string) error {
+	_, err := dbos.RunAsStep(ctx, func(c context.Context) (struct{}, error) {
+		_, err := events.AppendRun(c, p.Pool, in.Run, in.Project, events.Progress, map[string]any{"step": "scan", "tool": tool, "status": "skipped", "reason": reason})
+		return struct{}{}, err
+	}, dbos.WithStepName("skipped scan"))
+	return err
+}
+
 // began writes a step running and answers when, journaled, for ended's running time.
 func (p *Pipeline) began(ctx dbos.Context, in Input, step string) (time.Time, error) {
 	at, err := now(ctx)

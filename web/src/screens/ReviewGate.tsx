@@ -23,9 +23,11 @@ async function rows(run: string): Promise<{ rows: Row[]; named: Map<string, Name
   const logs: ProducerLog[] = [];
   let verdict: VerdictRun[] = [];
   const status = new Map<string, string>();
+  const skipped: { tool: string; reason?: string }[] = [];
   for (let after: number | null = 0; after !== null; ) {
     const page: { rows: TimelineRow[]; next: number | null } = await getTimeline(run, after);
     for (const row of page.rows) {
+      if (row.kind === "progress") { const p = row.data as { step: string; tool?: string; status: string; reason?: string }; if (p.status === "skipped" && p.tool !== undefined) skipped.push({ tool: p.tool, reason: p.reason }); }
       if (row.kind === "producer.sarif") logs.push(row.data as ProducerLog);
       if (row.kind === "check.completed") { const done = row.data as { check: string; status: string }; status.set(done.check, done.status); }
       if (row.kind === "verdict") verdict = (row.data as { findings?: { runs?: VerdictRun[] } }).findings?.runs ?? [];
@@ -57,8 +59,16 @@ async function rows(run: string): Promise<{ rows: Row[]; named: Map<string, Name
     }
   }
   for (const row of out) row.status = status.get(row.producer);
+  // A scan the run didn't ask for is a row of its own, skipped, never clean, with why under it (contracts/events.md,
+  // progress; #237).
+  for (const one of skipped) {
+    out.push({ name: named(`sarif/${one.tool}`), producer: `sarif/${one.tool}`, results: 0, status: "skipped", notes: one.reason === undefined || SKIPPED[one.reason] === undefined ? [] : [SKIPPED[one.reason]] });
+  }
   return { rows: out, named: policies };
 }
+
+// What a skipped scan's row says under it, by its reason (design/EXPERIENCE.md; #237): the row's word says skipped.
+const SKIPPED: Record<string, string> = { laptop_demo: "Off in the laptop demo. canyon demo up --with-trivy turns it on." };
 
 // The words of a note that says what nothing read, and of one that says a tool's scan did not finish
 // (contracts/finding.md, *What nothing read is named* and *Canyon-run tools*).

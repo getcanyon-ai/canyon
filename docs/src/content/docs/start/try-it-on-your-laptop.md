@@ -174,16 +174,16 @@ terminal:
 
   Review
     · opengrep: waiting for a scanner slot (1st in line)
-    · trivy: waiting for a scanner slot (2nd in line)
 
   ✗ Review blocked · 1 blocking finding
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✗ opengrep           1 blocking finding
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ────────────────────────────────────────────────────────────────────────────
 
@@ -241,16 +241,16 @@ Here is `canyon check` on claims-portal with that line fixed:
   Review
     · gitleaks: waiting for a scanner slot (1st in line)
     · opengrep: waiting for a scanner slot (2nd in line)
-    · trivy: waiting for a scanner slot (3rd in line)
 
   ✓ Review found nothing blocking in what was checked · 0 blocking, 0 warnings
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✓ opengrep           clean
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   Done in 36.1s · run gr_0b90f66d8a15a21d
 ```
@@ -272,12 +272,13 @@ directory called `team-notes`:
 
   ✓ Review found nothing blocking in what was checked · 0 blocking, 0 warnings
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✓ opengrep           clean
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ✓ Build      [25.0s]
   ✓ Deploy     preview

@@ -116,6 +116,20 @@ func scannedTools(snap policy.Snapshot) []policy.Rule {
 	})
 }
 
+// skippedScans are the tools a laptop host's run says it skipped (contracts/events.md, progress's skipped; #237):
+// trivy, whose rule is on while its run is off, as the laptop demo leaves it. None on any other host, where a tool an
+// admin turned off is the not-checked line alone, as before.
+func skippedScans(snap policy.Snapshot, laptop bool) []string {
+	if !laptop {
+		return nil
+	}
+	i := slices.IndexFunc(snap.Rules, func(r policy.Rule) bool { return r.ID == "sarif.trivy" })
+	if i < 0 || !snap.Rules[i].On() || snap.Rules[i].Run {
+		return nil
+	}
+	return []string{"trivy"}
+}
+
 // CurrentReports answers the ids of the package's current reports of tools, one per (tool, category),
 // in that order: what a run's start journals, so a replayed step reads the same reports.
 func CurrentReports(ctx context.Context, q querier, pkg string, tools []string) ([]int64, error) {

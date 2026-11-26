@@ -705,6 +705,17 @@ def seam2(snap, golden, sarif, fleet_tiles):
     for i, row in enumerate(rows):
         for e in sorted(v.iter_errors(row), key=lambda e: list(e.path)):
             errors.append(f"timeline: row {row.get('id', i + 1)}: {'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}")
+    # events.md, progress: a scan the laptop demo leaves off is skipped with its reason, and a reason is a skipped scan's alone (#237).
+    skip = {"id": 1, "ts": "2026-11-26T00:00:00Z", "scope": "run", "run": "gr_0001", "project": "claims-portal", "kind": "progress",
+            "data": {"step": "scan", "tool": "trivy", "status": "skipped", "reason": "laptop_demo"}}
+    for e in v.iter_errors(skip):
+        errors.append(f"timeline: a skipped scan's progress row: {e.message}")
+    for name, data in (("a skipped scan with no reason", {"step": "scan", "tool": "trivy", "status": "skipped"}),
+                       ("a reason on a running scan", {"step": "scan", "tool": "trivy", "status": "running", "reason": "laptop_demo"}),
+                       ("a skipped build", {"step": "build", "status": "skipped", "reason": "laptop_demo"}),
+                       ("a reason events.md doesn't name", {"step": "scan", "tool": "trivy", "status": "skipped", "reason": "admin"})):
+        if not list(v.iter_errors({**skip, "data": data})):
+            errors.append(f"selftest: {name} was not refused")
     known = catalogue()
     # A failed run's reason is one events.md lists, and every schema that carries one lists exactly those.
     listed = failure_reasons()

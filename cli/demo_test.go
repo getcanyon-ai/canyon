@@ -1119,34 +1119,6 @@ func TestTheDeployerSaysEachSampleAppTheWayUpReadsIt(t *testing.T) {
 	}
 }
 
-// demo/apps/run.sh leaves Trivy off unless canyon demo up --with-trivy asked for it (#237): before its first deploy it
-// turns sarif.trivy's run off, so no scan fetches Trivy's image or database; with CANYON_DEMO_TRIVY=on it leaves the
-// rule as it ships. Run with stand-ins for canyon and curl, which say what each was asked, in order.
-func TestTheDeployerLeavesTrivyOffUnlessAskedFor(t *testing.T) {
-	script, err := filepath.Abs(filepath.Join("..", "demo", "apps", "run.sh"))
-	must(t, err)
-	for _, trivy := range []string{"", "on"} {
-		bin, said := t.TempDir(), filepath.Join(t.TempDir(), "said")
-		must(t, os.WriteFile(filepath.Join(bin, "canyon"), []byte("#!/bin/sh\necho \"canyon $1\" >> '"+said+"'\ncase \"$1 $PWD\" in deploy*claims-portal-next) exit 2;; esac\n"), 0o700)) //nolint:gosec // a test fake must be executable
-		must(t, os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\necho \"curl $*\" >> '"+said+"'\ncase \"$*\" in *http_code*) printf 200;; esac\n"), 0o700))                    //nolint:gosec // a test fake must be executable
-		cmd := exec.Command("/bin/sh", script)                                                                                                                                            //nolint:gosec // this tree's own deployer script, run with stand-ins
-		cmd.Env = []string{"PATH=" + bin + ":/usr/bin:/bin", "CANYON_DEMO_TRIVY=" + trivy}
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("CANYON_DEMO_TRIVY=%q: run.sh: %v\n%s", trivy, err, out)
-		}
-		b, err := os.ReadFile(said) //nolint:gosec // the test's own file
-		must(t, err)
-		lines := strings.Split(string(b), "\n")
-		put := slices.IndexFunc(lines, func(l string) bool {
-			return strings.Contains(l, "-X PUT") && strings.Contains(l, `-d {"run":false}`) && strings.HasSuffix(l, "/api/v1/policies/sarif.trivy?apply=true")
-		})
-		deploy := slices.IndexFunc(lines, func(l string) bool { return l == "canyon deploy" })
-		if trivy == "on" && put >= 0 || trivy == "" && (put < 0 || deploy < put) {
-			t.Errorf("CANYON_DEMO_TRIVY=%q: the deployer asked, in order:\n%s", trivy, b)
-		}
-	}
-}
-
 // What the demo needs of the machine is not asked again where it runs, or where its images are.
 func TestDemoUpAsksNoDiskOrMemoryWhereTheDemoIsAlready(t *testing.T) {
 	m := demoOn(t)

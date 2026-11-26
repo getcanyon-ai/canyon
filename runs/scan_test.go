@@ -243,8 +243,8 @@ func TestABusyExecutorIsWaitedOutNeverAFinding(t *testing.T) {
 }
 
 // The laptop demo leaves trivy's run off (#237): a laptop host's run writes its scan skipped, with laptop_demo, once, as
-// it starts, asks the executor for no scan, and names deps.known-vuln not checked on this host, never clean; another host writes
-// no skipped row, only that line.
+// it starts, and asks the executor for no scan; another host writes no skipped row. (These runs read a recorded gate:
+// what the scanners' run names not checked is Gate.Review's, TestTrivyOffNamesItsRuleNotCheckedOnThisHost.)
 func TestALaptopRunSaysTrivySkippedAndItsRuleNotChecked(t *testing.T) {
 	for _, laptop := range []bool{true, false} {
 		p, ctx, f, snap := scanning(t)
@@ -271,17 +271,6 @@ func TestALaptopRunSaysTrivySkippedAndItsRuleNotChecked(t *testing.T) {
 		rows.Close()
 		if want := map[bool][]string{true: {"laptop_demo"}, false: nil}[laptop]; !slices.Equal(reasons, want) || f.Scans.Load() != before {
 			t.Fatalf("laptop %v: skipped rows %q, want %q; %d scans asked", laptop, reasons, want, f.Scans.Load()-before)
-		}
-		said := false
-		for _, r := range verdictOf(t, ctx, p, run.ID).Runs {
-			for _, inv := range r.Invocations {
-				for _, n := range inv.ToolExecutionNotifications {
-					said = said || strings.Contains(n.Message.Text, "not checked on this host: ") && strings.Contains(n.Message.Text, "deps.known-vuln")
-				}
-			}
-		}
-		if !said {
-			t.Fatalf("laptop %v: deps.known-vuln was not named not checked on this host", laptop)
 		}
 	}
 }

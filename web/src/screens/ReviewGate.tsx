@@ -62,7 +62,8 @@ async function rows(run: string): Promise<{ rows: Row[]; named: Map<string, Name
   // A scan the run didn't ask for is a row of its own, skipped, never clean, with why under it (contracts/events.md,
   // progress; #237).
   for (const one of skipped) {
-    out.push({ name: named(`sarif/${one.tool}`), producer: `sarif/${one.tool}`, results: 0, status: "skipped", notes: one.reason === undefined || SKIPPED[one.reason] === undefined ? [] : [SKIPPED[one.reason]] });
+    const why = one.reason === undefined ? undefined : SKIPPED[one.reason];
+    out.push({ name: named(`sarif/${one.tool}`), producer: `sarif/${one.tool}`, results: 0, status: "skipped", notes: why === undefined ? [] : [why] });
   }
   return { rows: out, named: policies };
 }

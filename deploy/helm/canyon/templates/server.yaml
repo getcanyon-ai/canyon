@@ -31,7 +31,6 @@ CANYON_GROUPS_CLAIM: {{ . | quote }}
 {{- with .Values.canyon.org }}
 CANYON_ORG: {{ . | quote }}
 {{- end }}
-CANYON_INSTALL_MODE: "helm_one_node"
 {{- if .Values.canyon.appDatabase.enabled }}
 CANYON_APP_DATABASE_URL: {{ required "canyon.appDatabase.url is required without infra.appPostgres" (include "canyon.appDatabaseURL" .) | quote }}
 {{- if .Values.canyon.appDatabase.caConfigMap }}
@@ -104,6 +103,7 @@ spec:
           image: {{ include "canyon.image" (dict "root" . "name" "server") }}
           env:
             - {name: CANYON_AUTH, value: oidc} # here, not in the Secret: env wins over envFrom, so no Secret, existingSecret included, starts it without sign-in
+            - {name: CANYON_INSTALL_MODE, value: helm_one_node} # how Canyon was installed, which the daily report says (TELEMETRY.md): here as CANYON_AUTH is, so existingSecret says it too
             {{- if ne (toString .Values.telemetry.enabled) "true" }}
             - {name: CANYON_TELEMETRY, value: "0"} # here as CANYON_AUTH is: off holds with existingSecret too. On sets nothing, so a Secret's own CANYON_TELEMETRY=0 stands
             {{- end }}

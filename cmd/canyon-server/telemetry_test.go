@@ -267,7 +267,7 @@ func TestEveryShippedInstallSendsByDefault(t *testing.T) {
 	}{
 		"docker-compose.yml":     {demo, "laptop"},
 		"deploy/docker/team.yml": {merged, "one_server"},
-		"deploy/k8s/server.yaml": {manifestServerEnv(t), ""}, // the operator's Secret says it: the manifest's own env would win over it
+		"deploy/k8s/server.yaml": {manifestServerEnv(t), "kubernetes"}, // the manifest's own env, so an install whose Secret leaves it out still says it (#239)
 	} {
 		for _, name := range telemetryOffVars {
 			if v, set := s.env[name]; set {

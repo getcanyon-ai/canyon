@@ -350,6 +350,16 @@ canyon demo down --purge
 
 Both end by saying the demo is gone, or by naming what Docker kept, if anything is left.
 
+On a Mac, the images were on the Docker VM's disk, and each engine gives the space back to the Mac
+its own way:
+
+- **Docker Desktop** gives it back on its own, a few minutes after the images are removed. Don't
+  make **Settings › Resources › Advanced › Disk usage limit** smaller to get space back: that
+  deletes every container and image.
+- **OrbStack** gives it back as soon as the images are removed.
+- **Colima** gives it back the next time its VM starts, with `colima stop && colima start`, or at
+  once with `colima ssh -- sudo fstrim -a`.
+
 If you set up a coding agent with `canyon skill install`, as the tour does, its session hook still
 looks for this Canyon at the start of every session. Take Canyon out of your coding agents:
 

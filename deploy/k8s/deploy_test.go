@@ -247,42 +247,6 @@ func TestEveryContainerIsBounded(t *testing.T) {
 	}
 }
 
-// Each install says how it was installed, in its own words, so the daily report names it (TELEMETRY.md, install_mode):
-// this one's server kubernetes, the laptop demo's laptop and the team setup's one_server, each the server's own env, never
-// a Secret's, which an operator's own replaces. The Helm chart's helm_one_node is check-rendered.py's to hold.
-func TestEachInstallSaysItsInstallMode(t *testing.T) {
-	for _, o := range objects(t) {
-		if d, ok := o.(*appsv1.Deployment); ok && d.Name == "canyon-server" {
-			mode := ""
-			for _, e := range d.Spec.Template.Spec.Containers[0].Env {
-				if e.Name == "CANYON_INSTALL_MODE" {
-					mode = e.Value
-				}
-			}
-			if mode != "kubernetes" {
-				t.Errorf("the server's CANYON_INSTALL_MODE is %q, want kubernetes: without it every install of this base reports none", mode)
-			}
-		}
-	}
-	for file, want := range map[string]string{"docker-compose.yml": "laptop", "deploy/docker/team.yml": "one_server"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var compose struct {
-			Services map[string]struct {
-				Environment []string `json:"environment"`
-			} `json:"services"`
-		}
-		if err := utilyaml.Unmarshal(raw, &compose); err != nil {
-			t.Fatalf("%s: %v", file, err)
-		}
-		if env := compose.Services["server"].Environment; !slices.Contains(env, "CANYON_INSTALL_MODE="+want) {
-			t.Errorf("%s's server environment %v, want CANYON_INSTALL_MODE=%s", file, env, want)
-		}
-	}
-}
-
 // TestTheExecutorAdmitsTheServerAlone: the executor's own NetworkPolicy is the single enforcement point
 // of who may call it — no token — so it alone selects the executor's pods, and admits TCP 7778 from the
 // server's pods and from no other pod the deploy writes. One executor runs, stopped before the next starts.

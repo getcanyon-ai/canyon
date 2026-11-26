@@ -550,6 +550,22 @@ describe("the headline of a production that's down", () => {
   };
   const band = async () => within(await screen.findByRole("region", { name: "Where it stands" }));
 
+  // A promotion's switch reads starting (contracts/routes.md, envs.<env>.state; #230): the band says production is
+  // starting, never "Production is down" the moment after a person pressed Promote, with no Put back and no lines read.
+  it("says production is starting while a switch is under way, never down", async () => {
+    const sent = server({ ...reads(reviewed("clean")), "GET /api/v1/projects/claims-portal/status": { body: down({ state: "starting" }) } });
+    render(<App id="claims-portal" auth="oidc" />);
+    const said = await band();
+    expect(said.getByText(S.prodStarting)).toBeDefined();
+    expect(said.getByText(S.prodStartingLine)).toBeDefined();
+    expect(screen.queryByText(/^Production is down/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Put .* back$/ })).toBeNull();
+    expect((await production()).getByText("Starting")).toBeDefined();
+    expect((await production()).queryByRole("link", { name: /^Open/ })).toBeNull(); // nothing answers there yet
+    await flush();
+    expect(sent().some((one) => one.includes("/logs?"))).toBe(false);
+  });
+
   // Stopped with no exit the executor names is a switch under way, a promotion's new container not yet started: nothing
   // crashed, so neither the band nor a card reads the lines, an audited read, until the person opens them (#199's
   // putback journey: a logs row nobody asked for).

@@ -15,7 +15,7 @@ export interface PullRequest { number: number; branch: string }
 // denied one's while denied (#2601).
 export type PatchState = "none" | "planned" | "wait" | "patched_preview" | "asked" | "patched" | "reverted" | "held" | "denied" | "could_not_rescan";
 export interface EnvPatch { state: PatchState; since: string; identity?: string; run?: string; approval?: string; why?: string }
-export interface Env { patch?: EnvPatch; pull_request?: PullRequest; url: string; package: string; label?: string; image_digest: string; deployed_at: string; gate_run: string; deployed_by: Actor | null; promoted_by?: Actor | null; run_by?: "canyon" | "org"; pending?: Pending; seen_at?: string; state?: "running" | "restarting" | "stopped" | "unknown"; stopped?: { exit_code: number; said: string }; restarting?: { restarts: number; exit_code?: number; said?: string }; answered?: { status: number; said: string } | { error: string } }
+export interface Env { patch?: EnvPatch; pull_request?: PullRequest; url: string; package: string; label?: string; image_digest: string; deployed_at: string; gate_run: string; deployed_by: Actor | null; promoted_by?: Actor | null; run_by?: "canyon" | "org"; pending?: Pending; seen_at?: string; state?: "running" | "restarting" | "starting" | "stopped" | "unknown"; stopped?: { exit_code: number; said: string }; restarting?: { restarts: number; exit_code?: number; said?: string }; answered?: { status: number; said: string } | { error: string } }
 // An environment waiting on its first release (release.schema.json's env_pending): nothing runs there yet.
 export interface Waiting { run_by: "org"; pending: Pending }
 export const waiting = (env: Env | Waiting): env is Waiting => !("url" in env);

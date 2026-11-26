@@ -109,6 +109,8 @@ export function headline(f: Facts): Band {
   const other = (env: Env | null) => env !== null && !down(env) && env.package !== f.latest.package;
   const keeps = other(f.preview) && other(f.prod) && f.preview!.package === f.prod!.package ? ` ${f.prodName} keeps running in preview and production.`
     : `${other(f.preview) ? ` ${f.previewName} keeps running in preview.` : ""}${other(f.prod) ? ` ${f.prodName} keeps running in production.` : ""}`;
+  // Production a promotion, a put-back or a lift is starting (#230): never down, the moment after a person pressed Promote.
+  if (f.prod?.state === "starting") return { tone: "teal", going: true, title: S.prodStarting, text: S.prodStartingLine, covers: ["starting:prod"] };
   // An environment that ran and stopped outranks everything else on the page.
   if (f.prod?.state === "stopped") {
     const code = f.prod.stopped === undefined ? "" : ` with exit code ${f.prod.stopped.exit_code}`;

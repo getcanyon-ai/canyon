@@ -170,6 +170,9 @@ export const S = {
   putBackCode: "Canyon puts back the code, not the data, the secrets or the outbound rules: <version> runs against production as <version> left it.",
   putBackCodeBare: "Canyon puts back the code, not the data, the secrets or the outbound rules.",
   // The headline of a production that's down (#188): the newest kept earlier version, or why none can go back.
+  // Production while a promotion, a put-back or a lift starts it (envs.<env>.state starting, #230): never down.
+  prodStarting: "Production is starting",
+  prodStartingLine: "Nothing for you to do: this page follows it until it runs.",
   putBackNamed: "Put <version> back",
   putBackNone: "No earlier version can be put back as it ran: fix it, deploy to preview, then promote.",
   imageGone: "<version>'s image is no longer on this Canyon, so it can't be put back as it ran. Deploy <version> to preview and promote it if you want it rebuilt.",

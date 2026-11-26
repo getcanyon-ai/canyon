@@ -102,7 +102,7 @@ export const down = (env: ViewerEnv) => env.state === "stopped" || env.state ===
 // What an environment deployed there is not doing, in plain words: stopped, restarting, or not known to
 // run because Canyon could not ask (contracts/routes.md, envs.<env>.state); null while it runs, or where
 // the org runs it.
-export const notRunning = (env: ViewerEnv) => (env.state === "stopped" ? "Stopped" : env.state === "restarting" ? "Keeps restarting"
+export const notRunning = (env: ViewerEnv) => (env.state === "stopped" ? "Stopped" : env.state === "restarting" ? "Keeps restarting" : env.state === "starting" ? "Starting"
   : env.state === undefined || env.state === "running" ? null : "Couldn't check whether it runs"); // unknown, or a state this build does not know
 
 // How often a restarting environment was started again since its deploy, as the status read says it
@@ -123,7 +123,7 @@ export const lastExited = (env: Env) => (env.restarting?.exit_code === undefined
 
 // Where an environment opens: nowhere once it stopped or while it keeps restarting, its address
 // otherwise — one Canyon could not check may well answer.
-export const opens = (env: ViewerEnv) => (down(env) ? undefined : env.url);
+export const opens = (env: ViewerEnv) => (down(env) || env.state === "starting" ? undefined : env.url); // starting: nothing answers there yet (#230)
 
 // That line, said under the environment: red when it stopped or keeps restarting, amber when Canyon could not ask.
 export function NotRunning({ env }: { env: ViewerEnv }) {

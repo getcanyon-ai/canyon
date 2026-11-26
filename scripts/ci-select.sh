@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 
 suites="journeys-1 journeys-2 journeys-3 journeys-4 journeys-5 journeys-6 journeys-7 journeys-8 probes kind-calico
   kind-calico-1 kind-calico-2 kind-calico-3 kind-kindnet kind-canyon handoff-argocd handoff-flux egress-floor
-  egress-layer3 oidc patch tour backup build-arch test-rest server-1 server-2 server-3 server-4 noee-rest
+  egress-layer3 oidc patch tour tour-classic backup build-arch test-rest server-1 server-2 server-3 server-4 noee-rest
   noee-server-1 noee-server-2 noee-server-3 noee-server-4 runs-1 runs-2 runs-3 provisioners-14 provisioners-15
   provisioners-16 provisioners-17 provisioners-18 lint tidy web compose-up images deploy-bundle helm-chart docs
   gitleaks"
@@ -27,6 +27,7 @@ listed() {
   case $1 in
     journeys-*) echo journeys ;;
     probes | oidc | patch | tour | backup | build-arch) echo "$1" ;;
+    tour-classic) echo tour ;; # the tour on the other image store: the same list
     kind-* | handoff-*) echo kind ;; # kube.yml's jobs, all on kind.txt
     egress-*) echo egress ;;
     helm-chart) echo helm ;;

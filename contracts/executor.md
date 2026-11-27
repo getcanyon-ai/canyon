@@ -34,8 +34,9 @@ other failure (pack itself, the daemon, the cluster API) is the error as the exe
 `pack: exit status 1`. Which of
 the app, a buildpack or the build image a step failed on is never the executor's to say.
 
-**A build the executor went away under is asked once more** (added 2026-11-04, #2671). A stream that ends
-before its final row — the connection refused or reset, the body cut short or closed — is the executor
+**A build the executor went away under is asked once more** (added 2026-11-04, #2671; **amended 2026-11-27**, #248: a
+dial that timed out, an answer closed before its status). A stream that ends
+before its final row — the connection refused, its dial timed out or reset, the body cut short or closed — is the executor
 restarting, upgrading or drained, never the package. The control plane waits for `GET /builder` to answer
 and asks the same `/build` again once, the same tree and the same `build_values`. That is safe with no key:
 a build keeps nothing between calls, and an executor that starts again removes what a crash mid-build
@@ -1579,6 +1580,14 @@ which the control plane attaches as a report (finding.md, *Canyon-run tools*).
   does a second grype scan on Kubernetes while one runs (*On Kubernetes*), or a second image scan on
   either host (*`target: "image"`*). A scan both would turn
   away while a refresh waits or writes is answered with `reason:"database"`.
+- **A scan the executor went away under is asked once more** (added 2026-11-27, #248), as a build is
+  (`POST /build`). A run's scan of its package whose request finds no executor — the connection refused, its dial
+  timed out or reset — or whose answer is cut short or closed before its end is the executor restarting, upgrading
+  or drained, never the package. The control plane waits for `GET /scandb` to answer and asks the same `/scan`
+  again once, the same tree, `settings` and rules, inside the scan's own deadline. That is safe: a scan keeps
+  nothing between calls, and an executor that starts again removes the scans a crash left before it serves (every
+  container labelled `canyon.scan` on Docker, every Job labelled `canyon.scan` on Kubernetes). A second loss, or
+  the deadline passing while it waits, fails the run as Canyon's own error, never a finding and never a pass.
 - **`target`** is `tree` — unset is `tree`, everything above — `image`, `sbom` or `packages` (PATCHING.md §3.1,
   §3.2; `packages` below), and only trivy takes `image`, `sbom` or `packages`. An image or sbom target takes no `package` and no
   `settings`, and an image target names `image`, and `app` unless the image is the run image (below), an sbom target neither; any other key, another

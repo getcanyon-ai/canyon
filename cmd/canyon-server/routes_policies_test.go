@@ -419,11 +419,12 @@ func TestThePolicyRoutesAnswerTheGolden(t *testing.T) {
 		('deps.known-vuln', 'blocking', 2, 14, now() + interval '14 days', 'person', 'dana@meridian.example', 'Dana Whitfield', '2026-09-23T08:30:00Z')`); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"claims-portal", "quote-engine"} {
+	for _, name := range []string{"claims-portal", "quote-engine", "renewal-reminder"} {
 		do(t, dana, http.MethodPost, base+"/api/v1/projects", `{"id":"`+name+`"}`)
 	}
 	seedVerdict(t, ctx, pool, "claims-portal", "gr_g1", "auth.unauthenticated-route@high", "auth.unauthenticated-route@critical", "auth.unauthenticated-route@low")
 	seedVerdict(t, ctx, pool, "quote-engine", "gr_g2", "auth.unauthenticated-route@high")
+	seedVerdict(t, ctx, pool, "renewal-reminder", "gr_g3") // nothing of the rule, and no journaled snapshot with it on: the preview's unchecked (#155)
 
 	code, got, _ := do(t, dana, http.MethodGet, base+"/api/v1/policies", "")
 	scheduled := func(doc map[string]any) map[string]any { // deps.known-vuln's, the sixth rule

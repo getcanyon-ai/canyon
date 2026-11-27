@@ -15,6 +15,9 @@
 #   handoff-flux      the same, under Flux
 #   egress-floor      e2e-ui.yml's egress job, its floor part: the egress floor, Envoy and its check
 #   egress-layer3     the same, its layer-3 part: interception and a route's credential at its upstream
+#   egress-first-calls  #144's measurement (e2e/firstcall_test.go) on the egress floor's stack, CANYON_E2E_FIRST_CALLS
+#                     deploys a phase (200 unset): hours long, so run when asked alone, never one of a pull request's
+#                     suites (scripts/ci-select.sh doesn't name it)
 #   oidc              e2e-ui.yml's oidc job: the team setup's sign-in, deploy and sharing
 #   patch             patch-e2e.yml: a rebase patch and its revert, on the team setup
 #   tour              tour.yml: the docs' tour on the laptop demo
@@ -400,6 +403,13 @@ egress() {
   listed stack "^Test($1)" ./e2e/ 30m skip
 }
 
+# egress_first_calls is #144's measurement: it prints how the first calls of fresh apps were answered, and fails only
+# when a deploy wasn't measured. Four deploys at once in its busy phase, so four tests at once whatever the CPUs.
+egress_first_calls() {
+  make e2e-up || return
+  (export CANYON_E2E_FIRST_CALLS=${CANYON_E2E_FIRST_CALLS:-200} GOFLAGS="${GOFLAGS:+$GOFLAGS }-parallel=4" && listed stack '^TestFirstCallAfterADeploy$' ./e2e/ 4h40m skip)
+}
+
 # oidc_suite is the team setup's stack, with e2e/ui's projects that run as each person, and its tests: $1 the tags, $2 the
 # -run pattern, $3 the timeout
 oidc_suite() {
@@ -435,6 +445,7 @@ case $suite in
   kind-canyon) kind kind_canyon ;;
   handoff-argocd | handoff-flux) kind handoff "${suite#handoff-}" ;;
   egress-floor) stack egress 'Connect|Floor|Envoy|Control' ;;
+  egress-first-calls) stack egress_first_calls ;;
   egress-layer3) stack egress 'Interception$|ForgedInterceptHeaderRejected$|ARouteCredentialReachesItsUpstream$|ForcedHTTP2CarriesTheRouteCredential$|GRPCCarriesTheRouteCredential$|PassThroughDestinationIsNeverDecrypted$' ;;
   oidc) stack oidc_suite oidc . 30m ;;
   patch) stack oidc_suite oidc,patch '^TestRebasePatch' 65m ;;

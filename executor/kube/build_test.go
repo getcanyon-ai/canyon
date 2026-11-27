@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -262,6 +263,27 @@ func TestEveryBuildRunsWithTheExecutorsOwnVariables(t *testing.T) {
 		if !reflect.DeepEqual(env, got) {
 			t.Fatalf("build values %v: the Build's spec.env %v, want %v", values, env, got)
 		}
+	}
+}
+
+// What a source carried is kept at a cost bounded per entry, whatever its name: a package is hostile, and
+// archive/tar reads a name of up to 1 MiB in a PAX header, so a name deep in directories is one entry kept, never
+// one per directory above it (#242's review). 8000 levels: 16 KB of name, which one key per ancestor turned into
+// 8001 keys and as many scans of the name; at archive/tar's 1 MiB, half a million of each.
+func TestWhatASourceCarriedStaysBoundedForADeepLongName(t *testing.T) {
+	e, _, _ := kpackCluster(t, "True", "")
+	deep := strings.Repeat("a/", 8000) + "nginx.conf"
+	src := tarOf(t, &tar.Header{Name: deep, Typeflag: tar.TypeReg, Mode: 0o644, Size: 2}) // the writer puts the name in a PAX header
+	var before, after goruntime.MemStats
+	goruntime.GC()
+	goruntime.ReadMemStats(&before)
+	_, saw, err := e.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(src))
+	goruntime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alloc := after.TotalAlloc - before.TotalAlloc; len(saw.paths) != 1 || alloc > 8<<20 {
+		t.Fatalf("one entry %d bytes deep: %d paths kept, %d bytes allocated, want 1 and at most 8 MiB", len(deep), len(saw.paths), alloc)
 	}
 }
 

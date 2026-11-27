@@ -108,8 +108,10 @@ variables those the build hands the buildpacks (the app's `project.toml` `[[io.b
 build values over them as pack's `--env` is over its descriptor), ends on exactly `this host's nginx buildpack
 fails on BP_NGINX_VERSION when the app has no buildpack.yml: set the version as nginx.version in a buildpack.yml
 at the app's root, and remove BP_NGINX_VERSION`, with no `builds`: the app's to change, never the host's to add.
-On Kubernetes the executor reads the tree's paths and its `project.toml` as the source image streams past
-(one past 1 MiB is not read, and its detect stays a failed detect). Any other detect is as above.
+On Kubernetes the executor reads the tree's paths and its `project.toml` as the source image streams past,
+keeping each entry's path as a sha256 digest alone, so a hostile name of any length or depth costs 32 bytes: a path
+is there when the tar names it, never a directory only the paths under it imply, and a `project.toml` past 1 MiB is
+not read; either leaves the detect a failed detect. Any other detect is as above.
 
 **The buildpacks that ran.** A build's result names the buildpacks of the group that passed detection, in
 the order they ran: each `{id, name?}`, `id` the buildpack's CNB id and `name` the name the builder's

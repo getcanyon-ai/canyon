@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -45,20 +46,22 @@ func checkTree(r io.Reader, w io.Writer, saw *seen) error {
 const maxProject = 1 << 20
 
 // seen is what a build's source carried, for its failed detect to read (contracts/executor.md, But a detect
-// the nginx buildpack errored on; #242): every path in it, each directory above a path too, and its root
-// project.toml, unread past maxProject.
+// the nginx buildpack errored on; #242): the sha256 of each entry's path, as the tar names it and never a
+// directory it only implies, and its root project.toml, unread past maxProject. A name is the package's and
+// archive/tar reads one of up to 1 MiB, so only its digest is kept: 32 bytes an entry, whatever its length or depth.
 type seen struct {
-	paths   map[string]bool
+	paths   map[[sha256.Size]byte]bool
 	project []byte
 	unread  bool
 }
 
-// nginxWantsYml is executor.NginxWantsYml of the source s saw: a project.toml it did not read says no.
+// nginxWantsYml is executor.NginxWantsYml of the source s saw: a project.toml it did not read says no, and a
+// directory only implied by the paths under it is not there, which leaves the detect a failed detect.
 func (s *seen) nginxWantsYml(values map[string]string) bool {
 	if s.unread {
 		return false
 	}
-	return executor.NginxWantsYml(s.project, values, func(rel string) bool { return s.paths[rel] })
+	return executor.NginxWantsYml(s.project, values, func(rel string) bool { return s.paths[sha256.Sum256([]byte(rel))] })
 }
 
 // copyTree is checkTree's copy into tw, each entry under prefix, leaving out an entry skip says (nil:
@@ -108,9 +111,7 @@ func copyTree(r io.Reader, tw *tar.Writer, prefix string, skip func(string) bool
 			var body io.Reader = tr
 			var project *bytes.Buffer // the root project.toml's bytes, as they pass
 			if saw != nil {
-				for p := clean; p != "."; p = path.Dir(p) {
-					saw.paths[p] = true
-				}
+				saw.paths[sha256.Sum256([]byte(clean))] = true
 				if clean == "project.toml" && h.Typeflag == tar.TypeReg {
 					if saw.unread = out.Size > maxProject; !saw.unread {
 						project = &bytes.Buffer{}
@@ -169,7 +170,7 @@ func (e *Executor) pushSource(ctx context.Context, app, run string, tree io.Read
 	}
 	tag := r.(name.Tag)
 	pr, pw := io.Pipe()
-	saw := &seen{paths: map[string]bool{}}
+	saw := &seen{paths: map[[sha256.Size]byte]bool{}}
 	checked := make(chan error, 1) // what the check said, sent before the pipe closes on it: a read that ends on it finds it here
 	go func() {
 		err := checkTree(tree, pw, saw)

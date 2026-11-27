@@ -66,7 +66,8 @@ Build not created, but for a refusal of its build values, below; the Build delet
 A server from before `own` reads such a line as a failed build (`build`), still closed: nothing is built or
 run. Any other failure carries no `own`, and stays the package's (`build`): the tree (`tree: …`, a tar that
 does not read, an entry that escapes it or one past its bounds), a `project.toml` refusal, pack's lifecycle
-exiting (`the build step exited <n>`, a failed detect, `pack: …`), a build past the executor's deadline, a
+exiting (`the build step exited <n>`, a failed detect, `pack: …`), a detect the nginx buildpack errored on for want of a
+`buildpack.yml` (below), a build past the executor's deadline, a
 Build kpack failed with no step to name (`build <name> failed: …`), and on Kubernetes a Build whose create the cluster's
 API refuses as `Invalid` or `RequestEntityTooLarge`, whose line starts `the cluster refused the build values: ` and goes
 on with the API's own error: the build values are the one part of the Build that is the user's, so too many or too large
@@ -95,6 +96,22 @@ manifest or config does not name a size of 1 to 4 MiB, is not read). Only a buil
 image carries none, so on Kubernetes the buildpacks show by id (amended 2026-10-04, #1599). A builder whose
 names cannot be read, or whose metadata has none, names its buildpacks by id, and the executor's log says why. Any
 other failure carries no `builds`. The detector's own lines stream before it as every build line does.
+
+**But a detect the nginx buildpack errored on for want of a `buildpack.yml` is the package's failed build**
+(added 2026-11-27, #242). `paketo-buildpacks/nginx` 1.3.8, which the pinned `paketo-buildpacks/web-servers`
+carries on Docker and on Kubernetes, errors while detecting a tree it would serve — `BP_WEB_SERVER` is `nginx`,
+or something is at `BP_NGINX_CONF_LOCATION` (`nginx.conf` when it is unset), a relative location under the
+tree's root and an absolute one under `/workspace` — whenever `BP_NGINX_VERSION` is set and not empty and the
+tree has no `buildpack.yml` at its root: it reads the file and fails on its absence. So an app pinning nginx as
+Paketo documents it read as a kind the host does not build. A detect that exited 21 on such a tree, its
+variables those the build hands the buildpacks (the app's `project.toml` `[[io.buildpacks.build.env]]`, the
+build values over them as pack's `--env` is over its descriptor), ends on exactly `this host's nginx buildpack
+fails on BP_NGINX_VERSION when the app has no buildpack.yml: set the version as nginx.version in a buildpack.yml
+at the app's root, and remove BP_NGINX_VERSION`, with no `builds`: the app's to change, never the host's to add.
+On Kubernetes the executor reads the tree's paths and its `project.toml` as the source image streams past,
+keeping each entry's path as a sha256 digest alone, so a hostile name of any length or depth costs 32 bytes: a path
+is there when the tar names it, never a directory only the paths under it imply, and a `project.toml` past 1 MiB is
+not read; either leaves the detect a failed detect. Any other detect is as above.
 
 **The buildpacks that ran.** A build's result names the buildpacks of the group that passed detection, in
 the order they ran: each `{id, name?}`, `id` the buildpack's CNB id and `name` the name the builder's

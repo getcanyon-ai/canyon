@@ -2,7 +2,9 @@ package kube
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -31,18 +33,40 @@ var (
 // checkTree copies a tar of the source from r to w, entry by entry as it arrives: directories and
 // regular files under the tree, at most maxTree bytes in maxEntries entries. Anything that would
 // escape the tree, anything but a file or a directory (a link, a device, a fifo), and a sparse entry
-// that expands beyond what the archive carried, is refused.
-func checkTree(r io.Reader, w io.Writer) error {
+// that expands beyond what the archive carried, is refused. What it copied is noted in saw.
+func checkTree(r io.Reader, w io.Writer, saw *seen) error {
 	tw := tar.NewWriter(w)
-	if err := copyTree(r, tw, "", nil); err != nil {
+	if err := copyTree(r, tw, "", nil, saw); err != nil {
 		return err
 	}
 	return tw.Close()
 }
 
+// maxProject is the largest project.toml a source's seen keeps.
+const maxProject = 1 << 20
+
+// seen is what a build's source carried, for its failed detect to read (contracts/executor.md, But a detect
+// the nginx buildpack errored on; #242): the sha256 of each entry's path, as the tar names it and never a
+// directory it only implies, and its root project.toml, unread past maxProject. A name is the package's and
+// archive/tar reads one of up to 1 MiB, so only its digest is kept: 32 bytes an entry, whatever its length or depth.
+type seen struct {
+	paths   map[[sha256.Size]byte]bool
+	project []byte
+	unread  bool
+}
+
+// nginxWantsYml is executor.NginxWantsYml of the source s saw: a project.toml it did not read says no, and a
+// directory only implied by the paths under it is not there, which leaves the detect a failed detect.
+func (s *seen) nginxWantsYml(values map[string]string) bool {
+	if s.unread {
+		return false
+	}
+	return executor.NginxWantsYml(s.project, values, func(rel string) bool { return s.paths[sha256.Sum256([]byte(rel))] })
+}
+
 // copyTree is checkTree's copy into tw, each entry under prefix, leaving out an entry skip says (nil:
-// none); tw stays open for what the caller adds.
-func copyTree(r io.Reader, tw *tar.Writer, prefix string, skip func(string) bool) error {
+// none), noting what it copied in saw (nil: nothing); tw stays open for what the caller adds.
+func copyTree(r io.Reader, tw *tar.Writer, prefix string, skip func(string) bool, saw *seen) error {
 	cr := &countingReader{r: r}
 	tr := tar.NewReader(cr)
 	var total int64
@@ -84,8 +108,22 @@ func copyTree(r io.Reader, tw *tar.Writer, prefix string, skip func(string) bool
 			if err := tw.WriteHeader(out); err != nil {
 				return err
 			}
-			if _, err := io.CopyN(tw, tr, out.Size); err != nil {
+			var body io.Reader = tr
+			var project *bytes.Buffer // the root project.toml's bytes, as they pass
+			if saw != nil {
+				saw.paths[sha256.Sum256([]byte(clean))] = true
+				if clean == "project.toml" && h.Typeflag == tar.TypeReg {
+					if saw.unread = out.Size > maxProject; !saw.unread {
+						project = &bytes.Buffer{}
+						body = io.TeeReader(tr, project)
+					}
+				}
+			}
+			if _, err := io.CopyN(tw, body, out.Size); err != nil {
 				return err
+			}
+			if project != nil {
+				saw.project = project.Bytes()
 			}
 		}
 		if total > cr.n+executor.SparseSlack { // written far more than the archive carried
@@ -123,41 +161,44 @@ func (e *Executor) ref(s string) (name.Reference, error) {
 
 // pushSource streams tree, checked as it passes, into a single-layer image tagged
 // <registry>/canyon/<app>:src-<nonce> and answers it by digest. The image carries its build's nonce,
-// so its digest is its build's alone and deleting it never takes another build's source.
-func (e *Executor) pushSource(ctx context.Context, app, run string, tree io.Reader) (name.Digest, error) {
+// so its digest is its build's alone and deleting it never takes another build's source. What the
+// tree carried is answered too.
+func (e *Executor) pushSource(ctx context.Context, app, run string, tree io.Reader) (name.Digest, *seen, error) {
 	r, err := e.ref(e.Registry + "/canyon/" + app + ":src-" + run)
 	if err != nil {
-		return name.Digest{}, &executor.HostFailed{Message: err.Error()}
+		return name.Digest{}, nil, &executor.HostFailed{Message: err.Error()}
 	}
 	tag := r.(name.Tag)
 	pr, pw := io.Pipe()
+	saw := &seen{paths: map[[sha256.Size]byte]bool{}}
 	checked := make(chan error, 1) // what the check said, sent before the pipe closes on it: a read that ends on it finds it here
 	go func() {
-		err := checkTree(tree, pw)
+		err := checkTree(tree, pw, saw)
 		checked <- err
 		_ = pw.CloseWithError(err)
 	}()
 	defer func() { _ = pr.Close() }() // a push that fails early ends the copy
 	img, err := mutate.AppendLayers(empty.Image, stream.NewLayer(pr))
 	if err != nil {
-		return name.Digest{}, &executor.HostFailed{Message: "the source image: " + err.Error()}
+		return name.Digest{}, nil, &executor.HostFailed{Message: "the source image: " + err.Error()}
 	}
 	img = mutate.Annotations(img, map[string]string{"canyon.build": run}).(v1.Image)
 	if err := remote.Write(tag, img, e.registry(ctx)...); err != nil {
 		select {
 		case terr := <-checked:
 			if terr != nil && !errors.Is(terr, io.ErrClosedPipe) { // the tree the check refused: the package's
-				return name.Digest{}, fmt.Errorf("tree: %w", terr)
+				return name.Digest{}, nil, fmt.Errorf("tree: %w", terr)
 			}
 		default: // the check still copying: the registry failed first
 		}
-		return name.Digest{}, &executor.HostFailed{Message: "the source image " + tag.String() + ": " + err.Error()} // the registry's (#2537)
+		return name.Digest{}, nil, &executor.HostFailed{Message: "the source image " + tag.String() + ": " + err.Error()} // the registry's (#2537)
 	}
+	<-checked // sent before the stream the write read to its end closed: saw is whole
 	sum, err := img.Digest()
 	if err != nil {
-		return name.Digest{}, &executor.HostFailed{Message: "the source image: " + err.Error()}
+		return name.Digest{}, nil, &executor.HostFailed{Message: "the source image: " + err.Error()}
 	}
-	return tag.Context().Digest(sum.String()), nil
+	return tag.Context().Digest(sum.String()), saw, nil
 }
 
 // dropImage deletes the image ref names from the registry; one already gone is a success.

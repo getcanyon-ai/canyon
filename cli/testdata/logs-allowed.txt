@@ -1,9 +1,0 @@
-
-  claims-portal · preview · last 200 lines
-
-  ready on :8080
-  summary refresh failed: fetch failed Request was cancelled.
-  summary refresh failed: fetch failed Request was cancelled.
-
-  canyon: allowed api.openai.com · by Dana Whitfield at 2026-11-08T11:37:50Z · last refused 2026-11-08T11:37:41Z
-  canyon: As of 2026-11-08T11:40:00Z, a person has allowed these destinations in preview since 001f3c went live, and preview's calls to them go through now, with no deploy. The app's log may still show failures from before each was allowed.

@@ -1,2 +1,0 @@
-    ✓ semgrep            1 warning · attached by ci-bot
-    – snyk               no report for this package

@@ -1,4 +1,0 @@
-{"postgres": {"preview": {"builtin": true},
-              "prod": {"url": "http://127.0.0.1:8099/adapter", "token_file": "/etc/canyon/provisioners/adapter-token"}},
- "s3": {"preview": {"url": "http://127.0.0.1:8099/adapter", "token_file": "/etc/canyon/provisioners/adapter-token"},
-        "prod": {"url": "http://127.0.0.1:8099/adapter", "token_file": "/etc/canyon/provisioners/adapter-token"}}}

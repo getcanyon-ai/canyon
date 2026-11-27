@@ -1,2 +1,0 @@
-
-  ✗ This report is from "snyk", which isn't a tool your admin has added to Canyon. Ask an admin to add it in Guardrails.

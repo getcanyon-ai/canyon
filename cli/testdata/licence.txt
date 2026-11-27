@@ -1,3 +1,0 @@
-Canyon Enterprise, licensed to Meridian Insurance until 14 Nov 2027.
-  Seats      50
-  Features   Credentials Canyon adds, Patching, Access by sign-in group

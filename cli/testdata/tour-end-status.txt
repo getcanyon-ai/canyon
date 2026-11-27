@@ -1,2 +1,0 @@
-
-  The tour is finished. canyon demo tour shows the recap; canyon demo tour reset starts it again.

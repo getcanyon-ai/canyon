@@ -1,9 +1,0 @@
-
-  claims-portal · preview · read-only · as dana@meridian.example
-
-  status    count
-  approved  118
-  denied    9
-  open      41
-
-  3 rows · 12 ms · this database session is recorded as you

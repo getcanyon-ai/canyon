@@ -1,9 +1,0 @@
-
-  ✓ Wrote 4 files into ./canyon-tour
-
-    components.json
-    public/canyon.css
-    public/index.html
-    server.js
-
-  PLANTED: server.js now has a search that builds its SQL from the request. It is the quick version a coding agent often writes, put here on purpose so you can watch Canyon stop it.

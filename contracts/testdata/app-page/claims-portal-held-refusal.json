@@ -1,6 +1,0 @@
-{
-  "error": "held",
-  "message": "Production was stopped by Rhea Okafor on 2026-10-11: Exports claimant SSNs unauthenticated (INC-2231). It stays stopped until a responder or an admin lets it run again.",
-  "hold": { "by": { "kind": "person", "subject": "rhea@meridian.example", "display": "Rhea Okafor" }, "at": "2026-10-11T09:40:00Z", "reason": "Exports claimant SSNs unauthenticated (INC-2231)" },
-  "admins": ["dana@meridian.example", "founder@meridian.example"]
-}

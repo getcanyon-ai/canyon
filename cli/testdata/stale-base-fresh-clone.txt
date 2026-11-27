@@ -1,7 +1,0 @@
-
-  ✗ claims-portal already has a version this copy didn't start from.
-
-    Theirs   pkg_9f2a1c   ada@meridian.example, 14m ago
-
-    Take their work:     canyon pull --force   (writes their files over yours, deletes nothing)
-    Send yours anyway:   canyon deploy --force

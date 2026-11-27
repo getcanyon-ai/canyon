@@ -1,1 +1,0 @@
-{"name": "app", "dependencies": {"express": "^4", "utils": "npm:lodash@4.17.15"}, "devDependencies": {"@types/node": "^22"}}

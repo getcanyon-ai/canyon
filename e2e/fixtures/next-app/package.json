@@ -1,5 +1,0 @@
-{
-  "name": "fixture",
-  "private": true,
-  "dependencies": { "next": "15.5.28" }
-}

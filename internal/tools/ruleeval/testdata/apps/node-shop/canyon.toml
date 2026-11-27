@@ -1,8 +1,0 @@
-description = "The shop"
-
-[resources]
-db = { type = "postgres" }
-
-[roles]
-admin = "Manages the shop"
-viewer = "Sees orders"

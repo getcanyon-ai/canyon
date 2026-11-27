@@ -1,4 +1,0 @@
-  ✗ No coding agent found: neither ~/.claude, ~/.codex nor ./.cursor exists here. Start Claude Code once, then run this again.
-  · Codex, Cursor, GitHub Copilot's agent, and other agents that read AGENTS.md:
-      canyon skill install --harness agents-md      appends to ./AGENTS.md
-      canyon skill install --harness codex          Codex's own skill and hook, once Codex has made ~/.codex

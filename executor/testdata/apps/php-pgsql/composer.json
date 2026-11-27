@@ -1,8 +1,0 @@
-{
-    "name": "canyon/stack-db-php",
-    "require": {
-        "php": ">=8.1",
-        "ext-pdo": "*",
-        "ext-pdo_pgsql": "*"
-    }
-}

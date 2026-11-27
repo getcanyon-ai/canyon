@@ -1,7 +1,0 @@
-
-  Stopping claims-portal in production and holding it: nobody can promote it until you or an admin let it run again.
-  Its team can still deploy to preview.
-
-  ✓ Held    prod · stopped
-
-  Lift it in Canyon's dashboard when it may run again.

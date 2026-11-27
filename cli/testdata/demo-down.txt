@@ -1,7 +1,0 @@
-
-  Stopping Canyon and removing its data
-  Removing the apps Canyon started
-
-  ✓ The demo is stopped and its data is gone. Its images stay, so the next start is quick.
-
-  canyon demo down --purge        remove the images too, and get the disk back

@@ -1,7 +1,0 @@
-# From kpack v0.18.0 release.yaml (sha256 cde8b7df8d31d6a5758ec4880eec45009f17811baf3df5a29b76a144fe200e69), split by kind.
-apiVersion: kpack.io/v1alpha2
-kind: ClusterLifecycle
-metadata:
-  name: default-lifecycle
-spec:
-  image: ghcr.io/buildpacks-community/kpack/lifecycle@sha256:cbb03f9ef71e9b80416445cfee8b6869805e98924090c49ee03404daa73bab3a

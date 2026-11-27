@@ -1,8 +1,0 @@
-
-  ✓ Wrote 3 files into ./canyon-tour
-
-    components.json
-    public/canyon.css
-    public/index.html
-
-  The tour wrote the page again, in the org's design system: components.json names its registry, and public/canyon.css is its theme. In a real project the shadcn CLI fetches these from the registry; this demo's registry is not online, so the tour hands them over.

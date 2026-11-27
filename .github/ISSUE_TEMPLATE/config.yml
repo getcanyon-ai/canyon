@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: A question or an idea
-    url: https://github.com/getcanyon-ai/canyon/discussions
-    about: Ask, propose or show what you built in Discussions.
-  - name: A security vulnerability
-    url: https://github.com/getcanyon-ai/canyon/security/advisories/new
-    about: Report it privately, never in a public issue. See SECURITY.md.

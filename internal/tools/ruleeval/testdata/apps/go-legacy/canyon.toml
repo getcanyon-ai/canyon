@@ -1,5 +1,0 @@
-description = "Reports"
-
-[resources]
-db = { type = "mysql" }
-reports = { type = "postgres" }

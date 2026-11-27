@@ -1,5 +1,0 @@
-{{- /* kpack v0.18.0's controller and webhook (files/kpack-0.18.0.yaml, its release.yaml without the CRDs,
-     which are in crds/, and the default ClusterLifecycle, which the builder hook applies). */}}
-{{- if .Values.kpack.enabled }}
-{{ .Files.Get "files/kpack-0.18.0.yaml" }}
-{{- end }}

@@ -1,5 +1,0 @@
-
-  Canyon said the deploy ended, then didn't answer for 2 minutes when this command asked how it ended (the last answer from http://localhost:7777 was 503 Service Unavailable).
-  canyon status says how it ended.
-  Don't deploy again or take the app offline because of this.
-  http://localhost:7777/#/apps/claims-portal

@@ -1,7 +1,0 @@
-
-  ✗ pkg_9e40 isn't on https://canyon-staging.meridian.example.
-    This checkout was last sent or pulled with it, so it went to another Canyon, or this one no longer has it.
-
-    Another Canyon:   canyon deploy --host https://canyon-eu.meridian.example
-                      canyon deploy --host https://canyon.meridian.example
-    This one:         rm .canyon/base, then canyon deploy again

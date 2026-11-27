@@ -1,7 +1,0 @@
-
-  claims-portal
-
-  PERSON                 ENV      MODE   SINCE  IDLE  OPENED  REASON                                                ROLE                        RELAYED BY
-  dana@meridian.example  preview  read   37m    8m    2       —                                                     p_32184ab65351b4f2b37d5b46  Q3VZ7M2KXJ4N6PARST2W7Y3B4C
-  dana@meridian.example  prod     read   20m    17m   1       find the duplicated March invoices                    p_57e5c707dc1003843eec0436  —
-  ana@meridian.example   prod     write  10m    6m    1       void the 3 duplicated March invoices, ticket FIN-482  p_68ab84880e55fb0130c80a3e  Q3VZ7M2KXJ4N6PARST2W7Y3B4C

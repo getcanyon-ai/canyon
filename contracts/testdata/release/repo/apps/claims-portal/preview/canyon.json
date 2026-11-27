@@ -1,9 +1,0 @@
-{
-  "canyon": "https://canyon.meridian.example",
-  "app": "claims-portal",
-  "env": "preview",
-  "release": "rel_8f2a",
-  "gate_run": "gr_8f2a",
-  "package": "pkg_9e40",
-  "version": "v1.4"
-}

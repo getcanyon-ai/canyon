@@ -1,5 +1,0 @@
-
-  canyon dev · claims-portal preview → prod · localhost:7777
-
-  Not promoted: v1.3 answers 400 Bad Request at / on preview. Fix the app and deploy again, or have a person promote it from the dashboard after checking it.
-  http://localhost:7777/#/apps/claims-portal

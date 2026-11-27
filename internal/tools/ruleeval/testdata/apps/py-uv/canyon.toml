@@ -1,7 +1,0 @@
-description = "Uploads"
-
-[resources]
-files = { type = "s3" }
-
-[roles]
-admin = "Manages uploads"

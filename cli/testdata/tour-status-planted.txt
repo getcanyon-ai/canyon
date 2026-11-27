@@ -1,3 +1,0 @@
-
-  Chapter 2 of 3 · Security: your agent writes a flaw
-  The tour's app is planted in /home/you/canyon-tour

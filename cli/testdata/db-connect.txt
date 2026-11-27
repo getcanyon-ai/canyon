@@ -1,6 +1,0 @@
-  claims-portal · preview · read-only · as dana@meridian.example
-
-✓ Listening on 127.0.0.1:<port> · until <until>, or 30 min idle
-  postgres://dana:<token>@127.0.0.1:<port>/claims-portal?sslmode=require&require_auth=scram-sha-256
-
-  This database session is recorded as you. Ctrl-C stops listening.

@@ -1,7 +1,0 @@
-
-  claims-portal
-
-  PERSON                 ENV      MODE   SINCE  IDLE  OPENED  REASON
-  dana@meridian.example  preview  read   37m    8m    2       —
-  dana@meridian.example  prod     read   20m    17m   1       find the duplicated March invoices
-  ana@meridian.example   prod     write  10m    6m    1       void the 3 duplicated March invoices, ticket FIN-482

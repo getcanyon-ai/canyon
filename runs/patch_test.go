@@ -440,7 +440,8 @@ func TestARedeployNeverUndoesARevert(t *testing.T) {
 	if err := pipe.RecordPatchOutcome(ctx, fakeRunImage, "redo-a", PatchReverted); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id IN ('redo-a', 'redo-c') AND env = 'preview'", "canyon/redo-x@"+sha('b')); err != nil {
+	// redeployed: a deploy since #2094 records its run-config fingerprint again, so the plan may name it (#265)
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id IN ('redo-a', 'redo-c') AND env = 'preview'", "canyon/redo-x@"+sha('b')); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 0 {
@@ -528,7 +529,7 @@ func TestARefusedPairIsNeverPlannedAgain(t *testing.T) {
 	if err := p.QueryRow(ctx, "SELECT outcome FROM patch_wave_apps WHERE project_id = 'refused-a'").Scan(&outcome); err != nil || outcome != PatchRefused {
 		t.Fatalf("the refused app's patch: %q (%v)", outcome, err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('b')); err != nil {
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('b')); err != nil { // a deploy, which records its fingerprint (#265)
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 1 {
@@ -540,7 +541,7 @@ func TestARefusedPairIsNeverPlannedAgain(t *testing.T) {
 	if _, err := p.Exec(ctx, "UPDATE runs SET state = 'clean', ended_at = now() WHERE project_id = 'refused-a' AND kind = 'patch' AND ended_at IS NULL"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('a')); err != nil { // the refused image, reused
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('a')); err != nil { // the refused image, reused
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 0 {

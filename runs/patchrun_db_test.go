@@ -145,6 +145,34 @@ func patched(t *testing.T, ctx context.Context, p *pgxpool.Pool) (run, state, re
 	return run, s, reasonOf(r)
 }
 
+// patchedDirectly is patched with its patch run started as the plan starts a canary's, without the plan: for a
+// preview the plan never names (#265; design/PATCHING.md §4.2), so the patch run's own config check is still proven
+// fail closed on it.
+func patchedDirectly(t *testing.T, ctx context.Context, p *pgxpool.Pool) (run, state, reason string) {
+	t.Helper()
+	image, _, _ := previewRow(t, ctx, p)
+	for _, q := range []string{
+		"INSERT INTO patch_identities (id, run_image) VALUES ($1, $1) ON CONFLICT DO NOTHING",
+		"INSERT INTO patch_wave_apps (identity, project_id, image, wave) VALUES ($1, $2, $3, 0)",
+	} {
+		args := []any{fakeRunImage}
+		if strings.Contains(q, "$3") {
+			args = append(args, project, image)
+		}
+		if _, err := p.Exec(ctx, q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	patch := Patch{Identity: fakeRunImage, RunImage: fakeRunImage, Image: image, Fixes: []PlatformFinding{libssl3("high", "CVE-2024-6119")}}
+	if why, err := pipe.StartPatch(ctx, project, patch); err != nil || why != WhyStarted {
+		t.Fatalf("the patch run, started directly: %s (%v)", why, err)
+	}
+	run, _, _ = patchRun(t, ctx, p, project)
+	s, r := waitEnded(t, ctx, p, run)
+	endedToo(t, run, watchID(run))
+	return run, s, reasonOf(r)
+}
+
 // waitOn is a hold the fake waits on until release, which the test's end calls too: a request still waiting
 // would hold the fake's Close.
 func waitOn(t *testing.T, on *atomic.Pointer[chan struct{}]) (release func()) {
@@ -267,6 +295,9 @@ func TestAPatchBehindAnUnprobedDoorShowsTheLineAndRunsNothing(t *testing.T) {
 func TestAPatchRunThatFailsDeploysNothing(t *testing.T) {
 	newHigh := PlatformFinding{Name: "libc6", Version: "2.39-0ubuntu8.4", Vulnerability: "CVE-2025-7", Fixed: "2.39-0ubuntu8.5", Class: "os", Severity: "high"}
 	rebased := ImageDigest(executortest.RebasedOf(project, fakeRunImage).Image)
+	// a row with no fingerprint, or one that does not read, the plan never names (#265): its patch run is started
+	// directly, so its own check is still proven to fail closed
+	unplanned := []string{"a row that recorded no fingerprint", "a row whose run-config does not read"}
 	for _, c := range []struct {
 		name                     string
 		setup                    func(t *testing.T, ctx context.Context, p *pgxpool.Pool, f *executortest.Fake, reads *imageReads)
@@ -324,7 +355,11 @@ func TestAPatchRunThatFailsDeploysNothing(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			p, ctx, f, reads := patchable(t)
 			c.setup(t, ctx, p, f, reads)
-			run, state, reason := patched(t, ctx, p)
+			start := patched
+			if slices.Contains(unplanned, c.name) {
+				start = patchedDirectly
+			}
+			run, state, reason := start(t, ctx, p)
 			var notPlatform, said string
 			if err := p.QueryRow(ctx, "SELECT coalesce(not_platform_only, ''), coalesce((SELECT data->>'not_platform_only' FROM timeline_rows WHERE run_id = $1 AND kind = 'run.state' AND data->>'state' = 'failed'), '') FROM runs WHERE id = $1",
 				run).Scan(&notPlatform, &said); err != nil {

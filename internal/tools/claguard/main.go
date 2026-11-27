@@ -1,10 +1,12 @@
-// Command claguard is the cla check (.github/workflows/cla.yml, #39): a pull request passes once every author of
-// its commits has signed CLA.md, by commenting the sentence below on it. Signatures are signatures/v1/cla.json on
-// the cla-signatures branch, written with the workflow's own GITHUB_TOKEN. It reads every page of the pull
-// request's commits, matches an author by account id, never by a name, and mentions only an account GitHub linked
-// the commit to: an author whose email is linked to none is named by the commit's sha. It reads the event and the
-// API alone, never the pull request's code. It fails closed: an answer it cannot read, a commit list short of the
-// pull request's count, or a pull request that moved on while it ran ends it red.
+// Command claguard is the cla check (.github/workflows/cla.yml, #39): a pull request into main passes once the
+// account that opened it and every author of its commits have signed CLA.md, by commenting the sentence below on
+// it. Signatures are signatures/v1/cla.json on the cla-signatures branch, which holds that file alone, written with
+// the workflow's own GITHUB_TOKEN. It reads every page of the pull request's commits and matches an account by its
+// id, never a name. The opener signs too, because a commit can claim any author email, a signer's noreply address
+// included. Its comment @-mentions the opener alone: it writes other accounts' logins without the @, and an author
+// whose email is linked to no account by the commit's sha. It reads the event and the API alone, never the pull
+// request's code. It fails closed: a base other than main, an answer it cannot read, or a commit list GitHub still
+// gives short of the pull request's count after a few tries ends it red.
 //
 //	go run ./internal/tools/claguard   # in the workflow: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH
 package main
@@ -21,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,9 +36,15 @@ const (
 	file      = "signatures/v1/cla.json"
 	workflow  = "cla.yml"
 	marker    = "<!-- cla -->"
+	base      = "main"   // the one branch the main ruleset requires the check on
 	actionsID = 41898282 // github-actions[bot], the only account whose comment the check edits
 	perPage   = 100
+	named     = 20 // the comment lists this many who have yet to sign, and counts the rest
+	tries     = 4  // reads of a pull request GitHub has not caught up with yet
 )
+
+// lag is how long the check waits before reading a pull request GitHub had not caught up with again.
+var lag = 5 * time.Second
 
 func main() {
 	ev, err := os.ReadFile(os.Getenv("GITHUB_EVENT_PATH")) //nolint:gosec // the runner names the event file
@@ -97,14 +106,29 @@ type signatures struct {
 	SignedContributors []signature `json:"signedContributors"`
 }
 
-// author is who wrote a commit: an account GitHub linked its email to, or, with no account, the commit alone.
+// author is who must sign: the pull request's opener, or who wrote a commit, an account GitHub linked its email
+// to or, with no account, the commit alone.
 type author struct {
 	account *user
 	commit  string // the first commit by an unlinked email
 	email   string // never printed: a commit claims any it likes
 }
 
-var errUnsigned = errors.New("not every author has signed the CLA")
+var (
+	errUnsigned = errors.New("not every author has signed the CLA")
+	errBehind   = errors.New("GitHub has not caught up with the pull request")
+)
+
+type pull struct {
+	Commits int  `json:"commits"`
+	User    user `json:"user"`
+	Head    struct {
+		SHA string `json:"sha"`
+	} `json:"head"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+}
 
 // check runs the cla check for one event: a pull_request_target event, or a recheck or signing comment.
 func check(gh *github, name string, raw []byte) error {
@@ -113,31 +137,39 @@ func check(gh *github, name string, raw []byte) error {
 		return fmt.Errorf("the event: %w", err)
 	}
 	var number int
+	head := "" // the commit a pull_request_target run's check is on; a comment's run checks the pull request's head
 	switch {
 	case name == "pull_request_target" && ev.PullRequest != nil:
-		number = ev.PullRequest.Number
+		number, head = ev.PullRequest.Number, ev.PullRequest.Head.SHA
 	case name == "issue_comment" && ev.Issue != nil && ev.Issue.PullRequest != nil && ev.Comment != nil:
 		number = ev.Issue.Number
 	default:
 		return fmt.Errorf("a %q event is not one the check reads", name)
 	}
-	var pr struct {
-		Commits int `json:"commits"`
-		Head    struct {
-			SHA string `json:"sha"`
-		} `json:"head"`
+	var (
+		pr      pull
+		authors []author
+		err     error
+	)
+	for try := 1; ; try++ {
+		pr, authors, err = read(gh, number, head)
+		if !errors.Is(err, errBehind) || try == tries {
+			break
+		}
+		log.Printf("%v; reading it again in %s", err, lag)
+		time.Sleep(lag)
 	}
-	if err := gh.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
-		return err
-	}
-	if ev.PullRequest != nil && ev.PullRequest.Head.SHA != pr.Head.SHA {
-		return fmt.Errorf("pull request #%d moved on from %s to %s: the run for %s decides", number, ev.PullRequest.Head.SHA, pr.Head.SHA, pr.Head.SHA)
-	}
-	authors, err := commitAuthors(gh, number, pr.Commits, pr.Head.SHA)
 	if err != nil {
 		return err
 	}
-	signed, sha, err := gh.signatures()
+	if pr.Base.Ref != base {
+		return fmt.Errorf("pull request #%d is into %q: the check passes a pull request into %s alone", number, pr.Base.Ref, base)
+	}
+	if ev.Comment != nil && !slices.ContainsFunc(authors, func(a author) bool { return a.account != nil && a.account.ID == ev.Comment.User.ID }) {
+		log.Printf("#%d: comment %d is by %s, who neither opened the pull request nor wrote a commit of it: nothing to do", number, ev.Comment.ID, ev.Comment.User.Login)
+		return nil
+	}
+	signed, sha, exists, err := gh.signatures()
 	if err != nil {
 		return err
 	}
@@ -151,14 +183,14 @@ func check(gh *github, name string, raw []byte) error {
 				Name: a.account.Login, ID: a.account.ID, CommentID: ev.Comment.ID, CreatedAt: ev.Comment.CreatedAt,
 				RepoID: ev.Repository.ID, PullRequestNo: number,
 			})
-			if err := gh.sign(signed, sha, fmt.Sprintf("%s has signed the CLA in #%d", a.account.Login, number)); err != nil {
+			if err := gh.sign(signed, sha, exists, fmt.Sprintf("%s has signed the CLA in #%d", a.account.Login, number)); err != nil {
 				return err
 			}
 			missing = append(missing[:i], missing[i+1:]...)
 			break
 		}
 	}
-	if err := gh.comment(number, missing); err != nil {
+	if err := gh.comment(number, body(missing, pr.User.ID), len(missing) == 0); err != nil {
 		return err
 	}
 	if ev.Comment != nil {
@@ -169,16 +201,28 @@ func check(gh *github, name string, raw []byte) error {
 	if len(missing) > 0 {
 		return errUnsigned
 	}
-	log.Printf("every author of #%d's %d commits has signed the CLA", number, pr.Commits)
+	log.Printf("#%d's opener and every author of its %d commits have signed the CLA", number, pr.Commits)
 	return nil
 }
 
-// commitAuthors reads every page of the pull request's commits, and fails unless they are the pull request's
-// whole count ending at its head: GitHub lists 250 at most, and a page it drops is an author never checked.
-func commitAuthors(gh *github, number, count int, head string) ([]author, error) {
-	var authors []author
-	seen := map[string]bool{}
-	listed, last := 0, ""
+// read reads the pull request and who must sign it: its opener first, then every page of its commits' authors.
+// It is errBehind while GitHub's answers disagree: the pull request's head is not the run's, or its commits are
+// not its whole count holding its head. GitHub lists 250 commits at most, so a longer pull request never agrees.
+func read(gh *github, number int, head string) (pull, []author, error) {
+	var pr pull
+	if err := gh.get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
+		return pr, nil, err
+	}
+	if head != "" && pr.Head.SHA != head {
+		return pr, nil, fmt.Errorf("%w: pull request #%d's head is %s, not this run's %s", errBehind, number, pr.Head.SHA, head)
+	}
+	if pr.User.ID == 0 || pr.User.Login == "" {
+		return pr, nil, fmt.Errorf("pull request #%d: an opener with no id or login", number)
+	}
+	opener := pr.User
+	authors := []author{{account: &opener}}
+	seen := map[string]bool{"id:" + strconv.FormatInt(opener.ID, 10): true}
+	listed, holds := 0, false
 	for page := 1; ; page++ {
 		var commits []struct {
 			SHA    string `json:"sha"`
@@ -190,15 +234,15 @@ func commitAuthors(gh *github, number, count int, head string) ([]author, error)
 			Author *user `json:"author"`
 		}
 		if err := gh.get(fmt.Sprintf("pulls/%d/commits?per_page=%d&page=%d", number, perPage, page), &commits); err != nil {
-			return nil, err
+			return pr, nil, err
 		}
 		for _, c := range commits {
-			listed, last = listed+1, c.SHA
+			listed, holds = listed+1, holds || c.SHA == pr.Head.SHA
 			a := author{account: c.Author, commit: c.SHA, email: c.Commit.Author.Email}
 			key := "email:" + a.email
 			if a.account != nil {
 				if a.account.ID == 0 || a.account.Login == "" {
-					return nil, fmt.Errorf("commit %s: an author account with no id or login", c.SHA)
+					return pr, nil, fmt.Errorf("commit %s: an author account with no id or login", c.SHA)
 				}
 				key = "id:" + strconv.FormatInt(a.account.ID, 10)
 			}
@@ -211,10 +255,10 @@ func commitAuthors(gh *github, number, count int, head string) ([]author, error)
 			break
 		}
 	}
-	if listed != count || last != head {
-		return nil, fmt.Errorf("pull request #%d has %d commits ending at %s, and GitHub listed %d ending at %q: the check reads them all or fails", number, count, head, listed, last)
+	if listed != pr.Commits || !holds {
+		return pr, nil, fmt.Errorf("%w: pull request #%d has %d commits with head %s, and GitHub listed %d (head listed: %t): the check reads them all or fails", errBehind, number, pr.Commits, pr.Head.SHA, listed, holds)
 	}
-	return authors, nil
+	return pr, authors, nil
 }
 
 // unsigned is the authors with no signature, matched by account id alone: a login can be renamed and taken.
@@ -232,21 +276,28 @@ func unsigned(authors []author, signed signatures) []author {
 	return missing
 }
 
-// body is the check's comment: who has yet to sign, each account by its login and each unlinked author by its
-// commit, and how to sign.
-func body(missing []author) string {
+// body is the check's comment: who has yet to sign, and how. It @-mentions the opener alone: a commit's author
+// account is the commit's to claim, so the comment writes its login without the @, and an author whose email is
+// linked to no account by the commit's sha. It lists the first few and counts the rest.
+func body(missing []author, opener int64) string {
 	if len(missing) == 0 {
-		return marker + "\nEvery author of this pull request's commits has signed the [contributor licence agreement](" + document + ")."
+		return marker + "\nThis pull request's opener and every author of its commits have signed the [contributor licence agreement](" + document + ")."
 	}
 	var b strings.Builder
-	b.WriteString(marker + "\nBefore this pull request can merge, each author of its commits signs the [contributor licence agreement](" + document + "), once. To sign, comment on this pull request with this sentence:\n\n")
+	b.WriteString(marker + "\nBefore this pull request can merge, the account that opened it and each author of its commits sign the [contributor licence agreement](" + document + "), once. To sign, comment on this pull request with this sentence:\n\n")
 	b.WriteString("```\n" + sentence + "\n```\n\nNot signed yet:\n\n")
-	for _, a := range missing {
-		if a.account != nil {
-			b.WriteString("- @" + a.account.Login + "\n")
-			continue
+	for i, a := range missing {
+		switch {
+		case i == named:
+			fmt.Fprintf(&b, "- and %d more\n", len(missing)-named)
+		case i > named:
+		case a.account != nil && a.account.ID == opener:
+			b.WriteString("- @" + a.account.Login + ", who opened this pull request\n")
+		case a.account != nil:
+			b.WriteString("- `" + a.account.Login + "`\n")
+		default:
+			b.WriteString("- the author of commit " + a.commit[:min(12, len(a.commit))] + ", whose email is linked to no GitHub account: add the email to your account, then sign\n")
 		}
-		b.WriteString("- the author of commit " + a.commit[:min(12, len(a.commit))] + ", whose email is linked to no GitHub account: add the email to your account, then sign\n")
 	}
 	b.WriteString("\nComment `recheck` to check again.")
 	return b.String()
@@ -299,8 +350,9 @@ func (g *github) get(path string, out any) error {
 	return err
 }
 
-// signatures reads cla.json and its blob sha; a file not there yet is no signatures, any other failure an error.
-func (g *github) signatures() (signatures, string, error) {
+// signatures reads cla.json and its blob sha, and whether the branch is there. A file or a branch not there yet
+// is no signatures; any other failure is an error.
+func (g *github) signatures() (signatures, string, bool, error) {
 	var f struct {
 		SHA     string `json:"sha"`
 		Content string `json:"content"`
@@ -308,31 +360,50 @@ func (g *github) signatures() (signatures, string, error) {
 	var s signatures
 	status, err := g.call(http.MethodGet, "contents/"+file+"?ref="+branch, nil, &f)
 	if status == http.StatusNotFound {
-		return s, "", nil
+		status, err := g.call(http.MethodGet, "git/ref/heads/"+branch, nil, nil)
+		if status == http.StatusNotFound {
+			return s, "", false, nil
+		}
+		return s, "", true, err
 	}
 	if err != nil {
-		return s, "", err
+		return s, "", true, err
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(f.Content, "\n", ""))
 	if err != nil {
-		return s, "", fmt.Errorf("%s: %w", file, err)
+		return s, "", true, fmt.Errorf("%s: %w", file, err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&s); err != nil {
-		return s, "", fmt.Errorf("%s: %w", file, err)
+		return s, "", true, fmt.Errorf("%s: %w", file, err)
 	}
-	return s, f.SHA, nil
+	return s, f.SHA, true, nil
 }
 
 // sign writes cla.json over the blob it read: a signature written in between makes GitHub refuse it, and the
-// check fails rather than drop one.
-func (g *github) sign(s signatures, sha, message string) error {
+// check fails rather than drop one. With no branch yet, it makes the branch, a commit holding cla.json alone.
+func (g *github) sign(s signatures, sha string, exists bool, message string) error {
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	put := map[string]string{"message": message, "branch": branch, "content": base64.StdEncoding.EncodeToString(append(raw, '\n'))}
+	raw = append(raw, '\n')
+	if !exists {
+		var tree, commit struct {
+			SHA string `json:"sha"`
+		}
+		entry := map[string]string{"path": file, "mode": "100644", "type": "blob", "content": string(raw)}
+		if _, err := g.call(http.MethodPost, "git/trees", map[string]any{"tree": []any{entry}}, &tree); err != nil {
+			return err
+		}
+		if _, err := g.call(http.MethodPost, "git/commits", map[string]any{"message": message, "tree": tree.SHA, "parents": []string{}}, &commit); err != nil {
+			return err
+		}
+		_, err := g.call(http.MethodPost, "git/refs", map[string]string{"ref": "refs/heads/" + branch, "sha": commit.SHA}, nil)
+		return err
+	}
+	put := map[string]string{"message": message, "branch": branch, "content": base64.StdEncoding.EncodeToString(raw)}
 	if sha != "" {
 		put["sha"] = sha
 	}
@@ -342,8 +413,7 @@ func (g *github) sign(s signatures, sha, message string) error {
 
 // comment writes the check's comment: a new one while someone has yet to sign, and an edit of its own, by
 // github-actions[bot], when what it says changed.
-func (g *github) comment(number int, missing []author) error {
-	text := body(missing)
+func (g *github) comment(number int, text string, done bool) error {
 	for page := 1; ; page++ {
 		var comments []struct {
 			ID   int64  `json:"id"`
@@ -367,7 +437,7 @@ func (g *github) comment(number int, missing []author) error {
 			break
 		}
 	}
-	if len(missing) == 0 {
+	if done {
 		return nil
 	}
 	_, err := g.call(http.MethodPost, fmt.Sprintf("issues/%d/comments", number), map[string]string{"body": text}, nil)

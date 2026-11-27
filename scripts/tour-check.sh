@@ -22,7 +22,9 @@ finish() {
   [ -z "${sampler:-}" ] || kill "$sampler" 2>/dev/null || true # demo up failed while the size sampler ran
   cd "$repo"
   [ "$rc" -eq 0 ] || [ ! -d "$stack" ] || (cd "$stack" && docker compose -p canyon-demo --profile demo-apps logs --no-color --tail=60 server executor demo-apps) || true
-  [ ! -d "$stack" ] || HOME=$work/home "$repo/bin/canyon" demo down --purge || true
+  if [ -d "$stack" ]; then
+    HOME=$work/home "$repo/bin/canyon" demo down --purge || { echo "tour-check: canyon demo down --purge exited $?" >&2; [ "$rc" -ne 0 ] || rc=1; }
+  fi
   docker rm -f canyon-tour-registry canyon-tour-release >/dev/null 2>&1 || true
   # what the executor made for apps, builds and scans goes with the demo, and with --purge the scanners' gigabytes of
   # databases and the build network too (#2697)
@@ -30,6 +32,23 @@ finish() {
     for f in label=canyon.app label=canyon.build; do docker network ls --format '{{.Name}}' --filter "$f"; done
     docker volume ls -q --filter name=^canyon-cache- --filter name=^canyon-scandb-)
   [ -z "$left" ] || { echo "tour-check: canyon demo down --purge left these behind: $(printf '%s' "$left" | tr '\n' ' ')" >&2; [ "$rc" -ne 0 ] || rc=1; }
+  # and every image the demo pulled or built (#170): one whose ID Docker didn't hold before up is the demo's, since
+  # nothing else here pulls or builds an image after that. The images this run built for its release, which purge
+  # keeps and names because their own tags hold them, were there before up.
+  if [ -f "$work/images-before" ]; then
+    if images=$(docker image ls -q --no-trunc); then
+      images=$(printf '%s\n' "$images" | sort -u | comm -13 "$work/images-before" -)
+      [ -z "$images" ] || {
+        echo "tour-check: canyon demo down --purge left images the demo made:" >&2
+        # shellcheck disable=SC2086 # one ID a word
+        docker image inspect --format '  {{.Id}} {{.RepoTags}} {{.RepoDigests}}' $images >&2 || true
+        [ "$rc" -ne 0 ] || rc=1
+      }
+    else
+      echo "tour-check: Docker could not list its images after canyon demo down --purge" >&2
+      [ "$rc" -ne 0 ] || rc=1
+    fi
+  fi
   rm -rf "$work"
   exit "$rc"
 }
@@ -144,6 +163,7 @@ used() { df -B1 --output=used,target "$(docker info --format '{{.DockerRootDir}}
 # registry above over loopback (#237). Docker's bridges and the containers' veth pairs carry the same bytes again.
 received() { awk 'NR > 2 { gsub(":", " "); if ($1 !~ /^(lo|docker|br-|veth)/) s += $2 } END { print s + 0 }' /proc/net/dev 2>/dev/null; }
 store=$(docker info --format '{{.Driver}} {{json .DriverStatus}}')
+docker image ls -q --no-trunc | sort -u >"$work/images-before" # what Docker held before the demo: purge leaves no other (finish)
 before=$(used)
 got=$(received)
 (while :; do used; sleep 5; done >"$work/used") &

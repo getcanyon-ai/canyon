@@ -369,12 +369,40 @@ func demoMade(ctx context.Context, stack string, transit []string, purge bool) (
 func demoImagesKept(dir string) string { return filepath.Join(dir, "images") }
 
 // demoComposeImages is what up kept of the compose file's images, else the file's own pins, read without this shell's
-// CANYON_IMAGE_* variables (a demo an older CLI started kept none).
+// CANYON_IMAGE_* variables (a demo an older CLI started kept none), and the Node builder the file has its executor pull.
 func demoComposeImages(ctx context.Context, stack string) ([]string, error) {
-	if b, err := os.ReadFile(demoImagesKept(filepath.Dir(stack))); err == nil { //nolint:gosec // this CLI's own file, under ~/.canyon
-		return strings.Fields(string(b)), nil
+	ctx = context.WithValue(ctx, demoNoImageEnv{}, true)
+	builder, err := demoNodeBuilder(ctx, stack)
+	if err != nil {
+		return nil, err
 	}
-	return demoListed(context.WithValue(ctx, demoNoImageEnv{}, true), stack, demoCompose("config", "--images")...)
+	if b, err := os.ReadFile(demoImagesKept(filepath.Dir(stack))); err == nil { //nolint:gosec // this CLI's own file, under ~/.canyon
+		return append(strings.Fields(string(b)), builder...), nil
+	}
+	refs, err := demoListed(ctx, stack, demoCompose("config", "--images")...)
+	return append(refs, builder...), err
+}
+
+// demoNodeBuilder is the Node builder the demo's compose file has its executor pull by digest: its CANYON_BUILDER_NODE,
+// which the release's bundle sets (scripts/deploy-bundle.sh). No service runs it, so config --images never names it
+// (#170). None when the file sets none.
+func demoNodeBuilder(ctx context.Context, stack string) ([]string, error) {
+	out, err := demoDocker(ctx, stack, nil, demoCompose("config", "--format", "json")...)
+	if err != nil {
+		return nil, err
+	}
+	var file struct {
+		Services map[string]struct {
+			Environment map[string]*string `json:"environment"`
+		} `json:"services"`
+	}
+	if err := json.Unmarshal([]byte(out), &file); err != nil {
+		return nil, fmt.Errorf("docker compose answered the demo's compose file as Canyon cannot read: %w", err)
+	}
+	if ref := file.Services["executor"].Environment["CANYON_BUILDER_NODE"]; ref != nil && *ref != "" {
+		return []string{*ref}, nil
+	}
+	return nil, nil
 }
 
 // demoHeld is why an image the demo pulled by digest stays: on Docker's containerd image store, removing that reference

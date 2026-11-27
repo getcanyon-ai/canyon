@@ -148,6 +148,16 @@ pushed to GitHub.
 The connection lasts 7 days, as a CLI sign-in does; then you allow it again. Under **Settings › Agents**, **Sessions** lists each one as
 `<agent> (MCP)`; **Disconnect** ends it at once.
 
+### From the MCP Registry
+
+Canyon is in the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.getcanyon-ai/canyon`. An
+agent that installs servers from the registry asks for your Canyon's host: its address in **Settings › Agents**
+without `https://` and `/mcp`, such as `canyon.example.com`. It then connects to `https://<host>/mcp` and you allow
+it in your browser, as above. It needs what a cloud agent needs, and it reviews and deploys a pushed branch.
+
+On a laptop, `canyon skill install` sets up tools that also deploy the folder you're in. Give each agent one of
+the two, not both.
+
 ### What the agent can do
 
 | Tool | Does |

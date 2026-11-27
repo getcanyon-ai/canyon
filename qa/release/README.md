@@ -133,6 +133,11 @@ The same for each .NET line.
 
 The same for nginx and httpd.
 
+### registry
+
+`server.json`, published to a copy of the MCP Registry run locally, installed from it in a client that reads one: the
+client asks for the host, Canyon's sign-in opens in the browser, and once it's allowed the client lists Canyon's tools.
+
 ### telemetry
 
 The collector that runs takes this release's report: its schema is the tagged one, or a newer one that takes it.

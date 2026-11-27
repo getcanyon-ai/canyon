@@ -7,8 +7,9 @@ name: Release
 # every image in it pulls by digest on amd64 and on arm64. Then the same release, with the chart, the deploy bundle
 # and Opengrep's source packed beside it, goes to getcanyon-ai/canyon-releases, which install.sh reads
 # (scripts/publish-release.sh), and release-smoke
-# installs what was published. Images build on tags alone, never on a pull request, and every job runs on GitHub's
-# runners. release, images and canyon-releases each refuse a commit that isn't on main.
+# installs what was published; then a release that isn't a prerelease updates Canyon's listing in the MCP Registry
+# (server.json). Images build on tags alone, never on a pull request, and every job runs on GitHub's
+# runners. release, images, canyon-releases and mcp-registry each refuse a commit that isn't on main.
 #
 # Credentials (RELEASING.md, The tokens): the images push with each job's own GITHUB_TOKEN (packages: write), which
 # needs this repository to have write access on each of the ten packages. Only canyon-releases holds a secret,
@@ -354,6 +355,57 @@ jobs:
     uses: ./.github/workflows/release-smoke.yml
     with:
       tag: ${{ github.ref_name }}
+
+  mcp-registry:
+    # Canyon's listing in the MCP Registry (design/specs/mcp.md §8): server.json with this release's version, once the
+    # published release installs. The only place it's published: never by hand, never from a pull request, and never a
+    # prerelease, whose version would sort below the release's. This job's own OIDC token proves the
+    # io.github.getcanyon-ai namespace to the registry: no secret, no environment, and no other job asks for id-token.
+    needs: smoke
+    if: github.event_name == 'push' && github.repository == 'getcanyon-ai/canyon' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # mcp-publisher login github-oidc
+    env:
+      MCP_PUBLISHER_COMMIT: ba94f657e1ecd4ddff11baa25ad84cda26c2b854 # modelcontextprotocol/registry v1.8.9, as mcp-registry.yml's; bump both together
+      REGISTRY: https://registry.modelcontextprotocol.io
+    steps:
+      - name: the commit is on main, so only reviewed code is listed
+        env:
+          GH_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          git init -q --bare "$RUNNER_TEMP/onmain"
+          git -C "$RUNNER_TEMP/onmain" fetch -q --filter=blob:none "$GH_REPO_URL" main
+          git -C "$RUNNER_TEMP/onmain" merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD ||
+            { echo "::error::$GITHUB_SHA is not on main: a release is cut from main alone"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: mcp-publisher, pinned by commit (Go's checksum database holds the module to it)
+        run: GOBIN="$RUNNER_TEMP/bin" go install "github.com/modelcontextprotocol/registry/cmd/publisher@$MCP_PUBLISHER_COMMIT"
+      - name: publish server.json with this release's version, unless the registry already lists that version
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          jq --arg v "$version" '.version = $v' server.json > "$RUNNER_TEMP/server.json"
+          cd "$RUNNER_TEMP"
+          bin/publisher validate server.json
+          # a release run again: the version is listed already, and a listed version can't change
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 "$REGISTRY/v0.1/servers/io.github.getcanyon-ai%2Fcanyon/versions/$version")
+          case $code in
+            200) echo "$version is listed already"; exit 0 ;;
+            404) ;;
+            *) echo "::error::the registry answered $code for io.github.getcanyon-ai/canyon $version: nothing was published"; exit 1 ;;
+          esac
+          bin/publisher login github-oidc
+          bin/publisher publish server.json
 
   rehearse:
     needs: [release, images]

@@ -34,6 +34,7 @@ runtime-php   | before | executor/*.Dockerfile Dockerfile.executor-kube executor
 runtime-dotnet | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
 runtime-static | before | executor/*.Dockerfile Dockerfile.executor-kube executor/kube/** deploy/k8s/builds.yaml deploy/helm/canyon/values.yaml
 telemetry     | before | cmd/canyon-collector/** deploy/collector/** contracts/schema/telemetry.schema.json cmd/canyon-server/telemetry*.go TELEMETRY.md
+registry      | before | server.json
 first-report  | after  | always
 
 nothing | .github/** .golangci.yml .gitleaks.toml .gitleaksignore .gitignore | CI's own: the tagged commit's runs are read, and a rehearsal runs the release workflow

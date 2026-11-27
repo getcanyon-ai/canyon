@@ -4,18 +4,19 @@ import type { Blocked, Policy, PolicyChange, PolicyState } from "../api";
 import { Impact, type Flow } from "./PolicyChange";
 
 // What a change's preview knows, in words that claim no more (the expert review): would_block names the apps a target of
-// blocking would hold, from their latest review (contracts/routes.md, the policies row). It says nothing of what a looser
-// rule lets through, of a rule no review had on, nor of a rule judged when an app is promoted, which no review holds.
-const said = (rule: Partial<Policy>, change: PolicyChange | undefined, wouldBlock: Blocked[] | null = []) => {
+// blocking would hold, from their latest review, and unchecked the apps whose latest review ran with the rule off
+// (contracts/routes.md, the policies row). It says nothing of what a looser rule lets through, nor of a rule judged when
+// an app is promoted, which no review holds.
+const said = (rule: Partial<Policy>, change: PolicyChange | undefined, wouldBlock: Blocked[] | null = [], unchecked?: string[]) => {
   const policy = { id: "sql.string-concat", name: "No hand-built SQL", state: "off" as PolicyState, ...rule } as Policy;
-  const flow = { of: () => (change === undefined ? undefined : { rule: policy, change, wouldBlock }) } as unknown as Flow;
-  const { container, unmount } = render(<Impact flow={flow} rule={policy} today={change === undefined ? (wouldBlock ?? []) : undefined} />);
+  const preview = wouldBlock === null ? null : { would_block: wouldBlock, ...(unchecked === undefined ? {} : { unchecked }) };
+  const flow = { of: () => (change === undefined ? undefined : { rule: policy, change, preview }) } as unknown as Flow;
+  const { container, unmount } = render(<Impact flow={flow} rule={policy} today={change === undefined ? (preview ?? { would_block: [] }) : undefined} />);
   const text = container.textContent;
   unmount();
   return text;
 };
 const NONE = "No app is affected today.";
-const OFF = "Not known yet: reviews may not check a rule while it's Off.";
 const PROMOTED = "Canyon checks this rule when an app is promoted, so it can't say which apps this affects.";
 const LOOSER = "Canyon doesn't check which apps this lets through.";
 const WARNS = "Advisory blocks no app.";
@@ -27,10 +28,23 @@ describe("a rule change's impact", () => {
     expect(said({}, { production: "blocking" })).toBe(NONE); // an app whose review had it off is named, at 0 findings
     expect(said({ state: "blocking" }, undefined)).toBe(NONE);
   });
-  it("says it isn't known for a rule no review had on", () => {
-    expect(said({}, { state: "blocking" })).toBe(OFF);
-    expect(said({}, { state: "blocking", production: "blocking" })).toBe(OFF);
-    expect(said({ production: "advisory" }, { state: "blocking" })).toBe(NONE); // on before production, so reviewed
+  // #155: the server says which apps' latest review ran with the rule off, whatever the rule is now: Off, or saved
+  // Advisory with no review since. The page never reads it from the rule's state.
+  it("says it isn't known for the apps no review checked, and that no other app is affected", () => {
+    expect(said({}, { state: "blocking" }, [], ["claims-portal"])).toBe("Canyon can't tell yet whether this affects 1 app: its latest review ran while this rule was Off. No other app is affected today.");
+    expect(said({ state: "advisory" }, { state: "blocking" }, [], ["claims-portal", "ledger"])).toBe("Canyon can't tell yet whether this affects 2 apps: their latest review ran while this rule was Off. No other app is affected today.");
+    expect(said({ state: "advisory" }, { state: "blocking", production: "blocking" }, [], ["ledger"])).toBe("Canyon can't tell yet whether this affects 1 app: its latest review ran while this rule was Off. No other app is affected today.");
+  });
+  it("says what it knows once every app is reviewed with the rule on", () => {
+    expect(said({ state: "advisory" }, { state: "blocking" })).toBe(NONE);
+    expect(said({}, { state: "blocking" }, [{ project: "claims-portal", findings: 2 }])).toBe("1 app could not promote today: claims-portal");
+  });
+  it("says what is known and how many apps aren't, when some were reviewed since and some not", () => {
+    expect(said({ state: "advisory" }, { state: "blocking" }, [{ project: "claims-portal", findings: 2 }], ["ledger", "quote-engine"]))
+      .toBe("1 app could not promote today: claims-portal. Canyon can't tell yet whether this affects 2 more apps: their latest review ran while this rule was Off.");
+  });
+  it("names before production an app whose review had the rule off among those it holds, as the server does", () => {
+    expect(said({ production: "advisory" }, { production: "blocking" }, [{ project: "ledger", findings: 0 }])).toBe("1 app could not promote today: ledger");
   });
   it("says it isn't known for a rule judged when an app is promoted, on or off, changed or not", () => {
     for (const id of ["prod.clean-gate", "prod.human-approval", "stack.blessed", "owner.required"]) {

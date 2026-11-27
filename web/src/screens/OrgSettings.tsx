@@ -38,9 +38,10 @@ export function domainOf(email: string): string | null {
 const listed = (domains: string[]) => (domains.length < 2 ? domains.join("") : `${domains.slice(0, -1).join(", ")} or ${domains.at(-1)}`);
 
 // Values is a list nobody on this screen can change: an operator-pinned key, the bootstrap admins,
-// or every list when a member is reading. An empty one says so rather than rendering as a gap.
-function Values({ values }: { values: string[] }) {
-  if (values.length === 0) return <p className="text-base text-text-dim">Nobody.</p>;
+// or every list when a member is reading. An empty one says what it is rather than rendering as a gap: a list of people
+// holds nobody, and a list of anything else says what it doesn't hold (#140).
+function Values({ values, empty = "Nobody." }: { values: string[]; empty?: string }) {
+  if (values.length === 0) return <p className="text-base text-text-dim">{empty}</p>;
   return <ul className="flex flex-col gap-1">{values.map((one) => <li key={one} className="font-mono text-base">{one}</li>)}</ul>;
 }
 
@@ -194,7 +195,7 @@ export function SignInFields({ record, draft, admin, mine = null }: Fields) {
               <List name="Domain" values={others} onChange={(next) => draft.setDomains(ticked ? [myDomain, ...next] : next)} add="Add domain" />
             </>
           )
-          : <Values values={record.allowed_domains} />}
+          : <Values values={record.allowed_domains} empty="No domain is allowed." />}
       {/* The box already carries the consequence; without a box the lists need it said once. */}
       {!box && <p className={NOTE}>Anyone at an allowed domain who can sign in to your identity provider can sign in to Canyon.</p>}
       {/* Only where the reader can add one: a list the server pins offers no Add. */}
@@ -354,11 +355,11 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
               ? <input id="groups-claim" className={FIELD} value={groups} onChange={(event) => setGroups(event.target.value)} />
               : admin && licence !== null
                 ? (<>
-                  <Values values={groups === "" ? [] : [groups]} />
+                  <Values values={groups === "" ? [] : [groups]} empty="No groups claim is set." />
                   {groups !== "" && <span className="mt-1 flex"><Button size="sm" variant="ghost" label="Clear the groups claim" onClick={() => setGroups("")}>Clear</Button></span>}
                   <div className="mt-1"><EnterpriseLine feature="group_sync" /></div>
                 </>)
-                : <Values values={record.groups_claim === "" ? [] : [record.groups_claim]} />}
+                : <Values values={record.groups_claim === "" ? [] : [record.groups_claim]} empty="No groups claim is set." />}
           <p className={NOTE}>The sign-in claim that lists a person's groups. Once it is set, owners can share an app with a group. Canyon reads it at sign-in.</p>
         </section>
         <section aria-label="Production">

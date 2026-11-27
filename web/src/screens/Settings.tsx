@@ -559,6 +559,11 @@ function OutboundSettings() {
     }
     return Object.keys(moved).length > 0 ? moved : null;
   };
+  // A limit typed and not saved, one Save won't send included: the folded Advanced says so (#139).
+  const capsUnsaved = () => {
+    const saved = read?.caps;
+    return caps !== null && saved !== undefined && CAPS.some(([key]) => !/^[0-9]+$/.test(caps[key]) || Number(caps[key]) !== saved[key]);
+  };
   const saveCaps = async (moved: Partial<EgressCaps>) => {
     const taken = await change("Saving…", () => putEgress({ caps: moved }).then(({ answer, pending }) => { if (live.current) setCapsPending(pendingLine(pending)); return answer; })
       .catch(async (err: unknown) => { await reread(); throw err; }));
@@ -726,7 +731,8 @@ function OutboundSettings() {
           a person, so a warning is never folded by itself. */}
       {read !== null && ((caps !== null && read.caps !== undefined) || (read.replicas?.length ?? 0) > 0 || caOf(read) !== null) && (
         <details className="mt-6 rounded-[10px] border border-border bg-surface px-4 py-3" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
-          <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-regular text-text-dim">{S.advancedWhat}</span></summary>
+          <summary className="cursor-pointer text-base font-semibold">{S.advanced}<span className="ml-2 font-regular text-text-dim">{S.advancedWhat}</span>
+            {!advanced && capsUnsaved() && <span className="ml-2 font-regular text-amber">{S.capsUnsaved}</span>}</summary>
           <fieldset disabled={busy !== null} className="min-w-0">
             {/* The limits, an admin's (#2691): a server from before them names none, and then none is shown. */}
             {caps !== null && read.caps !== undefined && (() => {

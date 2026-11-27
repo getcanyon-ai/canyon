@@ -1,6 +1,6 @@
 import { version, type Actor as ActorRef, type AuditEvent } from "../api";
 import { tableWords } from "../screens/AuditTable";
-import { ACCESS_WORD, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_HELD_RUNNING, AUDIT_LIFT_STARTED, AUDIT_MORE, AUDIT_STOP, AUDIT_UNDEPLOY, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, DB_CLOSED_WHY, PATCHING, S } from "../strings";
+import { ACCESS_WORD, AGENT_ENDED_WHY, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_CHECK, AUDIT_GRACE, AUDIT_HELD_RUNNING, AUDIT_LIFT_STARTED, AUDIT_MORE, AUDIT_STOP, AUDIT_UNDEPLOY, AUDIT_PRODUCTION, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED, DB_CLOSED_WHY, PATCHING, S } from "../strings";
 import { Actor, actorName } from "./Actor";
 import { Age } from "./Age";
 import { Icon } from "./Icon";
@@ -130,6 +130,7 @@ function worded(action: string, detail: Record<string, unknown>, picked?: string
     .replace("<db_mode>", () => text(detail.mode))
     .replace("<person>", () => { const p = detail.person as ActorRef | null | undefined; return p === null || p === undefined ? "someone" : actorName({ kind: "person", subject: text(p.subject), display: text(p.display) }); })
     .replace("<why>", () => DB_CLOSED_WHY[text(detail.reason)] ?? text(detail.reason))
+    .replace("<ended>", () => AGENT_ENDED_WHY[text(detail.reason)] ?? text(detail.reason))
     .replace("<kind>", () => CHANNEL[text(detail.kind)] ?? text(detail.kind))
     .replace("<channel>", () => text(detail.name))
     .replace("<status>", () => String(detail.status ?? ""))

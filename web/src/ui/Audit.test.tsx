@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditEvent } from "../api";
-import { AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED } from "../strings";
+import { AGENT_ENDED_WHY, AUDIT_ACTIONS, AUDIT_CA_BYO, AUDIT_MORE, AUDIT_RECREATE_FAILED, AUDIT_ROUTE_MOVED } from "../strings";
 import { AuditRow, folded, sentence } from "./Audit";
 
 // The contract's trail: every action a row on it carries has to have plain words here.
@@ -229,6 +229,28 @@ describe("an audit row's sentence", () => {
     const experience = readFileSync(join(import.meta.dirname, "../../../design/EXPERIENCE.md"), "utf8");
     for (const one of ["egress.route.set", "egress.route.remove", "egress.ca.rotate"]) expect(experience, one).toContain(AUDIT_ACTIONS[one]);
     for (const one of [AUDIT_ROUTE_MOVED, AUDIT_CA_BYO]) expect(experience).toContain(one);
+  });
+
+  // An agent's session ended (#137), each row as the server writes its detail (contracts/routes.md, POST /oauth/token and
+  // DELETE /api/v1/sessions/:id): Canyon's names whose agent it was and why it ended it, a person's names the agent, on the
+  // Audit page and the fleet's Recent activity alike, never the action's name, and each of them D5's.
+  it("says whose agent was disconnected, and why when Canyon did it", () => {
+    const canyon = { kind: "canyon" as const, subject: "oauth", display: "Canyon" };
+    for (const [actor, detail, said] of [
+      [canyon, { reason: "refresh token reused", subject: "bob@meridian.example" }, "Canyon disconnected bob@meridian.example's agent: its sign-in token was used again after it was replaced, which can mean someone copied it"],
+      [canyon, { reason: "no longer allowed to sign in", subject: "bob@meridian.example" }, "Canyon disconnected bob@meridian.example's agent: they're no longer allowed to sign in"],
+      [dana, { session: "ses_1", flow: "oauth", client: "Claude Code" }, "Dana W. disconnected the agent Claude Code"],
+      [dana, { session: "ses_1", flow: "oauth", client: "Claude Code", subject: "bob@meridian.example" }, "Dana W. disconnected bob@meridian.example's agent Claude Code"],
+    ] as const) {
+      for (const stacked of [false, true]) {
+        const { container, unmount } = render(<ul><AuditRow event={{ ...event("disconnect agent", detail), actor }} stacked={stacked} /></ul>);
+        expect(container.textContent, `${said}${stacked ? " on the fleet" : ""}`).toContain(said);
+        expect(container.textContent).not.toContain("disconnect agent");
+        unmount();
+      }
+    }
+    const experience = readFileSync(join(import.meta.dirname, "../../../design/EXPERIENCE.md"), "utf8");
+    for (const one of [AUDIT_MORE.disconnect, AUDIT_MORE.disconnectTheirs, AUDIT_MORE.disconnectCanyon, ...Object.values(AGENT_ENDED_WHY)]) expect(experience).toContain(one);
   });
 
   // Canyon's patches and an app's own guardrail (#2603), each row as the server writes its detail, rendered as the Audit

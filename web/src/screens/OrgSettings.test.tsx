@@ -172,6 +172,27 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(region("Who may sign in").getByText("No one by address; anyone at meridian.example, acme.example or globex.example can sign in.")).toBeTruthy();
   });
 
+  // An empty list is said as what it is (#140): below admin, an empty Domains list and an unset groups claim are not
+  // people, so neither reads "Nobody."; nor does an unset claim to an admin without the group-sync licence. An admin who
+  // may set them edits them instead.
+  it("an empty Domains list and an unset groups claim say what they are, never nobody", async () => {
+    show({ ...MEMBER, allowed_emails: [THEIRS], allowed_domains: [], groups_claim: "" });
+    expect(region("Who may sign in").getByText("No domain is allowed.")).toBeTruthy();
+    expect(region("Groups").getByText("No groups claim is set.")).toBeTruthy();
+    expect(screen.queryByText("Nobody.")).toBeNull();
+    cleanup();
+    server({ body: ADMIN }, LAPSED);
+    show({ ...ADMIN, groups_claim: "" });
+    expect(await region("Groups").findByText("No groups claim is set.")).toBeTruthy();
+    expect(region("Groups").queryByText("Nobody.")).toBeNull();
+    cleanup();
+    server({ body: ADMIN });
+    show({ ...ADMIN, allowed_domains: [], groups_claim: "" });
+    expect(await screen.findByRole("textbox", { name: "Groups claim" })).toBeTruthy();
+    expect(screen.queryByText("No groups claim is set.")).toBeNull();
+    expect(screen.queryByText("No domain is allowed.")).toBeNull();
+  });
+
   // Every rule is the server's. The screen sends what was typed, renders the sentence that comes
   // back, and knows nothing about last members or locked-out admins.
   it.each([

@@ -35,6 +35,19 @@ afterEach(() => {
 });
 
 describe("the audit screen", () => {
+  // #141: the line under the title names the reader's zone and offers UTC on hover; a reader whose zone is UTC is told
+  // once, and offered nothing.
+  it("says the times are in UTC once to a reader in UTC, and offers UTC to anyone else", async () => {
+    server(EMPTY);
+    const zone = (timeZone: string) => vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({ ...new Intl.DateTimeFormat().resolvedOptions(), timeZone });
+    for (const [reader, said] of [["Etc/UTC", "Times are in UTC."], ["UTC", "Times are in UTC."], ["Europe/London", "Times are in Europe/London; hover a time for UTC."]] as const) {
+      zone(reader);
+      const { container, unmount } = render(<AuditTrail query="" />);
+      expect(container.querySelector("h1 + p")?.textContent, reader).toBe(`Every change, newest first. ${said}`);
+      unmount();
+    }
+  });
+
   // Found by the UX journeys: the screen read the trail once, so a change made while it was open
   // showed only after a reload. The page is read again every 2 s and what is new goes on top when asked for.
   it("puts a change made while it is open on top, without a reload", async () => {

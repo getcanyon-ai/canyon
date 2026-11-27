@@ -32,7 +32,7 @@
   "preview": {
     "rule": "auth.unauthenticated-route",
     "request": { "state": "blocking" },
-    "response": { "would_block": [ { "project": "claims-portal", "findings": 2 }, { "project": "quote-engine", "findings": 1 } ] }
+    "response": { "would_block": [ { "project": "claims-portal", "findings": 2 }, { "project": "quote-engine", "findings": 1 } ], "unchecked": [ "renewal-reminder" ] }
   },
   "apply": {
     "rule": "auth.unauthenticated-route",

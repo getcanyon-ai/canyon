@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BETA, getAuthConfig, getPolicies, getPreferences, previewPolicy, putPreferences, said, type Blocked, type Policy, type Preferences } from "../api";
+import { BETA, getAuthConfig, getPolicies, getPreferences, previewPolicy, putPreferences, said, type Policy, type Preferences, type Preview } from "../api";
 import { S } from "../strings";
 import { Chip } from "../ui/Chip";
 import { Dial } from "../ui/Dial";
@@ -76,14 +76,14 @@ export function Policies() {
   // What each rule blocks today: the server's preview of the rule at its own state, one
   // per row, read again whenever the rows are A preview that fails says why in its row.
   // ponytail: one preview per rule per read; a count on GET /api/v1/policies if the rules grow many.
-  const [today, setToday] = useState<Record<string, Blocked[] | string>>({});
+  const [today, setToday] = useState<Record<string, Preview | string>>({});
   useEffect(() => {
     if (rows === null) return;
     let live = true;
     setToday({});
     for (const rule of rows.filter(shown)) {
       previewPolicy(rule.id, rule.production === undefined ? { state: rule.state } : { state: rule.state, production: rule.production }).then(
-        (answer) => { if (live) setToday((all) => ({ ...all, [rule.id]: answer.would_block })); },
+        (answer) => { if (live) setToday((all) => ({ ...all, [rule.id]: answer })); },
         (err: unknown) => { if (live) setToday((all) => ({ ...all, [rule.id]: said(err) })); },
       );
     }
@@ -103,7 +103,7 @@ export function Policies() {
   // Row by row: a line on every row, for one row's change, moves the control just tapped.
   const speaks = (rule: Policy) => {
     const now = today[rule.id];
-    return flow.of(rule.id) !== undefined || typeof now === "string" || (Array.isArray(now) && now.length > 0);
+    return flow.of(rule.id) !== undefined || typeof now === "string" || (now !== undefined && now.would_block.length > 0);
   };
   const affects = rows?.some(speaks) ?? false;
   return (

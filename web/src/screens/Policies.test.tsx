@@ -11,7 +11,7 @@ import { S } from "../strings";
 // Every rule, state, project and sentence here comes from the contract sample at runtime.
 const golden = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/policies/meridian.json"), "utf8")) as {
   policies: { policies: Policy[] };
-  preview: { rule: string; request: { state: PolicyState }; response: { would_block: Blocked[] } };
+  preview: { rule: string; request: { state: PolicyState }; response: { would_block: Blocked[]; unchecked: string[] } };
   apply: { rule: string; request: { state: PolicyState }; response: { policy: Policy; would_block: Blocked[] } };
   member: { error: string; message: string };
   custom_rules: { custom_rules: CustomRule[] };
@@ -24,6 +24,10 @@ const RULE = `${POLICIES}/${golden.preview.rule}`;
 const rule = golden.policies.policies.find((one) => one.id === golden.preview.rule)!;
 const scheduled = golden.policies.policies.find((one) => one.scheduled !== undefined)!;
 const WORD = { off: "Off", advisory: "Advisory", blocking: "Blocking" } as const;
+// The sample preview's line: the apps it would hold, then how many more no review checked with the rule on (#155).
+const { would_block: held, unchecked } = golden.preview.response;
+const IMPACT = `${held.length} apps could not promote today: ${held.map((one) => one.project).join(", ")}. `
+  + `Canyon can't tell yet whether this affects ${unchecked.length} more app${unchecked.length === 1 ? "" : "s"}: ${unchecked.length === 1 ? "its" : "their"} latest review ran while this rule was Off.`;
 
 // The server answers "<METHOD> <url>" from a table and 404s anything else; the reader lists every
 // request as "<METHOD> <url>", with its body when it has one.
@@ -54,7 +58,7 @@ const bar = () => within(screen.getByRole("region", { name: "Unsaved changes" })
 const change = async () => {
   render(<Policies />);
   await choose(rule.name, golden.preview.request.state);
-  await row().findByText(`${golden.preview.response.would_block.length} apps could not promote today: ${golden.preview.response.would_block.map((one) => one.project).join(", ")}`);
+  await row().findByText(IMPACT);
 };
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -199,7 +203,7 @@ describe("Policies", () => {
     const sent = server(routes);
     render(<Policies />);
     await screen.findByRole("region", { name: rule.name });
-    await row().findByText(`${golden.preview.response.would_block.length} apps could not promote today: ${golden.preview.response.would_block.map((one) => one.project).join(", ")}`);
+    await row().findByText(IMPACT);
     expect(sent()).toContain(`PUT ${RULE} ${JSON.stringify({ state: rule.state })}`);
     expect(applied(sent)).toHaveLength(0);
     expect(screen.queryByRole("region", { name: "Unsaved changes" })).toBeNull();

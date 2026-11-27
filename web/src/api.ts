@@ -212,6 +212,9 @@ export interface Policy {
   set_by?: Actor; set_at?: string; run?: boolean; settings?: ToolSettings; additions?: Addition[];
 }
 export interface Blocked { project: string; findings: number }
+// A preview's answer: the apps a target of blocking would hold and, before preview at blocking, the apps whose latest
+// review ran with the rule off, absent when none (contracts/routes.md, the policies row; #155).
+export interface Preview { would_block: Blocked[]; unchecked?: string[] }
 // An edit names the gates it sets: `state` before preview (a go-live rule's before production, its
 // only gate) and `production` before production, `off` taking the rule out of that gate.
 export interface PolicyChange { state?: PolicyState; production?: PolicyState }
@@ -456,7 +459,7 @@ export const createDesignSystem = (body: { name: string; namespace: string; regi
 export const getSkillManifest = () => call<Manifest>("GET", "/skill/manifest");
 // A PUT without apply is the preview and writes nothing; only `apply` writes the edit.
 export const getPolicies = () => call<{ policies: Policy[] }>("GET", "/policies");
-export const previewPolicy = (rule: string, change: PolicyChange) => call<{ would_block: Blocked[] }>("PUT", `/policies/${encodeURIComponent(rule)}`, change);
+export const previewPolicy = (rule: string, change: PolicyChange) => call<Preview>("PUT", `/policies/${encodeURIComponent(rule)}`, change);
 export const applyPolicy = (rule: string, body: PolicyChange & { grace_days?: number }) =>
   call<{ policy: Policy; would_block: Blocked[] }>("PUT", `/policies/${encodeURIComponent(rule)}?apply=true`, body);
 // An org's custom rules (contracts/routes.md, the custom-rules row): every member reads them, an

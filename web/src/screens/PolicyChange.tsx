@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { applyPolicy, previewPolicy, said, type Blocked, type Policy, type PolicyChange, type PolicyState } from "../api";
+import { applyPolicy, previewPolicy, said, type Policy, type PolicyChange, type PolicyState, type Preview } from "../api";
 import { POLICY_STATE as WORD } from "../strings";
 import { Button } from "../ui/Button";
 
@@ -22,7 +22,7 @@ const waiting = (rule: Policy, gate: Gate) => (gate === "state" ? rule.scheduled
 const named = (change: PolicyChange) => GATES.filter((gate) => change[gate] !== undefined);
 
 // One change asked of one rule: the server's preview of what it would block today, once it answers.
-export interface Change { rule: Policy; change: PolicyChange; wouldBlock: Blocked[] | null }
+export interface Change { rule: Policy; change: PolicyChange; preview: Preview | null }
 const tightens = ({ rule, change }: Change) => named(change).some((gate) => RANK[change[gate]!] > RANK[now(rule, gate)]);
 const loosens = ({ rule, change }: Change) => named(change).some((gate) => RANK[change[gate]!] < RANK[now(rule, gate)]);
 // Only a change that tightens and loosens nothing may wait a grace: one that moves both ways saves now.
@@ -52,11 +52,11 @@ export function usePolicyChanges(applied: (policy: Policy) => void) {
     const change: PolicyChange = Object.fromEntries(named(asked)
       .filter((gate) => asked[gate] !== now(rule, gate) || waiting(rule, gate) !== undefined).map((gate) => [gate, asked[gate]]));
     const same = named(change).length === 0;
-    hold((list) => [...list.filter((one) => one.rule.id !== rule.id), ...(same ? [] : [{ rule, change, wouldBlock: null }])]);
+    hold((list) => [...list.filter((one) => one.rule.id !== rule.id), ...(same ? [] : [{ rule, change, preview: null }])]);
     if (same) return;
     try {
-      const wouldBlock = (await previewPolicy(rule.id, change)).would_block;
-      hold((list) => list.map((one) => (one.change === change ? { ...one, wouldBlock } : one)));
+      const preview = await previewPolicy(rule.id, change);
+      hold((list) => list.map((one) => (one.change === change ? { ...one, preview } : one)));
     } catch (err) {
       // A refused preview takes its change back to what the rule held before it: the server would
       // refuse the apply the same way.
@@ -117,27 +117,37 @@ const asked = ({ rule, change }: Change) => {
 // Judged when an app is promoted, from the server's own state: no review holds a finding of one, so the preview, which
 // reads reviews, names no app for it (contracts/routes.md, the policies row). The other two go-live rules it reads now.
 const AT_PROMOTION = ["prod.clean-gate", "prod.human-approval", "stack.blessed", "owner.required"];
-const READ_NOW = ["platform.known-vuln", "prod.egress-allowed"];
-// What an empty preview means. It counts apps a gate at blocking would hold, so it says nothing of a looser rule, nor
-// before preview of a rule no review had on; before production it names an app whose review had the rule off.
+// What an empty preview means. It counts apps a gate at blocking would hold, so it says nothing of a looser rule;
+// before production it names an app whose review had the rule off, and before preview the server names those apart.
 function nobody(rule: Policy, one: Change | undefined): string {
   const to = one?.change ?? { state: rule.state, production: rule.production };
   if (!named(to).some((gate) => to[gate] === "blocking")) return one === undefined ? "No app is affected today." : loosens(one) ? "Canyon doesn't check which apps this lets through." : "Advisory blocks no app.";
   if (AT_PROMOTION.includes(rule.id)) return "Canyon checks this rule when an app is promoted, so it can't say which apps this affects.";
-  if (!READ_NOW.includes(rule.id) && to.state === "blocking" && now(rule, "state") === "off" && now(rule, "production") === "off") return "Not known yet: reviews may not check a rule while it's Off.";
   return "No app is affected today.";
 }
 
-export function Impact({ flow, rule, today }: { flow: Flow; rule: Policy; today?: Blocked[] | string }) {
+// The apps whose latest review ran with the rule off (the preview's unchecked, #155): what the rule would block of them
+// is not known until each is reviewed again, so they are counted apart from the apps it would hold.
+const unknown = (apps: string[], more: boolean) =>
+  `Canyon can't tell yet whether this affects ${plural(apps.length, more ? "more app" : "app")}: ${apps.length === 1 ? "its" : "their"} latest review ran while this rule was Off.`;
+
+export function Impact({ flow, rule, today }: { flow: Flow; rule: Policy; today?: Preview | string }) {
   const one = flow.of(rule.id);
-  const blocked = one === undefined ? today : one.wouldBlock;
-  if (blocked === undefined) return null;
-  if (typeof blocked === "string") return <span className="text-md text-text-faint">{`Couldn't check today's apps: ${blocked}`}</span>;
-  if (blocked === null) return <span className="text-md text-text-faint">Checking…</span>;
-  if (blocked.length === 0) return <span className="text-md text-text-dim">{nobody(rule, one)}</span>;
+  const read = one === undefined ? today : one.preview;
+  if (read === undefined) return null;
+  if (typeof read === "string") return <span className="text-md text-text-faint">{`Couldn't check today's apps: ${read}`}</span>;
+  if (read === null) return <span className="text-md text-text-faint">Checking…</span>;
+  const blocked = read.would_block;
+  const unchecked = read.unchecked ?? [];
+  const names = unchecked.length === 0 ? undefined : `Not reviewed with this rule on yet: ${unchecked.join(", ")}`;
+  if (blocked.length === 0) {
+    return unchecked.length === 0 ? <span className="text-md text-text-dim">{nobody(rule, one)}</span>
+      : <span className="text-md text-text-dim" title={names}>{`${unknown(unchecked, false)} No other app is affected today.`}</span>;
+  }
+  const held = `${plural(blocked.length, "app")} could not promote today: ${blocked.map((app) => app.project).join(", ")}`;
   return (
-    <span className="text-md font-medium text-critical" title={blocked.map((app) => `${app.project}: ${plural(app.findings, "finding")}`).join("\n")}>
-      {`${plural(blocked.length, "app")} could not promote today: ${blocked.map((app) => app.project).join(", ")}`}
+    <span className="text-md font-medium text-critical" title={[...blocked.map((app) => `${app.project}: ${plural(app.findings, "finding")}`), ...(names === undefined ? [] : [names])].join("\n")}>
+      {unchecked.length === 0 ? held : `${held}. ${unknown(unchecked, true)}`}
     </span>
   );
 }
@@ -149,7 +159,7 @@ export function SaveBar({ flow, affects = false }: { flow: Flow; affects?: boole
   if (flow.changes.length === 0 && flow.refusal === null) return flow.saved ? <p role="status" className="mt-4 text-base text-ok">Saved.</p> : null;
   const tightening = flow.changes.some(waits);
   // Nothing is saved before its preview says what it blocks: that preview is the reason for the page.
-  const checking = flow.changes.some((one) => one.wouldBlock === null);
+  const checking = flow.changes.some((one) => one.preview === null);
   return (
     <div role="region" aria-label="Unsaved changes" className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-3 rounded-[10px] border border-border-strong bg-surface px-4 py-3 text-base text-text shadow-overlay">
       <span aria-live="polite" className="min-w-0 flex-1 basis-[320px]">

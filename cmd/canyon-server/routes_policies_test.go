@@ -419,11 +419,12 @@ func TestThePolicyRoutesAnswerTheGolden(t *testing.T) {
 		('deps.known-vuln', 'blocking', 2, 14, now() + interval '14 days', 'person', 'dana@meridian.example', 'Dana Whitfield', '2026-09-23T08:30:00Z')`); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"claims-portal", "quote-engine"} {
+	for _, name := range []string{"claims-portal", "quote-engine", "renewal-reminder"} {
 		do(t, dana, http.MethodPost, base+"/api/v1/projects", `{"id":"`+name+`"}`)
 	}
 	seedVerdict(t, ctx, pool, "claims-portal", "gr_g1", "auth.unauthenticated-route@high", "auth.unauthenticated-route@critical", "auth.unauthenticated-route@low")
 	seedVerdict(t, ctx, pool, "quote-engine", "gr_g2", "auth.unauthenticated-route@high")
+	seedVerdict(t, ctx, pool, "renewal-reminder", "gr_g3") // nothing of the rule, and no journaled snapshot with it on: the preview's unchecked (#155)
 
 	code, got, _ := do(t, dana, http.MethodGet, base+"/api/v1/policies", "")
 	scheduled := func(doc map[string]any) map[string]any { // deps.known-vuln's, the sixth rule
@@ -897,6 +898,59 @@ func TestPolicyPlacingARuleNamesWhatNeverRanIt(t *testing.T) {
 	}
 	if n := count(t, ctx, pool, "SELECT count(*) FROM audit_events") - audited; n != 0 {
 		t.Fatalf("the previews wrote %d row(s)", n)
+	}
+}
+
+// Before preview, a preview at blocking names in unchecked each project whose latest review ran with the rule off and
+// holds nothing of it, until a review with the rule on (#155): a rule Off, then Advisory, then previewed at Blocking
+// with no review since. Never a project whose verdict holds a result under the rule, which was checked, nor below
+// blocking, nor before production, where such a project is held in would_block at 0 findings.
+func TestPoliciesPreviewNamesWhatNoReviewChecked(t *testing.T) {
+	pool, ctx, base, c := withProject(t)
+	review := func(project string) {
+		t.Helper()
+		upload(t, c, base, project, tarOf(t, map[string]string{"src/app.ts": "export {}\n"}), "", "")
+		_, started, _ := do(t, c, http.MethodPost, base+"/api/v1/projects/"+project+"/gate-runs", "")
+		run, _ := runOf(started)["id"].(string)
+		waitVerdict(t, c, base, run)
+	}
+	path := base + "/api/v1/policies/design.org-system"
+	if code, _, _ := do(t, c, http.MethodPut, path+"?apply=true", `{"state":"off"}`); code != 200 {
+		t.Fatalf("off: %d %s", code, lastBody)
+	}
+	review("claims-portal") // design.org-system off
+	if code, _, _ := do(t, c, http.MethodPut, path+"?apply=true", `{"state":"advisory"}`); code != 200 {
+		t.Fatalf("advisory: %d %s", code, lastBody)
+	}
+	do(t, c, http.MethodPost, base+"/api/v1/projects", `{"id":"quote-engine"}`)
+	review("quote-engine") // design.org-system on, nothing of it found
+	do(t, c, http.MethodPost, base+"/api/v1/projects", `{"id":"renewal-reminder"}`)
+	seedVerdict(t, ctx, pool, "renewal-reminder", "gr_unchecked", "design.org-system@medium") // no journal, but its verdict holds the rule
+	// What the previews write, rows of the trail and edits: never any.
+	written := func() int {
+		t.Helper()
+		return count(t, ctx, pool, "SELECT count(*) FROM audit_events") + count(t, ctx, pool, "SELECT count(*) FROM policy_edits")
+	}
+	before := written()
+	for put, want := range map[string]string{
+		`{"state":"blocking"}`:      `{"unchecked":["claims-portal"],"would_block":[]}`,
+		`{"state":"advisory"}`:      `{"would_block":[]}`,
+		`{"production":"blocking"}`: `{"would_block":[{"project":"claims-portal","findings":0},{"project":"renewal-reminder","findings":0}]}`,
+	} {
+		if code, _, _ := do(t, c, http.MethodPut, path, put); code != 200 || lastBody != want {
+			t.Errorf("the preview of %s: %d %s, want %s", put, code, lastBody, want)
+		}
+	}
+	if n := written() - before; n != 0 {
+		t.Fatalf("the previews wrote %d row(s)", n)
+	}
+	review("claims-portal") // design.org-system on now; its upload and its run are on the trail, and counted before the preview
+	before = written()
+	if code, _, _ := do(t, c, http.MethodPut, path, `{"state":"blocking"}`); code != 200 || lastBody != `{"would_block":[]}` {
+		t.Fatalf("the preview once every app is reviewed with the rule on: %d %s", code, lastBody)
+	}
+	if n := written() - before; n != 0 {
+		t.Fatalf("the preview wrote %d row(s)", n)
 	}
 }
 

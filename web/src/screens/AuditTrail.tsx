@@ -41,6 +41,10 @@ const QUESTIONS: { key: string; label: string; actions: string[]; admin?: true }
 const CATEGORIES = [["", "Every kind"], ["governance", "Changes"], ["access", "Access"], ["outcome", "Outcomes"]] as const;
 
 const FIELD = "rounded-lg border border-border bg-surface-2 px-2.5 py-1 text-base";
+// The names a reader's zone may carry for UTC itself (the tz database's links to Etc/UTC and Etc/GMT): a reader in one
+// already reads the times in UTC, so the line offers no hover for it (#141).
+const UTC = new Set(["UTC", "Etc/UTC", "Etc/UCT", "Etc/Universal", "Etc/Zulu", "UCT", "Universal", "Zulu", "Etc/GMT", "Etc/GMT+0", "Etc/GMT-0", "Etc/GMT0", "Etc/Greenwich", "GMT", "GMT+0", "GMT-0", "GMT0", "Greenwich"]);
+export const zoneLine = (zone: string) => (UTC.has(zone) ? "Times are in UTC." : `Times are in ${zone}; hover a time for UTC.`);
 const ITEM = "rounded-[7px] px-2.5 py-2 text-left text-base hover:bg-surface-2 disabled:text-text-faint";
 
 // The screen's address with one key changed; a default (the last day, 50 rows) is the key left out.
@@ -207,7 +211,7 @@ export function AuditTrail({ query }: { query: string }) {
       <Rail current="audit" />
       <main className="mx-auto max-w-[1280px] min-w-0 flex-1 px-8 pt-3.5 pb-24 max-[860px]:px-4">
         <h1 ref={heading} tabIndex={-1} className="text-title font-semibold tracking-tight outline-none">Audit</h1>
-        <p className="mt-0.5 text-md text-text-dim">{admin === false ? "Your apps' changes and your own sign-ins, newest first." : "Every change, newest first."} Times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}; hover a time for UTC.</p>
+        <p className="mt-0.5 text-md text-text-dim">{admin === false ? "Your apps' changes and your own sign-ins, newest first." : "Every change, newest first."} {zoneLine(Intl.DateTimeFormat().resolvedOptions().timeZone)}</p>
         <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
           <nav aria-label="Who" className="flex flex-wrap gap-1.5">
             {ACTORS.map(([kind, label]) => (

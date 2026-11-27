@@ -467,6 +467,8 @@ export const S = {
   // Settings › Outbound's fold over the limits, the gateway replicas and the certificates (#118).
   advanced: "Advanced",
   advancedWhat: "Limits, gateway replicas and credential certificates",
+  // On the folded Advanced while a limit typed there differs from the saved one (#139).
+  capsUnsaved: "Your changes to the limits aren't saved.",
   replicasHeading: "Gateway replicas",
   replicasNote: "A replica with an old policy has stopped, or can't reach Canyon and is refusing every call.",
   replicaCurrent: "policy up to date",
@@ -1376,7 +1378,7 @@ export const AUDIT_MORE = {
   connectAct: "connected the agent <client> from <client_host>, allowed to read, check, deploy and promote",
   disconnect: "disconnected the agent <client>",
   disconnectTheirs: "disconnected <subject>'s agent <client>",
-  disconnectCanyon: "disconnected <subject>'s agent: <reason>",
+  disconnectCanyon: "disconnected <subject>'s agent: <ended>",
   revokeBrowser: "ended a browser sign-in",
   revokeCLI: "ended a CLI sign-in",
   revokeTheirsBrowser: "ended <subject>'s browser sign-in",
@@ -1402,6 +1404,12 @@ export const AUDIT_MORE = {
   hostToken: "replaced the deploy repo's host token",
 };
 // A database session's close_reason, in the words its closed row says it with (contracts/routes.md, Database sessions).
+// Why Canyon ended an agent's session, by the reason its disconnect agent row records (contracts/routes.md, POST /oauth/token;
+// #137). A reason not named here is said as the row says it.
+export const AGENT_ENDED_WHY: Record<string, string> = {
+  "refresh token reused": "its sign-in token was used again after it was replaced, which can mean someone copied it",
+  "no longer allowed to sign in": "they're no longer allowed to sign in",
+};
 export const DB_CLOSED_WHY: Record<string, string> = {
   signed_out: "they signed out", access_changed: "their access changed", setting_changed: "a setting changed", database_gone: "the database is gone",
   expired: "it expired", held: "production is held", idle: "it was idle", turned_off: "database sessions were turned off",

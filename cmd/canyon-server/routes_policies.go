@@ -434,6 +434,12 @@ func (a *app) putPolicy(w http.ResponseWriter, r *http.Request) {
 		var would []blocked
 		would, err = a.wouldBlock(r.Context(), a.pool, rule, put)
 		answer = map[string]any{"would_block": would}
+		if err == nil && put.state == gatepolicy.Blocking && !slices.Contains(promoteRuleIDs, rule) {
+			var unchecked []string
+			if unchecked, err = a.uncheckedBefore(r.Context(), a.pool, rule); len(unchecked) > 0 {
+				answer["unchecked"] = unchecked
+			}
+		}
 	}
 	if err != nil {
 		a.log.Printf("canyon-server: put policy %s: %v", rule, err)
@@ -783,9 +789,39 @@ func (a *app) heldUnread(ctx context.Context, q querier, rule string, counts map
 	return nil
 }
 
+// uncheckedBefore is the preview's unchecked (contracts/routes.md, the policies row; #155): each live project whose
+// latest verdict holds no result under the rule and whose run's journaled snapshot did not have it on, so what the rule
+// would block of it before preview is not known until it is reviewed again. A verdict holding a result under the rule
+// was checked by it, and would_block counts it if it blocks. A snapshot that does not read had nothing on. Sorted by project id.
+func (a *app) uncheckedBefore(ctx context.Context, q querier, rule string) ([]string, error) {
+	rows, err := q.Query(ctx, `WITH `+latestVerdicts+` SELECT v.project_id, v.run FROM verdict v
+		JOIN projects p ON p.id = v.project_id AND p.deleted_at IS NULL
+		WHERE NOT jsonb_path_exists(v.data, '$.findings.runs[*].results[*] ? (@.ruleId == $rule || @.ruleId starts with $under)', jsonb_build_object('rule', $1::text, 'under', $1::text || '.'))
+		ORDER BY v.project_id`, rule)
+	if err != nil {
+		return nil, err
+	}
+	type latest struct{ Project, Run string }
+	verdicts, err := pgx.CollectRows(rows, pgx.RowToStructByPos[latest])
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, v := range verdicts {
+		snap, err := a.journaled(v.Run)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(snap.Rules, func(x gatepolicy.Rule) bool { return x.ID == rule && x.On() }) {
+			out = append(out, v.Project)
+		}
+	}
+	return out, nil
+}
+
 // latestVerdicts is each project's latest verdict, never a pull request's, a check's, a rollback review's or a
 // patch run's (contracts/routes.md, Patch runs): what before preview stopped.
-const latestVerdicts = `verdict AS (SELECT DISTINCT ON (t.project_id) t.project_id, t.data FROM timeline_rows t
+const latestVerdicts = `verdict AS (SELECT DISTINCT ON (t.project_id) t.project_id, t.run_id AS run, t.data FROM timeline_rows t
 	JOIN runs r ON r.id = t.run_id JOIN packages pk ON pk.id = r.package_id AND pk.project_id = r.project_id AND pk.source_kind NOT IN ('repo-pr', 'check')
 	WHERE t.kind = 'verdict' AND r.rollback_to IS NULL AND r.kind <> 'patch' ORDER BY t.project_id, t.id DESC)`
 

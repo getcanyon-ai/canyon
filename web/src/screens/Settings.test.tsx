@@ -918,6 +918,25 @@ describe("Settings › Outbound's replicas", () => {
     expect(folded.open).toBe(true);
   });
 
+  // #139: a limit typed and not saved stays typed when Advanced is folded, so the fold says a change is waiting, until
+  // the limit is the saved one again.
+  it("says on a folded Advanced that a typed limit isn't saved", async () => {
+    answering(admin);
+    const folded = (await within(await open()).findByText("Advanced")).closest("details") as HTMLDetailsElement;
+    const summary = folded.querySelector("summary")!;
+    const fold = (open: boolean) => { folded.open = open; fireEvent(folded, new Event("toggle")); };
+    expect(within(summary).queryByText(S.capsUnsaved)).toBeNull();
+    fold(true);
+    fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "31" } });
+    expect(within(summary).queryByText(S.capsUnsaved)).toBeNull(); // open, the Save beside the limits says it
+    fold(false);
+    expect(within(summary).getByText(S.capsUnsaved)).toBeDefined();
+    fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "0" } }); // out of range: Save won't send it
+    expect(within(summary).getByText(S.capsUnsaved)).toBeDefined();
+    fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: String(admin.caps!.new_names) } });
+    expect(within(summary).queryByText(S.capsUnsaved)).toBeNull();
+  });
+
   // It never closes for the admin (#118): a save whose answer needs nobody leaves Advanced as they had it, its confirmation shown.
   it("keeps Advanced open over a save, with the confirmation in sight", async () => {
     const now = Date.now();

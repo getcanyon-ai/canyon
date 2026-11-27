@@ -51,7 +51,11 @@ func (p *Pipeline) registerRescan(dc dbos.Context) error {
 	dbos.RegisterWorkflow(dc, p.imageSBOM, dbos.WithWorkflowName(ImageSBOMWorkflow), dbos.WithMaxRecoveryAttempts(3))
 	dbos.RegisterWorkflow(dc, p.rescan, dbos.WithWorkflowName(RescanWorkflow), dbos.WithMaxRecoveryAttempts(3))
 	for q, n := range map[string]int{PatchesQueue: positive(p.PatchConcurrency, 1), ImageQueue: 1, RescanQueue: 1} {
-		if _, err := dbos.RegisterQueue(dc, q, dbos.WithGlobalConcurrency(n)); err != nil {
+		opts := []dbos.QueueOption{dbos.WithGlobalConcurrency(n)}
+		if q == ImageQueue { // a deploy's before the fleet's (askImageSBOM)
+			opts = append(opts, dbos.WithPriorityEnabled())
+		}
+		if _, err := dbos.RegisterQueue(dc, q, opts...); err != nil {
 			return err
 		}
 	}
@@ -94,12 +98,13 @@ type rescanPlan struct {
 
 // rescan is the patch.rescan workflow, one per tick (design/PATCHING.md §3.2). A tick an interval late or
 // more does nothing: the next one is due. Otherwise it drops the scans no image that runs or is kept for
-// a rollback names, and the slices no scan names; asks image.sbom of each such image, of a project whose
-// rule is on, that has no finished scan; and matches each such scan's covered layers offline on the
-// executor's newest database, each distinct slice once. A scan's new matches are stored together or not at
-// all, and one that did not match them all reads could not check until a later one does. Last, it reads
+// a rollback names, and the slices no scan names, and matches each finished scan's covered layers offline on
+// the executor's newest database, each distinct slice once. A scan's new matches are stored together or not
+// at all, and one that did not match them all reads could not check until a later one does. Then it reads
 // and matches the run image GET /builder names (rescanRunImage) while an image runs in a project whose rule
-// is on, and plans patches against that match (planPatches). It answers the slices it matched.
+// is on; asks image.sbom, behind any deploy's, of each such image, of a project whose rule is on, that has no
+// finished scan; and plans patches against the run image's match (planPatches). It answers the slices it
+// matched.
 func (p *Pipeline) rescan(ctx dbos.Context, tick dbos.ScheduledWorkflowInput) (int, error) {
 	now, err := dbos.RunAsStep(ctx, func(context.Context) (time.Time, error) { return time.Now(), nil }, dbos.WithStepName("now"))
 	if err != nil || now.Sub(tick.ScheduledTime) > cmp.Or(p.RescanEvery, DefaultRescan) {
@@ -137,11 +142,19 @@ func (p *Pipeline) rescan(ctx dbos.Context, tick dbos.ScheduledWorkflowInput) (i
 		}
 		return 0, err
 	}
-	for _, in := range plan.Read {
-		in.Run = RescanWorkflow + "-" + tick.ScheduledTime.UTC().Format(time.RFC3339)
-		if _, err := dbos.Enqueue[any](ctx, ImageQueue, ImageSBOMWorkflow, in, dbos.WithEnqueueWorkflowID(imageScanID(in.Project, ImageDigest(in.Image), in.Run))); err != nil {
-			return 0, err
+	// the fleet's reads are queued after the run image's read: back to back they would hold the executor's one image
+	// scan at a time past its wait (#264)
+	readFleet := func() error {
+		for _, in := range plan.Read {
+			in.Run = RescanWorkflow + "-" + tick.ScheduledTime.UTC().Format(time.RFC3339)
+			if err := askImageSBOM(ctx, in, true); err != nil {
+				return err
+			}
 		}
+		return nil
+	}
+	if err := readFleet(); err != nil {
+		return 0, err
 	}
 	matched, failed := map[string]bool{}, 0
 	var first error

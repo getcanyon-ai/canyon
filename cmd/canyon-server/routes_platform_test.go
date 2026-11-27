@@ -295,6 +295,7 @@ func TestPlatformKnownVulnWithoutAMatchNeverPasses(t *testing.T) {
 		"no Java database":       {imageFacts{scanned: &g.ScannedAt, notFinished: "db_stale", reason: "java"}, "could not check: its Java database is over 5 days old"},
 		"an image over cap":      {imageFacts{scanned: &g.ScannedAt, notFinished: "over_cap", reason: "image"}, "could not check: the image is larger than this Canyon scans"},
 		"an answer unheard of":   {imageFacts{scanned: &g.ScannedAt, notFinished: "eaten"}, "could not check: its image scan did not finish"},
+		"the scanner busy":       {imageFacts{scanned: &g.ScannedAt, notFinished: "busy"}, "could not check: Canyon's scanner was busy with other apps, and checks again on its next round"},
 		"the launcher unmatched": {unmatched, "could not check: the image has not been matched yet"},
 	} {
 		row := platformRow(g.rule(), g.read(t, c.f, g.ReadAt))

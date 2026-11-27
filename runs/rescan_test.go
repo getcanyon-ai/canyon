@@ -533,6 +533,120 @@ func TestANotFinishedScanIsAskedAgain(t *testing.T) {
 	}
 }
 
+// A deploy's image scan goes before the fleet's: while a rescan tick's reads of four images wait on the one image
+// scan in flight, a deploy's scan is the next the executor runs, so production waits the scan's length, never the
+// fleet's (design/PATCHING.md §3.1; #264, where a deploy waited hours behind a tick's 76).
+func TestADeploysImageScanGoesBeforeTheFleetsReads(t *testing.T) {
+	p, ctx, f := deploying(t, runstest.CleanGolden)
+	g := loadGolden(t)
+	f.ImageAnswer.Store(&g.Image)
+	rematching(t, f, g)
+	var mu sync.Mutex
+	var order []string
+	first, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	on := func(image string) {
+		mu.Lock()
+		order = append(order, image)
+		n := len(order)
+		mu.Unlock()
+		if n == 1 { // the fleet's first read holds the executor's one image scan
+			close(first)
+			<-release
+		}
+	}
+	f.OnImageScan.Store(&on)
+	tick := RescanWorkflow + "-2026-11-27T16:45:00Z"
+	var fleet []string
+	for range 4 {
+		fleet = append(fleet, ImageDigest(freshImage(t, f)))
+		if err := askImageSBOM(durable, imageScan{Run: tick, Project: project, Image: f.Image}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-first:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the fleet's first read never reached the executor")
+	}
+	digest := freshImage(t, f)
+	deployed := f.Image
+	onDeploy(t, ctx, p, policy.Advisory)
+	once.Do(func() { close(release) })
+	imageScans(t, project, digest)
+	for _, d := range fleet {
+		imageScans(t, project, d)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 5 || order[1] != deployed {
+		t.Fatalf("the executor's image scans, in order: %q; the deploy's %s is not the second", order, deployed)
+	}
+	if notFinished, matched, _ := scanOf(t, ctx, p, project, digest); notFinished != "" || !matched {
+		t.Fatalf("the deploy's scan: not finished %q, matched %v", notFinished, matched)
+	}
+}
+
+// A tick reads the run image before it queues the fleet's reads: queued first, they would take the executor's one
+// image scan at a time back to back and keep the run image waiting past its 15 minutes (design/PATCHING.md §3.2;
+// #264, "the rescan could not read or match the run image: executor: /scan image busy for 15m0s").
+func TestATickReadsTheRunImageBeforeTheFleet(t *testing.T) {
+	p, ctx, f := deploying(t, runstest.CleanGolden)
+	g := loadGolden(t)
+	rematching(t, f, g)
+	f.ImageAnswer.Store(&g.Image)
+	answer := g.runImageOf(t, "3.0.13-0ubuntu3.4")
+	f.RunImageAnswer.Store(&answer)
+	digest := freshImage(t, f)
+	storedAs(t, ctx, p, nil, project, digest) // it runs, and was never read
+	queued := -1
+	on := func(image string) {
+		if !strings.HasPrefix(image, "canyon/") { // the run image
+			all, err := dbos.ListWorkflows(durable, dbos.WithFilterWorkflowIDPrefix(project+"@"+digest+"@"), dbos.WithFilterLoadInput(false), dbos.WithFilterLoadOutput(false))
+			if err != nil {
+				t.Error(err)
+			}
+			queued = len(all)
+		}
+	}
+	f.OnImageScan.Store(&on)
+	tick(t, time.Now())
+	if asked := imageScans(t, project, digest); f.RunImageScans.Load() != 1 || queued != 0 || len(asked) != 1 {
+		t.Fatalf("the run image read %d time(s), with %d of the fleet's reads queued before it; %d read after, want 1, 0 and 1", f.RunImageScans.Load(), queued, len(asked))
+	}
+}
+
+// An image read that finds the executor busy past its wait stores busy in place of nothing, so the image reads why
+// and never passes (contracts/routes.md, platform.known-vuln's row); the next ask reads it again, and its finished
+// scan replaces busy (design/PATCHING.md §3.1; #264).
+func TestAnImageReadStillBusyStoresBusy(t *testing.T) {
+	was := busyFor
+	busyFor = 2 * time.Second
+	t.Cleanup(func() { busyFor = was })
+	p, ctx, f := deploying(t, runstest.CleanGolden)
+	g := loadGolden(t)
+	rematching(t, f, g)
+	f.ImageAnswer.Store(&g.Image)
+	digest := freshImage(t, f)
+	f.Busy.Store(1 << 20)
+	if err := askImageSBOM(durable, imageScan{Run: "gr_busy", Project: project, Image: f.Image}, false); err != nil {
+		t.Fatal(err)
+	}
+	imageScans(t, project, digest)
+	if notFinished, _, _ := scanOf(t, ctx, p, project, digest); notFinished != "busy" || f.ImageScans.Load() != 0 {
+		t.Fatalf("a read the executor stayed busy for: stored %q, %d scans", notFinished, f.ImageScans.Load())
+	}
+	f.Busy.Store(0)
+	if err := askImageSBOM(durable, imageScan{Run: "gr_again", Project: project, Image: f.Image}, false); err != nil {
+		t.Fatal(err)
+	}
+	imageScans(t, project, digest)
+	if notFinished, matched, _ := scanOf(t, ctx, p, project, digest); notFinished != "" || !matched || f.ImageScans.Load() != 1 {
+		t.Fatalf("read again: %q, matched %v, %d scans", notFinished, matched, f.ImageScans.Load())
+	}
+}
+
 // One digest deployed from two projects is two scans, each through its own image.sbom, stored apart.
 func TestTheSameDigestFromTwoProjectsIsTwoScans(t *testing.T) {
 	p, ctx, f := deploying(t, runstest.CleanGolden)

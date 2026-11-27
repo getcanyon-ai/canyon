@@ -39,6 +39,9 @@ const (
 // busyFor is how long a scan waits on a busy executor in all; a variable so a test can lower it.
 var busyFor = 15 * time.Minute
 
+// errStillBusy is a scan the executor answered busy for all of busyFor.
+var errStillBusy = errors.New("busy")
+
 // imageScan is image.sbom's input: the image a deploy run or a rescan tick asked about, the project it runs
 // in, which the scan is stored under — never anything a caller names — and who asked.
 type imageScan struct {
@@ -91,12 +94,26 @@ func (p *Pipeline) askImage(ctx dbos.Context, in Input, image string) error {
 	if digest == "" || !scansImages(in.Policy) {
 		return nil
 	}
-	_, err := dbos.Enqueue[any](ctx, ImageQueue, ImageSBOMWorkflow, imageScan{Run: in.Run, Project: in.Project, Image: image},
-		dbos.WithEnqueueWorkflowID(imageScanID(in.Project, digest, in.Run)))
+	err := askImageSBOM(ctx, imageScan{Run: in.Run, Project: in.Project, Image: image}, false)
 	if err != nil && ctx.Err() == nil && !errors.Is(err, dbos.ErrWorkflowCancelled) {
 		log.Printf("runs: run %s (%s): its image's SBOM was not asked for: %v", in.Run, in.Project, err)
 		return nil
 	}
+	return err
+}
+
+// fleetRead is the priority of an image.sbom a rescan tick or an apply asks of the fleet. DBOS takes a queue's
+// lowest first, and a deploy's is its default, 0: a deploy waits for the one image scan in flight, never for the
+// fleet's (design/PATCHING.md §3.1; #264).
+const fleetRead = 0
+
+// askImageSBOM queues image.sbom of in under its attempt's id: a read of the fleet's behind every deploy's.
+func askImageSBOM(c dbos.Client, in imageScan, fleet bool) error {
+	opts := []dbos.EnqueueOption{dbos.WithEnqueueWorkflowID(imageScanID(in.Project, ImageDigest(in.Image), in.Run))}
+	if fleet {
+		opts = append(opts, dbos.WithEnqueuePriority(fleetRead))
+	}
+	_, err := dbos.Enqueue[any](c, ImageQueue, ImageSBOMWorkflow, in, opts...)
 	return err
 }
 
@@ -209,7 +226,7 @@ func (p *Pipeline) AskBuiltApps(ctx context.Context, dc dbos.Client, projects []
 		if !on {
 			continue
 		}
-		if _, err := dbos.Enqueue[any](dc, ImageQueue, ImageSBOMWorkflow, in, dbos.WithEnqueueWorkflowID(imageScanID(in.Project, ImageDigest(in.Image), by))); err != nil {
+		if err := askImageSBOM(dc, in, true); err != nil {
 			return asked, err
 		}
 		asked++
@@ -421,7 +438,7 @@ func storeImage(ctx context.Context, pool *pgxpool.Pool, project, digest string,
 
 // askScan sends one image or sbom scan (contracts/executor.md, POST /scan): the json part, then part sbom
 // when there is one. A busy executor is asked again once its Retry-After has passed — a second at least —
-// for up to busyFor in all, then the call is an error; a call past scanCeiling did not finish.
+// for up to busyFor in all, then the call is errStillBusy; a call past scanCeiling did not finish.
 func (p *Pipeline) askScan(ctx context.Context, req executor.ScanRequest, sbom []byte) (executor.ScanResult, error) {
 	if p.Executor == nil {
 		return executor.ScanResult{}, errors.New("runs: no executor configured")
@@ -435,7 +452,7 @@ func (p *Pipeline) askScan(ctx context.Context, req executor.ScanRequest, sbom [
 		}
 		wait := max(busy.RetryAfter, time.Second)
 		if time.Now().Add(wait).After(until) {
-			return executor.ScanResult{}, fmt.Errorf("executor: /scan %s busy for %s", req.Target, busyFor)
+			return executor.ScanResult{}, fmt.Errorf("executor: /scan %s %w for %s", req.Target, errStillBusy, busyFor)
 		}
 		select {
 		case <-ctx.Done():

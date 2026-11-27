@@ -211,8 +211,8 @@ func (m *demoMachine) answer(line string) string {
 		}
 		m.images["id-builder"], m.images["id-scan"] = "canyon-builder:0a1b2c3d4e5f", "canyon-scan/opengrep:latest"
 		m.images["id-lifecycle-other"] = "buildpacksio/lifecycle:0.20.0" // another lifecycle, pack's own pull for another builder: never the demo's
-		// the lifecycle pack pulled by its platform's digest, the scanners' images and the compose file's
-		for _, ref := range append(strings.Split(m.answer(compose("config --images")), "\n"), names.TrivyImage, names.CheckovImage, names.LifecyclePlatforms[1]) {
+		// the lifecycle pack pulled by its platform's digest, the scanners' images, the Node builder and the compose file's
+		for _, ref := range append(strings.Split(m.answer(compose("config --images")), "\n"), names.TrivyImage, names.CheckovImage, names.LifecyclePlatforms[1], nodeBuilderRef) {
 			m.refs[ref] = true
 		}
 		m.vols = append(m.vols, "canyon-scandb-trivy")
@@ -238,6 +238,8 @@ func (m *demoMachine) answer(line string) string {
 		return string(labels)
 	case line == compose("config --images"):
 		return "ghcr.io/getcanyon-ai/canyon-server@sha256:aa\nghcr.io/getcanyon-ai/canyon-executor@sha256:bb\ndocker.io/library/busybox@sha256:cc\npostgres:16-alpine@sha256:dd"
+	case line == compose("config --format json"): // the release's bundle names the Node builder for its executor (scripts/deploy-bundle.sh)
+		return `{"name":"canyon-demo","services":{"executor":{"image":"ghcr.io/getcanyon-ai/canyon-executor@sha256:bb","environment":{"CANYON_BUILDER_NODE":"` + nodeBuilderRef + `","CANYON_EXECUTOR_TOKEN":null}},"server":{"image":"ghcr.io/getcanyon-ai/canyon-server@sha256:aa"}}}`
 	case line == compose("ps -aq executor"):
 		if m.up {
 			return "e1e2e3e4e5e6"
@@ -296,6 +298,9 @@ func (m *demoMachine) answer(line string) string {
 	}
 	return ""
 }
+
+// nodeBuilderRef is the Node builder the demo's executor pulls by digest, as the bundle's compose file names it.
+const nodeBuilderRef = "ghcr.io/getcanyon-ai/canyon-builder-node@sha256:ee"
 
 // demoID is the ID the machine's Docker gives the image a reference pulled.
 func demoID(ref string) string { return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(ref))) }
@@ -775,7 +780,7 @@ func TestDemoDownRemovesWhatTheDemoStarted(t *testing.T) {
 		t.Fatalf("down --purge: exit %d, stderr %q\n%s", code, errs, out)
 	}
 	removed := slices.Sorted(slices.Values([]string{names.LifecyclePlatforms[1], names.CheckovImage, names.TrivyImage, "docker.io/library/busybox@sha256:cc", "postgres:16-alpine@sha256:dd",
-		"ghcr.io/getcanyon-ai/canyon-executor@sha256:bb", "ghcr.io/getcanyon-ai/canyon-server@sha256:aa", "id-builder", "id-claims-portal", "id-scan", "id-witty-wren"}))
+		"ghcr.io/getcanyon-ai/canyon-executor@sha256:bb", "ghcr.io/getcanyon-ai/canyon-server@sha256:aa", nodeBuilderRef, "id-builder", "id-claims-portal", "id-scan", "id-witty-wren"}))
 	if m.ran(compose("down -v --rmi all")) != 1 || m.ran("image rm -f "+strings.Join(removed, " ")) != 1 ||
 		m.ran("volume rm canyon-cache-witty-wren-build canyon-cache-witty-wren-launch canyon-scandb-trivy") != 1 {
 		t.Errorf("down --purge ran %q", m.calls)

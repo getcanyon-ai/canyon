@@ -900,6 +900,50 @@ func TestPolicyPlacingARuleNamesWhatNeverRanIt(t *testing.T) {
 	}
 }
 
+// Before preview, a preview at blocking names in unchecked each project whose latest review ran with the rule off and
+// holds nothing of it, until a review with the rule on (#155): a rule Off, then Advisory, then previewed at Blocking
+// with no review since. Never a project whose verdict holds a result under the rule, which was checked, nor below
+// blocking, nor before production, where such a project is held in would_block at 0 findings.
+func TestPoliciesPreviewNamesWhatNoReviewChecked(t *testing.T) {
+	pool, ctx, base, c := withProject(t)
+	review := func(project string) {
+		t.Helper()
+		upload(t, c, base, project, tarOf(t, map[string]string{"src/app.ts": "export {}\n"}), "", "")
+		_, started, _ := do(t, c, http.MethodPost, base+"/api/v1/projects/"+project+"/gate-runs", "")
+		run, _ := runOf(started)["id"].(string)
+		waitVerdict(t, c, base, run)
+	}
+	path := base + "/api/v1/policies/design.org-system"
+	if code, _, _ := do(t, c, http.MethodPut, path+"?apply=true", `{"state":"off"}`); code != 200 {
+		t.Fatalf("off: %d %s", code, lastBody)
+	}
+	review("claims-portal") // design.org-system off
+	if code, _, _ := do(t, c, http.MethodPut, path+"?apply=true", `{"state":"advisory"}`); code != 200 {
+		t.Fatalf("advisory: %d %s", code, lastBody)
+	}
+	do(t, c, http.MethodPost, base+"/api/v1/projects", `{"id":"quote-engine"}`)
+	review("quote-engine") // design.org-system on, nothing of it found
+	do(t, c, http.MethodPost, base+"/api/v1/projects", `{"id":"renewal-reminder"}`)
+	seedVerdict(t, ctx, pool, "renewal-reminder", "gr_unchecked", "design.org-system@medium") // no journal, but its verdict holds the rule
+	audited := count(t, ctx, pool, "SELECT count(*) FROM audit_events")
+	for put, want := range map[string]string{
+		`{"state":"blocking"}`:      `{"unchecked":["claims-portal"],"would_block":[]}`,
+		`{"state":"advisory"}`:      `{"would_block":[]}`,
+		`{"production":"blocking"}`: `{"would_block":[{"project":"claims-portal","findings":0},{"project":"renewal-reminder","findings":0}]}`,
+	} {
+		if code, _, _ := do(t, c, http.MethodPut, path, put); code != 200 || lastBody != want {
+			t.Errorf("the preview of %s: %d %s, want %s", put, code, lastBody, want)
+		}
+	}
+	review("claims-portal") // design.org-system on now
+	if code, _, _ := do(t, c, http.MethodPut, path, `{"state":"blocking"}`); code != 200 || lastBody != `{"would_block":[]}` {
+		t.Fatalf("the preview once every app is reviewed with the rule on: %d %s", code, lastBody)
+	}
+	if n := count(t, ctx, pool, "SELECT count(*) FROM audit_events") - audited; n != 0 {
+		t.Fatalf("the previews wrote %d row(s)", n)
+	}
+}
+
 // seedLive gives project, added if it is new, a run and a deploy in each of envs; with no envs it is a live app
 // with nothing deployed.
 func seedLive(t *testing.T, ctx context.Context, pool *pgxpool.Pool, project string, envs ...string) {

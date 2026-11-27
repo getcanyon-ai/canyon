@@ -186,7 +186,9 @@ servers):
 A platform team rolls out the remote server to its **cloud** agents, and optionally the session hook, where each
 agent's vendor offers an org-wide way. The address is for cloud agents alone (amended 2026-11-21): a laptop's agents
 use `canyon mcp`, which `canyon skill install` sets up, so no rollout that also reaches laptops is offered. Docs ship
-one page per agent (`docs/start/agents/`) with the exact steps.
+one page per agent (`docs/start/agents/`) with the exact steps. A person may still add the address to an agent on their
+own laptop from the MCP Registry (§8; amended 2026-11-27, getcanyon-ai/canyon#22): that is one person's choice in one
+agent, not a rollout, and the agent gets the cloud agents' tools, which work from a pushed branch.
 
 | Harness | MCP server, org-managed | Session hook, org-managed |
 |---|---|---|
@@ -369,7 +371,7 @@ Each runs its acceptance in CI, and shows its new checks red first.
     - What: `canyon_playbook` on both servers, the resource, `canyon playbook`, the hook's native-skill sync and its uninstall, and the read and sync counts with their migrations, `playbook_reads` and `playbook_syncs`.
     - Acceptance: `make test PKG=./cli RUN='TestPlaybook|TestSkillSyncTouchesOnlyItsOwn'` · `make test PKG=./cmd/canyon-server RUN='TestMCPPlaybook|TestPlaybookReads|TestPlaybookSyncsCountMachines'` · `make test PKG=./qa/agent`.
 11. **Distribution.**
-    - What: install links and per-agent docs. The MCP Registry listing waits (§8).
+    - What: install links and per-agent docs. The MCP Registry listing came after, in getcanyon-ai/canyon#22 (§8).
     - Acceptance: `make docs-site docs-links`.
 12. **The tour on MCP.**
     - What: §11.
@@ -395,10 +397,24 @@ Each runs its acceptance in CI, and shows its new checks red first.
 
 ## 8. Distribution
 
-- **MCP Registry: the listing waits** (getcanyon-ai/canyon#22). Two reasons:
-  - **A registry install would be a broken first run.** The local server signs in as the CLI does, so someone who installs it from the registry gets a server whose every tool answers "run `canyon login`", with no `canyon` on their `PATH`.
-  - **The registry can't pick an architecture.** Its type for a downloadable binary is an MCP Bundle (`mcpb`): a zip with its own manifest, not the CLI's archives, and a bundle names only the operating systems it runs on. One bundle per OS can't choose between arm64 and amd64.
-  - When it comes, the name stays `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, which the `io.github.*` namespace accepts with no DNS record. Only the local server is listed: a remote server's URL is each company's own, so the docs and the dashboard (§12) give it instead.
+- **MCP Registry: the remote server, with the host as a variable** (amended 2026-11-27, getcanyon-ai/canyon#22; it
+  waited until then for the two reasons below, which listing the remote server avoids).
+  - **What's listed.** `server.json` at the repository's root names `io.github.getcanyon-ai/canyon` with one remote,
+    `streamable-http` at `https://{host}/mcp`, and no package. Each company's Canyon has its own address, so `host` is
+    a variable the client asks the person for, its description D5's. The registry fills a remote's `{curly_braces}`
+    from its `variables`, and never checks a remote's domain against the name.
+  - **Why the remote server.** It signs in through Canyon's OAuth in the browser (§2.2), so a first run needs no CLI
+    and no `canyon login`, and with no binary there is no architecture to pick. A person without a Canyon reads in the
+    host's description that it needs one.
+  - **Why not the local server.** A registry install of `canyon mcp` would be a broken first run: it signs in as the
+    CLI does, so every tool would answer "run `canyon login`" with no `canyon` on the person's `PATH`. And the
+    registry's type for a binary, an MCP Bundle (`mcpb`), names only the operating systems it runs on, so one bundle
+    per OS can't choose between arm64 and amd64. `canyon skill install` sets the local server up with the skill and
+    the hook instead.
+  - **Publishing.** Only `release.yml` publishes, on a `v*` tag that isn't a prerelease, after the release's smoke
+    test: `server.json` with the tag's version (less its `v`), through `mcp-publisher login github-oidc`, GitHub's own
+    token for the run, which the `io.github.*` namespace accepts with no DNS record and no secret. Nothing publishes
+    by hand or from a pull request; a pull request that changes `server.json` runs `mcp-publisher validate` on it.
 - **Install links.** The docs give each agent its own:
   - Cursor's MCP install deep link, carrying `{"type":"stdio","command":"canyon","args":["mcp"]}`;
   - VS Code's `vscode:mcp/install` link;
@@ -465,7 +481,7 @@ What it took, each built for v0.11.0:
 
 - **Settings › Agents › Connect an agent**, a panel directly above the sessions list (§2.2), so connecting an agent and disconnecting one are in one place (**moved 2026-11-21** from Guardrails, which a member can't open; **moved 2026-11-23**, getcanyon-ai/canyon#99's review, with the sessions list from People & sign-in to their own tab, which every member finds by name):
   - **On a laptop, the CLI** (amended 2026-11-21): three numbered steps with this host filled in, install the CLI, `canyon login <host>`, `canyon skill install`. Every host shows them.
-  - **In the cloud, the URL**, for cloud agents alone: the protected-resource metadata's `resource`, exactly, with a copy button, then §2.4's way for each cloud agent: Claude Code on the web by a claude.ai connector, with a link to Anthropic's connector docs; Cursor's cloud agents by a team MCP server; and Codex, whose cloud tasks have no MCP, sent to the laptop steps. Nothing offers the URL for a laptop: no agent's command, no install link, no managed settings. Where the metadata read answers `404` (a public URL that isn't `https`), no URL, and one line saying why; on a host with sign-in off, no URL and a line saying why.
+  - **In the cloud, the URL**, for cloud agents alone: the protected-resource metadata's `resource`, exactly, with a copy button, then §2.4's way for each cloud agent: Claude Code on the web by a claude.ai connector, with a link to Anthropic's connector docs; Cursor's cloud agents by a team MCP server; and Codex, whose cloud tasks have no MCP, sent to the laptop steps. Nothing here offers the URL for a laptop: no agent's command, no install link, no managed settings. The MCP Registry listing (§8) is the one place a laptop's agent meets it, and only with the host the person types (amended 2026-11-27). Where the metadata read answers `404` (a public URL that isn't `https`), no URL, and one line saying why; on a host with sign-in off, no URL and a line saying why.
   - **Who sees it.** Every member, the same panel: each cloud agent's line says who adds the address.
 - **Guardrails › Playbooks**, the authoring screen: §3.2.
 - **What agents receive.** The existing *What agents are told* view gains the two things an agent is now handed besides the rules:
@@ -491,9 +507,9 @@ None.
 1. **Playbooks** are free, not Canyon Enterprise (§3).
 2. **Client identification:** both Client ID Metadata Documents and Dynamic Client Registration, since clients differ (§2.2).
 3. **Scopes:** two from v1, `read` and `act` (§2.2, §4).
-4. **The MCP Registry:** only the local server is listed; a remote URL is each company's own. The listing waits for a first run that works without the CLI and for architectures (§8, getcanyon-ai/canyon#22).
+4. **The MCP Registry:** only the remote server is listed, `https://{host}/mcp`, the client asking for the host; the local server isn't (§8; amended 2026-11-27, getcanyon-ai/canyon#22, reversing "only the local server is listed").
 5. **The demo and agent config:** `canyon demo up` writes none; the tour prompt has the agent run `canyon skill install`, which the person sees (§11).
 6. **MIT-0:** no exception. `segmentio/asm` v1.1.3 is MIT (§9), as the PR that adds the SDK found.
-7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` with GitHub's own token for the run, no DNS record, once the listing comes (§8).
+7. **The registry name:** `io.github.getcanyon-ai/canyon`, published from `release.yml` alone, on a tag, with GitHub's own token for the run, no DNS record (§8).
 8. **The demo and `/mcp`:** no URL chapter and no demo sign-in. The demo's `/mcp` fails closed like every host with sign-in off; the tour uses `canyon mcp`, and its last beat links *Connect your agent* (§11).
 9. **A contributor links a repository:** yes, to one the org's Canyon App already sees. PERMISSIONS.md changes as PR 8's first commit (§10.1).

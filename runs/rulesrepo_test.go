@@ -315,11 +315,7 @@ func TestOnlyPublicAddressesAreDialled(t *testing.T) {
 func TestARulesPartOverTheExecutorsCapIsNotSent(t *testing.T) {
 	was := rulesCap
 	t.Cleanup(func() { rulesCap = was })
-	part, err := rulesTar(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := io.ReadAll(part)
+	b, err := rulesTar(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

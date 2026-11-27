@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -276,17 +277,21 @@ func (c *Client) Build(ctx context.Context, req BuildRequest, tree io.Reader, li
 	return BuildResult{}, &Gone{Err: errors.New("executor: /build ended without a result")} // the stream closed before its final status
 }
 
-// Gone is a build the executor went away under, before its final status: the connection refused or reset,
-// or the stream cut short or closed — what a restart, an upgrade or a node drain does to a build in flight
-// (#2671). Nothing of the build is left to read; the same build may be asked again once the executor is back.
+// Gone is a build or a scan the executor went away under, before its answer: the connection refused, its dial
+// timed out or reset, or the answer cut short or closed — what a restart, an upgrade or a node drain does to a
+// call in flight (#2671, #248). Nothing of it is left to read; the same call may be asked again once the
+// executor is back.
 type Gone struct{ Err error }
 
 func (g *Gone) Error() string { return g.Err.Error() }
 func (g *Gone) Unwrap() error { return g.Err }
 
-// gone is err as Gone when it is the executor going away, else err.
+// gone is err as Gone when it is the executor going away, else err. A dial that failed reached no executor,
+// whatever stopped it; io.EOF is a connection closed before any answer.
 func gone(err error) error {
-	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
 		return &Gone{Err: err}
 	}
 	return err
@@ -303,7 +308,8 @@ func (e *Busy) Error() string { return fmt.Sprintf("executor: busy, ask again in
 
 // Scan streams the tree into POST /scan as Build does, then rules, opengrep's rule files as a tar (nil
 // for any other tool), and answers the tool's SARIF, or why there is none. A 503 with a Retry-After in
-// seconds is *Busy, with the body's reason; any other answer but a 200 is an error.
+// seconds is *Busy, with the body's reason; the executor gone before its answer is *Gone; any other answer
+// but a 200 is an error.
 func (c *Client) Scan(ctx context.Context, req ScanRequest, tree, rules io.Reader) (ScanResult, error) {
 	hreq, err := c.upload(ctx, "/scan", req, tree, rules)
 	if err != nil {
@@ -312,7 +318,7 @@ func (c *Client) Scan(ctx context.Context, req ScanRequest, tree, rules io.Reade
 	defer func() { _ = hreq.Body.Close() }()
 	resp, err := c.http().Do(hreq)
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("executor: %w", err)
+		return ScanResult{}, gone(fmt.Errorf("executor: %w", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); resp.StatusCode == http.StatusServiceUnavailable && err == nil && s >= 0 {
@@ -327,7 +333,7 @@ func (c *Client) Scan(ctx context.Context, req ScanRequest, tree, rules io.Reade
 	}
 	var res ScanResult
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 6*maxScanOut+1<<20)).Decode(&res); err != nil { // the SARIF the executor re-encodes: escaping can grow it six-fold
-		return ScanResult{}, fmt.Errorf("executor: /scan: %w", err)
+		return ScanResult{}, gone(fmt.Errorf("executor: /scan: %w", err))
 	}
 	return res, nil
 }

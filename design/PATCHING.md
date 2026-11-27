@@ -214,10 +214,14 @@ builder or trivy change that moves a package out of the class this table gives i
 
 A deploy's run ends at `Live` as today. Its last step enqueues **`image.sbom`**, a workflow on a queue of
 its own, `image-sbom`, one at a time across the replicas and never behind a patch run (§4.3; #2379's
-review, 2026-10-19), while `platform.known-vuln` is on (§3.3) or `deps.known-vuln` is placed before production (§3.6). Its id is the run's project, the image
+review, 2026-10-19), while `platform.known-vuln` is on (§3.3) or `deps.known-vuln` is placed before production (§3.6).
+**A deploy's goes first** (amended 2026-11-27, #264): the queue takes a deploy's `image.sbom` before every
+one a rescan tick (§3.2) or an apply (§3.6) asks of the fleet, so a deploy waits for the one image scan in
+flight, never for the fleet's (a tick after an upgrade asked of about 76 images, and a deploy waited
+hours). Its id is the run's project, the image
 digest and the run: each deploy asks, and a project's image whose scan finished is never read again,
 while one that did not finish — `timeout`, `no_room`, an executor's error, `over_cap` before an operator
-raised the cap — is read again by the next deploy or rescan tick. Once its scan is stored, it matches the
+raised the cap, `busy` — is read again by the next deploy or rescan tick. Once its scan is stored, it matches the
 image's layers at once (§3.2), so production waits the scan's length, never an interval. It calls
 `POST /scan` with
 `target: "image"`. Docker `docker save`s outside the scan container and unpacks only the OCI layout into
@@ -269,14 +273,19 @@ a function of the slice's bytes and the database alone, so every image naming th
 each slice's newest is kept: a newer match replaces the older in its transaction, since the read reads
 the newest alone. An image's new matches are stored together or not at all. Each tick also reads the
 running images of such a project that have no finished scan — deployed before the rule was turned on,
-say — and drops the scans of images nothing runs or keeps, a deleted project's, and the slices no scan
+say — on the `image-sbom` queue behind any deploy's (§3.1), once it has read the run image (below) — and drops the scans of images nothing runs or keeps, a deleted project's, and the slices no scan
 names. A tick that starts an interval late does nothing; each scan waits on a busy executor for 15
-minutes at most; and the scans matched longest ago go first, so no project waits behind another's.
+minutes at most, and an image read that still finds it busy stores `busy` in place of nothing (amended
+2026-11-27, #264): its read says `could not check: Canyon's scanner was busy with other apps, and checks again on its next round` until the
+next deploy or tick reads it, and it never passes; and the scans matched longest ago go first, so no project waits behind another's.
 
 **The named run image is matched too** (#2375, 2026-10-19), so the plan (§4.2) can tell a run image
 that carries a fix from one that does not (§0.4). Each tick asks `GET /builder` for `run_image`, has the
 executor read that image (contracts/executor.md, *The run image*) while no finished scan of its digest
-is stored, keeps the scan under that digest — no project's — and drops any other run image's. Its layers'
+is stored, keeps the scan under that digest — no project's — and drops any other run image's. The tick
+reads it before it queues the fleet's reads (above), which take the executor's one image scan at a time
+back to back (contracts/executor.md) and kept the run image waiting past its 15 minutes (amended
+2026-11-27, #264). Its layers'
 slices are stored by content beside the apps' and matched each tick as theirs are: a run image's `os`
 slice is the same bytes as the matching slice of each app on it. An executor that names no run image
 drops every run image's scan, and one missing a layer is read again. No finding is made of it; the plan
@@ -406,7 +415,7 @@ it** (decided 2026-11-01, the owner). No build is refused for its buildpack.
   An org that places only `deps.known-vuln` waits the image scan's length before its first promotion.
   Placing it asks at once: an apply that places it before production with no grace — the org's policy or
   an app's addition — asks `image.sbom` of every image a project it places it for runs or keeps, as a
-  deploy asks, and an image whose scan finished has its unmatched layers matched. An edit with a grace asks
+  deploy asks but behind any deploy's (§3.1), and an image whose scan finished has its unmatched layers matched. An edit with a grace asks
   nothing when it takes effect, as no edit does: its images are read and matched by the next rescan tick, up
   to `CANYON_PATCH_INTERVAL` (6 hours by default) after the grace ends, or by the app's next deploy.
 - **Approved as a blocking finding is** (decided 2026-11-02, #2610). None of them is in a run's findings,

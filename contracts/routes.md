@@ -1049,7 +1049,7 @@ preview* can be promoted, never how the app is doing, so it reads as nothing els
   rollback review's receipt, the image that run ships. `blocks` is true iff its state is `blocking`. These
   checks run in this order, and the first that holds is its `why`; the row does not pass:
   - no image scan is stored for the digest under the project (finding.md, *System libraries and build tools*: a scan is the project's own): `no image scan recorded`;
-  - the image scan answered `not_finished` (executor.md, target `image`):
+  - the image scan answered `not_finished` (executor.md, target `image`), or found the executor busy (`busy`, below):
     `could not check: <reason>`. The reason is:
     - `did not finish in time` for `timeout`;
     - `stopped before it finished` for `killed`;
@@ -1060,6 +1060,7 @@ preview* can be promoted, never how the app is doing, so it reads as nothing els
     - `the cluster had no room to run it` for `no_room`;
     - `its Java database could not be downloaded` for `db_missing`;
     - `its Java database is over 5 days old` for `db_stale`;
+    - `Canyon's scanner was busy with other apps, and checks again on its next round` for `busy`, Canyon's own: the scan found the executor busy past its 15 minutes, and the next deploy or rescan tick reads the image again (design/PATCHING.md §3.1, §3.2; added 2026-11-27, #264);
     - `its image scan did not finish` for any other answer.
   - **what is stored does not read whole** (finding.md, *System libraries and build tools*). It reads
     `could not check: a stored scan of the image does not read` in any of these cases:

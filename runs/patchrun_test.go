@@ -150,3 +150,40 @@ func TestFixedReadsWhatThePatchedImageHolds(t *testing.T) {
 		t.Fatalf("a rebase's fix of a package the image holds twice: %+v", x)
 	}
 }
+
+// A deploy row recorded what a patch's config check compares against only with a fingerprint, its spec, a via this
+// server runs and parts that read (#265): any one missing fails that check every time, so the plan never names the
+// preview (design/PATCHING.md §4.2), and the check reads it as changed.
+func TestADeployRowWithNoFingerprintRecordedNothingToCompare(t *testing.T) {
+	print, off, parts := strings.Repeat("a", 64), &Egress{Via: "off"}, []byte(`{"egress":{"via":"off"},"run_by":"canyon"}`)
+	for _, c := range []struct {
+		why         string
+		spec        *Egress
+		parts       []byte
+		fingerprint *string
+		want        bool
+	}{
+		{"recorded", off, parts, &print, true},
+		{"through Canyon's gateway", &Egress{Via: "canyon"}, parts, &print, true},
+		{"deployed before the fingerprint", off, nil, nil, false},
+		{"parts but no fingerprint", off, parts, nil, false},
+		{"no spec", nil, parts, &print, false},
+		{"a via this server does not run", &Egress{Via: "elsewhere"}, parts, &print, false},
+		{"parts that do not read", off, []byte(`[]`), &print, false},
+	} {
+		if got := ConfigRecorded(c.spec, c.parts, c.fingerprint); got != c.want {
+			t.Errorf("%s: recorded %v, want %v", c.why, got, c.want)
+		}
+	}
+}
+
+// A patch run that ends failed says so in the server's log, with its run, its app and why (#265).
+func TestAFailedPatchRunSaysWhyInTheLog(t *testing.T) {
+	if got, want := patchFailedLine("gr_81f332d7e3b88a27", "case-next-live", "not_platform_only", "config_changed"),
+		"runs: run gr_81f332d7e3b88a27 (case-next-live): the patch run failed: not_platform_only (config_changed)"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	if got, want := patchFailedLine("gr_1", "app", "patch_regressed", ""), "runs: run gr_1 (app): the patch run failed: patch_regressed"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}

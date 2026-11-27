@@ -1480,7 +1480,7 @@ describe("Settings › App hosting › Patching", () => {
   // check of no app says why under the image Canyon uses now.
   it("an admin reads why each app got no patch at Canyon's last check, beside the system libraries it checked against", async () => {
     const golden = (patchGolden.identities as unknown as { plan: { at: string; identity: string; apps: { project: string; why: string }[] } }).plan;
-    const plan = { ...golden, apps: [...golden.apps, { project: "ledger", why: "wave" }, { project: "quote-engine", why: "sideways" }, { project: "zeta", why: "wave" }, { project: "proto", why: "constructor" }] };
+    const plan = { ...golden, apps: [...golden.apps, { project: "ledger", why: "wave" }, { project: "quote-engine", why: "sideways" }, { project: "zeta", why: "wave" }, { project: "proto", why: "constructor" }, { project: "case-next-live", why: "no_fingerprint" }] };
     patching(admin, { status: 200, body: { identities: [identity], run_image: { image: RUN, behind: 0, projects: [] }, plan } });
     const { unmount } = render(<Settings />);
     const card = within(await screen.findByRole("group", { name: NEWEST }));
@@ -1490,6 +1490,7 @@ describe("Settings › App hosting › Patching", () => {
       "Patched in preview · claims-portal",
       "Waiting for its wave · ledger, zeta",
       "No fix from Canyon for this app's findings yet · intake-forms",
+      "Deployed before Canyon recorded its settings: deploy it once to patch it · case-next-live",
       "Not patched, for a reason Canyon can't name · quote-engine, proto",
     ]);
     expect(within(causes[2]!).getByRole("link", { name: "intake-forms" }).getAttribute("href")).toBe("#/apps/intake-forms");

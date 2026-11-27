@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.getcanyon-ai/canyon",
+  "title": "Canyon",
+  "description": "Reviews every deploy your coding agent makes and runs the apps that pass, on your team's Canyon.",
+  "version": "0.0.0-dev",
+  "websiteUrl": "https://getcanyon.ai",
+  "repository": {
+    "url": "https://github.com/getcanyon-ai/canyon",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "Your team's Canyon, such as canyon.example.com: its address in Settings › Agents, without https:// and /mcp. No Canyon yet? See getcanyon.ai/docs",
+          "isRequired": true,
+          "placeholder": "canyon.example.com"
+        }
+      }
+    }
+  ]
+}

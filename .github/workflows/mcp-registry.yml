@@ -1,0 +1,33 @@
+name: mcp-registry
+
+# server.json, Canyon's listing in the MCP Registry (design/specs/mcp.md §8), checked by the registry's own validator
+# whenever it changes. Nothing here publishes: release.yml alone does, on a tag. The validator sends server.json to the
+# registry's validate endpoint, which stores nothing.
+on:
+  pull_request:
+    paths: ['server.json', '.github/workflows/mcp-registry.yml']
+  push:
+    branches: [main]
+    paths: ['server.json', '.github/workflows/mcp-registry.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    env:
+      MCP_PUBLISHER_COMMIT: ba94f657e1ecd4ddff11baa25ad84cda26c2b854 # modelcontextprotocol/registry v1.8.9, as release.yml's; bump both together
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: mcp-publisher, pinned by commit (Go's checksum database holds the module to it)
+        run: GOBIN="$RUNNER_TEMP/bin" go install "github.com/modelcontextprotocol/registry/cmd/publisher@$MCP_PUBLISHER_COMMIT"
+      - name: the registry validates server.json
+        run: '"$RUNNER_TEMP/bin/publisher" validate server.json'

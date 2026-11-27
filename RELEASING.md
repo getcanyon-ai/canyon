@@ -66,6 +66,10 @@ released.
 5. The published release is installed and smoke-tested as a user gets it
    ([.github/workflows/release-smoke.yml](.github/workflows/release-smoke.yml)), and again every night against
    the latest release.
+6. A release that isn't a prerelease then updates Canyon's listing in the
+   [MCP Registry](https://registry.modelcontextprotocol.io) with its version: [server.json](server.json), as
+   `io.github.getcanyon-ai/canyon`. Only this job publishes it, never a person by hand and never a pull request. A
+   release run again finds its version listed and publishes nothing.
 
 ## The tokens
 
@@ -84,6 +88,8 @@ released.
   - The one job that uses it checks nothing out and runs none of the tree's code. It downloads the files the
     packing job made and creates the release from them. The packing job, which runs the tree's scripts, holds no
     secret.
+- **The MCP Registry listing takes no secret.** Its job alone has `id-token: write`: GitHub's OIDC token for the run
+  proves the `io.github.getcanyon-ai` namespace to the registry, and no account or DNS record is needed.
 - Only admins may create `v*` tags, and every job refuses a commit that isn't on `main`. The rehearsal needs no
   secret and runs in no environment.
 

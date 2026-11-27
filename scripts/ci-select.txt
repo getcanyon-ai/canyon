@@ -104,3 +104,4 @@ scripts/tour-check.sh               -
 .gitleaks.toml                      -
 .gitleaksignore                     -
 .golangci.yml                       -
+server.json                         -   # the MCP Registry listing: mcp-registry.yml validates it

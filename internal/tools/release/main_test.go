@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"maps"
 	"os"
 	"os/exec"
@@ -179,12 +180,14 @@ func TestAResultHoldsUntilWhatItChecksChanges(t *testing.T) {
 	}
 }
 
-// Only main's own runs count, a push's, a schedule's or one run by hand, the newest of each workflow; check runs count
-// through them. A stranger's comment run, failed, on the commit passes; a cancelled nightly with a newer green one passes;
-// a newest still pending refuses; a check run of no listed run refuses. The asking run is its own.
+// Only main's own runs count, a push's, a schedule's or one run by hand, each listed apart, the newest of each workflow;
+// check runs count through them. A check run of a stranger's comment run, failed, passes when GitHub says it is one,
+// however many there are; one of any other run, or one GitHub can't say, refuses. A cancelled nightly with a newer
+// green one passes; a newest still pending refuses; a listing short of its count, or holding another event, refuses.
+// The asking run is its own.
 func TestOnlyMainsNewestRunsCount(t *testing.T) {
 	type wf struct{ id, workflow, event, status, conclusion, created string }
-	runs := func(rs ...wf) string {
+	listing := func(total int, rs []wf) string {
 		var out []string
 		for _, r := range rs {
 			c := "null"
@@ -193,7 +196,21 @@ func TestOnlyMainsNewestRunsCount(t *testing.T) {
 			}
 			out = append(out, `{"id":`+r.id+`,"workflow_id":`+r.workflow+`,"name":"w`+r.workflow+`","event":"`+r.event+`","status":"`+r.status+`","conclusion":`+c+`,"created_at":"`+r.created+`","html_url":"https://github.com/o/r/actions/runs/`+r.id+`"}`)
 		}
-		return `[{"total_count":` + strconv.Itoa(len(rs)) + `,"workflow_runs":[` + strings.Join(out, ",") + `]}]`
+		return `[{"total_count":` + strconv.Itoa(total) + `,"workflow_runs":[` + strings.Join(out, ",") + `]}]`
+	}
+	// runs are the three listings GitHub answers: each of main's events alone
+	runs := func(rs ...wf) [][]byte {
+		var out [][]byte
+		for _, e := range mainEvents {
+			var of []wf
+			for _, r := range rs {
+				if r.event == e {
+					of = append(of, r)
+				}
+			}
+			out = append(out, []byte(listing(len(of), of)))
+		}
+		return out
 	}
 	check := func(run, conclusion string) string {
 		return `{"name":"c","status":"completed","conclusion":"` + conclusion + `","details_url":"https://github.com/o/r/actions/runs/` + run + `/job/1"}`
@@ -201,29 +218,43 @@ func TestOnlyMainsNewestRunsCount(t *testing.T) {
 	checks := func(cs ...string) string {
 		return `[{"total_count":` + strconv.Itoa(len(cs)) + `,"check_runs":[` + strings.Join(cs, ",") + `]}]`
 	}
+	// events is GitHub's answer for a run no listing holds: its event, or no answer
+	events := map[string]string{"2": "issue_comment", "1500": "issue_comment", "6": "pull_request_target", "7": "pull_request", "8": "push"}
+	event := func(id string) (string, error) {
+		if e, ok := events[id]; ok {
+			return e, nil
+		}
+		return "", errors.New("HTTP 502")
+	}
 	ci := wf{"1", "10", "push", "completed", "success", "2026-11-24T10:00:00Z"}
 	self := wf{"9", "90", "push", "in_progress", "", "2026-11-24T12:00:00Z"}
 	for name, c := range map[string]struct {
-		runs, checks string
-		ok           bool
+		runs   [][]byte
+		checks string
+		ok     bool
 	}{
-		"good": {runs(ci, self), checks(check("1", "success"), check("9", "")), true},
-		"a stranger's failed cla comment run": {runs(ci, self, wf{"2", "20", "issue_comment", "completed", "failure", "2026-11-24T11:00:00Z"}),
-			checks(check("1", "success"), check("2", "failure")), true},
+		"good":                                   {runs(ci, self), checks(check("1", "success"), check("9", "")), true},
+		"a stranger's failed cla comment run":    {runs(ci, self), checks(check("1", "success"), check("2", "failure")), true},
+		"more comment runs than a listing holds": {runs(ci, self), checks(check("1", "success"), check("1500", "skipped")), true},
+		"a pull_request_target run":              {runs(ci, self), checks(check("1", "success"), check("6", "failure")), true},
 		"a cancelled nightly, a newer green one": {runs(ci, self, wf{"3", "30", "schedule", "completed", "cancelled", "2026-11-23T03:00:00Z"}, wf{"4", "30", "schedule", "completed", "success", "2026-11-24T03:00:00Z"}),
 			checks(check("1", "success"), check("3", "cancelled"), check("4", "success")), true},
 		"the newest pending": {runs(ci, self, wf{"3", "30", "schedule", "completed", "success", "2026-11-23T03:00:00Z"}, wf{"4", "30", "schedule", "in_progress", "", "2026-11-24T03:00:00Z"}),
 			checks(check("1", "success")), false},
-		"a pending run with no jobs":   {runs(ci, self, wf{"5", "50", "push", "pending", "", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
-		"a startup_failure":            {runs(ci, self, wf{"5", "50", "push", "completed", "startup_failure", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
-		"a failed check run of main's": {runs(ci, self), checks(check("1", "failure")), false},
-		"a check run of no listed run": {runs(ci, self), checks(check("1", "success"), check("77", "success")), false},
-		"a check run naming no run":    {runs(ci, self), checks(`{"name":"app","status":"completed","conclusion":"success","details_url":"https://example.test/x"}`), false},
-		"no run but self":              {runs(self), checks(check("9", "")), false},
-		"a page short":                 {`[{"total_count":3,"workflow_runs":[` + strings.TrimSuffix(strings.TrimPrefix(runs(ci, self), `[{"total_count":2,"workflow_runs":[`), `]}]`) + `]}]`, checks(check("1", "success")), false},
-		"not GitHub's answer":          {`{"message":"Bad credentials"}`, checks(check("1", "success")), false},
+		"a pending run with no jobs":            {runs(ci, self, wf{"5", "50", "push", "pending", "", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
+		"a startup_failure":                     {runs(ci, self, wf{"5", "50", "push", "completed", "startup_failure", "2026-11-24T10:00:00Z"}), checks(check("1", "success")), false},
+		"a failed check run of main's":          {runs(ci, self), checks(check("1", "failure")), false},
+		"a check run of a pull_request run":     {runs(ci, self), checks(check("1", "success"), check("7", "success")), false},
+		"a check run of a push run not listed":  {runs(ci, self), checks(check("1", "success"), check("8", "success")), false},
+		"a check run GitHub can't look up":      {runs(ci, self), checks(check("1", "success"), check("77", "success")), false},
+		"a check run naming no run":             {runs(ci, self), checks(`{"name":"app","status":"completed","conclusion":"success","details_url":"https://example.test/x"}`), false},
+		"no run but self":                       {runs(self), checks(check("9", "")), false},
+		"a page short":                          {[][]byte{[]byte(listing(3, []wf{ci, self})), []byte(listing(0, nil)), []byte(listing(0, nil))}, checks(check("1", "success")), false},
+		"a listing holding another event's run": {[][]byte{[]byte(listing(3, []wf{ci, self, {"2", "20", "issue_comment", "completed", "failure", "2026-11-24T11:00:00Z"}})), []byte(listing(0, nil)), []byte(listing(0, nil))}, checks(check("1", "success")), false},
+		"not GitHub's answer":                   {[][]byte{[]byte(`{"message":"Bad credentials"}`), []byte(listing(0, nil)), []byte(listing(0, nil))}, checks(check("1", "success")), false},
+		"a listing missing":                     {runs(ci, self)[:2], checks(check("1", "success")), false},
 	} {
-		if bad := badRuns([]byte(c.checks), []byte(c.runs), "9"); (len(bad) == 0) != c.ok {
+		if bad := badRuns([]byte(c.checks), c.runs, "9", event); (len(bad) == 0) != c.ok {
 			t.Errorf("%s: %v, want passed %v", name, bad, c.ok)
 		}
 	}

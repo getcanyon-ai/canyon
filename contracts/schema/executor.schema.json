@@ -314,6 +314,7 @@
       "properties": {
         "running": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/container" } },
         "restarting": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/restarting" } },
+        "starting": { "description": "Those asked that a /run is starting and that neither run, restart nor have exited (executor.md, POST /running, Starting): never stopped.", "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/container" } },
         "stopped": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/stopped" } }
       }
     },

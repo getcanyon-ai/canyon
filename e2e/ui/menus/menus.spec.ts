@@ -175,3 +175,14 @@ test.describe("a menu at every width", () => {
     await opensInside(page, page.getByRole("button", { name: /^Filter/ }), page.locator("#fleet-filter"));
   });
 });
+
+// Settings › Hosting at 320px, an admin's narrowest window or a laptop at 400%: the page is no wider than the window (#129).
+test.describe("Settings › Hosting at 320px", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+  test.beforeEach(async ({ page }) => { await answered(page); });
+  test("leaves the page its width", async ({ page }) => {
+    await page.goto("/#/settings/hosting");
+    await expect(page.getByText("Who signs people in")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(320);
+  });
+});

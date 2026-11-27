@@ -58,6 +58,7 @@ type written struct {
 			Post *group `toml:"post,omitempty"`
 		} `toml:"buildpacks"`
 	} `toml:"io"`
+	named bool // project.toml names buildpacks (a group, pre or post), which only read with a builder resolves
 }
 
 // table is one TOML table as go-toml/v2 reads it into a map: every key exactly as written.
@@ -414,7 +415,8 @@ func (e *Executor) read(ctx context.Context, b []byte, builder string, w *writte
 			Env []envVar `toml:"env"`
 		}{vars}
 	}
-	if len(grp)+len(pre)+len(post) == 0 {
+	w.named = len(grp)+len(pre)+len(post) > 0
+	if !w.named || builder == "" { // with no builder the file alone is read, as choose reads it, never a buildpack resolved
 		return nil
 	}
 	carried, err := e.carried(ctx, builder)

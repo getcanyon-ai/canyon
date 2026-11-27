@@ -114,6 +114,7 @@ type Fake struct {
 	RunningAsked [][]executor.Container        // what each POST /running asked about, in the order it asked
 	Why          []executor.Stopped            // POST /running asked why answers these as why containers stopped, asked or not
 	Restarting   []executor.Restarting         // POST /running answers these as restarting, asked or not, and never as running
+	Starting     []executor.Container          // POST /running answers these as starting, asked or not, and never as running
 	WhyAsked     atomic.Int32                  // POST /running calls that asked why
 
 	mu          sync.Mutex
@@ -720,17 +721,20 @@ func New(t *testing.T) *Fake {
 		for name := range f.running {
 			running[name] = true
 		}
-		restarting := append([]executor.Restarting{}, f.Restarting...)
+		restarting, starting := append([]executor.Restarting{}, f.Restarting...), append([]executor.Container{}, f.Starting...)
 		f.mu.Unlock()
 		for _, r := range restarting {
 			running[r.App+"-"+r.Target] = false
+		}
+		for _, s := range starting {
+			running[s.App+"-"+s.Target] = false
 		}
 		stopped := []executor.Stopped{}
 		if req.Why {
 			f.WhyAsked.Add(1)
 			stopped = append(stopped, f.Why...)
 		}
-		_ = json.NewEncoder(w).Encode(executor.Runs{Running: executor.Asked(req.Containers, running), Restarting: restarting, Stopped: stopped})
+		_ = json.NewEncoder(w).Encode(executor.Runs{Running: executor.Asked(req.Containers, running), Restarting: restarting, Starting: starting, Stopped: stopped})
 	})
 	mux.HandleFunc("POST /callers", func(w http.ResponseWriter, r *http.Request) {
 		f.CallersAsks.Add(1)

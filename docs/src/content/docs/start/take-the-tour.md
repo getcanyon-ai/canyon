@@ -12,7 +12,7 @@ real deploy on your Canyon, and at the end you have a working app in production.
 | | |
 |---|---|
 | **Time** | Minutes, once the demo is up |
-| **You need** | Claude Code, Codex, Cursor, Gemini CLI or another coding agent, and what the [laptop demo](/start/try-it-on-your-laptop/#what-you-need) needs: Docker 28 or newer, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk |
+| **You need** | Claude Code, Codex, Cursor, Gemini CLI or another coding agent, and what the [laptop demo](/start/try-it-on-your-laptop/#what-you-need) needs: Docker 28 or newer, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk (21 GB with Docker's containerd image store) |
 | **You get** | A claims tracker in your org's design system, with a safe search, running in preview and in production |
 
 Canyon checks an app at three stages: when a coding agent deploys, on every pull request, and before
@@ -62,7 +62,7 @@ canyon demo up
 ```
 
 `canyon demo up` checks your machine, then starts the demo and names each stage as it goes. A first
-start takes 20 to 30 minutes at 25 Mbit/s, longer on a slower line, and a restart 5 to 10 minutes.
+start takes 15 to 20 minutes at 25 Mbit/s, longer on a slower line, and a restart 5 to 10 minutes.
 It ends on these two lines, and then you tell the agent Canyon is ready:
 
 ```text

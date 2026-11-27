@@ -2,7 +2,7 @@
   Checking this machine
   Fetching the demo into ~/.canyon/demo
   Downloading Canyon's images
-  Starting Canyon and its sample apps. A first start takes 20 to 30 minutes.
+  Starting Canyon and its sample apps. A first start takes 15 to 20 minutes.
   ✓ claims-portal is running (1 of 4)
   ✓ endorsement-hub is running (2 of 4)
   ✓ claims-archive is running (3 of 4)

@@ -15,3 +15,9 @@ Dockerfile.executor
 docker-compose.yml
 .github/pack-download-test.py
 .github/fetch.sh
+# the Node builder the tests build on (make builder-node, #174), the pins it is made from, and the trees they build
+scripts/builder-node.sh
+deploy/k8s/builds.yaml
+internal/tools/paketobump/**
+demo/apps/**
+cli/testdata/tour/**

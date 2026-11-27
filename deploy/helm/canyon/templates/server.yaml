@@ -31,7 +31,6 @@ CANYON_GROUPS_CLAIM: {{ . | quote }}
 {{- with .Values.canyon.org }}
 CANYON_ORG: {{ . | quote }}
 {{- end }}
-CANYON_INSTALL_MODE: "helm_one_node"
 {{- if .Values.canyon.appDatabase.enabled }}
 CANYON_APP_DATABASE_URL: {{ required "canyon.appDatabase.url is required without infra.appPostgres" (include "canyon.appDatabaseURL" .) | quote }}
 {{- if .Values.canyon.appDatabase.caConfigMap }}
@@ -104,6 +103,7 @@ spec:
           image: {{ include "canyon.image" (dict "root" . "name" "server") }}
           env:
             - {name: CANYON_AUTH, value: oidc} # here, not in the Secret: env wins over envFrom, so no Secret, existingSecret included, starts it without sign-in
+            - {name: CANYON_INSTALL_MODE, value: helm_one_node} # how Canyon was installed, which the daily report says (TELEMETRY.md): here as CANYON_AUTH is, so existingSecret says it too
             {{- if ne (toString .Values.telemetry.enabled) "true" }}
             - {name: CANYON_TELEMETRY, value: "0"} # here as CANYON_AUTH is: off holds with existingSecret too. On sets nothing, so a Secret's own CANYON_TELEMETRY=0 stands
             {{- end }}
@@ -191,3 +191,7 @@ spec:
     {{- if not (or $cidrs .Values.platform.k3s.enabled) }}{{ fail "canyon.kubeAPI.cidrs is empty: set your API server's endpoint addresses (kubectl get endpoints kubernetes) and the kubernetes Service's cluster IP, or the server never reads the key set the egress gateway's token is checked against, and the gateway is never ready" }}{{ end }}
     - to: [{{ range $i, $cidr := $cidrs | default (list (printf "%s/32" .Values.platform.k3s.apiServer)) }}{{ if $i }}, {{ end }}{ipBlock: {cidr: {{ $cidr }}}}{{ end }}]
       ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]
+{{- if .Values.canyon.existingSecret }}{{/* the chart writes no Secret then, so these two would be dropped without a word (#149) */}}
+{{- if .Values.canyon.auth.allowedEmails }}{{ fail "canyon.auth.allowedEmails and canyon.existingSecret: put CANYON_OIDC_ALLOWED_EMAILS in that Secret instead" }}{{ end }}
+{{- if .Values.canyon.auth.allowedDomains }}{{ fail "canyon.auth.allowedDomains and canyon.existingSecret: put CANYON_OIDC_ALLOWED_DOMAINS in that Secret instead" }}{{ end }}
+{{- end }}

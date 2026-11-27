@@ -51,11 +51,12 @@ Blocked: the agent built SQL from the request. · Passed: after the agent's one-
 ```text
   ✗ Review blocked · 1 blocking finding
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✗ opengrep           1 blocking finding
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ────────────────────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ a passing review and a person's say-so, and every app keeps its review history a
 
 ## Quickstart
 
-**Run Canyon on your laptop** (Docker 28 or newer with Compose v2, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk):
+**Run Canyon on your laptop** (Docker 28 or newer with Compose v2, 4 CPUs and 6 GB of memory for it, about 18 GB of free disk, 21 GB with Docker's containerd image store):
 
 ```sh
 curl -fsSL https://github.com/getcanyon-ai/canyon-releases/releases/latest/download/install.sh -o install.sh && sh install.sh

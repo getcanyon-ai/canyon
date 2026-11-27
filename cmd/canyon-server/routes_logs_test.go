@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getcanyon-ai/canyon/internal/executortest"
 )
 
 const (
@@ -65,7 +67,7 @@ func TestLogsStreamThePreviewContainerRawAndAuditTheReader(t *testing.T) {
 	// one row per served read: the reader and the env, never a line
 	var rows, details string
 	if err := pool.QueryRow(ctx, "SELECT string_agg(project_id || ' ' || actor_subject, ','), string_agg(detail::text, ',') FROM audit_events WHERE action = $1", logsRoute).Scan(&rows, &details); err != nil ||
-		rows != "claims-portal anonymous,claims-portal anonymous" || details != `{"env": "preview"},{"env": "preview"}` {
+		rows != "claims-portal anonymous,claims-portal anonymous" || details != `{"env": "preview", "redaction": "none"},{"env": "preview", "redaction": "none"}` {
 		t.Fatalf("two served reads, two rows naming the env: %q %q (%v)", rows, details, err)
 	}
 	// prod has nothing deployed: a 404 that reaches neither the executor nor the trail
@@ -266,5 +268,155 @@ func TestTheMaskedReadIsBoundedBeforeItMasks(t *testing.T) {
 		strings.NewReader(strings.Repeat("x", 1<<20+1)))
 	if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), `"too_long_to_mask"`) || w.Header().Get("Canyon-Log-Redaction") != "" {
 		t.Errorf("a log over 1 MiB: %d %s", w.Code, w.Body)
+	}
+}
+
+// A security responder reads production's logs, masked, whatever their access to the app, each read audited (design/PERMISSIONS.md,
+// Security responders; the owner, 2026-11-25): never preview's, never a raw read, decided on the read as the server parses it,
+// and never where a value is short enough that its name gives it away (#223's security review). A member below contributor
+// who isn't a responder reads none.
+func TestAResponderReadsProductionsMaskedLogsAlone(t *testing.T) {
+	withOIDC(t)
+	pool, ctx := migrated(t)
+	base, _ := start(t, pool, time.Hour)
+	if _, err := pool.Exec(ctx, "UPDATE org_preferences SET responder_emails = $1", []string{"rex@meridian.example"}); err != nil {
+		t.Fatal(err)
+	}
+	olive := signedIn(t, ctx, pool, base, "sub-olive", "olive@meridian.example", false)
+	seedTeamApp(t, ctx, pool, base, olive)
+	// a build value the fake's log prints (GET /api/claims): preview built the image production runs, so it is masked there too
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH", `{"value":"/api/claims","where":"build"}`); code != 204 {
+		t.Fatalf("the build value: %d %s", code, lastBody)
+	}
+	// the run that built the image both environments run, after that value was set
+	image := "canyon/claims-portal@" + executortest.Digest
+	if _, err := pool.Exec(ctx, "UPDATE runs SET build_image = $1, created_at = now() WHERE id = 'gr_seed'", image); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO deploys (project_id, env, package_id, image, url, gate_run, run_started_at) SELECT 'claims-portal', e, package_id, $1, 'http://x', 'gr_seed', now() + interval '1 second' FROM runs, unnest(ARRAY['preview', 'prod']) e WHERE id = 'gr_seed'`, image); err != nil {
+		t.Fatal(err)
+	}
+	started := func() { // what runs started after every value set so far: the masked read's rule can mask it
+		t.Helper()
+		if _, err := pool.Exec(ctx, "UPDATE deploys SET run_started_at = now() + interval '1 second' WHERE project_id = 'claims-portal'"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rex := signedIn(t, ctx, pool, base, "sub-rex", "rex@meridian.example", false)
+	nora := signedIn(t, ctx, pool, base, "sub-nora", "nora@meridian.example", false)
+	vic := signedIn(t, ctx, pool, base, "sub-vic", "vic@meridian.example", false)
+	carl := signedIn(t, ctx, pool, base, "sub-carl", "carl@meridian.example", false)
+	logs := base + "/api/v1/projects/claims-portal/logs"
+	reads := 0
+	read := func(who string, c *http.Client, query string) {
+		t.Helper()
+		code, _, resp := do(t, c, http.MethodGet, logs+query, "")
+		if code != 200 || resp.Header.Get("Canyon-Log-Redaction") != "masked" || strings.Contains(lastBody, "/api/claims") || !strings.Contains(lastBody, "<CLAIMS_PATH>") {
+			t.Fatalf("%s, %s: %d %q, want 200 masked, the build value by its name", who, query, code, lastBody)
+		}
+		reads++
+	}
+	read("a responder", rex, "?env=prod&redaction=masked")
+	var row string
+	if err := pool.QueryRow(ctx, "SELECT project_id || ' ' || actor_subject || ' ' || detail::text FROM audit_events WHERE action = $1", logsRoute).Scan(&row); err != nil ||
+		row != `claims-portal sub-rex {"env": "prod", "redaction": "masked"}` {
+		t.Fatalf("the responder's read leaves its row: %q (%v)", row, err)
+	}
+	refused := func(who string, c *http.Client, query string) {
+		t.Helper()
+		asked := fake.Logs.Load()
+		if code, body, _ := do(t, c, http.MethodGet, logs+query, ""); code != 403 || body["error"] != "team_required" {
+			t.Errorf("%s, %s: %d %s, want 403 team_required", who, query, code, lastBody)
+		}
+		if fake.Logs.Load() != asked {
+			t.Errorf("%s, %s: a refused read reached the executor", who, query)
+		}
+	}
+	for _, query := range []string{
+		"?env=preview&redaction=masked", "?env=prod", "?env=prod&redaction=none&follow=false",
+		"?redaction=masked",                         // no env: preview's
+		"?env=preview&env=prod&redaction=masked",    // the first env is the read's
+		"?env=prod&redaction=none&redaction=masked", // the first redaction is the read's
+		"?env=prod;x=1&redaction=masked",            // a pair with a semicolon is no pair: no env
+		"?env=nope",                                 // a read the parse refuses is the team's refusal, never a 400
+		"?env=prod&redaction=masked&follow=true",
+	} {
+		refused("a responder", rex, query)
+	}
+	refused("a member with no access", nora, "?env=prod&redaction=masked")
+	refused("a read-only member", vic, "?env=prod&redaction=masked")
+	// a responder who is also read-only on the app reads as a responder
+	if _, err := pool.Exec(ctx, `INSERT INTO project_access (project_id, kind, grantee, level, granted_by_kind, granted_by_subject, granted_by_display) VALUES ('claims-portal', 'email', 'rex@meridian.example', 'viewer', 'person', 'sub-olive', '')`); err != nil {
+		t.Fatal(err)
+	}
+	read("a read-only responder", rex, "?env=prod&redaction=masked")
+	refused("a read-only responder", rex, "?env=prod&follow=false")
+	// a value under 8 characters: the name in its place would give it away, so the responder reads none; the team reads as before
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/PIN", `{"value":"4321","env":"prod"}`); code != 204 {
+		t.Fatalf("the short value: %d %s", code, lastBody)
+	}
+	started()
+	if code, body, _ := do(t, rex, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 409 || body["error"] != "too_short_to_mask" {
+		t.Errorf("a responder's read with a short value: %d %s, want 409 too_short_to_mask", code, lastBody)
+	}
+	read("a contributor, with a short value", carl, "?env=prod&redaction=masked")
+	// a build value rotated after the image was built, then promoted: the image holds the old one, which the vault no
+	// longer has, so nobody's masked read can hide it
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH", `{"value":"/api/claims/v2","where":"build"}`); code != 204 {
+		t.Fatalf("the rotated build value: %d %s", code, lastBody)
+	}
+	started()
+	for who, c := range map[string]*http.Client{"a contributor": carl, "a responder": rex} {
+		if code, body, _ := do(t, c, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 409 || body["error"] != "not_maskable" {
+			t.Errorf("%s, a build value rotated since the build: %d %s, want 409 not_maskable", who, code, lastBody)
+		}
+	}
+	masked := func(who string, want int, wantErr string) {
+		t.Helper()
+		code, body, _ := do(t, carl, http.MethodGet, logs+"?env=prod&redaction=masked", "")
+		if code != want || (wantErr != "" && body["error"] != wantErr) {
+			t.Errorf("%s: %d %s, want %d %s", who, code, lastBody, want, wantErr)
+		}
+		if code == 200 {
+			reads++
+		}
+	}
+	rebuilt := func() { // the image built again, after every value set so far
+		t.Helper()
+		if _, err := pool.Exec(ctx, "UPDATE runs SET created_at = now() WHERE id = 'gr_seed'"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rebuilt()
+	started()
+	masked("rebuilt since the rotation", 200, "")
+	// a build value removed since the build: the image may hold it, and the vault has it no longer
+	if code, _, _ := do(t, olive, http.MethodDelete, base+"/api/v1/projects/claims-portal/secrets/CLAIMS_PATH?env=preview", ""); code != 204 {
+		t.Fatalf("the build value removed: %d %s", code, lastBody)
+	}
+	started()
+	masked("a build value removed since the build", 409, "not_maskable")
+	// an image no run records building: the deploy's gate run stands for its build, so a build value set before that run
+	// is masked, and one set after it is a change
+	rebuilt()
+	if _, err := pool.Exec(ctx, "UPDATE runs SET build_image = NULL WHERE id = 'gr_seed'"); err != nil {
+		t.Fatal(err)
+	}
+	started()
+	masked("an image no run records building, nothing set since its gate run", 200, "")
+	if code, _, _ := do(t, olive, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/LATER_PATH", `{"value":"/api/later/one","where":"build"}`); code != 204 {
+		t.Fatalf("a build value after the gate run: %d %s", code, lastBody)
+	}
+	started()
+	masked("an image no run records building, a build value set since its gate run", 409, "not_maskable")
+	if n := count(t, ctx, pool, logsAudited); n != reads {
+		t.Fatalf("%d rows for %d reads served", n, reads)
+	}
+	// a deleted app is 404 to a responder, before anything is read
+	if _, err := pool.Exec(ctx, "UPDATE projects SET deleted_at = now() WHERE id = 'claims-portal'"); err != nil { // as delete leaves it
+		t.Fatal(err)
+	}
+	if code, body, _ := do(t, rex, http.MethodGet, logs+"?env=prod&redaction=masked", ""); code != 404 || body["error"] != "not_found" || count(t, ctx, pool, logsAudited) != reads {
+		t.Fatalf("a responder on a deleted app: %d %s, want 404 and no row", code, lastBody)
 	}
 }

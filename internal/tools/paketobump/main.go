@@ -8,6 +8,7 @@
 //	go run ./internal/tools/paketobump -out <dir>        # from the repository's root: rewrites the pins, writes bump.json, prints the issue
 //	go run ./internal/tools/paketobump -out <dir> issue  # pushes the branch from <dir>/pins.patch and opens or updates the issue
 //	go run ./internal/tools/paketobump sbom              # this tree's pins: the fixture apps' image scans, as JSON on stdout
+//	go run ./internal/tools/paketobump pin <name>        # this tree's one pin of paketobuildpacks/<name>, by digest
 package main
 
 import (
@@ -47,8 +48,9 @@ const (
 )
 
 // The fixture apps built on each side: Paketo's Node, Python and Java samples, whose images
-// design/PATCHING.md §2's class table is checked against (executor/e2e_test.go).
-var apps = []string{"node-engines", "django-sqlite", "spring-maven"}
+// design/PATCHING.md §2's class table is checked against (executor/e2e_test.go), and a Ruby and an ASP.NET app,
+// which no other check builds (#133).
+var apps = []string{"node-engines", "django-sqlite", "spring-maven", "ruby-rack", "aspnet-minimal"}
 
 // pinRE is a Paketo image pinned by digest, as Canyon names one in its Dockerfiles, its manifests and its tests.
 var pinRE = regexp.MustCompile(`docker\.io/paketobuildpacks/([a-z0-9-]+)@(sha256:[0-9a-f]{64})`)
@@ -68,8 +70,20 @@ func main() {
 		}
 		return
 	}
+	if flag.Arg(0) == "pin" { // what scripts/builder-node.sh builds the Node builder from (#174)
+		pinned, err := bumper{root: "."}.pins()
+		if err != nil {
+			log.Fatalf("paketobump pin: %v", err)
+		}
+		p := pinned[flag.Arg(1)]
+		if p == nil {
+			log.Fatalf("paketobump pin: no file pins paketobuildpacks/%s", flag.Arg(1))
+		}
+		fmt.Printf("docker.io/paketobuildpacks/%s@%s\n", flag.Arg(1), p.digest)
+		return
+	}
 	if *out == "" || *repo == "" {
-		log.Fatal("usage: paketobump -out <dir> [-repo owner/name] [issue] | paketobump sbom")
+		log.Fatal("usage: paketobump -out <dir> [-repo owner/name] [issue] | paketobump sbom | paketobump pin <name>")
 	}
 	if flag.Arg(0) == "issue" {
 		raw, err := os.ReadFile(filepath.Join(*out, "bump.json")) //nolint:gosec // the bump job's artifact

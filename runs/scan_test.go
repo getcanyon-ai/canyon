@@ -242,6 +242,39 @@ func TestABusyExecutorIsWaitedOutNeverAFinding(t *testing.T) {
 	}
 }
 
+// The laptop demo leaves trivy's run off (#237): a laptop host's run writes its scan skipped, with laptop_demo, once, as
+// it starts, and asks the executor for no scan; another host writes no skipped row. (These runs read a recorded gate:
+// what the scanners' run names not checked is Gate.Review's, TestTrivyOffNamesItsRuleNotCheckedOnThisHost.)
+func TestALaptopRunSaysTrivySkippedAndItsRuleNotChecked(t *testing.T) {
+	for _, laptop := range []bool{true, false} {
+		p, ctx, f, snap := scanning(t)
+		i := slices.IndexFunc(snap.Rules, func(r policy.Rule) bool { return r.ID == "sarif.trivy" })
+		snap.Rules[i].Run, snap.Rules[i].State = false, policy.Advisory
+		before := f.Scans.Load()
+		run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap, Laptop: laptop})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state, failure := waitEnded(t, ctx, p, run.ID); state == "failed" {
+			t.Fatalf("laptop %v: the run ended %s %s", laptop, state, why(failure))
+		}
+		var reasons []string
+		rows, err := p.Query(ctx, "SELECT data->>'reason' FROM timeline_rows WHERE run_id = $1 AND kind = 'progress' AND data->>'tool' = 'trivy' AND data->>'status' = 'skipped'", run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var r string
+			must(t, rows.Scan(&r))
+			reasons = append(reasons, r)
+		}
+		rows.Close()
+		if want := map[bool][]string{true: {"laptop_demo"}, false: nil}[laptop]; !slices.Equal(reasons, want) || f.Scans.Load() != before {
+			t.Fatalf("laptop %v: skipped rows %q, want %q; %d scans asked", laptop, reasons, want, f.Scans.Load()-before)
+		}
+	}
+}
+
 // progressOf is a scan's progress statuses, oldest first (contracts/events.md, progress).
 func progressOf(t *testing.T, ctx context.Context, p *pgxpool.Pool, run, tool string) []string {
 	t.Helper()

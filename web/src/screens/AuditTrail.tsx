@@ -27,7 +27,7 @@ const QUESTIONS: { key: string; label: string; actions: string[]; admin?: true }
   { key: "production", label: "Production changes", actions: ["deploy prod", "POST /api/v1/projects/{id}/promotions", "request promotion", "approve promotion", "deny promotion",
     "stop app", "lift hold", "DELETE /api/v1/projects/{id}/envs/{env}", "request undeploy", "send remove again",
     "patch prod", "revert patch prod", "request patch approval", "approve patch identity",
-    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest",
+    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest", "platform reported deployed without resources",
     "commit release", "release live by check-in", "release removed by commit", "release tree mismatch", "pull request closed", "pull request changed"] },
   { key: "admin", label: "Admin and sign-in changes", actions: ["PUT /api/v1/preferences", "sign in", "sign out", "revoke sessions", "complete setup", "set front door", "egress.set", "egress.networks.recreate", "set platform webhook", "rotate platform token", "scanner.credential.set", "scanner.credential.remove", "github app registered"], admin: true },
   { key: "guardrails", label: "Guardrail changes", actions: ["policy.set", "app_policy.set", "app_policy.remove", "custom_rule.set", "set playbook", "restore playbook", "remove playbook"], admin: true },

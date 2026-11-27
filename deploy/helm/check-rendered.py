@@ -301,6 +301,13 @@ for d in docs:
         for k in ("CANYON_TELEMETRY", "DO_NOT_TRACK", "CI"):
             if k in d.get("stringData", {}):
                 fail.append(f"Secret canyon-server sets {k}: the off switch is the server container's own env")
+# How Canyon was installed, which the daily report says (TELEMETRY.md, install_mode): the server container's own env, as
+# CANYON_AUTH is, so an install with canyon.existingSecret says it too, never the chart's Secret.
+if server_env.get("CANYON_INSTALL_MODE") != "helm_one_node":
+    fail.append(f"the server's env sets CANYON_INSTALL_MODE to {server_env.get('CANYON_INSTALL_MODE')!r}: want helm_one_node, with canyon.existingSecret too")
+for d in docs:
+    if d["kind"] == "Secret" and d["metadata"]["name"] == "canyon-server" and "CANYON_INSTALL_MODE" in d.get("stringData", {}):
+        fail.append("Secret canyon-server sets CANYON_INSTALL_MODE: an operator's own Secret would leave it out; it is the server container's own env")
 k3s_caddy = any(d["kind"] == "NetworkPolicy" and d["metadata"]["name"] == "canyon-apps-gateway" for d in docs)
 pocket = any(d["kind"] == "Deployment" and d["metadata"]["name"] == "pocket-id" for d in docs)
 if (k3s_caddy and pocket) != ("CANYON_KUBE_GATEWAY_SIGNIN" in server_env):

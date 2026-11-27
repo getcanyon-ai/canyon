@@ -60,6 +60,9 @@ func TestUndeployUnderOrgSendsARemoveRelease(t *testing.T) {
 	if code, again, _ := do(t, c, http.MethodDelete, base+previewEnv, ""); code != 202 || again["release"] != release || count(t, ctx, pool, undeployAudited) != 1 {
 		t.Fatalf("undeploy again while the remove is open: %d %s", code, lastBody)
 	}
+	if n := count(t, ctx, pool, undeployAudited+" AND detail->>'stop' = 'remove_sent'"); n != 1 { // the platform runs it: never "stopped" (#156)
+		t.Fatalf("the undeploy's row says what it can't know: %d with stop remove_sent", n)
+	}
 	reportRemoved(t, c, base, release, token)
 	if preview := previewOf(t, c, base); preview != nil {
 		t.Fatalf("removed takes the environment off the read: %v", preview)

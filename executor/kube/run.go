@@ -903,11 +903,17 @@ func (e *Executor) RunningOf(ctx context.Context, containers []executor.Containe
 			running[name] = false
 		}
 	}
-	runs := executor.Runs{Running: executor.Asked(containers, running), Restarting: []executor.Restarting{}, Stopped: []executor.Stopped{}}
+	runs := executor.Runs{Running: executor.Asked(containers, running), Restarting: []executor.Restarting{}, Starting: []executor.Container{}, Stopped: []executor.Stopped{}}
 	for _, c := range containers {
 		name := c.App + "-" + c.Target
 		if restarts[name] > 0 && !slices.ContainsFunc(runs.Restarting, func(r executor.Restarting) bool { return r.App == c.App && r.Target == c.Target }) {
 			runs.Restarting = append(runs.Restarting, executor.Restarting{App: c.App, Target: c.Target, Restarts: restarts[name]})
+		}
+		if _, deployed := minReady[name]; deployed && !running[name] && restarts[name] == 0 && startingOf(pods.Items, name, template[name]) {
+			if !slices.Contains(runs.Starting, c) { // a /run's pod on its way up: never stopped (#230)
+				runs.Starting = append(runs.Starting, c)
+			}
+			continue
 		}
 		if _, deployed := minReady[name]; !why || !deployed || running[name] || slices.ContainsFunc(runs.Stopped, func(s executor.Stopped) bool { return s.App == c.App && s.Target == c.Target }) {
 			continue
@@ -927,14 +933,7 @@ func (e *Executor) RunningOf(ctx context.Context, containers []executor.Containe
 // Deployment name's current template, run its canyon.run label: 0 with no such pod. A pod being deleted
 // is not counted.
 func restartsOf(pods []corev1.Pod, name, run string) int {
-	var newest *corev1.Pod
-	for i, p := range pods {
-		if p.Labels["canyon.app"]+"-"+p.Labels["canyon.target"] != name || p.Labels["canyon.run"] != run || p.DeletionTimestamp != nil ||
-			(newest != nil && !p.CreationTimestamp.After(newest.CreationTimestamp.Time)) {
-			continue
-		}
-		newest = &pods[i]
-	}
+	newest := newestOf(pods, name, run)
 	if newest == nil {
 		return 0
 	}
@@ -944,6 +943,47 @@ func restartsOf(pods []corev1.Pod, name, run string) int {
 		}
 	}
 	return 0
+}
+
+// newestOf is the newest pod of the Deployment name's template run, one being deleted aside; nil with none.
+func newestOf(pods []corev1.Pod, name, run string) *corev1.Pod {
+	var newest *corev1.Pod
+	for i, p := range pods {
+		if p.Labels["canyon.app"]+"-"+p.Labels["canyon.target"] != name || p.Labels["canyon.run"] != run || p.DeletionTimestamp != nil ||
+			(newest != nil && !p.CreationTimestamp.After(newest.CreationTimestamp.Time)) {
+			continue
+		}
+		newest = &pods[i]
+	}
+	return newest
+}
+
+// startingOf says the newest pod of the Deployment name's template run is on its way up (contracts/executor.md, POST
+// /running, Starting): scheduled or waiting to be, its app container not yet made, being made, or up and not yet ready.
+// One that ended, one whose image can't be pulled or whose container can't be made, and one no node can take is not.
+func startingOf(pods []corev1.Pod, name, run string) bool {
+	p := newestOf(pods, name, run)
+	if p == nil {
+		return false
+	}
+	for _, c := range p.Status.Conditions {
+		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse && c.Reason == corev1.PodReasonUnschedulable {
+			return false
+		}
+	}
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.Name != "app" {
+			continue
+		}
+		switch {
+		case cs.State.Terminated != nil || cs.LastTerminationState.Terminated != nil:
+			return false
+		case cs.State.Waiting != nil:
+			return cs.State.Waiting.Reason == "ContainerCreating" || cs.State.Waiting.Reason == "PodInitializing"
+		}
+		return true // running, and not yet available
+	}
+	return p.Status.Phase == corev1.PodPending // no app container yet
 }
 
 // ended is how the app container of the newest pod of c that has ended last ended — of template run's

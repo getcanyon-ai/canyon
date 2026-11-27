@@ -91,7 +91,9 @@ function despite(d: Record<string, unknown>): string {
 
 // The verb and its specifics. Every action the server writes has its own; one the bundle doesn't know
 // yet is the trail's own sentence, or the action as written — odd, never blank.
-export function what(event: AuditEvent): { verb: string; rest?: string } {
+// tableWords is the table's own words for an action it words itself, null for the rest, which the trail's sentence says.
+// The sentence says these too, in the table's words (ui/Audit.tsx), so an app's Activity reads the same row the same way.
+export function tableWords(event: AuditEvent): { verb: string; rest?: string } | null {
   const d = event.detail;
   const v = named(event);
   if (UPLOAD.includes(event.action)) return { verb: d.kind === "check" ? "Checked" : event.action === "package from github" ? "Pushed" : "Uploaded", rest: v };
@@ -160,7 +162,10 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "POST /api/v1/projects": return { verb: "Created the app" };
     case "DELETE /api/v1/projects/{id}": return { verb: "Deleted the app" };
     case "PUT /api/v1/projects/{id}/owner": return { verb: "Claimed the app" };
-    case "DELETE /api/v1/projects/{id}/envs/{env}": return { verb: "Took", rest: `${env(event)} offline, keeping its data` };
+    case "DELETE /api/v1/projects/{id}/envs/{env}": // "Took" only what Canyon ran (#156)
+      return d.stop === "remove_sent" ? { verb: "Asked your platform to take", rest: `${env(event)} offline, keeping its data` }
+        : d.stop === "nothing" ? { verb: "Stopped the deploy to", rest: `${env(event)}; nothing ran there` }
+        : { verb: "Took", rest: `${env(event)} offline, keeping its data` };
     case "declare resource": return { verb: "Declared a resource", rest: text(d.name) };
     case "ensure resource": return { verb: "Made a resource ready", rest: `${text(d.name)} in ${env(event)}` };
     case "reissue resource password": return { verb: "Gave a resource a new password", rest: `${text(d.name)} in ${env(event)}` };
@@ -198,6 +203,13 @@ export function what(event: AuditEvent): { verb: string; rest?: string } {
     case "scanner.credential.set": return { verb: "Set a scanner credential", rest: [text(d.tool), text(d.repo)].filter(Boolean).join(" · ") };
     case "scanner.credential.remove": return { verb: "Removed a scanner credential", rest: [text(d.tool), text(d.repo)].filter(Boolean).join(" · ") };
   }
+  return null;
+}
+
+// what is the row's verb and specifics: the table's own where it words the action, else the trail's sentence.
+export function what(event: AuditEvent): { verb: string; rest?: string } {
+  const own = tableWords(event);
+  if (own !== null) return own;
   const said = sentence(event);
   return { verb: said.charAt(0).toUpperCase() + said.slice(1) };
 }

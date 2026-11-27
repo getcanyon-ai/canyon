@@ -142,8 +142,9 @@ file and its pinned base determine the image but for its packages' patch version
 host built it; a host keeps the image its tag names until the file changes or the image is removed, so
 it takes a later security fix of those packages only then, and a change of the file changes the tag
 and every host builds it again — and
-names it `canyon-run:noble` too, a tag it moves onto each build, which pack is handed as `--run-image`
-(**amended 2026-10-18**, #2089): the lifecycle records the name pack is handed in the image's
+names it `canyon-run:noble` too, a tag it moves onto each build, which pack builds onto: handed as `--run-image`
+(**amended 2026-10-18**, #2089), or named as its run image by the builder itself, `canyon-builder`'s own and the Node
+builder (**amended 2026-11-25**, #177): the lifecycle records the name pack builds onto in the image's
 `runImage.image` and rebases only onto that name (`/rebase`), so a name that moved with the file would
 leave every image it built unrebasable. The name follows the distribution, so a file that moves to
 another Ubuntu release takes another name and a rebase across releases is refused, never forced. An
@@ -175,10 +176,46 @@ which the executor builds as it builds `canyon-run`, from `executor/builder.Dock
 `paketobuildpacks/ubuntu-noble-builder` pinned by digest — the builder no longer follows the tag, so
 every host that builds one `canyon-builder:<12 hex of the file's sha256>` tag holds the same buildpacks,
 and a bump of the pin is a new builder — with `libpq5`, as above, ending as the stack's build
-user, `1001:1001`. A `CANYON_BUILDER` replaces it whole, and its libraries are the operator's. On
-Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `executor/build.Dockerfile`:
+user, `1001:1001`. A `CANYON_BUILDER` replaces it whole, and its libraries are the operator's.
+
+**`canyon-builder`'s own** (**amended 2026-11-25**, #177). From that image the executor builds a second,
+`canyon-builder:<12 hex of the sha256 of the first's tag, a newline and executor/builder.own.Dockerfile>`, whose run
+image is `canyon-run:noble` and whose own build environment is the executor's two build variables (*Every build runs
+with*, below), as the Node builder's are. Its `io.buildpacks.builder.metadata` is the first's, read with a JSON parser,
+with `canyon-run:noble` its one run image under both keys pack 0.40.3 reads (`images` and `stack.runImage`), and its
+`/cnb/run.toml` names the same. A build on Docker uses it when `CANYON_BUILDER` and `CANYON_IMAGE_RUN` are unset and
+neither its build values nor the `project.toml` Canyon reads name either of those two variables, which only `--env`
+can replace: pack is then handed neither `--run-image` nor `--env` for them, and builds on it as it is, never on an
+ephemeral copy. Any other build on `canyon-builder` builds as before, on the first, with `--run-image` and `--env`. A
+metadata label that can't be read fails that build of the second. On Kubernetes the ClusterStack `canyon`'s build image is `canyon-build`, from `executor/build.Dockerfile`:
 `paketobuildpacks/ubuntu-noble-build` pinned by digest with `libpq5`, ending as `1001:1001`, which the
 deploy names by digest as it names `canyon-run`.
+
+**A Node app builds on Canyon's Node builder, on Docker** (**amended 2026-11-24**, #174). `CANYON_BUILDER_NODE`, in
+the executor's environment, names `canyon-builder-node`, as `CANYON_BUILDER` names a builder. Each release publishes it
+by digest beside its other images (`images.txt`), and the laptop demo's bundle names it so. It is made from `canyon-build` (above), Paketo's `nodejs`
+buildpack at the digest `deploy/k8s/builds.yaml` pins, and the lifecycle the pinned `canyon-builder` carries. Its run
+image is `canyon-run:noble`, and the executor's own two build variables (*Every build runs with*, below) are the
+builder's own build environment. A build with no build values therefore hands pack neither `--run-image` nor
+`--env`, so pack builds on the builder itself, never on an ephemeral copy it saves to the daemon. Saving that copy
+takes about 85 s a build on Docker's containerd image store, and leaves about 1.3 GB that nothing frees.
+
+- **Which builder.** `/build` uses it for a tree when both hold:
+  - (a) the tree and its build environment (its build values, and the `project.toml` Canyon reads) carry none of the
+    entries `executor/choose.go` lists;
+  - and no build value names either of those two variables, which only `--env` can replace;
+  - (b) the Node builder's detect passes, as pack's `detect` phase reports it. Its log is held until it has, so a
+    tree it detects nothing in shows `canyon-builder`'s build alone. When this host doesn't have `canyon-builder` yet,
+    that build's log says so and what it downloads, once.
+- **Otherwise `canyon-builder`**, which then decides exactly as today, its failed-detect answer included.
+- **(a)'s list.** It is read from the detect code of every buildpack group the full builder orders before `nodejs`,
+  at the versions `deploy/k8s/builds.yaml` pins: entry names and globs in the tree, and build variables set at all.
+  It never names the app's language. It is a superset of what could make an earlier group pass, so a tree it
+  can't rule out goes to today's builder.
+- **Keeping it true.** `choose.go` carries the pins it was read for, written so the Paketo bump never moves them. A
+  test fails while any of them differs from what the tree pins, until the detect code is read again.
+- **Unset, or with `CANYON_BUILDER` set:** every app builds on the one builder, as before.
+- **On Kubernetes** the ClusterBuilder is unchanged.
 
 **Every build runs with `NODE_ENV=production`**, the executor's own build variable, which a build value
 of that name replaces. Paketo's npm-install installs devDependencies under `NODE_ENV=development` and
@@ -442,6 +479,19 @@ address*): which app a container or network belongs to stays its name. They let 
 what the executor made, and only that, with `docker ps -a --filter label=canyon.app` and
 `docker network ls --filter label=canyon.app` — which is how the demo's `make demo-down` removes it,
 since compose did not create it and cannot.
+
+**What an app's things are labelled with: the executor's own compose project** (**amended 2026-11-25**, #178). At
+start the executor reads the `com.docker.compose.project` label of its own container, found by its hostname, which
+Docker sets to the container's ID; outside a container, in one compose didn't start, or with Docker not answering,
+it has none. With one, everything it makes for an app also carries `canyon.project=<that project>`: the container
+`<app>-<target>`, its floor holder, the network `canyon-app-<app>`, and the two build cache volumes, which it now
+creates with `canyon.app=<app>` (and `canyon.project`) before pack, which would make them unlabelled. pack can't
+label the image it builds, so the executor gives each image a build or a `/rebase` makes, tagged
+`canyon/<app>:<package>-<nonce>`, a second name on the same ID, `<project>/<app>:<package>-<nonce>`. Every name an
+app is read by stays `canyon/<app>`, and the executor's own cleanup of an app's images (after a `/run`, and
+`/forget`) removes both names. `canyon demo down` finds what the demo's executor made by
+`canyon.project=canyon-demo` and its images by `canyon-demo/*`, never by an app's id, which another Canyon on the
+same Docker can share (cli.md §6.14).
 
 **Egress** (**amended 2026-10-11**, #2085; design/EGRESS.md §2.2–2.3). `run` is the server's id of
 the run that asked for this `/run`, `gr_` and hex (contracts/events.md, `run`), and the executor writes
@@ -1130,9 +1180,19 @@ and no buildpack goes in, and nothing above the run image's layers changes.
 // 502 when the executor cannot tell (its daemon or the cluster API did not answer)
 ```
 
-Which builder a `/build` now would use (#1244): on Docker the builder image's ID (`docker image inspect
+Which builder a `/build` now would use (#1244). With `CANYON_BUILDER_NODE` set (**amended 2026-11-24**, #174), the
+SHA-256 of the Node builder's image ID, a newline, and the name of `canyon-builder`'s own, the tag its two files'
+hashes make (**amended 2026-11-25**, #177), as `sha256:<64 hex>`. The Node builder is pulled first when the daemon has
+none. A new Node builder, or a change to `executor/builder.Dockerfile` or `executor/builder.own.Dockerfile`, a pin bump
+among them, is a new identity.
+- **The full builder's part is its Dockerfiles' hashes, not an image ID.** So a `canyon-builder` built again from
+  the same files, with newer packages from apt, is not a new identity, where without a Node builder it is.
+- **Why:** the image ID exists only once the full builder is built, which means downloading it. Asking for it here
+  would download the full builder at the first deploy's reuse check, when a Node app never needs it.
+Otherwise, on Docker the builder image's ID (`docker image inspect
 --format {{.Id}}` of `CANYON_BUILDER`, pulled first when the daemon has none, as a build would pull it,
-else of `canyon-builder`, built first when the daemon has none, as a build would build it); on Kubernetes the ClusterBuilder `canyon`'s
+else of `canyon-builder`'s own, built first with the `canyon-builder` it is built from when the daemon has none, as a
+build would build them, so a change to either is a new identity); on Kubernetes the ClusterBuilder `canyon`'s
 `status.latestImage`, a reference by digest, and `502` while it has none. A builder patched or replaced —
 a new Paketo release pulled through `CANYON_BUILDER`, kpack's rebuilt ClusterBuilder — is a new identity. The server asks before
 every `/build` and before it reuses an image, and the build digest covers the answer (routes.md, the
@@ -1156,7 +1216,9 @@ moves it. An executor from before it answers `builder` alone, and the server pla
 the first build on a host, and again when a Canyon release changes either image, `canyon-builder` up to a
 1.4 GB download. It runs from the call's start to the moment the later of the two was built during it.
 Absent when neither was built while it waited: both on the daemon already, `CANYON_BUILDER` and
-`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. The server turns it
+`CANYON_IMAGE_RUN` (pulled, not built), Kubernetes, and an executor from before it. With `CANYON_BUILDER_NODE`
+set it counts the Node builder's pull in place of `canyon-builder`'s build, which only a tree that needs it starts,
+inside its `/build`, whose log says what it downloads. The server turns it
 into the run's `build.image` row (events.md), which the CLI adds to the build's time.
 
 ## `GET /scandb`
@@ -1198,11 +1260,12 @@ attempt always starts the container, so prod's current values reach it.
 // why those that have exited stopped (below), and only the status read asks it
 { "containers": [ { "app": "claims-portal", "target": "preview" }, { "app": "claims-archive", "target": "prod" } ], "why": true }
 // response: 200 — those asked whose app runs, each once, in the order asked; those asked whose
-// container has been started again and is up or waiting to start (below); and those asked
-// whose container is there and has exited, with its last exit code and its last line, raw, when why was
-// asked, and [] when it was not (below)
+// container has been started again and is up or waiting to start (below); those asked that a /run is
+// starting (below); and those asked whose container is there and has exited, with its last exit code and
+// its last line, raw, when why was asked, and [] when it was not (below)
 { "running": [ { "app": "claims-portal", "target": "preview" } ],
   "restarting": [ { "app": "case-dies-later", "target": "preview", "restarts": 7 } ],
+  "starting": [ { "app": "claims-archive", "target": "preview" } ],
   "stopped": [ { "app": "claims-archive", "target": "prod", "exit_code": 1, "said": "Error: connect ECONNREFUSED 10.0.4.7:5432" } ] }
 // 400 on an app or target the naming pattern refuses, on none or more than 400;
 // 502 when the executor cannot tell — never a 200 naming fewer, which a caller reads as stopped
@@ -1221,6 +1284,16 @@ asked once each (label selector `canyon.app in (…)`), and answers a Deployment
 pod, whatever its template: during a redeploy or a promotion the previous pod serves until the new
 one is available, and the app runs all along, unless the new pod has restarted (*Restarting*)
 (`GET /running` keeps its template rule, which the promote retry needs).
+
+**Starting** (**amended 2026-11-26**, #230: a promotion's switch read as stopped, and the app page said
+"Production is down" the moment a person pressed Promote). Each asked that a `/run` is starting, and that
+neither runs, restarts nor has exited, is in `starting` and nowhere else: never `stopped`, since nothing
+stopped. On Docker it is a `<app>-<target>` the daemon lists as `created`, the new container `/run` made and
+has not yet started, or one it doesn't list while it lists `<app>-<target>-previous`, the container `/run`
+set aside while its successor starts. On Kubernetes it is a Deployment with no available pod, not
+restarting, whose current template's newest pod has not ended: pending, or its `app` container waiting to
+be created (`ContainerCreating`, `PodInitializing`). An image the kubelet can't pull is not starting. A
+client that reads an answer with no `starting` reads none.
 
 **Restarting** (**amended 2026-10-05**, #1722). Each asked whose container has been started again and
 is up or waiting to start is in `restarting` and nowhere else — **never in `running`, even while it is

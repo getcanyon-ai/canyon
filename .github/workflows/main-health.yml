@@ -2,7 +2,9 @@ name: main-health
 
 # A workflow on main that ended red, or never started (startup_failure: GitHub refused the file, so no job ran and
 # nothing of the workflow's own reported it, #70), opens one issue labelled ci per workflow, or comments on the one
-# open, each red run once. Hourly, over the last three hours, so a run is seen even when an hour's job is late.
+# open, each red run once: a run named in any such issue, open or closed, is never reported again. Asked hourly, over
+# the last two days: GitHub starts this schedule as rarely as every nine hours (#131), and a run seen still going at
+# one look may end red long after it was created.
 on:
   schedule:
     - cron: '41 * * * *'
@@ -30,20 +32,32 @@ jobs:
         run: |
           set -euo pipefail
           gh label create ci --color d73a4a --description "main's CI is red" 2>/dev/null || true # once: it exists after
-          since=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          since=$(date -u -d '48 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           # this repository's own main alone: a fork's pull request from a branch named main also lists under branch=main,
           # under a workflow name its own file chose, so only push, schedule and dispatch runs whose head is this repository count
           for event in push schedule workflow_dispatch; do
-            gh api -X GET "repos/$GH_REPO/actions/runs" -f branch=main -f event="$event" -f created=">=$since" -f per_page=100 \
+            gh api -X GET --paginate "repos/$GH_REPO/actions/runs" -f branch=main -f event="$event" -f created=">=$since" -f per_page=100 \
               --jq '.workflow_runs[] | select(.head_repository.full_name == env.GH_REPO) | select(.conclusion == "failure" or .conclusion == "startup_failure") | [.name, .conclusion, .head_sha[0:7], .html_url] | @tsv'
           done |
           while IFS=$'\t' read -r workflow conclusion sha url; do
             title="main is red: $workflow"
-            issue=$(gh issue list --label ci --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+            # every ci issue of this title, open or closed, newest first: a run any of them names was reported already. Listed,
+            # not searched: GitHub's search index lags, and an issue this loop just opened must be found by the next run
+            issues=$(gh issue list --label ci --state all --limit 1000 --json number,title,state \
+              --jq "[.[] | select(.title == \"$title\")] | sort_by(-.number) | .[] | \"\(.number) \(.state)\"")
+            seen=false open=""
+            while read -r number state; do
+              [ -n "$number" ] || continue
+              if [ "$state" = OPEN ] && [ -z "$open" ]; then open=$number; fi
+              text=$(gh issue view "$number" --json body,comments --jq '[.body, .comments[].body] | join("\n")') # read in full: grep stopping early can't fail gh
+              if grep -qF "$url" <<< "$text"; then seen=true; fi
+            done <<< "$issues"
             line="$conclusion on $sha: $url"
-            if [ -z "$issue" ]; then
+            if [ "$seen" = true ]; then
+              continue
+            elif [ -z "$open" ]; then
               gh issue create --label ci --title "$title" --body "$line"
-            elif ! gh issue view "$issue" --json body,comments --jq '[.body, .comments[].body] | join("\n")' | grep -qF "$url"; then
-              gh issue comment "$issue" --body "$line"
+            else
+              gh issue comment "$open" --body "$line"
             fi
           done

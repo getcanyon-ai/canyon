@@ -462,6 +462,16 @@ func TestARestartingEnvironmentSaysHowOftenAndHasNoURL(t *testing.T) {
 	}
 }
 
+// A preview a deploy is still starting says so in amber, with no URL yet and no log to read: never stopped (#230).
+func TestAStartingEnvironmentSaysStartingAndHasNoURL(t *testing.T) {
+	s, latest := reads(t, page(t), "status")
+	url := s.Envs["preview"].URL
+	s.Envs["preview"].State = "starting"
+	if out := rendered(t, s, latest); strings.Contains(out, url) || !strings.Contains(out, "  preview      v1.3   ! starting\n") || strings.Contains(out, "stopped") {
+		t.Errorf("a starting preview rendered\n%s", out)
+	}
+}
+
 // A rule with nothing set to check against reads neutral, never a failure, and stays on the receipt
 // so an admin sees it (contracts/routes.md, decision D4).
 func TestAnUnsetRuleReadsNeutral(t *testing.T) {

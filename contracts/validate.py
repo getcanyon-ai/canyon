@@ -705,6 +705,17 @@ def seam2(snap, golden, sarif, fleet_tiles):
     for i, row in enumerate(rows):
         for e in sorted(v.iter_errors(row), key=lambda e: list(e.path)):
             errors.append(f"timeline: row {row.get('id', i + 1)}: {'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}")
+    # events.md, progress: a scan the laptop demo leaves off is skipped with its reason, and a reason is a skipped scan's alone (#237).
+    skip = {"id": 1, "ts": "2026-11-26T00:00:00Z", "scope": "run", "run": "gr_0001", "project": "claims-portal", "kind": "progress",
+            "data": {"step": "scan", "tool": "trivy", "status": "skipped", "reason": "laptop_demo"}}
+    for e in v.iter_errors(skip):
+        errors.append(f"timeline: a skipped scan's progress row: {e.message}")
+    for name, data in (("a skipped scan with no reason", {"step": "scan", "tool": "trivy", "status": "skipped"}),
+                       ("a reason on a running scan", {"step": "scan", "tool": "trivy", "status": "running", "reason": "laptop_demo"}),
+                       ("a skipped build", {"step": "build", "status": "skipped", "reason": "laptop_demo"}),
+                       ("a reason events.md doesn't name", {"step": "scan", "tool": "trivy", "status": "skipped", "reason": "admin"})):
+        if not list(v.iter_errors({**skip, "data": data})):
+            errors.append(f"selftest: {name} was not refused")
     known = catalogue()
     # A failed run's reason is one events.md lists, and every schema that carries one lists exactly those.
     listed = failure_reasons()
@@ -1189,6 +1200,12 @@ def seam3_hold():
     for code in ("responder_required", "person_required", "dashboard_required", '"held"'):
         if code not in text.partition("### The hold")[2].partition("\n### ")[0]:
             errors.append(f"routes: *The hold* does not name {code}")
+    # Whether a stop happened is the row's to say (#156): the hold's row and the undeploy's name `stop` and its values.
+    undeploy = next((line for line in text.splitlines() if line.startswith("| `DELETE /api/v1/projects/:id/envs/:env` |")), "")
+    for where, said in (("*The hold*", text.partition("### The hold")[2].partition("\n### ")[0]), ("the undeploy row", undeploy)):
+        for word in ("`stop`", "`stopped`", "`remove_sent`", "`nothing`") + (("`failed`",) if where == "*The hold*" else ()):
+            if word not in said:
+                errors.append(f"routes: {where} does not name {word}, which says whether a stop happened")
     for action in ("stop app", "lift hold"):
         if audit_categories().get(action, "governance") != "governance":
             errors.append(f"routes: {action} is not governance; a stop and a lift are the production change record")
@@ -3497,6 +3514,13 @@ def seam4():
         errors.append(f"executor: POST /running answers {again} restarting; each asked once, in the order asked, never running or stopped too")
     if not restarting:
         errors.append("selftest: the executor fixture answers no restarting container, so the checks above check nothing")
+    # Starting (executor.md, POST /running, #230): those asked that a /run is starting, each once, in the order asked,
+    # never running, restarting or stopped too.
+    starting = [(a["app"], a["target"]) for a in doc["running_batch_result"].get("starting", [])]
+    if starting != [a for a in asked if a in starting] or len(set(starting)) != len(starting) or set(starting) & (set(answered) | set(again) | set(stopped)):
+        errors.append(f"executor: POST /running answers {starting} starting; each asked once, in the order asked, never running, restarting or stopped too")
+    if not starting:
+        errors.append("selftest: the executor fixture answers no starting container, so the check above checks nothing")
     # The app's own network and identity (executor.md, /run): canyon-app-<app>, the token's audience the app.
     if run["network"] != f"canyon-app-{run['app']}":
         errors.append(f"executor: /run joins {run['network']}; an app's containers join canyon-app-<app>, never another app's")

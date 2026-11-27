@@ -19,6 +19,7 @@ stack=$work/home/.canyon/demo/canyon # where canyon demo up unpacks the demo
 mkdir -p "$work/home/.claude" # ~/.claude is there once Claude Code has started, and canyon skill install looks for it
 finish() {
   rc=$?
+  [ -z "${sampler:-}" ] || kill "$sampler" 2>/dev/null || true # demo up failed while the size sampler ran
   cd "$repo"
   [ "$rc" -eq 0 ] || [ ! -d "$stack" ] || (cd "$stack" && docker compose -p canyon-demo --profile demo-apps logs --no-color --tail=60 server executor demo-apps) || true
   [ ! -d "$stack" ] || HOME=$work/home "$repo/bin/canyon" demo down --purge || true
@@ -107,10 +108,12 @@ go build -o "$work/mcpcall" ./internal/tools/mcpcall
 
 step "a release built from this tree: its images in a registry on this runner, its bundle and SHA256SUMS served beside it"
 cd "$repo"
-docker compose --profile demo-apps build server executor demo-apps
+docker compose --profile demo-apps build ${GOPROXY:+--build-arg "GOPROXY=$GOPROXY"} server executor demo-apps
 p=$(docker compose config --format json | jq -r .name)
 docker run -d --name canyon-tour-registry -p 127.0.0.1:5000:5000 docker.io/library/registry:2.8.3 >/dev/null
-for i in canyon-server canyon-executor canyon-demo-apps; do
+make --no-print-directory builder-node BUILDER_NODE=canyon-builder-node:tour >&2 # the Node builder the release publishes, built as it builds it
+docker tag canyon-builder-node:tour "$p-builder-node"
+for i in canyon-server canyon-executor canyon-demo-apps canyon-builder-node; do
   docker tag "$p-${i#canyon-}" "localhost:5000/$i:tour"
   docker push -q "localhost:5000/$i:tour" >&2
   echo "localhost:5000/$i:tour"
@@ -132,7 +135,26 @@ run 0 demo --help
 says '^  canyon demo tour  '
 
 step "the demo, as a visitor starts it: canyon demo up"
+# What the demo takes on this Docker's image store, for the laptop page's figures: the bytes used on the filesystems
+# of Docker's and containerd's directories before up, at their peak while it runs (every 5 s) and once it ends, and
+# docker system df then. Canyon's own four images were built above, so their layers were on disk before up pulled
+# them: the difference leaves them out, and docker system df names their sizes. It decides nothing.
+used() { df -B1 --output=used,target "$(docker info --format '{{.DockerRootDir}}')" /var/lib/containerd 2>/dev/null | tail -n +2 | sort -u -k2 | awk '{s += $1} END {print s}'; }
+# What the runner's own interfaces received: what up downloaded, the release's images aside, which come from the
+# registry above over loopback (#237). Docker's bridges and the containers' veth pairs carry the same bytes again.
+received() { awk 'NR > 2 { gsub(":", " "); if ($1 !~ /^(lo|docker|br-|veth)/) s += $2 } END { print s + 0 }' /proc/net/dev 2>/dev/null; }
+store=$(docker info --format '{{.Driver}} {{json .DriverStatus}}')
+before=$(used)
+got=$(received)
+(while :; do used; sleep 5; done >"$work/used") &
+sampler=$!
 run 0 demo up
+kill "$sampler" 2>/dev/null || true
+sampler=
+after=$(used)
+peak=$( (cat "$work/used"; echo "$after") | sort -n | tail -1)
+echo "demo size: store=$store before=$before up=$after peak=$peak (bytes used) downloaded=$(($(received) - got))"
+docker system df -v
 grep -qF "$ready" "$work/out" || fail "canyon demo up never showed: $ready"
 says 'Canyon is ready at http://localhost:7777$'
 says '^  Next, take the guided tour: canyon demo tour$'

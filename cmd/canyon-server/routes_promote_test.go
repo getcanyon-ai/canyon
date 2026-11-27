@@ -467,6 +467,43 @@ func TestAStoppedPreviewSaysWhyOnTheStatusReadAlone(t *testing.T) {
 // A restarting preview says how it last exited on the status read, as a stopped one says why, masked by
 // the same rule: the test cluster's case-dies-later restarts for ever on Kubernetes, so it never reads stopped.
 // The fleet row never says it (#1597).
+// A preview a deploy is still starting reads starting, never stopped and never down: the status read and the fleet row say
+// so, no need asks a person to look at it, the receipt waits with its own line, and the promotion is refused with it
+// (contracts/routes.md, envs.<env>.state; #230).
+func TestAPreviewThatIsStartingWaitsAndIsNeverDown(t *testing.T) {
+	pool, ctx, base, c, deploy := previewed(t)
+	_, status, _ := do(t, c, http.MethodGet, base+"/api/v1/projects/claims-portal/status", "")
+	pkg, _ := status["envs"].(map[string]any)["preview"].(map[string]any)["package"].(string)
+	fake.Starting = []executor.Container{{App: "claims-portal", Target: "preview"}}
+	t.Cleanup(func() { fake.Starting = nil })
+	line := strings.TrimPrefix(pkg, "pkg_") + " is starting in preview: promote it once it runs."
+	_, status, _ = do(t, c, http.MethodGet, base+"/api/v1/projects/claims-portal/status", "")
+	if preview := status["envs"].(map[string]any)["preview"].(map[string]any); preview["state"] != "starting" || preview["stopped"] != nil {
+		t.Fatalf("the status read's preview: %s", lastBody)
+	}
+	if r := status["receipt"].(map[string]any); r["waiting"] != line {
+		t.Fatalf("the receipt: %s, want waiting %q", lastBody, line)
+	}
+	if strings.Contains(fmt.Sprint(status["needs"]), "down") {
+		t.Fatalf("a starting preview is no down need: %s", lastBody)
+	}
+	_, fleet, _ := do(t, c, http.MethodGet, base+"/api/v1/fleet", "")
+	for _, a := range fleet["apps"].([]any) {
+		if row := a.(map[string]any); row["id"] == "claims-portal" {
+			if env := row["envs"].(map[string]any)["preview"].(map[string]any); env["state"] != "starting" || strings.Contains(fmt.Sprint(row["needs"]), "down") {
+				t.Fatalf("the fleet row: %v", row)
+			}
+		}
+	}
+	code, body, _ := do(t, c, http.MethodPost, base+promotions, `{"gate_run":"`+deploy+`"}`)
+	if code != 409 || body["error"] != "nothing_in_preview" || body["message"] != line {
+		t.Fatalf("the promotion: %d %s", code, lastBody)
+	}
+	if n := count(t, ctx, pool, "SELECT count(*) FROM deploys WHERE env = 'prod'"); n != 0 {
+		t.Fatalf("a refused promotion wrote %d deploys", n)
+	}
+}
+
 func TestARestartingPreviewSaysHowItLastExited(t *testing.T) {
 	pool, ctx, base, c, _ := previewed(t)
 	do(t, c, http.MethodPut, base+"/api/v1/projects/claims-portal/secrets/API_TOKEN", `{"value":"tok-91c2"}`)

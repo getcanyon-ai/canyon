@@ -98,6 +98,10 @@ services:
       server:
         condition: service_started
     restart: "no"
+    # on when canyon demo up --with-trivy asked for Trivy, which the deployer otherwise leaves off (cli.md §6.14; #237). An
+    # edit to an existing service, called out against the append-only rule.
+    environment:
+      - CANYON_DEMO_TRIVY=${CANYON_DEMO_TRIVY:-}
     # In the server's own network namespace, so it reaches the server at localhost:7777: with sign-in off the server
     # answers a loopback name alone (421 to any other Host, against DNS rebinding), and no Host a browser can be made to
     # send by name is allowed in for it. An edit to an existing service, called out against the append-only rule.

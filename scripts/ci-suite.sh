@@ -5,7 +5,10 @@
 # nothing of a pull request's .github but its scripts. The stack suites:
 #   journeys-<1..8>   a shard of the browser journeys (make e2e-ui), on the compose stack
 #   probes            the probe apps never read clean (TestProbesNeverReadClean), on the compose stack
-#   kind-calico       the kind suite on Calico, Envoy's lost access-log entries, and the hand-off journey
+#   kind-calico       the kind suite on Calico, Envoy's lost access-log entries, and the hand-off journey, all on one cluster
+#   kind-calico-<n>   one part of it, on a cluster of its own: the tests .github/kind/calico-parts.txt lists for part n,
+#                     Envoy's lost entries, and in the last part the hand-off journey; kube.yml's and the private CI's
+#                     runs
 #   kind-kindnet      the probe on a cluster that enforces nothing, and run_by canyon there
 #   kind-canyon       run_by canyon on Calico: a deploy through the server builds and runs
 #   handoff-argocd    hand-off through a deploy repository, under Argo CD
@@ -15,6 +18,8 @@
 #   oidc              e2e-ui.yml's oidc job: the team setup's sign-in, deploy and sharing
 #   patch             patch-e2e.yml: a rebase patch and its revert, on the team setup
 #   tour              tour.yml: the docs' tour on the laptop demo
+#   tour-classic      the same on Docker's classic image store (overlay2), where the runners' Docker keeps images in
+#                     containerd: the laptop demo runs on both, and the tour prints what it takes on each
 #   backup            backup.yml: one k3s host backed up and restored, on kind
 #   build-arch        build-arch.yml's arm64 job: a real build and /run through the executor, on kind
 # and the rest of a pull request's checks, the jobs GitHub runs on its own runners, for when it can't (the owner,
@@ -29,7 +34,7 @@
 #   tidy              ci.yml's tidy: go.mod and go.sum are tidy
 #   web               ci.yml's web: the dashboard's tests and build, e2e/ui type-checked
 #   compose-up        ci.yml's compose-up: Envoy's bootstrap validates, and make demo-check
-#   images            ci.yml's images: the nine release images build, each carrying what it must
+#   images            ci.yml's images: the ten release images build, each carrying what it must
 #   deploy-bundle     ci.yml's deploy-bundle: canyon-deploy.tar.gz starts with no source, and Opengrep's source builds
 #   helm-chart        helm.yml's chart job (.github/helm/chart-check.sh)
 #   docs              docs.yml: the links, and the site built and checked (.github/docs/site-check.sh)
@@ -52,9 +57,30 @@ export PATH="$HOME/.local/bin:$PATH"
 # sets it for the private runners, and a cut-short download in an image's build failed #197's backup suite
 [ -n "${GOPROXY:-}" ] || GOPROXY=$(.github/actions/go-cache/goproxy.sh https://proxy.golang.org)
 export GOPROXY
+echo "ci-suite.sh: GOPROXY=$GOPROXY, for the Go commands and every image this suite builds" # (#180)
 tmp=${RUNNER_TEMP:-$(mktemp -d)}
 compose=(docker compose -f docker-compose.yml -f e2e/compose.e2e.yml)
 dbs="$HOME/.cache/canyon-scandb"
+
+# pack_cli is the pinned pack CLI in ~/.local/bin, checked against its sha256 (make pack-fetch), which makes
+# canyon-builder-node for the images, deploy-bundle and tour suites, as their public jobs' make pack-install does
+# classic_store is this runner's Docker on its classic image store, overlay2, as e2e.yml's executor-e2e sets it:
+# containerd-snapshotter off in daemon.json, every other setting there kept, Docker restarted, the driver checked.
+classic_store() {
+  local current
+  current=$(sudo cat /etc/docker/daemon.json 2>/dev/null || true)
+  [ -n "$current" ] || current='{}'
+  jq '.features["containerd-snapshotter"] = false' <<<"$current" | sudo tee /etc/docker/daemon.json >/dev/null || return
+  sudo systemctl restart docker || return
+  for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+  [ "$(docker info --format '{{.Driver}}')" = overlay2 ] || { echo "ci-suite: Docker's store is not overlay2 after the switch" >&2; return 1; }
+}
+
+pack_cli() {
+  local tgz
+  tgz=$(mktemp -d)/pack.tgz
+  make --no-print-directory pack-fetch PACK_TGZ="$tgz" && tar -xzf "$tgz" -C "$HOME/.local/bin" pack
+}
 
 # chromium is the journeys' browser and the hand-off journeys' set-up in the dashboard, with its system libraries
 chromium() { (cd e2e/ui && npm ci && npx playwright install --with-deps chromium); }
@@ -109,15 +135,16 @@ cluster() {
 }
 
 # envoy_lost: each Envoy replica's access-log and receiver stats, and red when one lost an entry on its way to the
-# receiver or its stats name no such counter (#2377); Envoy's image has no curl, so an ephemeral container of the
-# router's image reads the admin socket from the pod's admin volume
+# receiver or its stats name no such counter (#2377), beside the plain cluster's upstream counters and the egress
+# listener's downstream ones, which say how a call that reached Envoy ended there (#143); Envoy's image has no curl, so
+# an ephemeral container of the router's image reads the admin socket from the pod's admin volume
 envoy_lost() {
   local router pods p stats lost=0
   router=$(kubectl -n canyon get deploy canyon-router -o jsonpath='{.spec.template.spec.containers[?(@.name=="nginx")].image}') || return
   pods=$(kubectl -n canyon get pods -l app.kubernetes.io/name=canyon-egress -o name) || return
   [ -n "$pods" ] || { echo "::error::no Envoy pod to read"; return 1; }
   for p in $pods; do
-    kubectl -n canyon patch "$p" --subresource=ephemeralcontainers --type=strategic -p '{"spec":{"ephemeralContainers":[{"name":"stats","image":"'"$router"'","command":["curl","-s","--unix-socket","/var/run/envoy-admin/admin.sock","http://x/stats?filter=access_log|ext_authz|receiver"],"volumeMounts":[{"name":"admin","mountPath":"/var/run/envoy-admin"}],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
+    kubectl -n canyon patch "$p" --subresource=ephemeralcontainers --type=strategic -p '{"spec":{"ephemeralContainers":[{"name":"stats","image":"'"$router"'","command":["curl","-s","--unix-socket","/var/run/envoy-admin/admin.sock","http://x/stats?filter=access_log|ext_authz|receiver|cluster.plain.upstream_|http.egress.downstream_"],"volumeMounts":[{"name":"admin","mountPath":"/var/run/envoy-admin"}],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}'
     for _ in $(seq 30); do kubectl -n canyon logs "$p" -c stats 2>/dev/null | grep -q . && break; sleep 2; done
     stats=$(kubectl -n canyon logs "$p" -c stats) || return
     echo "== $p"; echo "$stats"
@@ -146,6 +173,9 @@ kind_suite() {
   if [ "$rc" != 0 ]; then
     ps -eo pid,ppid,etime,args --forest | grep -E 'go |kube|make|kubectl|helm|docker' | grep -v grep | tail -60 || true
     cluster
+    for p in $(kubectl -n canyon-apps get pods -o name 2>/dev/null); do # each app's forwarder still running (#143)
+      echo "== $p canyon-identity"; kubectl -n canyon-apps logs "$p" -c canyon-identity --tail=100 || true
+    done
   fi
   return "$rc"
 }
@@ -157,6 +187,25 @@ kind_calico() {
   kind_suite TestKind enforced || rc=$?
   envoy_lost || rc=1 # whether the suite passed or not: a check of its own
   [ "$rc" = 0 ] || return "$rc"
+  chromium || return
+  handoff_db || return
+  make e2e-handoff
+}
+
+# kind_calico_part is kind_calico's part $1 (.github/kind/calico-parts.txt), on a cluster of its own: the tests listed
+# for it, anchored, so a name inside another's runs nothing extra; Envoy's lost entries whether they passed or not; and
+# in the last part, the hand-off journey
+kind_calico_part() {
+  local parts=.github/kind/calico-parts.txt rc=0 run last
+  run=$(awk -v p="$1" '!/^#/ && $1 == p { printf "%s%s", (n++ ? "|" : ""), $2 }' "$parts") || return
+  last=$(awk '!/^#/ && NF { if ($1 > m) m = $1 } END { print m }' "$parts") || return
+  [ -n "$run" ] || { echo "::error::$parts lists no test for part $1"; return 1; }
+  .github/kind/up.sh calico || return
+  helm_pinned || return # TestKindSigninRuleFromTheChart applies the chart's canyon-apps-signin
+  kind_suite "^($run)\$\$" enforced || rc=$? # $$: make reads RUN, and its $ is make's
+  envoy_lost || rc=1 # whether the tests passed or not: a check of its own
+  [ "$rc" = 0 ] || return "$rc"
+  [ "$1" = "$last" ] || return 0
   chromium || return
   handoff_db || return
   make e2e-handoff
@@ -381,6 +430,7 @@ case $suite in
   journeys-[1-8]) chromium && stack journeys "${suite#journeys-}" ;;
   probes) stack probes ;;
   kind-calico) kind kind_calico ;;
+  kind-calico-[0-9]*) kind kind_calico_part "${suite#kind-calico-}" ;;
   kind-kindnet) kind kind_kindnet ;;
   kind-canyon) kind kind_canyon ;;
   handoff-argocd | handoff-flux) kind handoff "${suite#handoff-}" ;;
@@ -388,7 +438,8 @@ case $suite in
   egress-layer3) stack egress 'Interception$|ForgedInterceptHeaderRejected$|ARouteCredentialReachesItsUpstream$|ForcedHTTP2CarriesTheRouteCredential$|GRPCCarriesTheRouteCredential$|PassThroughDestinationIsNeverDecrypted$' ;;
   oidc) stack oidc_suite oidc . 30m ;;
   patch) stack oidc_suite oidc,patch '^TestRebasePatch' 65m ;;
-  tour) make tour-check ;;
+  tour) pack_cli && make tour-check ;;
+  tour-classic) classic_store && pack_cli && make tour-check ;;
   backup) kind kind_backup ;;
   build-arch) kind kind_build_arch ;;
   test-rest) test_rest ;;
@@ -401,8 +452,8 @@ case $suite in
   tidy) make tidy-check ;;
   web) dashboard ;;
   compose-up) compose_up ;;
-  images) make images-load ;;
-  deploy-bundle) make deploy-bundle-check && opengrep_source ;;
+  images) pack_cli && make images-load ;;
+  deploy-bundle) pack_cli && make deploy-bundle-check && opengrep_source ;;
   helm-chart) helm_chart ;;
   docs) docs ;;
   gitleaks) gitleaks_scan ;;

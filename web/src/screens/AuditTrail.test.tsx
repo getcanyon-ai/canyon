@@ -217,7 +217,7 @@ describe("the audit screen", () => {
     "patch prod", "revert patch prod", "request patch approval", "approve patch identity",
   ];
   const PLATFORM = [
-    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest",
+    "platform reported deployed", "platform reported removed", "platform reported failed", "platform reported another digest", "platform reported deployed without resources",
     "commit release", "release live by check-in", "release removed by commit", "release tree mismatch", "pull request closed", "pull request changed",
   ];
   const NOT_PRODUCTION = [
@@ -247,6 +247,8 @@ describe("the audit screen", () => {
   it("says an environment taken offline as a sentence", () => {
     const { verb, rest } = what({ ...pages[0]!.events[0]!, action: "DELETE /api/v1/projects/{id}/envs/{env}", detail: { env: "preview" } });
     expect([verb, rest]).toEqual(["Took", "preview offline, keeping its data"]);
+    const said = (stop: string) => { const one = what({ ...pages[0]!.events[0]!, action: "DELETE /api/v1/projects/{id}/envs/{env}", detail: { env: "prod", stop } }); return `${one.verb} ${one.rest ?? ""}`; };
+    expect([said("stopped"), said("remove_sent"), said("nothing")]).toEqual(["Took production offline, keeping its data", "Asked your platform to take production offline, keeping its data", "Stopped the deploy to production; nothing ran there"]);
   });
   it("each of them that can be preview's names its environment", () => {
     const either = ["DELETE /api/v1/projects/{id}/envs/{env}", "request undeploy", "send remove again", ...PLATFORM];

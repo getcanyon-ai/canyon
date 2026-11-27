@@ -113,13 +113,13 @@ export function AppSections({ project, envs, refreshed }: { project: AppRead; en
   // where a version is deployed, said as the cells say it: only one that runs is named alone
   // (contracts/routes.md, envs.<env>.state); one waiting on its first release runs nothing
   const at = (name: string, env: Status["envs"]["preview"], pkg: string) =>
-    env === undefined || waiting(env) || env.package !== pkg ? null : env.state === "stopped" ? `${name} · stopped${exited(env) === null ? "" : `: ${exited(env)}`}` : env.state === "restarting" ? `${name} · keeps restarting${restarts(env) === null ? "" : `: ${restarts(env)}`}${lastExited(env) === null ? "" : ` · ${lastExited(env)}`}` : env.state === "unknown" ? `${name} · couldn't check` : name;
+    env === undefined || waiting(env) || env.package !== pkg ? null : env.state === "stopped" ? `${name} · stopped${exited(env) === null ? "" : `: ${exited(env)}`}` : env.state === "restarting" ? `${name} · keeps restarting${restarts(env) === null ? "" : `: ${restarts(env)}`}${lastExited(env) === null ? "" : ` · ${lastExited(env)}`}` : env.state === "starting" ? `${name} · starting` : env.state === "unknown" ? `${name} · couldn't check` : name;
   const where = (pkg: string) => [at("Preview", envs.preview, pkg), at("Production", envs.prod, pkg)].filter(Boolean).join(" · ") || "—";
   return (
     <section aria-label="History">
       {/* Closed until asked for (the app-page redesign): its tabs read nothing until one is chosen anyway. */}
       <details className="grid grid-cols-[minmax(0,1fr)] gap-3">
-      <summary className="cursor-pointer"><h2 className="inline text-base font-semibold">History<span className="ml-2 text-md font-normal text-text-faint">Versions, reviews, activity</span></h2></summary>
+      <summary className="cursor-pointer"><h2 className="inline text-base font-semibold">History<span className="ml-2 text-md font-regular text-text-faint">Versions, reviews, activity</span></h2></summary>
       <div role="tablist" aria-label="Versions, reviews and activity" className="flex gap-5 overflow-x-auto border-b border-border">
         {TABS.map((name, at) => (
           <button key={name} id={`history-tab-${name}`} type="button" role="tab" aria-selected={tab === name} aria-controls="history-panel"

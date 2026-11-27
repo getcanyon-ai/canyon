@@ -5,8 +5,8 @@ description: Run Canyon and its sample org on one Docker host, watch it block a 
 
 | | |
 |---|---|
-| **Time** | The first start: 20 to 30 minutes at 25 Mbit/s, longer on a slower line, while it downloads about 3.5 GB. A restart: 5 to 10 minutes |
-| **You need** | The `canyon` CLI · Docker 28 or newer, with Compose v2 · 4 CPUs and 6 GB of memory for Docker · about 18 GB of free disk · port 7777 free. Details: [What you need](#what-you-need) |
+| **Time** | The first start: 15 to 20 minutes at 25 Mbit/s, longer on a slower line, while it downloads about 1.5 GB. A restart: 5 to 10 minutes |
+| **You need** | The `canyon` CLI · Docker 28 or newer, with Compose v2 · 4 CPUs and 6 GB of memory for Docker · about 18 GB of free disk (21 GB with Docker's containerd image store) · port 7777 free. Details: [What you need](#what-you-need) |
 | **You get** | Canyon at `http://localhost:7777`, with a sample org of seven apps, sign-in off, and apps at `http://<app>.preview.localhost:7777` |
 | **Not covered** | Other people: it listens on your laptop alone. Keeping anything: it's a demo |
 
@@ -17,9 +17,14 @@ shows it blocking a SQL injection, deploys an app of your own, and cleans up.
 ## What you need
 
 - Docker 28 or newer, with Compose v2.
-- About 18 GB of free disk, most of it for Canyon's build image (3.3 GB), the scanners' databases
-  (several GB) and the sample apps' builds. On Docker Desktop or Colima, that space is on the Docker
-  VM's disk.
+- About 18 GB of free disk. A first start takes about 4.3 GB of it once it's up, and up to 6.5 GB
+  while the sample apps build: Canyon's images, its Node build image (1.1 GB) and the sample apps.
+  The rest is room for the apps you deploy, and for Trivy if you turn it on: `canyon demo up
+  --with-trivy` takes about 2 GB more. Where Docker uses its containerd image store, the demo needs
+  about 21 GB, and a first start takes about 7.3 GB, up to 9.6 GB: that's the default on new installs of Docker Desktop since 4.34 and of Colima since 0.10,
+  and an option in OrbStack. `canyon demo up` checks which yours uses. On Docker Desktop or Colima,
+  that space is on the Docker VM's disk. Colima 0.5.3 and later give their VM a bigger disk with
+  `colima stop && colima start --disk 60`.
 - 4 CPUs and 6 GB of memory for Docker. At rest the stack and its sample apps use about 300 MB; the
   builds and reviews of a first start need the rest.
 
@@ -37,10 +42,10 @@ canyon demo up
 and starts nothing; it never installs or changes anything itself. Then it downloads the demo into
 `~/.canyon/demo` and starts it. The first start builds four of the sample apps (claims-portal,
 endorsement-hub, claims-archive and premium-ledger) through Canyon itself, so the fleet shows real
-running apps and a real blocked version. It takes 20 to 30 minutes at 25 Mbit/s, longer on a slower
-line, because it downloads about 3.5 GB on the way, most of it Canyon's build image and the scanners'
-databases. A restart: 5 to 10 minutes. After `canyon demo down --purge`, nearer the first: the
-scanners' databases download again and the apps build again.
+running apps and a real blocked version. It takes 15 to 20 minutes at 25 Mbit/s, longer on a slower
+line, because it downloads about 1.5 GB on the way, most of it Canyon's images and its Node build
+image. A restart: 5 to 10 minutes. After `canyon demo down --purge`, about as long as the first: the
+images download again and the apps build again.
 
 It names each stage and each sample app as it goes, signs the CLI in to the demo, and ends on:
 
@@ -169,16 +174,16 @@ terminal:
 
   Review
     · opengrep: waiting for a scanner slot (1st in line)
-    · trivy: waiting for a scanner slot (2nd in line)
 
   ✗ Review blocked · 1 blocking finding
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✗ opengrep           1 blocking finding
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ────────────────────────────────────────────────────────────────────────────
 
@@ -236,16 +241,16 @@ Here is `canyon check` on claims-portal with that line fixed:
   Review
     · gitleaks: waiting for a scanner slot (1st in line)
     · opengrep: waiting for a scanner slot (2nd in line)
-    · trivy: waiting for a scanner slot (3rd in line)
 
   ✓ Review found nothing blocking in what was checked · 0 blocking, 0 warnings
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✓ opengrep           clean
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   Done in 36.1s · run gr_0b90f66d8a15a21d
 ```
@@ -267,12 +272,13 @@ directory called `team-notes`:
 
   ✓ Review found nothing blocking in what was checked · 0 blocking, 0 warnings
     · AI review          off (no AI model set up on this Canyon)
+    · not checked on this host: deps.known-vuln
     · design.org-system: no package.json in this app lists a UI framework, so there was no UI to check
     ✓ checkov            clean
     ✓ eslint             clean
     ✓ gitleaks           clean
     ✓ opengrep           clean
-    ✓ trivy              clean
+    · trivy              skipped: off in the laptop demo; canyon demo up --with-trivy turns it on
 
   ✓ Build      [25.0s]
   ✓ Deploy     preview
@@ -347,6 +353,16 @@ canyon demo down --purge
 ```
 
 Both end by saying the demo is gone, or by naming what Docker kept, if anything is left.
+
+On a Mac, the images were on the Docker VM's disk, and each engine gives the space back to the Mac
+its own way:
+
+- **Docker Desktop** gives it back on its own, a few minutes after the images are removed. Don't
+  make **Settings › Resources › Advanced › Disk usage limit** smaller to get space back: that
+  deletes every container and image.
+- **OrbStack** gives it back as soon as the images are removed.
+- **Colima** 0.5.0 and later gives it back the next time its VM starts, with
+  `colima stop && colima start`, or at once with `colima ssh -- sudo fstrim -a`.
 
 If you set up a coding agent with `canyon skill install`, as the tour does, its session hook still
 looks for this Canyon at the start of every session. Take Canyon out of your coding agents:

@@ -1,0 +1,31 @@
+# kind-calico's parts (scripts/ci-suite.sh kind-calico-<part>): each part is a cluster of its own, Calico's, running the
+# kube-tagged tests listed for it here, then Envoy's lost-entries check; the last part runs the hand-off journey after its
+# tests. Every test make test-kube RUN=TestKind runs is on exactly one line (internal/tools/suites: TestTheCalicoPartsCoverTheKindTests).
+# Balanced by the tests' times on Canyon's runners (2026-11-25): about 10 minutes of tests a part, the journey's 5 counted.
+# <part> <test>
+1 TestKindCheckMetadataReachesTheReceiver
+1 TestKindAppReachesOnlyEnvoy
+1 TestKindTrivyScansThroughItsServer
+1 TestKindChoice1ALBPodStartsUnderEmptyAllowlist
+1 TestKindSigninRuleFromTheChart
+1 TestKindLogsReadACrashedAppsLastRun
+1 TestKindStopIsIdempotent
+1 TestKindAppsReachNoOtherAppNorTheControlPlane
+1 TestKindOnlyTheExecutorReadsBuilds
+1 TestKindRebaseIsKpacksBuildAndRefusesFirst
+2 TestKindSigninPastTheGateway
+2 TestKindSilentConnectionsAreClosed
+2 TestKindANarrowingRefusesFromItsAnswer
+2 TestKindTunnelWritesItsRowBeforeItsLastEntry
+2 TestKindChoice1OIDCPodStartsUnderEmptyAllowlist
+2 TestKindLogsReadTheEndKeptOfAGoneRun
+2 TestKindProbeTellsEnforcement
+2 TestKindBuildsReachNoPrivateNorLinkLocalAddress
+2 TestKindLogsReadTheAppContainerAlone
+3 TestKindChoice2PodStartsUnderEmptyAllowlist
+3 TestKindCallWithoutTokenRefused
+3 TestKindAppPortOnlyThroughTheSidecar
+3 TestKindAccessReachesThePodWithoutARestart
+3 TestKindTheRouterSaysWhyItCannotReachAnApp
+3 TestKindExecutorReadsNoSecret
+3 TestKindPodSecurityRefusesWhatEachNamespaceForbids

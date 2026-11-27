@@ -65,9 +65,8 @@ export function needWords(app: App, need: Need): { title: string; text: string[]
     case "held":
       return { title: t(S.needHeld), text: app.hold === undefined ? [] : [heldLine(app.hold)] };
     case "down":
-      // A restarting environment's last log lines are on its page (#2744); any other down state's are canyon logs' alone.
-      return { title: t(need.state === "restarting" ? S.needRestarting : S.needDown),
-        text: [need.state === "restarting" ? (need.env === "prod" ? S.needRestartingFixProd : S.needRestartingFixPreview) : need.env === "prod" ? S.needDownFixProd : S.needDownFixPreview] };
+      // Its last log lines are on its page, stopped or restarting (#2744, #188).
+      return { title: t(need.state === "restarting" ? S.needRestarting : S.needDown), text: [need.env === "prod" ? S.needDownFixProd : S.needDownFixPreview] };
     case "refused": {
       const other = need.env === "prod" ? "Preview" : "Production";
       return {

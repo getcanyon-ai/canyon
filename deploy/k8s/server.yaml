@@ -31,6 +31,7 @@ spec:
           env:
             - {name: CANYON_ADDR, value: ":7777"}
             - {name: CANYON_RUNTIME, value: kubernetes}
+            - {name: CANYON_INSTALL_MODE, value: kubernetes} # how Canyon was installed, which the daily report says (TELEMETRY.md)
             - {name: CANYON_SCAN_CONCURRENCY, value: "10"} # the scans and builds the cluster runs at once ; the executor takes as many
             - {name: CANYON_BUILD_CONCURRENCY, value: "4"}
             - {name: CANYON_PATCH_CONCURRENCY, value: "2"} # Canyon's platform patches at once; the executor's 6 builds and 14 scans keep all three

@@ -568,9 +568,12 @@ func TestGetBuilderIsTheBuilderImagesID(t *testing.T) {
 	srv := httptest.NewServer(Handler(e))
 	defer srv.Close()
 	c, id := &Client{Base: srv.URL}, "sha256:"+strings.Repeat("cd", 32)
-	// no CANYON_BUILDER: canyon-builder's ID, built first when the daemon has none
-	builderImage.id = ""
-	must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte("#!/bin/sh\ncase \"$*\" in *canyon-run:*) echo "+id+"; exit 0;; esac\n[ \"$1 $2 $3\" = 'build --quiet --tag' ] && [ \"$4\" = '"+builderImage.repo+"' ] && { echo "+id+"; exit 0; }; exit 1\n"), 0o700)) //nolint:gosec // a test fake must be executable
+	// no CANYON_BUILDER: canyon-builder's own ID, it and the canyon-builder it is built from built first when the
+	// daemon has none
+	builderImage.id, ownBuilder.id = "", ""
+	must(t, os.WriteFile(filepath.Join(dir, "docker"), []byte("#!/bin/sh\ncase \"$*\" in *canyon-run:*) echo "+id+"; exit 0;; *io.buildpacks.builder.metadata*) echo '"+builderMetadataFake+"'; exit 0;; esac\n"+ //nolint:gosec // a test fake must be executable
+		"[ \"$1 $2 $3\" = 'build --quiet --tag' ] && [ \"$4\" = '"+builderImage.repo+"' ] && { echo sha256:"+strings.Repeat("ef", 32)+"; exit 0; }\n"+
+		"[ \"$1 $2 $3\" = 'build --quiet --tag' ] && [ \"$4\" = '"+ownBuilder.repo+"' ] && { echo "+id+"; exit 0; }; exit 1\n"), 0o700))
 	if got, err := c.BuilderImage(t.Context()); got != id || err != nil {
 		t.Errorf("canyon-builder: %q %v, want %q", got, err, id)
 	}

@@ -47,11 +47,22 @@ journey("put an earlier version back in production", {
     {
       name: "promote it, and production runs the first version again",
       do: async (page, { v1 }) => {
-        await page.getByRole("button", { name: `Promote ${v1}` }).click();
+        const card = page.getByRole("region", { name: "Production", exact: true });
+        await card.getByRole("button", { name: `Promote ${v1}`, exact: true }).click();
+        // the question before production changes, the keyboard on Cancel, as every promote's (#157, #188)
+        await expect(card.getByText(/^Put .+ back in production(, replacing .+)?\?$/)).toBeVisible();
+        await expect(card.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+        await card.getByRole("button", { name: `Promote ${v1}`, exact: true }).click();
       },
       see: async (page, { v1 }) => {
-        // what production runs is named on the card's first line; the earlier rows carry a date after theirs
-        await expect(page.getByRole("region", { name: "Production", exact: true }).getByText(v1, { exact: true })).toBeVisible({ timeout: 5 * 60_000 });
+        // what production runs is named on the card's first line; the earlier rows carry a date after theirs. Watched as
+        // it switches: it reads starting, never down, the moment after Promote (#230)
+        const runs = page.getByRole("region", { name: "Production", exact: true }).getByText(v1, { exact: true });
+        for (const until = Date.now() + 5 * 60_000; !(await runs.isVisible()); await page.waitForTimeout(250)) {
+          expect(await page.getByText(/^Production is down/).count(), "the band said production was down while it switched").toBe(0);
+          expect(Date.now(), `production never showed ${v1}`).toBeLessThan(until);
+        }
+        await expect(runs).toBeVisible();
       },
       settle: 5 * 60_000,
       changes: {

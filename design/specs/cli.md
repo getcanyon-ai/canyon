@@ -2041,7 +2041,9 @@ and names the log that says why: `preview      v1.3   ✗ stopped   canyon logs 
 in red. One the host could not check keeps its URL and says so in amber: `! couldn't check whether it
 runs`. **Amended 2026-10-05** (#1722): one that keeps restarting has no URL either — it may be down
 between two restarts — and says how often, in red: `preview      v1.3   ✗ keeps restarting (7 times since
-5 Oct 09:12)   canyon logs --env preview says why`, `once` for one restart.
+5 Oct 09:12)   canyon logs --env preview says why`, `once` for one restart. **Amended 2026-11-26** (#230):
+one a deploy or a promotion is starting has no URL yet and says so in amber, with no log to read:
+`prod         v1.3   ! starting`.
 
 **Amended 2026-10-08** (QA round 3: a preview answering `400` read as running here, and only deploy's
 step to production said so): a row that shows its URL carries what the app answered there when it is
@@ -2485,7 +2487,7 @@ it, never the identity provider's subject id.
 
 **Amended 2026-10-03** (#1241): ENV says whether the environment runs now (`envs.<env>.state`,
 contracts/routes.md): `prod stopped` and `prod restarting` in red for an app whose container stopped or
-keeps restarting (#1722), `prod couldn't check` in amber when the host could not ask — status's words, cut to the column, and the name alone only while it runs.
+keeps restarting (#1722), `prod starting` in amber while a deploy or a promotion starts it (#230), `prod couldn't check` in amber when the host could not ask — status's words, cut to the column, and the name alone only while it runs.
 
 **Amended 2026-10-27** (#2455): where the org runs the environment, ENV is `prod no check-in` in amber
 once its pods have stopped checking in, or never began — `canyon status`'s `your platform hasn't reported
@@ -3885,9 +3887,10 @@ was asked to "get Canyon running" improvised: it installed an engine, edited Doc
 | Form | Does |
 |---|---|
 | `canyon demo up` | The five stages below, ending `✓ Canyon is ready at http://localhost:7777`. It can be run again at any point: it keeps what it downloaded, and on a demo that is already running it checks, signs in and says the same line |
+| `canyon demo up --with-trivy` | The same, with Trivy (**added 2026-11-26**, #237): the demo leaves it off, its deployer turning `sarif.trivy`'s `run` off before its first deploy, saving Trivy's image and its vulnerability database, about 2 GB. The flag sets `CANYON_DEMO_TRIVY=on` in the environment of its compose calls, which docker-compose.yml's `demo-apps` service passes to the deployer, and the deployer then leaves `run` as it ships. On a demo already running it deploys nothing again, says `Trivy is off in this demo. To turn it on, run canyon demo down, then canyon demo up --with-trivy. Or turn it on in Guardrails › Scanners.` after the ready line while Trivy's `run` is off, and changes nothing. Each review on the demo shows Trivy as not run (design/EXPERIENCE.md) |
 | `canyon demo tour` | The guided tour on this demo, a chapter at a time (§6.14.1) |
-| `canyon demo down` | `make demo-down` for a machine with no checkout, on the demo alone: its Compose project with its volumes, then what its executor made for the apps its own server lists, read before it stops: their containers and networks (`canyon.app=<app>`), their build caches (`canyon-cache-<app>-build`, `-launch`), and the builds and scans (`canyon.build`, `canyon.scan`) started since its executor did. Nothing another Canyon on this Docker made is touched. Images and the scanners' databases stay, so the next start is quick |
-| `canyon demo down --purge` | The same, and the images too: the demo's own, as its compose file named them when `up` started it (`up` keeps that in `~/.canyon/demo/images`; with none kept, the file's own pins, read without the shell's `CANYON_IMAGE_*`), and the scanners' its executor pulls, each by its reference; the ones it built for its apps (`canyon/<app>`); Canyon's tool images (`canyon-scan/*`, `canyon-run`, `canyon-builder`); the lifecycle by its pin's linux/amd64 and linux/arm64 digests alone, never by repository; the scanners' databases (`canyon-scandb-*`) nothing uses; the build network; and `~/.canyon/demo`. It works the same after a `down`, with the server gone. An image pulled by digest that something else holds stays, each named with why under `These images stay, because something else on this Docker holds them:` (below) (**amended 2026-11-24**, #170) |
+| `canyon demo down` | `make demo-down` for a machine with no checkout, on the demo alone: its Compose project with its volumes, then what its executor made for its apps, by the label it puts on each (`canyon.project=canyon-demo`; **amended 2026-11-25**, #178): their containers and floor holders, networks and build caches, and the builds and scans (`canyon.build`, `canyon.scan`) started since its executor did. Nothing another Canyon on this Docker made is touched. Images and the scanners' databases stay, so the next start is quick |
+| `canyon demo down --purge` | The same, and the images too: the demo's own, as its compose file named them when `up` started it (`up` keeps that in `~/.canyon/demo/images`; with none kept, the file's own pins, read without the shell's `CANYON_IMAGE_*`), and the scanners' its executor pulls, each by its reference; the ones its executor built for its apps, by the second name it gives each (`canyon-demo/<app>`), removed by ID with their `canyon/<app>` name, unless a container that isn't the demo's uses one; Canyon's tool images (`canyon-scan/*`, `canyon-run`, `canyon-builder`); the lifecycle by its pin's linux/amd64 and linux/arm64 digests alone, never by repository; the scanners' databases (`canyon-scandb-*`) nothing uses; the build network; and `~/.canyon/demo`. It works the same after a `down`, with the server gone. An image pulled by digest that something else holds stays, each named with why under `These images stay, because something else on this Docker holds them:` (below) (**amended 2026-11-24**, #170) |
 
 **The demo is its own Compose project** (**amended 2026-11-15**, review of #2866). Every compose call runs as
 `docker compose -p canyon-demo --profile demo-apps`, whatever the folder: the bundle unpacked by hand into `canyon/`,
@@ -3902,14 +3905,14 @@ never Compose's progress, as `up` does.
 **down says the demo is gone only when it is.** After the sweep it lists again what it removed. Anything left is named,
 a line each (`container claims-portal-preview`), under `✗ The demo is stopped, but these are left:`, and the verb
 exits 1; a listing Docker refuses is a failure, never an empty list, and only Docker's own `No such image` says an
-image is gone. A server that does not answer cannot say which apps are its own: `down` then removes no app container,
-names every `canyon.app` container it found as ones that may be the demo's, and what of the demo's own is left, and
-exits 1.
+image is gone.
 
-**Which apps are the demo's, when its server is gone** (**amended 2026-11-24**, #170). `up` keeps the ids its server
-lists in `~/.canyon/demo/apps`, and each `down` whose server answers adds the ones it lists; only the server of the
-compose project `canyon-demo` is ever asked, and only while its container runs. A `down` whose server does not answer, as one after an earlier `down`,
-takes the apps from that file; only with neither does it remove no app and name the `canyon.app` containers as above.
+**What is the demo's** (**amended 2026-11-25**, #178; it was a list of app ids, #170). The demo's executor labels
+everything it makes for an app `canyon.project=canyon-demo`, its own compose project, and gives each image it builds
+a second name, `canyon-demo/<app>:<tag>` (contracts/executor.md). `down` takes those, and nothing by an app's id
+alone, which another Canyon on the same Docker can share. No server is asked, so a `down` after an earlier `down`, with
+the server gone, takes the same. A demo an executor before this release started carries no label, so `down` doesn't
+find its apps' containers, networks and caches.
 
 **An image something else holds stays** (**amended 2026-11-24**, #170). On Docker's containerd image store, removing
 a reference by digest takes every tag of its repository at that digest with it. So `--purge` keeps an image it pulled
@@ -3935,7 +3938,11 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
 **The five stages of `canyon demo up`.**
 
 1. **Preflight, as one list.** Docker answers and is 28 or newer; Compose v2; 4 CPUs and 6 GB of memory; 18 GB of free
-   disk on the engine's own disk, read by `df` in the busybox image the compose file pins; no Canyon started another
+   disk on the engine's own disk, read by `df` in the busybox image the compose file pins, or 21 GB where `docker info`'s
+   `DriverStatus` names the containerd snapshotter (`driver-type` `io.containerd.snapshotter.v1`), or can't be read
+   (**amended 2026-11-25**, #196; **amended 2026-11-26**: a cold up peaked at 11.7 GB on that store, 8.9 GB on overlay2,
+   measured by the tour on each, #235). The gap names the
+   store as Docker does, and its fix never tells anyone to switch stores: that is the person's Docker; no Canyon started another
    way holds the names the demo's containers take; nothing else holds `127.0.0.1:7777`. Each gap is a numbered line with one `Fix:` under it, on stderr, and the verb exits 1 having
    fetched and started nothing. **It never installs, deletes or repairs anything**, and the fix for a machine with no
    engine is a command the person runs, not one Canyon runs:
@@ -3961,11 +3968,15 @@ stops waiting, exit 1, names the deployer's log and `To carry on, run: canyon de
    Its deploys build Canyon's build image and download the scanners' databases, so nothing is left to download in the
    middle of the visitor's first review. A deployer that exits non-zero ends the verb with exit 1 and
    `To carry on, run: canyon demo up`; one whose log ended with no exit status to name says that instead.
+   A deployer that exits 0 leaves its four sample apps' build caches (`canyon-cache-<app>-build`, `-launch`), which
+   nothing needs, so up removes them by those names (**amended 2026-11-25**, #186). A visitor's redeploy of a sample app
+   then takes a few seconds more. A cache already gone is no matter, and one Docker won't remove stays, with a warning.
 5. **Sign in and report.** `canyon login http://localhost:7777`'s `✓ Connected to` line without its next step, then
    `✓ Canyon is ready at http://localhost:7777` and the one next step, `Next, take the guided tour: canyon demo tour`
    (§6.14.1).
 
-The minimums are the ones the laptop page and the README name: 4 CPUs, 6 GB of memory, 18 GB of free disk. A
+The minimums are the ones the laptop page and the README name: 4 CPUs, 6 GB of memory, 18 GB of free disk (21 GB
+with Docker's containerd image store). A
 `CANYON_DEMO_FROM` in the environment names where the bundle and its `SHA256SUMS` are served, in place of this CLI's
 release: CI starts the demo from a release built from its tree. `--help` does not offer it.
 
@@ -4464,6 +4475,9 @@ A new app's first `canyon deploy` reviews it before anything runs, and writes th
 app's id into `canyon.toml`. After that, run `canyon check` after a change that adds
 a dependency, a route or a secret: it runs the review a deploy runs, without
 deploying, so you fix what blocks before the deploy.
+
+Start a new app on a version of its language that its vendor still supports:
+for .NET, that's .NET 10 (`net10.0` in the project file).
 
 A static single-page app (a Vite app, say) runs no server of its own: give it this
 `project.toml` at its root and Canyon serves the files its build writes.

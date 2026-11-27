@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { App as AppRead, Earlier, Env, Finding, FleetPage, Receipt, RunRead, Status } from "../api";
-import { S } from "../strings";
+import { APPROVAL, S } from "../strings";
 import { shortDate } from "../ui/Verdict";
 import { App } from "./App";
 
@@ -52,6 +52,11 @@ const reads = (run: RunRead, receipt: Receipt = rollback.receipt, more: Routes =
 });
 const production = async () => within(await screen.findByRole("region", { name: "Production" }));
 const putBack = async (version = "v1.3") => fireEvent.click((await production()).getByRole("button", { name: `Put back ${version}` }));
+// Promote, then its question's Promote: the question before production changes (#157).
+const promoteIt = async () => {
+  fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+  fireEvent.click((await production()).getByRole("button", { name: "Promote v1.3" }));
+};
 const posts = (sent: string[], route: string) => sent.filter((one) => one.startsWith(route)).length;
 const reviewing = (version: string) => S.putBackReviewing.replace("<version>", () => version);
 const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -302,6 +307,29 @@ describe("Put back", () => {
 });
 
 describe("after the review", () => {
+  // Like every production promote since #157: a question naming the app, the version and what it replaces, the keyboard on
+  // Cancel, so Enter twice promotes nothing (design/EXPERIENCE.md, the question before production changes).
+  it("asks before promoting, Cancel selected, naming the app, the version and what it replaces", async () => {
+    const sent = server(reads(reviewed("clean"), rollback.receipt, {
+      [PROMOTE]: { status: 202, body: { run: { id: "gr_p7", state: "pending" } } },
+      "GET /api/v1/gate-runs/gr_p7/timeline?after=0": () => new Promise<Answer>(() => {}),
+    }));
+    render(<App id="claims-portal" auth="oidc" />);
+    await putBack();
+    const card = await production();
+    fireEvent.click(await card.findByRole("button", { name: "Promote v1.3" }));
+    expect(card.getByText(APPROVAL.titlePutBack.replace("<app>", "claims-portal").replace("<version>", "v1.3").replace("<replaces>", "v1.4"))).toBeDefined();
+    expect(document.activeElement).toBe(card.getByRole("button", { name: "Cancel" }));
+    expect(posts(sent(), PROMOTE)).toBe(0);
+    fireEvent.click(card.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(card.getByRole("button", { name: "Promote v1.3" }));
+    expect(posts(sent(), PROMOTE)).toBe(0);
+    fireEvent.click(card.getByRole("button", { name: "Promote v1.3" }));
+    fireEvent.click(card.getByRole("button", { name: "Promote v1.3" }));
+    await flush();
+    expect(posts(sent(), PROMOTE)).toBe(1);
+  });
+
   it("offers Promote v1.3 with the confirm's lines once the review passes, and promotes that run", async () => {
     const sent = server(reads(reviewed("clean"), rollback.receipt, {
       [PROMOTE]: { status: 202, body: { run: { id: "gr_p7", state: "pending" } } },
@@ -316,7 +344,9 @@ describe("after the review", () => {
     expect(card.getByText(S.putBackImage.replace("<date>", "2 Oct"))).toBeDefined();
     expect(card.getByText(S.putBackCode.replace("<version>", "v1.3").replace("<version>", "v1.4"))).toBeDefined();
     fireEvent.click(promote);
-    fireEvent.click(promote);
+    const yes = card.getByRole("button", { name: "Promote v1.3" });
+    fireEvent.click(yes);
+    fireEvent.click(yes);
     expect(await card.findByText("deploying to production")).toBeDefined();
     expect(sent().filter((one) => one.startsWith(PROMOTE))).toEqual([`${PROMOTE} ${JSON.stringify({ gate_run: REVIEW })}`]);
     expect(document.activeElement).toBe(card.getByRole("list", { name: "Promotion" }).parentElement);
@@ -330,7 +360,7 @@ describe("after the review", () => {
     }));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     expect(await screen.findByText("live at http://claims-portal.prod.localhost:7777")).toBeDefined();
     expect(screen.queryByRole("link", { name: "the run →" })).toBeNull();
   });
@@ -347,7 +377,7 @@ describe("after the review", () => {
     server(routes);
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     await screen.findByRole("button", { name: "Cancel promotion" });
     routes[PUT_BACK] = () => new Promise<Answer>((resolve) => { started = resolve; });
     routes["GET /api/v1/gate-runs/gr_c2d5"] = () => new Promise<Answer>(() => {});
@@ -414,6 +444,7 @@ describe("after the review", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(await card.findByText(S.putBackImage.replace("<date>", "2 Oct"))).toBeDefined();
     fireEvent.click(card.getByRole("button", { name: "Promote v1.3" }));
+    fireEvent.click(card.getByRole("button", { name: "Promote v1.3" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(sent().filter((one) => one.startsWith(PROMOTE))).toEqual([`${PROMOTE} ${JSON.stringify({ gate_run: REVIEW })}`]);
   });
@@ -464,7 +495,7 @@ describe("after the review", () => {
     server(reads(reviewed("clean"), rollback.receipt, { [PROMOTE]: { status: 409, body: { error, message } } }));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     expect(await screen.findByText(message)).toBeDefined();
     expect(screen.queryByRole("button", { name: "Promote v1.3" })).toBeNull();
   });
@@ -474,7 +505,7 @@ describe("after the review", () => {
     const sent = server(reads(reviewed("clean"), rollback.receipt, { [PROMOTE]: { status: 409, body: { error: "run_in_progress", message, run: { id: "gr_x", state: "running" } } } }));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     expect(await screen.findByText(message)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Promote v1.3" }));
     await flush();
@@ -486,7 +517,7 @@ describe("after the review", () => {
     server(reads(reviewed("clean"), rollback.receipt, { [PROMOTE]: { status: 409, body: { error: "gate_not_clean", receipt: failing("prod.clean-gate", why) } } }));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     expect(await screen.findByText(why)).toBeDefined();
     expect((screen.getByRole("button", { name: "Promote v1.3" }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -496,10 +527,96 @@ describe("after the review", () => {
     const sent = server(reads(reviewed("clean"), rollback.receipt, { [PROMOTE]: { status: 409, body: null } }));
     render(<App id="claims-portal" auth="oidc" />);
     await putBack();
-    fireEvent.click(await (await production()).findByRole("button", { name: "Promote v1.3" }));
+    await promoteIt();
     expect(await screen.findByText("POST /api/v1/projects/claims-portal/promotions answered 409")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Promote v1.3" }));
     await flush();
     expect(posts(sent(), PROMOTE)).toBe(2);
+  });
+});
+
+// Production down leads with its last lines and the newest kept version to put back (#188): the button does what
+// that version's Put back on the card does, and the card follows it.
+describe("the headline of a production that's down", () => {
+  const down = (prod: Partial<Env>, earlier = rollback.earlier): Status => ({ ...bare, envs: { ...bare.envs, prod: { ...(bare.envs.prod as Env), ...prod } }, earlier });
+  const stopped: Partial<Env> = { state: "stopped", stopped: { exit_code: 1, said: "boom" } };
+  const restarting: Partial<Env> = { state: "restarting", restarting: { restarts: 3, exit_code: 1, said: "boom" } };
+  // The masked read of the environment's last lines answers text, as the server does.
+  const logs = (env: "preview" | "prod") => {
+    const LOGS = `GET /api/v1/projects/claims-portal/logs?env=${env}&lines=20&redaction=masked`;
+    const routed = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (`${init?.method} ${url}` !== LOGS ? routed(url, init)
+      : { ok: true, status: 200, headers: new Headers({ "Canyon-Log-Redaction": "masked" }), text: async () => "dialing <DATABASE_URL>\nboom\n" } as unknown as Response)));
+  };
+  const band = async () => within(await screen.findByRole("region", { name: "Where it stands" }));
+
+  // A promotion's switch reads starting (contracts/routes.md, envs.<env>.state; #230): the band says production is
+  // starting, never "Production is down" the moment after a person pressed Promote, with no Put back and no lines read.
+  it("says production is starting while a switch is under way, never down", async () => {
+    const sent = server({ ...reads(reviewed("clean")), "GET /api/v1/projects/claims-portal/status": { body: down({ state: "starting" }) } });
+    render(<App id="claims-portal" auth="oidc" />);
+    const said = await band();
+    expect(said.getByText(S.prodStarting)).toBeDefined();
+    expect(said.getByText(S.prodStartingLine)).toBeDefined();
+    expect(screen.queryByText(/^Production is down/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Put .* back$/ })).toBeNull();
+    expect((await production()).getByText("Starting")).toBeDefined();
+    expect((await production()).queryByRole("link", { name: /^Open/ })).toBeNull(); // nothing answers there yet
+    await flush();
+    expect(sent().some((one) => one.includes("/logs?"))).toBe(false);
+  });
+
+  // Stopped with no exit the executor names is a switch under way, a promotion's new container not yet started: nothing
+  // crashed, so neither the band nor a card reads the lines, an audited read, until the person opens them (#199's
+  // putback journey: a logs row nobody asked for).
+  it.each([["production", "prod"], ["preview", "preview"]] as const)("reads no lines while %s is stopped with no exit named", async (_name, key) => {
+    const sent = server({ ...reads(reviewed("clean")), "GET /api/v1/projects/claims-portal/status": { body: { ...bare, envs: { ...bare.envs, [key]: { ...(bare.envs[key] as Env), state: "stopped" } } } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    await production();
+    await flush();
+    await flush();
+    expect(sent().some((one) => one.includes("/logs?"))).toBe(false);
+    expect(screen.queryByText(S.lastLines)).toBeNull();
+  });
+
+  it.each([["stopped", stopped], ["restarting", restarting]])("shows a %s production's last lines and puts the newest kept version back", async (_state, prod) => {
+    const sent = server({ ...reads(reviewed("pending")), "GET /api/v1/projects/claims-portal/status": { body: down(prod) } });
+    logs("prod");
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await (await band()).findByText(S.lastLines)).toBeDefined();
+    expect((await band()).getByText((_, node) => node?.tagName === "PRE").textContent).toBe("dialing <DATABASE_URL>\nboom");
+    if (prod === stopped) expect((await band()).queryByText(/canyon logs --env prod has the rest/)).toBeNull(); // the lines say why
+    expect((await production()).getByText(/^exited 1|last exited 1/).closest("p")?.textContent).not.toContain("canyon logs has the rest"); // nor the card's
+    fireEvent.click((await band()).getByRole("button", { name: "Put v1.3 back" })); // v1.4 patched and v1.2 aren't kept
+    expect(await (await production()).findByText(reviewing("v1.3"))).toBeDefined();
+    expect(posts(sent(), PUT_BACK)).toBe(1);
+    expect(sent().find((one) => one.startsWith(PUT_BACK))).toContain(v13.package);
+    expect((screen.getByRole("region", { name: "Earlier versions" }).closest("details") as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it("says no earlier version can be put back where none is kept, with no button", async () => {
+    server({ ...reads(reviewed("pending")), "GET /api/v1/projects/claims-portal/status": { body: down(stopped, rollback.earlier!.map((one) => ({ ...one, kept: false }))) } });
+    logs("prod");
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await (await band()).findByText(new RegExp(S.putBackNone.replace(/[.:]/g, "\\$&")))).toBeDefined();
+    expect(screen.queryByRole("button", { name: /^Put .* back$/ })).toBeNull();
+  });
+
+  // Production up says nothing of putting back.
+  it("offers no headline Put back while production runs", async () => {
+    server(reads(reviewed("clean")));
+    render(<App id="claims-portal" auth="oidc" />);
+    await (await production()).findByRole("button", { name: "Put back v1.3" });
+    expect(screen.queryByRole("button", { name: /^Put .* back$/ })).toBeNull();
+    expect(screen.queryByText(S.putBackNone)).toBeNull();
+  });
+
+  // A stopped preview shows its last lines too, with nothing to put back.
+  it("shows a stopped preview's last lines", async () => {
+    server({ ...reads(reviewed("clean")), "GET /api/v1/projects/claims-portal/status": { body: { ...bare, envs: { ...bare.envs, preview: { ...(bare.envs.preview as Env), ...stopped } } } } });
+    logs("preview");
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await screen.findByText(S.lastLines)).toBeDefined();
+    expect(screen.queryByRole("button", { name: /^Put .* back$/ })).toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import { Patched, PatchLine } from "./Patched";
 // What one environment runs right now, at a glance (the app-page redesign, block 2): its state, the
 // version, where it answers, who put it there and when. An empty one is dashed and says so; a stopped
 // one is red and says why. Only a running app, or one Canyon couldn't check, has an Open link.
-export function EnvCard({ name, env, empty, blank = "Nothing running", who, note, preview, calls, children }: {
+export function EnvCard({ name, env, empty, blank = "Nothing running", who, note, preview, calls, lined, children }: {
   name: "Preview" | "Production";
   env: Env | Waiting | ViewerEnv | undefined;
   empty: string; // what an empty one says under its blank
@@ -17,6 +17,7 @@ export function EnvCard({ name, env, empty, blank = "Nothing running", who, note
   note?: string; // what production carries on its face, D5's line: "<version> · passed review"
   preview?: Env | Waiting | ViewerEnv; // production's card: what preview runs, which a patch held behind it names
   calls?: ReactNode; // what it calls out to, and how much of it Canyon refused, the Outbound card a click away
+  lined?: boolean; // the headline shows its last lines: canyon logs is no longer where the rest is (#188)
   children?: ReactNode; // what the card gains under its facts: production's earlier versions
 }) {
   const label = <span className="col-span-2 text-sm font-semibold tracking-wide text-text-faint uppercase">{name}</span>;
@@ -50,7 +51,7 @@ export function EnvCard({ name, env, empty, blank = "Nothing running", who, note
   // Under the state: why it stopped and where the rest is, or where it answers, its review, who and when.
   // A read-only member's stopped card says no more: the reduced read names no reason, and logs are the team's.
   const why = full === null ? [] : (at.state === "restarting" ? [restarts(full) === null ? null : `started again ${restarts(full)}`, lastExited(full)] : [exited(full)]).filter((one) => one !== null);
-  const facts: ReactNode[] = (stopped ? (full === null ? [] : (why.length > 0 ? [...why, "canyon logs has the rest"] : ["canyon logs says why."]))
+  const facts: ReactNode[] = (stopped ? (full === null ? [] : (why.length > 0 ? [...why, lined ? null : "canyon logs has the rest"] : ["canyon logs says why."]))
     : [new URL(at.url).host, who, full === null ? null : <Age at={full.deployed_at} long />]).filter((one) => one !== null && one !== undefined);
   return (
     <section aria-label={name} className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 rounded-[10px] border bg-surface px-4 py-3 ${stopped ? "border-critical/40" : "border-border"}`}>
@@ -60,7 +61,7 @@ export function EnvCard({ name, env, empty, blank = "Nothing running", who, note
         {state}
         {shown !== null && <span className="tnum font-medium"><bdi>{shown}</bdi></span>}
       </p>
-      {!stopped && (
+      {!stopped && at.state !== "starting" && ( // starting: nothing answers there yet (#230)
         <a className="row-span-2 inline-flex items-center gap-1 text-base text-link no-underline hover:underline" href={at.url} target="_blank" rel="noreferrer" aria-label={shown === null ? `Open ${name.toLowerCase()}` : `Open ${shown} in ${name.toLowerCase()}`}>
           Open<Icon name="external" size={14} />
         </a>

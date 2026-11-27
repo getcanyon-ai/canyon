@@ -811,6 +811,7 @@ func (p *Pipeline) scan(ctx context.Context, in Input, rule policy.Rule, ids []i
 		if err := p.executorBack(ctx, func(c context.Context) error { _, err := p.Executor.ScanDBs(c); return err }); err != nil {
 			return scanned{}, err // never back in the scan's own time: Canyon's own failure, never a finding
 		}
+		res, err = ask() // lost again, it fails the run
 	}
 	var busy *executor.Busy
 	switch {

@@ -27,6 +27,7 @@ import { allows, Outbound, prodPending } from "./Outbound";
 import { Provided } from "./Provided";
 import { SystemLibraries } from "./SystemLibraries";
 import { AppSections } from "./AppSections";
+import { useAdmins } from "./NoAccess";
 import { Secrets } from "./Secrets";
 import { BuildFailure, CopyForAgent, useBroke } from "./BuildFailure";
 import { Progress, progressWords, useProgress } from "./Progress";
@@ -124,6 +125,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
   const [checked, setChecked] = useState<RunRow | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [gone, setGone] = useState(false); // no app has this id: the page says so, with the way back (#102)
+  const admins = useAdmins(gone).join(", "); // and whom to ask if it should be here (#103)
   // A secret production lacks, set from the promotion's question on this page, which stays open while it is (#102).
   const [settingFor, setSettingFor] = useState<{ name: string; env: "prod" } | null>(null);
   const [secretsSet, setSecretsSet] = useState(0);
@@ -693,6 +695,7 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
           <p className="text-base text-text-dim">{S.noApp.replace("<app>", () => id)}{" "}
             <a className="text-link no-underline hover:underline" href="#/fleet">{S.backToFleet}</a></p>
         )}
+        {gone && admins !== "" && <p className="text-base text-text-dim">{S.noAppAdmins.replace("<admins>", () => admins)}</p>}
         {/* The question names the hold it read; the page's newest read, held or not, says when someone else changed it (#2723). */}
         {lifting !== null && <HoldDialog offline={admin || project?.access.level === "owner"} acting={lifting} now={project === null ? undefined : { ...project, hold: status?.hold }} close={() => { setLifting(null); opener.current?.focus(); opener.current = null; void tick.current(); }} />}
         {/* The body waits on the app's row and its status read, one after the other: until they answer, it says so (#2561). */}

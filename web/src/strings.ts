@@ -208,6 +208,11 @@ export const S = {
   groupNamed: "the group <group>",
   noAccessOwner: "<owner> owns <app>. Ask them or a Canyon admin for access.",
   noAccessNoOwner: "Ask a Canyon admin.",
+  // The org's admins by address, to a member, where no access or no app leaves them nobody else to ask (#103):
+  // under the owner's line; in place of noAccessNoOwner; and under noApp. No full stop after an address.
+  noAccessAdmins: "Canyon's admins: <admins>",
+  noAccessNoOwnerAdmins: "Ask an admin for access: <admins>",
+  noAppAdmins: "If it should be here, ask an admin: <admins>",
   noAccessGroup: "Members of the <group> group own <app>. Ask one of them or a Canyon admin for access.",
   accessNow: "You have access to <app> now. Open its link again: it can take up to a minute to reach it.",
   askForAccess: "Ask for access",

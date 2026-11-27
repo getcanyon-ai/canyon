@@ -27,6 +27,11 @@ Everyone else holds, per app, one **level**:
   `provided` resources' endpoints, #2432): contributor and above read them on the project read, the app
   page and `canyon status`; the reduced row below contributor carries no `resources[]`.
 - *Change it*: upload, check, deploy, undeploy, cancel, secrets, and linking a repository (*Link a repository*, below).
+- *Who to ask*: the no-access screen, and an app's page when no app has its name, show a signed-in member the org's
+  admins by address: `admin_emails` and `bootstrap_admins` together, each once, sorted. The preferences read already
+  answers both to every member (contracts/routes.md, the preferences row), so these pages show no one anything new. A
+  person who is not a member reads no address, and with no admin listed by address the pages name none (decided
+  2026-11-27, getcanyon-ai/canyon#103).
 - *Promote* includes approving or denying a production approval, when the org has a person approve
   production in the dashboard (design/AUTH.md §4.5); only a browser session does that, whatever the
   level.

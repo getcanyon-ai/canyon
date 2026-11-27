@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AccessRead, App as AppRead, AuditPage, Earlier, Env, Finding, FleetPage, ImageRead, Need, Package, ProjectEgress, Receipt, RunRead, Secret, Status, TimelineRow } from "../api";
+import type { AccessRead, App as AppRead, AuditPage, Earlier, Env, Finding, FleetPage, ImageRead, Need, Package, Preferences, ProjectEgress, Receipt, RunRead, Secret, Status, TimelineRow } from "../api";
 import { AUTH, LIBRARIES, S } from "../strings";
 import { RailContext } from "../ui/Rail";
 import { forAgent } from "../ui/Finding";
@@ -1264,6 +1264,22 @@ describe("the app page", () => {
     expect(screen.getByRole("link", { name: "Back to the fleet" }).getAttribute("href")).toBe("#/fleet");
     expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("link", { name: "Fleet" }).getAttribute("href")).toBe("#/fleet");
     expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull(); // the rail's menu button is not the page's
+  });
+
+  // #103: a member who opens an app that isn't there is told whom to ask, every admin by address, as the preferences
+  // read answers every member (design/PERMISSIONS.md, *Who to ask*). A person the read refuses, who isn't a member, reads none.
+  it("an unknown app names Canyon's admins to a member, and none to anyone the read refuses", async () => {
+    const member = golden<{ preferences_member: Preferences }>("guardrails/preferences.json").preferences_member;
+    server({ "GET /api/v1/preferences": { body: { ...member, admin_emails: ["dana@meridian.example", "ana@meridian.example"], bootstrap_admins: ["dana@meridian.example"] } } });
+    render(<App id="nope" auth="oidc" />);
+    expect(await screen.findByText("If it should be here, ask an admin: ana@meridian.example, dana@meridian.example")).toBeDefined();
+    expect(screen.queryByRole("link", { name: /@/ })).toBeNull(); // the addresses are text to copy, never mailto links
+    cleanup();
+    server({ "GET /api/v1/preferences": { status: 403, body: { error: "not_a_member" } } });
+    render(<App id="nope" auth="oidc" />);
+    await screen.findByText("There's no app called nope on this Canyon.", { exact: false });
+    await act(async () => {});
+    expect(screen.queryByText(/ask an admin/)).toBeNull();
   });
 
   it("production carries its review only when its run came back clean", async () => {

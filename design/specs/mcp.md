@@ -188,7 +188,8 @@ agent's vendor offers an org-wide way. The address is for cloud agents alone (am
 use `canyon mcp`, which `canyon skill install` sets up, so no rollout that also reaches laptops is offered. Docs ship
 one page per agent (`docs/start/agents/`) with the exact steps. A person may still add the address to an agent on their
 own laptop from the MCP Registry (§8; amended 2026-11-27, getcanyon-ai/canyon#22): that is one person's choice in one
-agent, not a rollout, and the agent gets the cloud agents' tools, which work from a pushed branch.
+agent, not a rollout. It works only with a Canyon that has sign-in on and is served over https, and the agent gets
+the cloud agents' tools, which review and deploy what the person has pushed to GitHub.
 
 | Harness | MCP server, org-managed | Session hook, org-managed |
 |---|---|---|

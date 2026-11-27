@@ -3100,7 +3100,7 @@ describe("who can open it, what it calls out to, and who looks after it", () => 
     const read = { ...base, envs: { preview: { ...base.envs.preview, destinations: calls(5, 2) }, prod: { ...base.envs.prod, destinations: calls(1, 0) } } };
     server({ ...reads(() => page.status), "GET /api/v1/projects/claims-portal/egress": { body: read }, "GET /api/v1/egress": { body: { via: "off" } } });
     render(<App id="claims-portal" auth="oidc" />);
-    const line = await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "5 destinations in the last 30 days · 2 refused on their last call" });
+    const line = await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "5 destinations in the last 30 days · 2 refused" });
     expect(line.className).not.toContain("text-critical"); // red only while a request is refused now
     expect(within(screen.getByRole("region", { name: "Production" })).queryByRole("button", { name: /destinations? in the last 30 days/ })).toBeNull(); // nothing runs there
   });
@@ -3113,7 +3113,7 @@ describe("who can open it, what it calls out to, and who looks after it", () => 
     const read = { ...base, envs: { ...base.envs, preview: { ...base.envs.preview, destinations: calls, requests: refusing } } };
     server({ ...reads(() => page.status), "GET /api/v1/projects/claims-portal/egress": { body: read }, "GET /api/v1/egress": { body: { via: "off" } } });
     const { unmount } = render(<App id="claims-portal" auth="oidc" />);
-    expect((await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "1 destination in the last 30 days · 1 refused on their last call" })).className).toContain("text-critical");
+    expect((await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "1 destination in the last 30 days · 1 refused" })).className).toContain("text-critical");
     unmount();
     // A pending request the read doesn't mark refusing is nothing refused now: the line isn't red.
     const quiet = { ...read, envs: { ...read.envs, preview: { ...read.envs.preview, requests: [{ ...refusing[0]!, refusing: false }] } } };
@@ -3126,6 +3126,28 @@ describe("who can open it, what it calls out to, and who looks after it", () => 
     render(<App id="claims-portal" auth="oidc" />);
     await within(await screen.findByRole("region", { name: "Preview" })).findByText(/^Stopped/);
     expect(within(screen.getByRole("region", { name: "Preview" })).queryByRole("button", { name: /in the last 30 days/ })).toBeNull();
+  });
+
+  // A destination refused in the 30 days counts as refused after a later call to it answered (#246): a call refused under
+  // Allowlist, then allowed by an admin, is the allow's last_refused_at; one with its request still open, the request's.
+  it("counts a destination refused in the last 30 days as refused after a later call answered", async () => {
+    const row = (destination: string) => ({ destination, port: 443, first_seen_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-11T10:00:00Z", calls: 4, last_outcome: "allowed", last_status_class: "2xx", last_protocol: "connect", last_response_flags: [], last_credential_refusal: null });
+    const base = egressOff as unknown as ProjectEgress;
+    const by = { kind: "person", subject: "sub-dana", display: "Dana Whitfield" };
+    const preview = { ...base.envs.preview, mode: "allowlist", allowed: ["api.openai.com", "hooks.example.com"], destinations: [row("api.openai.com"), row("hooks.example.com"), row("registry.npmjs.org"), row("files.example.com")],
+      allows: [{ entry: "api.openai.com", by, at: "2026-10-11T09:45:00Z", last_refused_at: "2026-10-11T09:44:10Z" }, { entry: "hooks.example.com", by, at: "2026-09-01T00:00:00Z", last_refused_at: "2026-09-01T00:00:00Z" }],
+      requests: [{ destination: "files.example.com", state: "pending", first_refused_at: "2026-10-02T00:00:00Z", last_refused_at: "2026-10-02T00:00:00Z", refusals: 2, refusing: false }] };
+    const read = { ...base, envs: { ...base.envs, preview } };
+    server({ ...reads(() => page.status), "GET /api/v1/projects/claims-portal/egress": { body: read }, "GET /api/v1/egress": { body: { via: "off" } } });
+    const { unmount } = render(<App id="claims-portal" auth="oidc" />);
+    // api.openai.com refused before its Allow, files.example.com while it was observed; hooks.example.com refused before the window
+    expect(await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "4 destinations in the last 30 days · 2 refused" })).toBeDefined();
+    unmount();
+    // Refusals older than the window are not counted: none refused.
+    const old = { ...read, envs: { ...read.envs, preview: { ...preview, allows: [preview.allows[1]!], requests: [{ ...preview.requests[0]!, first_refused_at: "2026-09-01T00:00:00Z", last_refused_at: "2026-09-01T00:00:00Z" }] } } };
+    server({ ...reads(() => page.status), "GET /api/v1/projects/claims-portal/egress": { body: old }, "GET /api/v1/egress": { body: { via: "off" } } });
+    render(<App id="claims-portal" auth="oidc" />);
+    expect(await within(await screen.findByRole("region", { name: "Preview" })).findByRole("button", { name: "4 destinations in the last 30 days · none refused" })).toBeDefined();
   });
 
   // A read-only member never learns production is held (design/PERMISSIONS.md): its card never says nothing is there, and

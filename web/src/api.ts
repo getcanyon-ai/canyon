@@ -614,7 +614,9 @@ export type EgressMode = "observe" | "allowlist";
 // org's), its allowlist and its egress requests; the read, the platform destinations every app may call.
 // refusing: the env refuses it now, as the fleet's refused tile counts it (contracts/routes.md; #2723).
 export interface EgressRequest { destination: string; state: "pending" | "dismissed"; first_refused_at: string; last_refused_at: string; refusals: number; refusing?: boolean }
-export interface EgressEnv { via: "off" | "canyon" | null; destinations: EgressDestination[]; mode: EgressMode; app_mode: EgressMode | null; allowed: string[]; requests: EgressRequest[] }
+// Who allowed one entry and when (#2722); last_refused_at the latest refusal of the requests that Allow closed, null for none.
+export interface EgressAllow { entry: string; by: { kind: "person"; subject: string; display: string }; at: string; last_refused_at: string | null }
+export interface EgressEnv { via: "off" | "canyon" | null; destinations: EgressDestination[]; mode: EgressMode; app_mode: EgressMode | null; allowed: string[]; allows: EgressAllow[]; requests: EgressRequest[] }
 export interface ProjectEgress { since: string; floor: "enforced" | "not_enforced" | null; envs: { preview: EgressEnv; prod: EgressEnv }; gaps: EgressGap[]; platform: string[] }
 // The host's egress setting: every member reads via and the org's mode; an admin also the rest (setting_admin).
 export interface EgressReplica { replica: string; have: string | null; seen_at: string; current_at: string | null }

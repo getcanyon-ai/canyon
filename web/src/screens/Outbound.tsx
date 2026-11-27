@@ -37,7 +37,7 @@ const place = (row: EgressDestination) => (row.destination === "invalid" ? S.noH
 // egress.schema.json's `name`), a port other than 80 or 443 — is no allowlist's to allow.
 const MODES = new Set<unknown>(["observe", "allowlist"]);
 const named = (destination: string) => destination !== "invalid" && !/^[0-9]+$/.test(destination.slice(destination.lastIndexOf(".") + 1));
-const allows = (allowed: string[], name: string) => allowed.some((entry) => (entry.startsWith("*.") ? name.endsWith(entry.slice(1)) : entry === name));
+export const allows = (allowed: string[], name: string) => allowed.some((entry) => (entry.startsWith("*.") ? name.endsWith(entry.slice(1)) : entry === name));
 const allowable = (row: EgressDestination, env: EgressEnv, platform: string[]) =>
   named(row.destination) && (row.port === 80 || row.port === 443) && !allows(env.allowed, row.destination) && !platform.includes(row.destination);
 // The rows allowlist would refuse that the env's mode lets through now: its last call went out.

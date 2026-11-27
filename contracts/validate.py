@@ -2323,6 +2323,15 @@ def seam3_policies(snap):
     for label in ("preview", "apply"):
         if doc[label]["rule"] not in {r["id"] for r in snap["rules"]}:
             errors.append(f"policies: the {label} names '{doc[label]['rule']}', which the snapshot does not carry")
+    for problem in unchecked_problems(doc["preview"]):
+        errors.append(f"policies: {problem}")
+    for name, mutate in (("unchecked naming a project would_block counts", lambda p: p["response"]["unchecked"].append("quote-engine")),
+                         ("unchecked out of project order", lambda p: p["response"]["unchecked"].insert(0, "zeta-app")),
+                         ("unchecked on a preview below blocking", lambda p: p["request"].update(state="advisory"))):
+        probe = copy.deepcopy(doc["preview"])
+        mutate(probe)
+        if not unchecked_problems(probe):
+            errors.append(f"selftest: the preview with {name} was not refused")
     states = load(CONTRACTS / "schema" / "snapshot.schema.json")["properties"]["rules"]["items"]["properties"]["state"]["enum"]
     if sorted(states) != sorted(load(schema)["definitions"]["state"]["enum"]):
         errors.append(f"policies: the schema's states are not the snapshot's {sorted(states)}; one vocabulary")
@@ -2399,6 +2408,23 @@ def pipeline_problems(doc, snap):
     return out
 
 
+def unchecked_problems(preview):
+    """routes.md, the policies row: the preview's unchecked is before preview at blocking only, sorted by
+    project id, and never a project would_block names: one its verdict counts was checked (#155)."""
+    out = []
+    unchecked = preview["response"].get("unchecked")
+    if unchecked is None:
+        return out
+    if preview["request"].get("state") != "blocking":
+        out.append("the preview answers unchecked for a request that does not set state blocking")
+    if unchecked != sorted(unchecked):
+        out.append(f"the preview's unchecked {unchecked} is not sorted by project id")
+    counted = {row["project"] for row in preview["response"]["would_block"]}
+    if counted & set(unchecked):
+        out.append(f"the preview's unchecked names {sorted(counted & set(unchecked))}, which would_block counts")
+    return out
+
+
 def seam3_pipeline(snap):
     doc = load(CONTRACTS / "testdata" / "policies" / "meridian.json")
     if not accepts(CONTRACTS / "schema" / "policies.schema.json", doc):
@@ -2426,6 +2452,7 @@ def seam3_pipeline(snap):
                          ("a pending production edit on a go-live row", lambda d: next(r for r in d["policies"]["policies"] if r["id"] == "owner.required").update(scheduled_production={"state": "advisory", "effective_at": "2026-10-16T09:00:00Z"})),
                          ("a pending edit naming both gates in one", lambda d: d["production_scheduled"]["response"]["policy"].setdefault("scheduled_production", {}).update(production="blocking")),
                          ("grace_days on an addition", lambda d: d["app_policy_put"]["request"].update(grace_days=3)),
+                         ("an empty unchecked, which is absent instead", lambda d: d["preview"]["response"].update(unchecked=[])),
                          ("an addition setting run", lambda d: d["app_policy_put"]["request"].update(run=True))):
         probe = copy.deepcopy(doc)
         mutate(probe)

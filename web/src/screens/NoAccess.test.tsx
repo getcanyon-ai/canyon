@@ -7,7 +7,10 @@ import { S } from "../strings";
 import { NoAccess } from "./NoAccess";
 import { Shell } from "./Shell";
 
-const prefs = (JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/guardrails/preferences.json"), "utf8")) as { preferences_admin: Preferences }).preferences_admin;
+const golden = JSON.parse(readFileSync(join(import.meta.dirname, "../../../contracts/testdata/guardrails/preferences.json"), "utf8")) as { preferences_admin: Preferences; preferences_member: Preferences };
+const prefs = golden.preferences_admin;
+// The golden's admins, by address, as the screen names them: the two lists together, each once, sorted (#103).
+const ADMINS = [...new Set([...prefs.admin_emails, ...prefs.bootstrap_admins])].sort().join(", ");
 const dana: Actor = { kind: "person", subject: "dana@meridian.example", display: "Dana Whitfield" };
 const app = (owners: Actor[], groups: string[] = []): Reduced => ({ id: "claims-portal", name: "claims-portal", owners, owner_groups: groups, summary: "File and track motor claims", claimable: false, access: { level: "none" } });
 const ASK = "POST /api/v1/projects/claims-portal/access-requests";
@@ -51,9 +54,33 @@ describe("the no-access screen", () => {
   it("an app with no owner sends the person to a Canyon admin", async () => {
     server({ "GET /api/v1/projects/claims-portal": { body: { project: app([]) } }, [ASK]: { status: 201 } });
     open();
-    expect(await screen.findByText("Ask a Canyon admin.")).toBeDefined();
+    expect(await screen.findByText(`Ask an admin for access: ${ADMINS}`)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: S.askForAccess }));
     expect(await screen.findByText("Asked. A Canyon admin will see your request.")).toBeDefined();
+  });
+
+  // #103: past the owners, a member is told who the admins are, by address, as the preferences read answers every member
+  // (design/PERMISSIONS.md, *Who to ask*): text to copy, never a mailto link. A person the read refuses, who isn't a
+  // member, reads no address, and the screen reads as it did.
+  it("names Canyon's admins to a member, and none to anyone the preferences read refuses", async () => {
+    const reads = (preferences: { status?: number; body?: unknown }) => {
+      const fetch = vi.fn(async (url: string) => {
+        const { status = 200, body } = url === "/api/v1/preferences" ? preferences : url === "/api/v1/projects/claims-portal" ? { body: { project: app([dana]) } } : { status: 404, body: { error: "not_found" } };
+        return { ok: status < 300, status, json: async () => body } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetch);
+    };
+    reads({ body: { ...golden.preferences_member, admin_emails: ["dana@meridian.example", "ana@meridian.example"], bootstrap_admins: ["dana@meridian.example"] } });
+    const member = render(<NoAccess id="claims-portal" auth="oidc" />);
+    expect(await screen.findByText("Dana Whitfield owns claims-portal. Ask them or a Canyon admin for access.")).toBeDefined();
+    expect(await screen.findByText("Canyon's admins: ana@meridian.example, dana@meridian.example")).toBeDefined();
+    expect(screen.queryByRole("link", { name: /@/ })).toBeNull();
+    member.unmount();
+    reads({ status: 403, body: { error: "not_a_member" } });
+    render(<NoAccess id="claims-portal" auth="oidc" />);
+    await screen.findByText("Dana Whitfield owns claims-portal. Ask them or a Canyon admin for access.");
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toContain("/api/v1/preferences"));
+    expect(screen.queryByText(/admins:/)).toBeNull();
   });
 
   it("an app a group owns sends the person to that group, not to an admin", async () => {

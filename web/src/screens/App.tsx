@@ -23,7 +23,7 @@ import { reviewOf, type StageKey } from "../ui/Stage";
 import { approved, blockingEntries, failedAfterReview, TONE, verdict } from "../ui/Verdict";
 import { Access, sharedLine, type Asked } from "./Access";
 import { empty, HoldDialog, lifts, stops, type Acting } from "./HoldDialog";
-import { Outbound, prodPending } from "./Outbound";
+import { allows, Outbound, prodPending } from "./Outbound";
 import { Provided } from "./Provided";
 import { SystemLibraries } from "./SystemLibraries";
 import { AppSections } from "./AppSections";
@@ -608,17 +608,23 @@ export function App({ id, run: pinned = null, auth, outbound = false, secret }: 
       <Button variant="primary" onClick={() => toPutBack(top.band!.back!)}>{S.putBackNamed.replace("<version>", () => top.band!.back!.version)}</Button>
     </span>
   );
-  // What a running environment calls out to, on its card (D15): how many destinations, how many refused on their last call,
-  // the Outbound card a click away; red while one of its requests is refused now (the refused tile's predicate).
+  // What a running environment calls out to, on its card (D15): how many destinations, how many Canyon refused in those 30
+  // days, the Outbound card a click away; red while one of its requests is refused now (the refused tile's predicate).
+  // A destination refused in the window stays refused after a later call answered (#246): its last call refused, or a
+  // request of its name, or an Allow of an entry that holds it, refused since the window opened.
   const calls = (key: "preview" | "prod") => {
     const at = status?.envs[key];
     const read = egress?.envs?.[key];
     const rows = read?.destinations;
     if (at === undefined || waiting(at) || at.state !== "running" || !Array.isArray(rows) || rows.length === 0) return undefined;
-    const refusedLast = rows.filter((row) => row.last_outcome === "refused").length;
-    const now = Array.isArray(read?.requests) && read.requests.some((one) => one.state === "pending" && one.refusing === true);
+    if (!Array.isArray(read!.requests) || !Array.isArray(read!.allows)) return undefined; // unread is never "none refused"
+    const since = Date.parse(egress!.since);
+    const recent = (when: string | null) => when !== null && !(Date.parse(when) < since); // a time Canyon can't read counts
+    const lifted = [...read!.requests.filter((one) => recent(one.last_refused_at)).map((one) => one.destination), ...read!.allows.filter((one) => recent(one.last_refused_at)).map((one) => one.entry)];
+    const refused = rows.filter((row) => row.last_outcome === "refused" || allows(lifted, row.destination)).length;
+    const now = read!.requests.some((one) => one.state === "pending" && one.refusing === true);
     const line = (rows.length === 1 ? S.callsOutOne : S.callsOut.replace("<n>", () => String(rows.length)))
-      + (refusedLast > 0 ? S.callsOutRefused.replace("<n>", () => String(refusedLast)) : S.callsOutNoneRefused);
+      + (refused > 0 ? S.callsOutRefused.replace("<n>", () => String(refused)) : S.callsOutNoneRefused);
     return <button type="button" className={`text-left hover:underline ${now ? "text-critical" : "text-link"}`} onClick={() => document.querySelector<HTMLElement>('section[aria-label="Outbound"]')?.scrollIntoView?.({ block: "start" })}>{line}</button>;
   };
   const me = viewer ?? { display: "", role: admin ? "admin" as const : "member" as const, github_logins: [], github_link: false };

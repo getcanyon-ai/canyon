@@ -814,7 +814,7 @@ export const S = {
   whoLooksAfterNone: "To change it, or if something isn't working, ask a Canyon admin: it has no owner.",
   callsOutOne: "1 destination in the last 30 days",
   callsOut: "<n> destinations in the last 30 days",
-  callsOutRefused: " · <n> refused on their last call",
+  callsOutRefused: " · <n> refused",
   callsOutNoneRefused: " · none refused",
   needsAPerson: "Needs a person",
   modeOwnerAsk: "Ask <owner>, its owner.",

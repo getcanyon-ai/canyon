@@ -926,7 +926,12 @@ func TestPoliciesPreviewNamesWhatNoReviewChecked(t *testing.T) {
 	review("quote-engine") // design.org-system on, nothing of it found
 	do(t, c, http.MethodPost, base+"/api/v1/projects", `{"id":"renewal-reminder"}`)
 	seedVerdict(t, ctx, pool, "renewal-reminder", "gr_unchecked", "design.org-system@medium") // no journal, but its verdict holds the rule
-	audited := count(t, ctx, pool, "SELECT count(*) FROM audit_events")
+	// What the previews write, rows of the trail and edits: never any.
+	written := func() int {
+		t.Helper()
+		return count(t, ctx, pool, "SELECT count(*) FROM audit_events") + count(t, ctx, pool, "SELECT count(*) FROM policy_edits")
+	}
+	before := written()
 	for put, want := range map[string]string{
 		`{"state":"blocking"}`:      `{"unchecked":["claims-portal"],"would_block":[]}`,
 		`{"state":"advisory"}`:      `{"would_block":[]}`,
@@ -936,12 +941,16 @@ func TestPoliciesPreviewNamesWhatNoReviewChecked(t *testing.T) {
 			t.Errorf("the preview of %s: %d %s, want %s", put, code, lastBody, want)
 		}
 	}
-	review("claims-portal") // design.org-system on now
+	if n := written() - before; n != 0 {
+		t.Fatalf("the previews wrote %d row(s)", n)
+	}
+	review("claims-portal") // design.org-system on now; its upload and its run are on the trail, and counted before the preview
+	before = written()
 	if code, _, _ := do(t, c, http.MethodPut, path, `{"state":"blocking"}`); code != 200 || lastBody != `{"would_block":[]}` {
 		t.Fatalf("the preview once every app is reviewed with the rule on: %d %s", code, lastBody)
 	}
-	if n := count(t, ctx, pool, "SELECT count(*) FROM audit_events") - audited; n != 0 {
-		t.Fatalf("the previews wrote %d row(s)", n)
+	if n := written() - before; n != 0 {
+		t.Fatalf("the preview wrote %d row(s)", n)
 	}
 }
 

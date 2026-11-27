@@ -770,13 +770,13 @@ func TestPatchTickSaysWhyNothingWasPlanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := onto + "1 patch run(s) (" + canary + ")" +
-		": 1 not, a rebase of its image onto this run image was refused for good (refused)" +
+		": 1 not, Canyon didn't record the settings its preview was deployed with: deploy it once to patch it (unrecorded)" +
+		"; 1 not, a rebase of its image onto this run image was refused for good (refused)" +
 		"; 1 not, it waits for its wave (" + next + ")" +
 		"; 1 not, its counted findings are in runtimes or build tools, which a rebase does not fix (npm)" +
 		"; 1 not, its image's read could not check (unread)" +
 		"; 1 not, its policy could not be composed (uncomposed)" +
 		"; 1 not, its preview is not running (stopped)" +
-		"; 1 not, its preview was deployed before Canyon recorded its settings: deploy it once to patch it (unrecorded)" +
 		"; 1 not, no counted finding at high or above (low)" +
 		"; 1 not, platform.known-vuln is off (ruleoff)" +
 		"; 1 not, the run image fixes none of its counted findings (nofix)"

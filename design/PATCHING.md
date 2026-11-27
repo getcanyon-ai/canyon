@@ -493,7 +493,7 @@ rescan still reads and matches every running image, and nothing is planned or pa
   before it, or by a retry that found its version running — or whose spec or parts do not read, can only
   fail that proof, `config_changed`, every time. So the plan reads it before it names the app, of a
   preview Canyon runs, and never names it: not as the canary, not in a wave, not for a rebuild. Its cause
-  says what to do: `its preview was deployed before Canyon recorded its settings: deploy it once to
+  says what to do: `Canyon didn't record the settings its preview was deployed with: deploy it once to
   patch it`. Its next deploy records one. The proof itself is unchanged, and still fails such a row.
 - **Each tick says what it planned** (#2575): one server log line naming the run image, the apps whose
   patch runs started, and every other app it read under one cause each: the rule off, no counted

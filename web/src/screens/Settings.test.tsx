@@ -1490,7 +1490,7 @@ describe("Settings › App hosting › Patching", () => {
       "Patched in preview · claims-portal",
       "Waiting for its wave · ledger, zeta",
       "No fix from Canyon for this app's findings yet · intake-forms",
-      "Deployed before Canyon recorded its settings: deploy it once to patch it · case-next-live",
+      "Canyon didn't record the settings its preview was deployed with: deploy it once to patch it · case-next-live",
       "Not patched, for a reason Canyon can't name · quote-engine, proto",
     ]);
     expect(within(causes[2]!).getByRole("link", { name: "intake-forms" }).getAttribute("href")).toBe("#/apps/intake-forms");

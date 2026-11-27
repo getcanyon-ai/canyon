@@ -1081,7 +1081,7 @@ export const PATCHING = {
     stopped: "Its preview isn't running",
     rule_off: "The known-vulnerable packages check is off for it",
     refused: "Canyon can't patch its current image, so its next deploy picks up the fix",
-    no_fingerprint: "Deployed before Canyon recorded its settings: deploy it once to patch it",
+    no_fingerprint: "Canyon didn't record the settings its preview was deployed with: deploy it once to patch it",
     ended_early: "Its watch ended early, so Canyon tries again after its next deploy",
     failed: "The patch failed, so Canyon tries again after its next deploy",
     reverted: "Reverted after the patch, and not tried again with this fix",

@@ -78,6 +78,9 @@ func planRebuilds(ctx context.Context, p *runs.Pipeline, run string, candidates 
 	if err := runningOnly(ctx, p, candidates, said); err != nil {
 		return 0, err
 	}
+	if err := recordedOnly(ctx, p, candidates, said); err != nil {
+		return 0, err
+	}
 	var due []string
 	if err := pgx.BeginFunc(ctx, p.Pool, func(tx pgx.Tx) error {
 		var err error

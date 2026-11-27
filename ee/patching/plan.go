@@ -3,6 +3,7 @@ package patching
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -29,6 +30,7 @@ type planned struct {
 const (
 	whyNoPreview  = "no app has a preview"
 	whyRefused    = "a rebase of its image onto this run image was refused for good"
+	whyNoPrint    = "Canyon didn't record the settings its preview was deployed with: deploy it once to patch it"
 	whyNoDigest   = "its preview's image is not named by digest"
 	whyPolicy     = "its policy could not be composed"
 	whyUnread     = "its image's read could not check"
@@ -96,7 +98,7 @@ func (s planSaid) String() string {
 // the plan read no app, then each app's. A cause not here is unknown, never nothing to do (fail closed).
 var causes = map[string]string{
 	runs.WhyServerOff: "server_off", runs.WhyOrgOff: "org_off", runs.WhyNotWired: "not_wired", whyNoPreview: "no_preview",
-	runs.WhyStarted: "started", whyRefused: "refused", whyNoDigest: "no_digest", whyPolicy: "policy", runs.WhyRuleOff: "rule_off",
+	runs.WhyStarted: "started", whyRefused: "refused", whyNoPrint: "no_fingerprint", whyNoDigest: "no_digest", whyPolicy: "policy", runs.WhyRuleOff: "rule_off",
 	whyUnread: "unread", whyNoFinding: "no_finding", whyNoFix: "no_fix", whyBump: "runtime", whyRunUnread: "run_image_unread",
 	whyStopped: "stopped", whyUnderWay: "under_way", whyWatchedOut: "passed", whyEnded: "ended_early", whyReverted: "reverted",
 	whyNoStart: "failed_start", whyFailed: "failed", whyPaused: "paused", whyWave: "wave", whyStall: "stalled",
@@ -188,6 +190,9 @@ func planTick(ctx context.Context, p *runs.Pipeline, said *planSaid, rebuilds ma
 		return err
 	}
 	if err := runningOnly(ctx, p, plans, said.apps); err != nil {
+		return err
+	}
+	if err := recordedOnly(ctx, p, plans, said.apps); err != nil {
 		return err
 	}
 	var due []string
@@ -285,6 +290,32 @@ func runningOnly(ctx context.Context, p *runs.Pipeline, plans map[string]planned
 		if !slices.Contains(up.Running, executor.Container{App: project, Target: "preview"}) {
 			delete(plans, project)
 			said[project] = whyStopped
+		}
+	}
+	return nil
+}
+
+// recordedOnly leaves in plans the previews whose deploy row recorded what a patch's config check compares against
+// (runs.ConfigRecorded): one that recorded none fails that check every time, so it is never planned, not as the canary
+// nor in a wave (design/PATCHING.md §4.2; #265), and said says to deploy it once. A preview no longer on the image the
+// plan read has moved; one another platform runs is runningOnly's, left as it is.
+func recordedOnly(ctx context.Context, p *runs.Pipeline, plans map[string]planned, said map[string]string) error {
+	for project, pl := range plans {
+		var spec *runs.Egress
+		var parts []byte
+		var fingerprint *string
+		var runBy string
+		err := p.Pool.QueryRow(ctx, "SELECT run_by, egress, run_config, run_config_sha256 FROM deploys WHERE project_id = $1 AND env = 'preview' AND image = $2",
+			project, pl.image).Scan(&runBy, &spec, &parts, &fingerprint)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			delete(plans, project)
+			said[project] = runs.WhyMoved
+		case err != nil:
+			return err
+		case runBy == "canyon" && !runs.ConfigRecorded(spec, parts, fingerprint):
+			delete(plans, project)
+			said[project] = whyNoPrint
 		}
 	}
 	return nil

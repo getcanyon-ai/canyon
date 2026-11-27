@@ -812,7 +812,7 @@ func (a *app) uncheckedBefore(ctx context.Context, q querier, rule string) ([]st
 		if err != nil {
 			return nil, err
 		}
-		if !slices.ContainsFunc(snap.Rules, func(x gatepolicy.Rule) bool { return x.ID == rule && x.On() }) {
+		if slices.ContainsFunc(snap.Rules, func(x gatepolicy.Rule) bool { return x.ID == rule && x.On() }) {
 			out = append(out, v.Project)
 		}
 	}

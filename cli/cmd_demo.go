@@ -347,8 +347,7 @@ func demoMade(ctx context.Context, stack string, transit []string, purge bool) (
 			}
 			return nil
 		}
-		_ = built // PLANTED FAULT (#170 red run): the apps' built images are never looked for
-		steps = append(steps, pulled,
+		steps = append(steps, pulled, built,
 			image(every, "--filter", "reference=canyon-scan/*", "--filter", "reference=canyon-run", "--filter", "reference=canyon-builder"),
 			func() error {
 				return named("volume", func(v string) bool { return strings.HasPrefix(v, "canyon-scandb-") }, "volume", "ls", "-q", "--filter", "dangling=true", "--filter", "name=canyon-scandb-")

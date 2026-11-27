@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -239,6 +241,92 @@ func TestABusyExecutorIsWaitedOutNeverAFinding(t *testing.T) {
 	}
 	if got := progressOf(t, ctx, p, run.ID, "trivy"); !slices.Contains(got, "queued") || got[len(got)-1] != "done" {
 		t.Fatalf("trivy's progress: %q", got)
+	}
+}
+
+// refusing is the executor's transport while it restarts: the first n POST /scan connections are refused — a
+// dial of an address nothing listens on — and, down, every GET /scandb too, an executor not yet back. Every
+// other call reaches the fake.
+type refusing struct {
+	closed string
+	n      atomic.Int32
+	down   bool
+	scans  atomic.Int32 // POST /scan asked, refused or not
+}
+
+func (r *refusing) RoundTrip(req *http.Request) (*http.Response, error) {
+	scan := req.Method == http.MethodPost && req.URL.Path == "/scan"
+	if scan {
+		r.scans.Add(1)
+	}
+	if scan && r.n.Add(-1) >= 0 || r.down && req.URL.Path == "/scandb" {
+		req = req.Clone(req.Context())
+		req.URL.Host = r.closed
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// refuse puts refusing between the run's scans and the fake.
+func refuse(t *testing.T, n int32, down bool) *refusing {
+	t.Helper()
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	r := &refusing{closed: gone.Listener.Addr().String(), down: down}
+	r.n.Store(n)
+	pipe.Executor.HTTP = &http.Client{Transport: r}
+	return r
+}
+
+// A scan whose executor went away under it — its connection refused, as a restart, an upgrade or a reclaimed node
+// leaves it — waits for the executor to answer again and is asked once more, as a build is: the review finishes,
+// and nothing reads as a finding (contracts/executor.md, POST /scan; #248).
+func TestAScanTheExecutorWentAwayUnderIsAskedOnceMore(t *testing.T) {
+	p, ctx, f, snap := scanning(t)
+	r := refuse(t, 1, false)
+	run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state, failure := waitEnded(t, ctx, p, run.ID); state == "failed" {
+		t.Fatalf("a scan the executor went away under: the run ended %s %s in %q", state, why(failure), failedIn(t, ctx, p, run.ID))
+	}
+	if got := notChecked(verdictOf(t, ctx, p, run.ID)); len(got) != 0 {
+		t.Fatalf("a scan asked again became a finding: %q", got)
+	}
+	if r.scans.Load() != 2 || f.Scans.Load() != 1 {
+		t.Fatalf("trivy asked %d time(s), the executor scanned %d: want asked twice, scanned once", r.scans.Load(), f.Scans.Load())
+	}
+	if got := progressOf(t, ctx, p, run.ID, "trivy"); got[len(got)-1] != "done" {
+		t.Fatalf("trivy's progress: %q", got)
+	}
+}
+
+// A scan the executor went away under twice, or that is still away at the scan's deadline, fails the run closed
+// as Canyon's own error in the scan step: never a pass, never a finding to approve (#248).
+func TestAScanTheExecutorStaysAwayFromFailsTheRun(t *testing.T) {
+	was := scanCeiling
+	scanCeiling = 3 * time.Second
+	t.Cleanup(func() { scanCeiling = was })
+	for name, tc := range map[string]struct {
+		refused int32
+		down    bool
+		asked   int32
+	}{
+		"lost twice":       {refused: 2, asked: 2},
+		"not back in time": {refused: 1, down: true, asked: 1},
+	} {
+		p, ctx, f, snap := scanning(t)
+		r := refuse(t, tc.refused, tc.down)
+		run, err := Start(ctx, p, durable, StartInput{Project: project, Package: pkg, Policy: snap})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state, reason := waitEnded(t, ctx, p, run.ID); state != "failed" || why(reason) != "error" || failedIn(t, ctx, p, run.ID) != "scan" {
+			t.Fatalf("%s: the run ended %s %s, want failed error in the scan", name, state, why(reason))
+		}
+		if r.scans.Load() != tc.asked || f.Scans.Load() != 0 {
+			t.Fatalf("%s: trivy asked %d time(s), the executor scanned %d", name, r.scans.Load(), f.Scans.Load())
+		}
 	}
 }
 

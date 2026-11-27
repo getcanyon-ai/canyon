@@ -389,7 +389,7 @@ func (h *headOf) Write(p []byte) (int, error) {
 // rulesTar is opengrep's rules part: the vendored sast-rules at their paths in GitLab's
 // repository, and the org's under org/ when set; over the executor's cap it is tooBig
 // (contracts/finding.md, Canyon-run tools).
-func rulesTar(org map[string][]byte) (io.Reader, error) {
+func rulesTar(org map[string][]byte) ([]byte, error) {
 	vendored, err := opengrep.Rules()
 	if err != nil {
 		return nil, err
@@ -413,7 +413,7 @@ func rulesTar(org map[string][]byte) (io.Reader, error) {
 	if b.Len() > rulesCap {
 		return nil, tooBig
 	}
-	return &b, nil
+	return b.Bytes(), nil
 }
 
 // ruleIDs is the rule ids the files declare. Opengrep runs with --no-rewrite-rule-ids and its SARIF

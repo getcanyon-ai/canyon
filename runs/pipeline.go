@@ -1,6 +1,7 @@
 package runs
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/hmac"
@@ -765,7 +766,7 @@ func (p *Pipeline) scan(ctx context.Context, in Input, rule policy.Rule, ids []i
 	if p.Executor == nil || p.Attach == nil {
 		return scanned{}, errors.New("runs: no executor configured: a run cannot scan with " + tool) // fails the run closed, never a panic in the step
 	}
-	var rules io.Reader // opengrep's rule files: the vendored sast-rules, and the org's repo when set; no other tool takes a part
+	var rules []byte // opengrep's rule files: the vendored sast-rules, and the org's repo when set; no other tool takes a part
 	if tool == "opengrep" {
 		var org map[string][]byte
 		var err error
@@ -790,13 +791,28 @@ func (p *Pipeline) scan(ctx context.Context, in Input, rule policy.Rule, ids []i
 			return scanned{}, err
 		}
 	}
-	tree, err := p.archive(ctx, in)
-	if err != nil {
-		return scanned{}, err
+	req := executor.ScanRequest{App: in.Project, Package: in.Package, Tool: tool,
+		Settings: &executor.ScanSettings{Scanners: s.Scanners, Frameworks: s.Frameworks, SkipChecks: s.SkipChecks, SkipPaths: s.SkipPaths}}
+	ask := func() (executor.ScanResult, error) {
+		tree, err := p.archive(ctx, in)
+		if err != nil {
+			return executor.ScanResult{}, err
+		}
+		defer func() { _ = tree.Close() }()
+		var part io.Reader
+		if rules != nil {
+			part = bytes.NewReader(rules)
+		}
+		return p.Executor.Scan(ctx, req, tree, part)
 	}
-	defer func() { _ = tree.Close() }()
-	res, err := p.Executor.Scan(ctx, executor.ScanRequest{App: in.Project, Package: in.Package, Tool: tool,
-		Settings: &executor.ScanSettings{Scanners: s.Scanners, Frameworks: s.Frameworks, SkipChecks: s.SkipChecks, SkipPaths: s.SkipPaths}}, tree, rules)
+	res, err := ask()
+	var lost *executor.Gone
+	if errors.As(err, &lost) && ctx.Err() == nil { // the executor went away under the scan (#248): once it is back, the same scan once more
+		if err := p.executorBack(ctx, func(c context.Context) error { _, err := p.Executor.ScanDBs(c); return err }); err != nil {
+			return scanned{}, err // never back in the scan's own time: Canyon's own failure, never a finding
+		}
+		res, err = ask() // lost again, it fails the run
+	}
 	var busy *executor.Busy
 	switch {
 	case errors.As(err, &busy):
@@ -1040,11 +1056,11 @@ func (p *Pipeline) prepared(ctx context.Context, in Input, waited time.Duration)
 // package's build failing.
 const BuilderRestarting = "Canyon is restarting its builder: the build starts again once it is back."
 
-// builderBack waits for the executor to answer GET /builder again, every two seconds, for as long as ctx
-// lets it: the build step's own deadline fails the run as before.
-func (p *Pipeline) builderBack(ctx context.Context) error {
+// executorBack waits for the executor to answer call again — GET /builder for a build, GET /scandb for a
+// scan — every two seconds, for as long as ctx lets it: the step's own deadline fails the run as before.
+func (p *Pipeline) executorBack(ctx context.Context, call func(context.Context) error) error {
 	for {
-		if _, err := p.Executor.BuilderImage(ctx); err == nil {
+		if call(ctx) == nil {
 			return nil
 		}
 		select {
@@ -1124,7 +1140,7 @@ func (p *Pipeline) build(ctx context.Context, in Input) (built, error) {
 		if err := row(ctx, BuilderRestarting); err != nil {
 			return built{}, err
 		}
-		if err := p.builderBack(ctx); err != nil {
+		if err := p.executorBack(ctx, func(c context.Context) error { _, err := p.Executor.BuilderImage(c); return err }); err != nil {
 			return built{}, err
 		}
 		_ = pr.Close()

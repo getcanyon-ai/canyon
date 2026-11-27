@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -746,6 +747,58 @@ func TestOnlyPlatformsImageGoneIsNoImage(t *testing.T) {
 		srv.Close()
 		if err == nil || errors.Is(err, ErrNoImage) != tc.gone {
 			t.Errorf("%s: %v, want the image gone %v", tc.name, err, tc.gone)
+		}
+	}
+}
+
+// A scan the executor went away under — the connection refused, its dial timed out, the connection closed before
+// an answer, or the answer cut short — is Gone, which a run's scan asks once more (#248); a scan the executor
+// answered, an error or SARIF it cannot read, never is.
+func TestAScanTheExecutorWentAwayUnderIsGone(t *testing.T) {
+	scan := func(c *Client) error {
+		_, err := c.Scan(t.Context(), ScanRequest{App: "claims-portal", Package: "pkg_7d3e8f", Tool: "trivy"},
+			bytes.NewReader(tarOf(t, map[string]string{"a": "1"})), nil)
+		return err
+	}
+	answering := func(status int, body string, cut bool) *Client {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			if status != 0 {
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, body)
+				w.(http.Flusher).Flush()
+			}
+			if cut {
+				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+					_ = conn.Close()
+				}
+			}
+		}))
+		t.Cleanup(srv.Close)
+		return &Client{Base: srv.URL}
+	}
+	refused := httptest.NewServer(http.NotFoundHandler())
+	refused.Close()
+	timedOut := &http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded} // what the dialer's own timeout answers: dial tcp …: i/o timeout
+	}}}
+	var g *Gone
+	for name, c := range map[string]*Client{
+		"the connection refused":                 {Base: refused.URL},
+		"the dial timed out":                     {Base: "http://canyon-executor.canyon.svc:7778", HTTP: timedOut},
+		"the connection closed before an answer": answering(0, "", true),
+		"the answer cut short":                   answering(http.StatusOK, `{"tool":"trivy","sarif":{"version"`, true),
+	} {
+		if err := scan(c); !errors.As(err, &g) {
+			t.Errorf("%s: %v, want Gone", name, err)
+		}
+	}
+	for name, c := range map[string]*Client{
+		"an error answered":          answering(http.StatusInternalServerError, `{"error":"the daemon did not answer"}`, false),
+		"an answer that is not JSON": answering(http.StatusOK, "<html>", false),
+	} {
+		if err := scan(c); err == nil || errors.As(err, &g) {
+			t.Errorf("%s: %v, want an error that is not Gone", name, err)
 		}
 	}
 }

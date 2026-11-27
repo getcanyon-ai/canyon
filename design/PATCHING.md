@@ -702,12 +702,15 @@ live container to watch between runs); the tag cleanup keeps every image a deplo
   `npm 10.8.2 → 10.9.x`): Actions cannot open pull requests in this repository by design, and a
   person's PR runs its checks as any other (decided 2026-11-02, #2114). An open issue for the same pins is updated, never
   a second. This is how Node and Python security releases, which trivy cannot see (§2), still reach
-  Canyon on a schedule, except for the Python of an app built with uv. An operator moves faster with
+  Canyon on a schedule, except for the Python of an app built with uv (below). An operator moves faster with
   `CANYON_BUILDER` and `CANYON_IMAGE_RUN`.
-- **A uv app's Python is uv's choice** (#160). uv chooses and downloads CPython itself during the build: the newest
-  its own version knows that the app's `requires-python` allows, fetched from outside the pinned images (3.15.2, where
-  a pipenv app on the same builder got the builder's 3.11.18). So a bump moves that Python only as far as a newer uv
-  knows a newer one, and a rebuild of unchanged code can get another. Having uv use the builder's CPython is #210.
+- **A uv app's Python is the one uv downloads** (#160; decided 2026-11-27, #210: uv's download stays). uv chooses and
+  downloads CPython itself during the build, from outside the pinned images: the newest its own version knows that the
+  app's `requires-python` or `.python-version` allows (3.15.2, where a pipenv app on the same builder got the builder's
+  3.11.18). The pins install no CPython for a uv app to use instead: Paketo's uv group takes the `cpython` buildpack
+  only for an app with a `vendor` directory, and the build image has no Python of its own, so with uv's download off
+  uv would have nothing to build on. So a bump does not move that Python, and a rebuild brings its patches: a rebuild,
+  of unchanged code too, gets the newest release uv knows within what the app allows.
 - **Which .NET line an app builds on is the app's own** (#159): the `TargetFramework` its project file names. Paketo's
   default line (`8.*`) is used only where nothing names one, so for an app built from a project file it decides
   nothing. Canyon builds every line its pins carry, one past its vendor's support date too (.NET 8 and 9 since

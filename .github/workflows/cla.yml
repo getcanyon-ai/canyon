@@ -34,9 +34,10 @@ jobs:
         (github.event.comment.body == 'recheck' ||
          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA')))
     runs-on: ubuntu-24.04
-    # A pull request's comment runs take turns, one at a time; a pull request's own runs each go at once.
+    # A group holds one pending run, and a newer one cancels it. A pull request's rechecks take turns; each sign
+    # comment and each pull request run has a group of its own, so nothing cancels a signature waiting to be written.
     concurrency:
-      group: ${{ github.event_name == 'issue_comment' && format('cla-comment-{0}', github.event.issue.number) || format('cla-{0}', github.run_id) }}
+      group: ${{ github.event_name == 'issue_comment' && github.event.comment.body == 'recheck' && format('cla-recheck-{0}', github.event.issue.number) || github.event_name == 'issue_comment' && format('cla-sign-{0}', github.event.comment.id) || format('cla-{0}', github.run_id) }}
     steps:
       # GITHUB_SHA: the default branch's commit, on pull_request_target as on issue_comment, whatever the base.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, node24

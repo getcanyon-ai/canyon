@@ -169,25 +169,20 @@ func check(gh *github, name string, raw []byte) error {
 		log.Printf("#%d: comment %d is by %s, who neither opened the pull request nor wrote a commit of it: nothing to do", number, ev.Comment.ID, ev.Comment.User.Login)
 		return nil
 	}
-	signed, sha, exists, err := gh.signatures()
+	signed, _, _, err := gh.signatures()
 	if err != nil {
 		return err
 	}
 	missing := unsigned(authors, signed)
 	if ev.Comment != nil && strings.TrimSpace(ev.Comment.Body) == sentence {
-		for i, a := range missing {
-			if a.account == nil || a.account.ID != ev.Comment.User.ID {
-				continue
-			}
-			signed.SignedContributors = append(signed.SignedContributors, signature{
-				Name: a.account.Login, ID: a.account.ID, CommentID: ev.Comment.ID, CreatedAt: ev.Comment.CreatedAt,
+		if i := slices.IndexFunc(missing, func(a author) bool { return a.account != nil && a.account.ID == ev.Comment.User.ID }); i >= 0 {
+			if signed, err = gh.sign(signature{
+				Name: missing[i].account.Login, ID: missing[i].account.ID, CommentID: ev.Comment.ID, CreatedAt: ev.Comment.CreatedAt,
 				RepoID: ev.Repository.ID, PullRequestNo: number,
-			})
-			if err := gh.sign(signed, sha, exists, fmt.Sprintf("%s has signed the CLA in #%d", a.account.Login, number)); err != nil {
+			}); err != nil {
 				return err
 			}
-			missing = append(missing[:i], missing[i+1:]...)
-			break
+			missing = unsigned(authors, signed)
 		}
 	}
 	if err := gh.comment(number, body(missing, pr.User.ID), len(missing) == 0); err != nil {
@@ -381,12 +376,37 @@ func (g *github) signatures() (signatures, string, bool, error) {
 	return s, f.SHA, true, nil
 }
 
-// sign writes cla.json over the blob it read: a signature written in between makes GitHub refuse it, and the
-// check fails rather than drop one. With no branch yet, it makes the branch, a commit holding cla.json alone.
-func (g *github) sign(s signatures, sha string, exists bool, message string) error {
+// sign adds one signature to cla.json and returns the file it wrote. It writes over the blob it read, so a
+// signature another run wrote in between makes GitHub refuse the write (409, or 422 for a branch made in between):
+// it reads the file again and writes once more, a few times, then fails rather than drop one.
+func (g *github) sign(sig signature) (signatures, error) {
+	for try := 1; ; try++ {
+		s, sha, exists, err := g.signatures()
+		if err != nil {
+			return s, err
+		}
+		if slices.ContainsFunc(s.SignedContributors, func(x signature) bool { return x.ID == sig.ID }) {
+			return s, nil
+		}
+		s.SignedContributors = append(s.SignedContributors, sig)
+		status, err := g.write(s, sha, exists, fmt.Sprintf("%s has signed the CLA in #%d", sig.Name, sig.PullRequestNo))
+		if err == nil {
+			return s, nil
+		}
+		if status != http.StatusConflict && status != http.StatusUnprocessableEntity || try == tries {
+			return s, err
+		}
+		log.Printf("%v; reading %s again in %s", err, file, lag)
+		time.Sleep(lag)
+	}
+}
+
+// write writes cla.json over the blob sha it read. With no branch yet, it makes the branch: a commit with no
+// parent, holding cla.json alone.
+func (g *github) write(s signatures, sha string, exists bool, message string) (int, error) {
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	raw = append(raw, '\n')
 	if !exists {
@@ -394,21 +414,19 @@ func (g *github) sign(s signatures, sha string, exists bool, message string) err
 			SHA string `json:"sha"`
 		}
 		entry := map[string]string{"path": file, "mode": "100644", "type": "blob", "content": string(raw)}
-		if _, err := g.call(http.MethodPost, "git/trees", map[string]any{"tree": []any{entry}}, &tree); err != nil {
-			return err
+		if status, err := g.call(http.MethodPost, "git/trees", map[string]any{"tree": []any{entry}}, &tree); err != nil {
+			return status, err
 		}
-		if _, err := g.call(http.MethodPost, "git/commits", map[string]any{"message": message, "tree": tree.SHA, "parents": []string{}}, &commit); err != nil {
-			return err
+		if status, err := g.call(http.MethodPost, "git/commits", map[string]any{"message": message, "tree": tree.SHA, "parents": []string{}}, &commit); err != nil {
+			return status, err
 		}
-		_, err := g.call(http.MethodPost, "git/refs", map[string]string{"ref": "refs/heads/" + branch, "sha": commit.SHA}, nil)
-		return err
+		return g.call(http.MethodPost, "git/refs", map[string]string{"ref": "refs/heads/" + branch, "sha": commit.SHA}, nil)
 	}
 	put := map[string]string{"message": message, "branch": branch, "content": base64.StdEncoding.EncodeToString(raw)}
 	if sha != "" {
 		put["sha"] = sha
 	}
-	_, err = g.call(http.MethodPut, "contents/"+file, put, nil)
-	return err
+	return g.call(http.MethodPut, "contents/"+file, put, nil)
 }
 
 // comment writes the check's comment: a new one while someone has yet to sign, and an edit of its own, by

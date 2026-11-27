@@ -68,10 +68,12 @@ func TestTheCLACheckSkipsNobodyByAName(t *testing.T) {
 		}
 	}
 	if !slices.Contains(wf.On.PullRequestTarget.Types, "edited") {
-		t.Error("the check does not run on edited: a pull request opened into another branch, then moved to main, keeps that branch's verdict")
+		t.Error("the check does not run on edited: a pull request moved to main from another base keeps the red it had there")
 	}
-	if !strings.Contains(job.Concurrency.Group, "format('cla-comment-{0}', github.event.issue.number)") {
-		t.Errorf("a pull request's comment runs do not take turns: concurrency group %q", job.Concurrency.Group)
+	// A group holds one pending run, and a newer one cancels it: rechecks share a pull request's group, and each
+	// sign comment has its own, so no comment can cancel a signature waiting to be written.
+	if g := job.Concurrency.Group; !strings.Contains(g, "format('cla-recheck-{0}', github.event.issue.number)") || !strings.Contains(g, "format('cla-sign-{0}', github.event.comment.id)") {
+		t.Errorf("want a pull request's rechecks to take turns and each sign comment in a group of its own: concurrency group %q", g)
 	}
 	if strings.Contains(job.If, "github.actor") || strings.Contains(job.If, "author") {
 		t.Errorf("the cla job's if names an actor or an author, which a pull request can change: %s", job.If)
@@ -108,6 +110,8 @@ type fakeGitHub struct {
 	short     int    // reads of the commits that still miss the head
 	shorting  bool
 	signed    *signatures // nil: no cla.json yet
+	blob      int         // cla.json's version: its sha is blob<n>
+	race      []*user     // signatures another run writes, one before each write of this one's
 	noBranch  bool        // no cla-signatures branch yet
 	broken    bool        // cla.json's read answers 500
 	created   []string    // the branch made: its tree's paths, then its commit's parents
@@ -125,6 +129,7 @@ func (f *fakeGitHub) serve(t *testing.T) *github {
 	f.commits[len(f.commits)-1-f.headAt].SHA = head
 	f.count = len(f.commits)
 	f.opener = cmp.Or(f.opener, alice)
+	f.blob = max(f.blob, 1)
 	f.base = cmp.Or(f.base, "main")
 	mux := http.NewServeMux()
 	page := func(r *http.Request) (int, int) {
@@ -208,7 +213,7 @@ func (f *fakeGitHub) serve(t *testing.T) *github {
 			http.NotFound(w, r)
 		default:
 			raw, _ := json.Marshal(f.signed)
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob1", "content": base64.StdEncoding.EncodeToString(raw)})
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": fmt.Sprintf("blob%d", f.blob), "content": base64.StdEncoding.EncodeToString(raw)})
 		}
 	})
 	mux.HandleFunc("PUT /repos/o/r/contents/"+file, func(w http.ResponseWriter, r *http.Request) {
@@ -220,6 +225,16 @@ func (f *fakeGitHub) serve(t *testing.T) *github {
 			t.Errorf("cla.json written as %q to %q", raw, put["branch"])
 		}
 		f.written, f.writeSHA = append(f.written, s), append(f.writeSHA, put["sha"])
+		if len(f.race) > 0 { // another run's signature lands first
+			f.signed = cmp.Or(f.signed, &signatures{})
+			f.signed.SignedContributors = append(f.signed.SignedContributors, signature{Name: f.race[0].Login, ID: f.race[0].ID})
+			f.race, f.blob = f.race[1:], f.blob+1
+		}
+		if f.signed != nil && put["sha"] != fmt.Sprintf("blob%d", f.blob) {
+			http.Error(w, `{"message": "is at blob, but expected another"}`, http.StatusConflict)
+			return
+		}
+		f.signed, f.blob = &s, f.blob+1
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, "{}")
 	})
@@ -480,5 +495,28 @@ func TestWhatTheCheckCannotReadKeepsItRed(t *testing.T) {
 	}
 	if err := check(gh, "push", opened()); err == nil {
 		t.Error("an event the check does not read passed")
+	}
+}
+
+// Two runs can sign at once: GitHub refuses the write over a blob that moved on, and the check reads the file again
+// and writes its signature over the new one, a few times, then fails.
+func TestASignatureWrittenInBetweenIsKeptAndTheWriteTriedAgain(t *testing.T) {
+	f := &fakeGitHub{signed: signedBy(alice), runStatus: "completed", race: []*user{carol}}
+	f.add(1, alice, "alice", "a@example.com")
+	f.add(1, bob, "bob", "b@example.com")
+	if err := check(f.serve(t), "issue_comment", commented(bob, sentence)); err != nil {
+		t.Fatalf("bob signs while carol does: %v", err)
+	}
+	var ids []int64
+	for _, s := range f.signed.SignedContributors {
+		ids = append(ids, s.ID)
+	}
+	if !slices.Equal(ids, []int64{alice.ID, carol.ID, bob.ID}) || !slices.Equal(f.writeSHA, []string{"blob1", "blob2"}) {
+		t.Errorf("cla.json holds %v, written over %q: want alice, carol and bob, the second write over blob2", ids, f.writeSHA)
+	}
+	f = &fakeGitHub{signed: signedBy(alice), runStatus: "completed", race: slices.Repeat([]*user{carol}, tries)}
+	f.add(1, bob, "bob", "b@example.com")
+	if err := check(f.serve(t), "issue_comment", commented(bob, sentence)); err == nil || errors.Is(err, errUnsigned) || len(f.writeSHA) != tries {
+		t.Errorf("every write refused: got %v after %d writes, want the check failed after %d", err, len(f.writeSHA), tries)
 	}
 }

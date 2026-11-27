@@ -613,7 +613,7 @@ func feedTar(w io.Writer, req executor.ScanRequest, tool executor.Tool, parts *m
 	if err := tw.WriteHeader(&tar.Header{Name: "tree/", Typeflag: tar.TypeDir, Mode: 0o755}); err != nil { // an empty package is still a tree, as on Docker
 		return err
 	}
-	if err := copyTree(p, tw, "tree/", skip); err != nil {
+	if err := copyTree(p, tw, "tree/", skip, nil); err != nil {
 		return fmt.Errorf("%w: tree: %v", executor.ErrRequest, err)
 	}
 	switch p, err := parts.NextPart(); {
@@ -622,7 +622,7 @@ func feedTar(w io.Writer, req executor.ScanRequest, tool executor.Tool, parts *m
 		return fmt.Errorf("%w: after tree, opengrep takes part rules and no other tool takes a part", executor.ErrRequest)
 	default:
 		rules := &countingReader{r: io.LimitReader(p, executor.MaxRules+1)} // counted, not cut: a cut on a block boundary reads as a shorter archive
-		err := copyTree(rules, tw, "rules/", nil)
+		err := copyTree(rules, tw, "rules/", nil, nil)
 		if _, _ = io.Copy(io.Discard, rules); rules.n > executor.MaxRules {
 			return fmt.Errorf("%w: rules exceed %d bytes", executor.ErrRequest, executor.MaxRules)
 		}

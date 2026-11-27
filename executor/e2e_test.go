@@ -84,6 +84,22 @@ func TestEndToEndATreeNoBuildpackDetectsIsAFailedDetect(t *testing.T) {
 	}
 }
 
+// #242's app on the real builder: a static site pinning nginx with BP_NGINX_VERSION and no buildpack.yml, which
+// paketo-buildpacks/nginx 1.3.8 errors on while detecting. The answer is the contract's line saying what to change,
+// never a host that doesn't build it. Red after a web-servers bump that builds it means the buildpack reads the
+// variable alone now, and the line and its check go.
+func TestEndToEndANginxVersionWithoutBuildpackYmlSaysWhatToChange(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	e := &Executor{Join: []string{}}
+	defer exec.Command("docker", "volume", "rm", "-f", names.CacheVolume("nginx-pinned", "build"), names.CacheVolume("nginx-pinned", "launch")).Run()
+	var log bytes.Buffer
+	_, err := e.Build(ctx, BuildRequest{App: "nginx-pinned", Package: "pkg_e2e0"}, bytes.NewReader(tarOf(t, map[string]string{"public/index.html": "<p>hi</p>\n", "project.toml": pinnedNginx})), &log)
+	if err == nil || err.Error() != NginxWithoutYml || !strings.Contains(log.String(), "/workspace/buildpack.yml") {
+		t.Fatalf("#242's app: %#v\n%s", err, tail(log.String(), 40))
+	}
+}
+
 // TestEndToEndBuildsAndServesAStaticSPA builds executor/testdata/apps/vite-spa, a stock Vite React app
 // carrying the project.toml cli/skill/canyon.md gives a static single-page app, and serves what its build
 // wrote: / is the index.html vite build emitted, and a client-side route answers it too.

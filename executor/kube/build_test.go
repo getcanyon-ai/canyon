@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -171,6 +172,25 @@ func tarOf(t *testing.T, entries ...*tar.Header) []byte {
 	return b.Bytes()
 }
 
+// files is a tar of each name's body, in name order.
+func files(t *testing.T, bodies map[string]string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	tw := tar.NewWriter(&b)
+	for _, name := range slices.Sorted(maps.Keys(bodies)) {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(bodies[name]))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(tw, bodies[name]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
 func tree(t *testing.T) []byte {
 	return tarOf(t, &tar.Header{Name: "src/", Typeflag: tar.TypeDir, Mode: 0o755}, &tar.Header{Name: "src/package.json", Typeflag: tar.TypeReg, Mode: 0o644, Size: 2})
 }
@@ -249,7 +269,7 @@ func TestEveryBuildRunsWithTheExecutorsOwnVariables(t *testing.T) {
 // or an escape is refused, and nothing is pushed for it.
 func TestTheSourceImageIsTheCheckedTree(t *testing.T) {
 	e, _, _ := kpackCluster(t, "True", "")
-	src, err := e.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t)))
+	src, _, err := e.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +319,7 @@ func TestTheSourceImageIsTheCheckedTree(t *testing.T) {
 func refusedAndNotPushed(t *testing.T, e *Executor, label string, tree []byte) {
 	t.Helper()
 	run := fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(label)))
-	if _, err := e.pushSource(t.Context(), "claims-portal", run, bytes.NewReader(tree)); err == nil {
+	if _, _, err := e.pushSource(t.Context(), "claims-portal", run, bytes.NewReader(tree)); err == nil {
 		t.Errorf("%s was pushed", label)
 	}
 	tag, err := name.NewTag(e.Registry + "/canyon/claims-portal:src-" + run)
@@ -371,11 +391,17 @@ func TestABuildWhosePodIsGoneAnswersAtOnce(t *testing.T) {
 // the ClusterBuilder builds, from its status.order, each buildpack by the metadata label of its image,
 // read from the executor's registry; never a failed build (contracts/executor.md, /build; #1242). An image
 // that cannot be read, elsewhere or without the label, leaves each buildpack its id. Any other step
-// failing, or detect failing otherwise, is the build's failure as before.
+// failing, or detect failing otherwise, is the build's failure as before. A detect exiting 21 on a tree
+// that pins nginx with BP_NGINX_VERSION and has no buildpack.yml is the contract's line instead, read from
+// the tree as it streamed (But a detect the nginx buildpack errored on; #242).
 func TestAFailedDetectNamesWhatTheClusterBuilderBuilds(t *testing.T) {
 	named := []string{"Paketo Buildpack for Ruby", "Paketo Buildpack for Node.js"}
 	ids := []string{"paketo-buildpacks/ruby", "paketo-buildpacks/nodejs"}
 	meta := `{"buildpacks":[{"id":"paketo-buildpacks/nodejs","name":"Paketo Buildpack for Node.js","version":"10.13.0"},{"id":"paketo-buildpacks/ruby","name":"Paketo Buildpack for Ruby","version":"3.1.1"}]}`
+	project := "[_]\nschema-version = \"0.2\"\n\n[[io.buildpacks.build.env]]\nname = \"BP_WEB_SERVER\"\nvalue = \"nginx\"\n\n" +
+		"[[io.buildpacks.build.env]]\nname = \"BP_NGINX_VERSION\"\nvalue = \"1.30.*\"\n"
+	pinned := files(t, map[string]string{"./project.toml": project, "public/index.html": "<p>hi</p>\n"})
+	withYml := files(t, map[string]string{"./project.toml": project, "public/index.html": "<p>hi</p>\n", "buildpack.yml": "nginx:\n  version: 1.30.*\n"})
 	for _, c := range []struct {
 		step    string
 		code    int32
@@ -383,14 +409,18 @@ func TestAFailedDetectNamesWhatTheClusterBuilderBuilds(t *testing.T) {
 		unread  bool     // status.order is not an order: the failed detect names none
 		builds  []string // nil: not a failed detect
 		errored bool
+		tree    []byte // nil: tree(t)
 	}{
-		{"detect", 21, meta, false, named, true},
-		{"detect", 20, meta, false, named, false},
-		{"detect", 20, "elsewhere", false, ids, false},
-		{"detect", 20, "-", false, ids, false},
-		{"detect", 20, meta, true, []string{}, false},
-		{"detect", 1, meta, false, nil, false},
-		{"build", 51, meta, false, nil, false},
+		{"detect", 21, meta, false, named, true, nil},
+		{"detect", 20, meta, false, named, false, nil},
+		{"detect", 20, "elsewhere", false, ids, false, nil},
+		{"detect", 20, "-", false, ids, false, nil},
+		{"detect", 20, meta, true, []string{}, false, nil},
+		{"detect", 1, meta, false, nil, false, nil},
+		{"build", 51, meta, false, nil, false, nil},
+		{"detect", 21, meta, false, nil, false, pinned},
+		{"detect", 20, meta, false, named, false, pinned},
+		{"detect", 21, meta, false, named, true, withYml},
 	} {
 		e, dc, _ := kpackCluster(t, "False", "Build failed")
 		cb, err := dc.Resource(clusterBuilderGVR).Get(t.Context(), "canyon", metav1.GetOptions{})
@@ -431,10 +461,16 @@ func TestAFailedDetectNamesWhatTheClusterBuilderBuilds(t *testing.T) {
 			p.Status.Phase = corev1.PodFailed
 			return true, p, nil
 		})
-		_, err = e.Build(t.Context(), executor.BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f"}, bytes.NewReader(tree(t)), io.Discard)
+		src := c.tree
+		if src == nil {
+			src = tree(t)
+		}
+		_, err = e.Build(t.Context(), executor.BuildRequest{App: "claims-portal", Package: "pkg_7d3e8f"}, bytes.NewReader(src), io.Discard)
 		var undetected *executor.Undetected
 		switch {
-		case c.builds == nil && (err == nil || errors.As(err, &undetected) || err.Error() != fmt.Sprintf("the %s step exited %d", c.step, c.code)):
+		case c.builds == nil && c.tree != nil && (err == nil || err.Error() != executor.NginxWithoutYml):
+			t.Fatalf("detect exiting %d on a tree pinning nginx without buildpack.yml: %#v, want %q", c.code, err, executor.NginxWithoutYml)
+		case c.builds == nil && c.tree == nil && (err == nil || errors.As(err, &undetected) || err.Error() != fmt.Sprintf("the %s step exited %d", c.step, c.code)):
 			t.Fatalf("%s exiting %d is the build's failure: %v", c.step, c.code, err)
 		case c.builds != nil && (!errors.As(err, &undetected) || undetected.Builds == nil || !slices.Equal(undetected.Builds, c.builds) || undetected.Errored != c.errored):
 			t.Fatalf("%s exiting %d, builder image %.20q: %#v, want a failed detect naming %q, errored %v", c.step, c.code, c.image, err, c.builds, c.errored)
@@ -529,7 +565,7 @@ func TestImagesAreOfThisRegistryAlone(t *testing.T) {
 		t.Fatalf("another host was asked %d times", n)
 	}
 	dotless := &Executor{Registry: "registry"}
-	if _, err := dotless.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t))); err == nil || !strings.Contains(err.Error(), "CANYON_KUBE_REGISTRY") {
+	if _, _, err := dotless.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t))); err == nil || !strings.Contains(err.Error(), "CANYON_KUBE_REGISTRY") {
 		t.Fatalf("a dotless registry: %v", err)
 	}
 }
@@ -537,7 +573,7 @@ func TestImagesAreOfThisRegistryAlone(t *testing.T) {
 // At start the executor deletes every Build labelled canyon.build a crash left, and its source image.
 func TestSweepBuildsDeletesWhatACrashLeft(t *testing.T) {
 	e, dc, _ := kpackCluster(t, "True", "")
-	src, err := e.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t)))
+	src, _, err := e.pushSource(t.Context(), "claims-portal", "abcd1234", bytes.NewReader(tree(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

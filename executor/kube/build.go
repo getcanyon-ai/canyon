@@ -170,7 +170,7 @@ func (e *Executor) Build(ctx context.Context, req executor.BuildRequest, tree io
 		return executor.BuildResult{}, &executor.HostFailed{Message: err.Error()}
 	}
 	run := nonce()
-	src, err := e.pushSource(ctx, req.App, run, tree)
+	src, saw, err := e.pushSource(ctx, req.App, run, tree)
 	if err != nil {
 		return executor.BuildResult{}, err
 	}
@@ -209,7 +209,11 @@ func (e *Executor) Build(ctx context.Context, req executor.BuildRequest, tree io
 		return executor.BuildResult{Image: image, DurationMS: time.Since(start).Milliseconds(), Buildpacks: ran(cur)}, nil
 	default:
 		if pod, _, _ := unstructured.NestedString(cur.Object, "status", "podName"); pod != "" {
-			if status := e.detected(ctx, pod); status == 20 || status == 21 {
+			status := e.detected(ctx, pod)
+			if status == 21 && saw.nginxWantsYml(req.BuildValues) { // the app's to change (#242)
+				return executor.BuildResult{}, errors.New(executor.NginxWithoutYml)
+			}
+			if status == 20 || status == 21 {
 				return executor.BuildResult{}, &executor.Undetected{Builds: e.builds(ctx, cb, builder), Errored: status == 21}
 			}
 		}

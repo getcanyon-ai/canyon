@@ -724,6 +724,9 @@ func (e *Executor) buildOn(ctx context.Context, req BuildRequest, dir string, ou
 		var exit *exec.ExitError // only a pack that exited on its own says how detection went: never one a signal or the ceiling killed
 		status, said := strings.CutPrefix(last.String(), lifecycleFailed)
 		said = said && errors.As(err, &exit) && exit.Exited() && ctx.Err() == nil
+		if said && status == "21" && !node && nginxWantsYmlIn(dir, req.BuildValues) { // the app's to change (#242)
+			return BuildResult{}, errors.New(NginxWithoutYml)
+		}
 		if said && (status == "20" || status == "21") {
 			return BuildResult{}, &Undetected{Builds: e.builds(ctx, builder), Errored: status == "21"} // the Node builder's log is dropped: canyon-builder decides
 		}

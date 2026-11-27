@@ -25,7 +25,7 @@ import (
 // stopped (#2271). Left at DBOS's default, a hash of the binary, every build would be a version of its
 // own. handOver moves queued work across versions. DBOS__APPVERSION and DBOS__VMID in the environment
 // would override this and the executor id; neither is ever set for the server.
-const durableVersion = "canyon-v13"
+const durableVersion = "canyon-v12"
 
 // workflowSets records, sorted, the workflows each application version names; a recorded set never
 // changes. Launch refuses a server whose workflows are not its version's set.
@@ -48,10 +48,6 @@ var workflowSets = map[string][]string{
 	// rebuild patch queued or under way then fails on it with nothing deployed, so let rebuild patches end before rolling
 	// back (#2117)
 	"canyon-v12": {"build", "gate-run", "github-check", "github-keep", "image.sbom", "patch.rescan", "patch.watch", "release-remove", "scan"},
-	// patch.rescan reads the run image before it queues the fleet's image.sbom reads, where a v12 tick queued them
-	// first (#264): a v12 tick a v13 server resumed would meet its journaled steps out of order, and the version keeps
-	// it from claiming one. Back, a queued tick handOver gives the release before runs as v12's did
-	"canyon-v13": {"build", "gate-run", "github-check", "github-keep", "image.sbom", "patch.rescan", "patch.watch", "release-remove", "scan"},
 }
 
 // beatEvery is how often a server writes its durable_executors row, and staleAfter how long another's

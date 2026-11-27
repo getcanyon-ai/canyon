@@ -85,7 +85,7 @@ type Fake struct {
 	// run_image_moved; unset, not_finished no_image. Rematch is what target sbom answers of its part; unset,
 	// not_finished no_image (contracts/executor.md).
 	ImageAnswer    atomic.Pointer[executor.ScanResult]
-	OnImageScan    atomic.Pointer[func(image string)] // set, each POST /scan of target image, an app's or the run image, calls it with the image first, and answers once it returns
+	OnImageScan    atomic.Pointer[func(image string)] // set, each POST /scan of target image naming an app calls it with the image first, and answers once it returns
 	RunImageAnswer atomic.Pointer[executor.ScanResult]
 	Rematch        atomic.Pointer[func(part []byte) executor.ScanResult]
 	// Packages is what POST /scan of target packages answers; unset, not_finished no_image.
@@ -857,9 +857,6 @@ func (f *Fake) target(t *testing.T, w http.ResponseWriter, req executor.ScanRequ
 		return
 	case req.Target == "image" && req.App == "":
 		f.RunImageScans.Add(1)
-		if on := f.OnImageScan.Load(); on != nil {
-			(*on)(req.Image)
-		}
 		if a := f.RunImageAnswer.Load(); a != nil {
 			res = *a
 		}

@@ -105,7 +105,7 @@ func (p *Pipeline) askImage(ctx dbos.Context, in Input, image string) error {
 // fleetRead is the priority of an image.sbom a rescan tick or an apply asks of the fleet. DBOS takes a queue's
 // lowest first, and a deploy's is its default, 0: a deploy waits for the one image scan in flight, never for the
 // fleet's (design/PATCHING.md §3.1; #264).
-const fleetRead = 0
+const fleetRead = 1
 
 // askImageSBOM queues image.sbom of in under its attempt's id: a read of the fleet's behind every deploy's.
 func askImageSBOM(c dbos.Client, in imageScan, fleet bool) error {
@@ -133,6 +133,10 @@ func (p *Pipeline) imageSBOM(ctx dbos.Context, in imageScan) (string, error) {
 			return false, err
 		}
 		res, err := p.askScan(c, executor.ScanRequest{Tool: "trivy", Target: "image", App: in.Project, Image: in.Image}, nil)
+		if errors.Is(err, errStillBusy) { // stored as not finished, never nothing: the image reads why, and the next deploy or tick reads it again (#264)
+			log.Printf("runs: the SBOM of %s for %s, asked by %s, stores busy: %v", in.Image, in.Project, in.Run, err)
+			res, err = executor.ScanResult{Tool: "trivy", NotFinished: "busy"}, nil
+		}
 		if err != nil {
 			return false, err
 		}

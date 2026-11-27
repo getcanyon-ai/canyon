@@ -273,7 +273,7 @@ a function of the slice's bytes and the database alone, so every image naming th
 each slice's newest is kept: a newer match replaces the older in its transaction, since the read reads
 the newest alone. An image's new matches are stored together or not at all. Each tick also reads the
 running images of such a project that have no finished scan — deployed before the rule was turned on,
-say — on the `image-sbom` queue behind any deploy's (§3.1), once it has read the run image (below) — and drops the scans of images nothing runs or keeps, a deleted project's, and the slices no scan
+say — on the `image-sbom` queue behind any deploy's (§3.1) — and drops the scans of images nothing runs or keeps, a deleted project's, and the slices no scan
 names. A tick that starts an interval late does nothing; each scan waits on a busy executor for 15
 minutes at most, and an image read that still finds it busy stores `busy` in place of nothing (amended
 2026-11-27, #264): its read says `could not check: Canyon's scanner was busy with other apps, and checks again on its next round` until the
@@ -282,10 +282,7 @@ next deploy or tick reads it, and it never passes; and the scans matched longest
 **The named run image is matched too** (#2375, 2026-10-19), so the plan (§4.2) can tell a run image
 that carries a fix from one that does not (§0.4). Each tick asks `GET /builder` for `run_image`, has the
 executor read that image (contracts/executor.md, *The run image*) while no finished scan of its digest
-is stored, keeps the scan under that digest — no project's — and drops any other run image's. The tick
-reads it before it queues the fleet's reads (above), which take the executor's one image scan at a time
-back to back (contracts/executor.md) and kept the run image waiting past its 15 minutes (amended
-2026-11-27, #264). Its layers'
+is stored, keeps the scan under that digest — no project's — and drops any other run image's. Its layers'
 slices are stored by content beside the apps' and matched each tick as theirs are: a run image's `os`
 slice is the same bytes as the matching slice of each app on it. An executor that names no run image
 drops every run image's scan, and one missing a layer is read again. No finding is made of it; the plan

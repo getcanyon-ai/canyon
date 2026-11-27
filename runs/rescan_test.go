@@ -588,35 +588,6 @@ func TestADeploysImageScanGoesBeforeTheFleetsReads(t *testing.T) {
 	}
 }
 
-// A tick reads the run image before it queues the fleet's reads: queued first, they would take the executor's one
-// image scan at a time back to back and keep the run image waiting past its 15 minutes (design/PATCHING.md §3.2;
-// #264, "the rescan could not read or match the run image: executor: /scan image busy for 15m0s").
-func TestATickReadsTheRunImageBeforeTheFleet(t *testing.T) {
-	p, ctx, f := deploying(t, runstest.CleanGolden)
-	g := loadGolden(t)
-	rematching(t, f, g)
-	f.ImageAnswer.Store(&g.Image)
-	answer := g.runImageOf(t, "3.0.13-0ubuntu3.4")
-	f.RunImageAnswer.Store(&answer)
-	digest := freshImage(t, f)
-	storedAs(t, ctx, p, nil, project, digest) // it runs, and was never read
-	queued := -1
-	on := func(image string) {
-		if !strings.HasPrefix(image, "canyon/") { // the run image
-			all, err := dbos.ListWorkflows(durable, dbos.WithFilterWorkflowIDPrefix(project+"@"+digest+"@"), dbos.WithFilterLoadInput(false), dbos.WithFilterLoadOutput(false))
-			if err != nil {
-				t.Error(err)
-			}
-			queued = len(all)
-		}
-	}
-	f.OnImageScan.Store(&on)
-	tick(t, time.Now())
-	if asked := imageScans(t, project, digest); f.RunImageScans.Load() != 1 || queued != 0 || len(asked) != 1 {
-		t.Fatalf("the run image read %d time(s), with %d of the fleet's reads queued before it; %d read after, want 1, 0 and 1", f.RunImageScans.Load(), queued, len(asked))
-	}
-}
-
 // An image read that finds the executor busy past its wait stores busy in place of nothing, so the image reads why
 // and never passes (contracts/routes.md, platform.known-vuln's row); the next ask reads it again, and its finished
 // scan replaces busy (design/PATCHING.md §3.1; #264).

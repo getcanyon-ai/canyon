@@ -574,9 +574,29 @@ func TestADeploysImageScanGoesBeforeTheFleetsReads(t *testing.T) {
 	deployed := f.Image
 	onDeploy(t, ctx, p, policy.Advisory)
 	once.Do(func() { close(release) })
-	imageScans(t, project, digest)
-	for _, d := range fleet {
-		imageScans(t, project, d)
+	// every read stored, the truth of a scan, rather than the workflows' list: the test ends only once all five ran
+	all := append(slices.Clone(fleet), digest)
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		var stored int
+		if err := p.QueryRow(ctx, "SELECT count(*) FROM scanned_images WHERE project_id = $1 AND digest = ANY($2) AND not_finished IS NULL", project, all).Scan(&stored); err != nil {
+			t.Fatal(err)
+		}
+		if stored == len(all) {
+			break
+		}
+		if time.Now().After(deadline) {
+			for _, d := range all {
+				ws, err := dbos.ListWorkflows(durable, dbos.WithFilterWorkflowIDPrefix(project+"@"+d+"@"), dbos.WithFilterLoadInput(false))
+				for _, w := range ws {
+					t.Logf("%s: %s %v", w.ID, w.Status, w.Error)
+				}
+				if err != nil || len(ws) == 0 {
+					t.Logf("%s: no workflow listed (%v)", d, err)
+				}
+			}
+			mu.Lock()
+			t.Fatalf("%d of the %d reads stored in 30 s; the executor's image scans, in order: %q", stored, len(all), order)
+		}
 	}
 	mu.Lock()
 	defer mu.Unlock()

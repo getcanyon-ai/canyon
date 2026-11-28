@@ -73,6 +73,13 @@ describe("IntegrationsSettings", () => {
     fireEvent.click(await screen.findByRole("button", { name: `${S.integrationsTest}: #platform-alerts` }));
     expect(await screen.findByText(S.integrationsTested.replace("<channel>", "#platform-alerts"))).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Remove #platform-alerts" }));
+    // A removal asks first, saying what stops, and Cancel sends nothing (D16).
+    const ask = within(screen.getByRole("group", { name: "Remove #platform-alerts?" }));
+    expect(ask.getByText(S.integrationsRemoveMeans)).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect(sent).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove #platform-alerts" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Remove #platform-alerts?" })).getByRole("button", { name: S.integrationsRemoveYes }));
     expect(await screen.findByText(S.integrationsRemoved.replace("<channel>", "#platform-alerts"))).toBeDefined();
     expect(sent).toEqual(["POST /api/v1/integrations/channels/platform-alerts/test", "DELETE /api/v1/integrations/channels/platform-alerts"]);
   });

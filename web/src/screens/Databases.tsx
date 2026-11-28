@@ -9,8 +9,8 @@ const NOTE = "mt-1 text-md text-text-dim";
 
 // Settings › Databases (design/DATABASE-SESSIONS.md §5; #2835): whether people may open database sessions at all. An
 // admin turns them on, from this browser alone, as the server requires, or off, which ends every open one; a member
-// reads which it is. Turning them on saves as it is pressed; turning them off asks first, since it ends every open
-// session (D16).
+// reads which it is. Either way asks first (D16): turning them on opens a way into apps' databases, and turning them
+// off ends every open session.
 export function DatabasesSettings({ record, admin, adopt }: { record: Preferences; admin: boolean; adopt: (row: Preferences) => void }) {
   const [asking, setAsking] = useState(false);
   const choice = useSaveChoice();
@@ -24,12 +24,13 @@ export function DatabasesSettings({ record, admin, adopt }: { record: Preference
         <>
           {!on && <p className={NOTE}>{DATABASES.turnOnMeans}</p>}
           {asking
-            ? <AskFirst question={DATABASES.turnOffAsk} yes={DATABASES.turnOff} danger busy={choice.sending} onYes={() => turn("off")} onNo={() => setAsking(false)}>
-              <p className="text-md">{DATABASES.turnOffMeans}</p>
+            ? <AskFirst question={on ? DATABASES.turnOffAsk : DATABASES.turnOnAsk} yes={on ? DATABASES.turnOff : DATABASES.turnOn} danger={on} busy={choice.sending}
+              onYes={() => turn(on ? "off" : "on")} onNo={() => setAsking(false)}>
+              <p className="text-md">{on ? DATABASES.turnOffMeans : DATABASES.turnOnMeans}</p>
             </AskFirst>
             : (
               <div className="mt-2">
-                <Button variant={on ? "secondary" : "primary"} size="sm" onClick={() => { choice.clear(); if (on) setAsking(true); else turn("on"); }}>{on ? DATABASES.turnOff : DATABASES.turnOn}</Button>
+                <Button variant={on ? "secondary" : "primary"} size="sm" onClick={() => { choice.clear(); setAsking(true); }}>{on ? DATABASES.turnOff : DATABASES.turnOn}</Button>
               </div>
             )}
         </>

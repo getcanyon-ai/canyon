@@ -144,11 +144,11 @@ describe("an env's credentials", () => {
     ]);
   });
 
-  it("removes a route and says so, or what gateway hasn't taken it yet", async () => {
+  it("removes a route and says so, or that Canyon's outbound proxy hasn't taken it yet", async () => {
     const calls = server({ [`DELETE ${PREVIEW_ROUTE}`]: { status: 204, pending: "egress-0" } });
     const saved = card(preview, "contributor");
     fireEvent.click(screen.getByRole("button", { name: "Remove the credential for api.stripe.com" }));
-    await screen.findByText(/one of Canyon's gateways \(egress-0\)/);
+    await screen.findByText(S.gatewayPending); // a member's line names no proxy by its pod (the settings words, #270)
     expect(calls()).toEqual([["DELETE", PREVIEW_ROUTE, undefined]]);
     expect(saved).toHaveBeenCalled();
   });

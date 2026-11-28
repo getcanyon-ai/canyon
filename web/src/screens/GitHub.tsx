@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AskFirst } from "../ui/AskFirst";
 import { useSaveChoice } from "../ui/Saved";
 import { useUnsaved } from "../ui/Unsaved";
 import { getGitHub, getGitHubRepositories, importRepository, linkRepository, said, setGitHubClientSecret, setGitHubOrg, unlinkRepository, type GitHubOrg, type GitHubRead, type GitHubRepository } from "../api";
@@ -129,17 +130,26 @@ function Repositories() {
   const [list, setList] = useState<{ repositories: GitHubRepository[]; unreachable: string[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [form, setForm] = useState<{ repo: number; kind: "import" | "folder" | "link" } | null>(null);
+  // Unlinking stops the app's pushes reaching it, so it asks first, saying what stops (D16).
+  const [unlinking, setUnlinking] = useState<{ id: string; name: string; repo: string } | null>(null);
   const phone = useMedia("(max-width: 719px)"); // the table's 640px and the page's gutters
   const load = () => getGitHubRepositories().then((answer) => { setList(answer); setFailure(null); }, (err: unknown) => setFailure(said(err)));
   useEffect(() => { void load(); }, []);
-  const act = (work: Promise<unknown>) => work.then(() => { setForm(null); return load(); }, (err: unknown) => setFailure(said(err)));
+  const act = (work: Promise<unknown>) => work.then(() => { setForm(null); setUnlinking(null); return load(); }, (err: unknown) => setFailure(said(err)));
   if (list === null) return failure === null ? null : <p className="text-base text-critical">{failure}</p>;
-  const row = (repo: GitHubRepository): RepositoryProps => ({ repo, open: form?.repo === repo.repo_id ? form.kind : null, ask: (kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind }), act });
+  const row = (repo: GitHubRepository): RepositoryProps => ({ repo, open: form?.repo === repo.repo_id ? form.kind : null, ask: (kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind }), act,
+    unlink: (app) => setUnlinking({ id: app.id, name: app.name, repo: repo.full_name }) });
   return (
     <div>
       <h2 className="text-base font-semibold">{S.githubRepositories}</h2>
       {list.unreachable.map((org) => <p key={org} className={NOTE}>{S.githubUnanswered.replace("<org>", () => org)}</p>)}
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}
+      {unlinking !== null && (
+        <AskFirst question={S.githubUnlinkAsk.replace("<app>", () => unlinking.name).replace("<repo>", () => unlinking.repo)} yes={S.githubUnlinkYes} danger
+          onYes={() => act(unlinkRepository(unlinking.id))} onNo={() => setUnlinking(null)}>
+          <p className="text-md">{S.githubUnlinkMeans.replace("<app>", () => unlinking.name)}</p>
+        </AskFirst>
+      )}
       {/* on a phone each repository is a card: the table's buttons start past its edge (#126) */}
       {phone && list.repositories.length > 0
         ? <ul className="mt-2.5 grid gap-2.5">{list.repositories.map((repo) => <RepositoryCard key={repo.repo_id} {...row(repo)} />)}</ul>
@@ -156,11 +166,14 @@ function Repositories() {
 
 const NO_REPOSITORIES = "None of Canyon's Apps sees a repository yet";
 
-interface RepositoryProps { repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void }
+interface RepositoryProps {
+  repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void;
+  unlink: (app: GitHubRepository["apps"][number]) => void;
+}
 
 // A repository's parts, the same in the table and in a phone's card: its name, what an admin does with one no app is
 // linked to, each app linked to it, and the form open on it.
-function repositoryParts({ repo, open, ask, act }: RepositoryProps) {
+function repositoryParts({ repo, open, ask, act, unlink }: RepositoryProps) {
   return {
     name: <a className="font-medium text-text no-underline hover:underline" href={`https://github.com/${repo.full_name}`}>{repo.full_name}</a>,
     unlinked: (
@@ -174,7 +187,7 @@ function repositoryParts({ repo, open, ask, act }: RepositoryProps) {
       app: (
         <span className="flex flex-wrap items-center gap-2">
           <a className="text-link no-underline hover:underline" href={`#/apps/${app.id}`}>{app.name}</a>
-          <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => act(unlinkRepository(app.id))}>Unlink</Button>
+          <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => unlink(app)}>Unlink</Button>
           {at === repo.apps.length - 1 && <Button size="sm" variant="ghost" onClick={() => ask("folder")}>Add another folder</Button>}
         </span>
       ),
@@ -245,7 +258,7 @@ function LinkForm({ repo, cancel, act }: { repo: GitHubRepository; cancel: () =>
   useUnsaved(app !== "" || path !== "");
   return (
     <span className="flex flex-wrap items-end gap-2">
-      <label className="grid gap-1 text-sm text-text-dim">App id
+      <label className="grid gap-1 text-sm text-text-dim">App (its id in Canyon)
         <input className={FIELD} value={app} placeholder="funny-snake-4k2" onChange={(event) => setApp(event.target.value)} />
       </label>
       <label className="grid gap-1 text-sm text-text-dim">Folder (empty for the whole repository)

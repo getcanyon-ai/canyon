@@ -213,9 +213,13 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const team = hook && (
     <section aria-labelledby="hand-off-team" className={CARD}>
       <h3 id="hand-off-team" className="text-base font-semibold">{S.teamTitle}</h3>
-      <p className={NOTE}>{S.teamWebhook.replace("<url>", () => hook.url)}</p>
-      <p className={NOTE}>{S.teamReport}</p>
-      <p className={NOTE}>{S.teamDocs}</p>
+      {/* The contract the receiver is coded against, folded for whoever builds it. */}
+      <details className="mt-1">
+        <summary className="cursor-pointer text-md text-link">{S.teamFold}</summary>
+        <p className={NOTE}>{S.teamWebhook.replace("<url>", () => hook.url)}</p>
+        <p className={NOTE}>{S.teamReport}</p>
+        <p className={NOTE}>{S.teamDocs}</p>
+      </details>
     </section>
   );
   const deliveryChoice = admin ? (

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AskFirst } from "../ui/AskFirst";
 import { useUnsaved } from "../ui/Unsaved";
 import { getChannels, putChannel, removeChannel, said, testChannel, type Channel } from "../api";
 import { S } from "../strings";
@@ -53,6 +54,7 @@ export function IntegrationsSettings() {
 function ChannelRow({ channel, done, change }: { channel: Channel; done: (line: string) => void; change: () => void }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [removing, setRemoving] = useState(false); // a removal asks first, saying what stops (D16)
   const act = async (call: () => Promise<unknown>, line: string) => {
     if (sending) return;
     setSending(true);
@@ -79,8 +81,16 @@ function ChannelRow({ channel, done, change }: { channel: Channel; done: (line: 
       <span className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" label={`${S.integrationsTest}: ${channel.name}`} onClick={() => void act(() => testChannel(channel.id), S.integrationsTested)}>{S.integrationsTest}</Button>
         <Button size="sm" variant="ghost" label={`Change ${channel.name}`} onClick={change}>Change</Button>
-        <Button size="sm" variant="ghost" label={`Remove ${channel.name}`} onClick={() => void act(() => removeChannel(channel.id), S.integrationsRemoved)}>Remove</Button>
+        {!removing && <Button size="sm" variant="ghost" label={`Remove ${channel.name}`} onClick={() => setRemoving(true)}>Remove</Button>}
       </span>
+      {removing && (
+        <div className="col-span-full">
+          <AskFirst question={S.integrationsRemoveAsk.replace("<channel>", () => channel.name)} yes={S.integrationsRemoveYes} danger busy={sending}
+            onYes={() => void act(() => removeChannel(channel.id), S.integrationsRemoved)} onNo={() => setRemoving(false)}>
+            <p className="text-md">{S.integrationsRemoveMeans}</p>
+          </AskFirst>
+        </div>
+      )}
     </li>
   );
 }

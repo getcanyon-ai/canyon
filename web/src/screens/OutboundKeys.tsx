@@ -94,9 +94,9 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
         <h3 className="text-base font-semibold">{S.keysByoHeading}</h3>
         <p className={NOTE}>{S.keysByoNote}</p>
         <fieldset disabled={busy} className="contents">
-          <label htmlFor="egress-ca-cert" className={LABEL}>Certificates: the sub-CA first, ending at your root</label>
+          <label htmlFor="egress-ca-cert" className={LABEL}>Certificate chain: yours first, ending at your root</label>
           <textarea id="egress-ca-cert" ref={cert} rows={6} className={FIELD} spellCheck={false} autoComplete="off" onChange={() => setTyped(true)} />
-          <label htmlFor="egress-ca-key" className={LABEL}>Private key (PKCS #8)</label>
+          <label htmlFor="egress-ca-key" className={LABEL}>Private key (PEM, PKCS #8)</label>
           <textarea id="egress-ca-key" ref={key} rows={4} className={FIELD} spellCheck={false} autoComplete="off" aria-describedby="egress-ca-key-note" onChange={() => setTyped(true)} />
           <p id="egress-ca-key-note" className={NOTE}>{S.keysKeyNote}</p>
         </fieldset>

@@ -160,6 +160,8 @@ async function sessions(page: Page, who: string) {
   await list.scrollIntoViewIfNeeded();
   await walked(page, "sessions", who);
   await mine.getByRole("button", { name: /^Disconnect / }).click();
+  // A disconnect ends someone's access, so it asks first (design/EXPERIENCE.md, D16).
+  await list.getByRole("group", { name: /^Disconnect .* session\?$/ }).getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(mine).toHaveCount(0);
   await walked(page, "sessions-disconnected", who);
 }

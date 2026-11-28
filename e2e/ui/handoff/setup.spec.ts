@@ -33,9 +33,9 @@ test("H1 the admin saves the webhook and the front door, and stores the two valu
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Go to the front door" }).click();
+  await page.getByRole("button", { name: "Go to How people reach apps" }).click();
   await expect(page.getByRole("heading", { name: "How people reach apps" })).toBeFocused();
-  await page.getByRole("radio", { name: "Your gateway signs people in" }).check();
+  await page.getByRole("radio", { name: "Your sign-in proxy signs people in" }).check();
   await page.getByLabel("Issuer", { exact: true }).fill(env("HANDOFF_ISSUER"));
   await page.getByLabel("Audience", { exact: true }).fill(env("HANDOFF_AUDIENCE"));
   await page.getByLabel("JWKS URL", { exact: true }).fill(`${env("HANDOFF_ISSUER")}/keys`);
@@ -43,7 +43,7 @@ test("H1 the admin saves the webhook and the front door, and stores the two valu
   await page.getByLabel("Domain", { exact: true }).fill(env("HANDOFF_DOMAIN"));
   await page.getByRole("button", { name: "Save how people reach apps" }).click();
   await expect(page.getByText("Saved. Apps change at their next deploy.")).toBeVisible({ timeout: 180_000 }); // the probe takes its time
-  await expect(page.getByRole("heading", { name: "✓ Your gateway signs people in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "✓ Your sign-in proxy signs people in" })).toBeVisible();
 });
 
 test("H2 a test delivery reaches the platform, then the admin hands apps to it", async ({ page }) => {

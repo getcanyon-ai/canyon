@@ -29,7 +29,7 @@ test("R1 the admin saves and checks the deploy repo, stores the two values, and 
   await page.getByLabel("User name", { exact: true }).fill(env("HANDOFF_REPO_USER"));
   await page.getByLabel("Token", { exact: true }).fill(env("HANDOFF_REPO_TOKEN"));
   await page.getByLabel("API address", { exact: true }).fill(env("HANDOFF_API_URL"));
-  await page.getByLabel("CA for the sign-in sidecar and External Secrets (optional)", { exact: true }).fill(env("HANDOFF_CA"));
+  await page.getByLabel("Your private certificate authority, if one signed Canyon's address (optional)", { exact: true }).fill(env("HANDOFF_CA"));
   await page.getByRole("button", { name: "Save the deploy repo" }).click();
   const dialog = page.getByRole("dialog", { name: "Store these now" });
   const fetch = await dialog.getByLabel("Fetch-only token", { exact: true }).inputValue();
@@ -45,9 +45,9 @@ test("R1 the admin saves and checks the deploy repo, stores the two values, and 
   await expect(page.getByText("Canyon reached the repo, read both branches, pushed a test branch to it and rendered your templates.")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/^Templates found: .*route\.yaml/)).toBeVisible();
 
-  await page.getByRole("button", { name: "Go to the front door" }).click();
+  await page.getByRole("button", { name: "Go to How people reach apps" }).click();
   await expect(page.getByRole("heading", { name: "How people reach apps" })).toBeFocused();
-  await page.getByRole("radio", { name: "Your gateway signs people in" }).check();
+  await page.getByRole("radio", { name: "Your sign-in proxy signs people in" }).check();
   await page.getByLabel("Issuer", { exact: true }).fill(env("HANDOFF_ISSUER"));
   await page.getByLabel("Audience", { exact: true }).fill(env("HANDOFF_AUDIENCE"));
   await page.getByLabel("JWKS URL", { exact: true }).fill(`${env("HANDOFF_ISSUER")}/keys`);

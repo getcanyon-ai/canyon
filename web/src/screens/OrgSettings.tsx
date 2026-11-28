@@ -3,6 +3,7 @@ import { endSession, listSessions, putPreferences, said, type ListedSession, typ
 import { APPROVAL, S, SESSIONS } from "../strings";
 import { Button } from "../ui/Button";
 import { EnterpriseLine, unlocks, useLicence } from "../ui/Enterprise";
+import { AskFirst } from "../ui/AskFirst";
 import { useSaveChoice } from "../ui/Saved";
 import { SaveSection } from "../ui/SaveSection";
 
@@ -80,7 +81,7 @@ function Pinned({ keys, values }: { keys: Overridable[]; values: string[] }) {
   return (
     <div className={PINNED}>
       {values.length > 0 && <Values values={values} />}
-      <p className={NOTE}>Set on the server, by {keys.map((key) => VARIABLE[key]).join(" and ")}. Change it there, not here.</p>
+      <p className={NOTE}>Set in Canyon's server configuration, as {keys.map((key) => VARIABLE[key]).join(" and ")}, so it can't be changed here.</p>
     </div>
   );
 }
@@ -162,7 +163,7 @@ export function SignInFields({ record, draft, admin, mine = null }: Fields) {
                       onChange={(event) => draft.setDomains(event.target.checked ? [myDomain, ...others] : others)} />
                     {`Allow everyone at ${myDomain}`}
                   </label>
-                  <p className={NOTE}>Anyone at this domain who can sign in to your identity provider can sign in to Canyon.</p>
+                  <p className={NOTE}>Anyone at this domain who can sign in to your sign-in provider can sign in to Canyon.</p>
                 </div>
               )}
               <List name="Domain" values={others} onChange={(next) => draft.setDomains(ticked ? [myDomain, ...next] : next)} add="Add domain" />
@@ -170,7 +171,7 @@ export function SignInFields({ record, draft, admin, mine = null }: Fields) {
           )
           : <Values values={record.allowed_domains} empty="No domain is allowed." />}
       {/* The box already carries the consequence; without a box the lists need it said once. */}
-      {!box && <p className={NOTE}>Anyone at an allowed domain who can sign in to your identity provider can sign in to Canyon.</p>}
+      {!box && <p className={NOTE}>Anyone at an allowed domain who can sign in to your sign-in provider can sign in to Canyon.</p>}
       {/* Only where the reader can add one: a list the server pins offers no Add. */}
       {admin && !pinnedIn(record, "allowed_emails") && <p className={NOTE}>Canyon does not send invitations. Add an address, then tell that person to open Canyon and sign in.</p>}
     </>
@@ -194,7 +195,7 @@ export function AdminFields({ record, draft, admin, mine = null }: Fields) {
           <p className={`${LABEL} mt-3`}>From the environment</p>
           <div className={PINNED}>
             <Values values={record.bootstrap_admins} />
-            <p className={NOTE}>Granted by CANYON_ADMINS. They cannot be removed here.</p>
+            <p className={NOTE}>Made admins in Canyon's server configuration, as CANYON_ADMINS, so they can't be removed here.</p>
           </div>
         </>
       )}
@@ -205,16 +206,16 @@ export function AdminFields({ record, draft, admin, mine = null }: Fields) {
       {/* The sign-in group is an admin's alone (#118): a member is answered neither the claim nor its value, and the
           variables that pin them are an admin's to read. */}
       {admin && (<>
-        <p className={`${LABEL} mt-3`}>By sign-in group (optional)</p>
+        <p className={`${LABEL} mt-3`}>By a group in your sign-in provider (optional)</p>
         {pinnedIn(record, "admin_claim")
           ? <Pinned keys={["admin_claim", "admin_value"]} values={pair} />
           : (
             <span className="flex flex-wrap items-center gap-2">
-              <input aria-label="Claim" placeholder="Claim" className={FIELD} value={draft.claim} onChange={(event) => draft.setClaim(event.target.value)} />
-              <input aria-label="Value" placeholder="Value" className={FIELD} value={draft.value} onChange={(event) => draft.setValue(event.target.value)} />
+              <input aria-label="Claim" placeholder="Claim (such as groups)" className={FIELD} value={draft.claim} onChange={(event) => draft.setClaim(event.target.value)} />
+              <input aria-label="Value" placeholder="Value it must have" className={FIELD} value={draft.value} onChange={(event) => draft.setValue(event.target.value)} />
             </span>
           )}
-        <p className={NOTE}>Anyone whose sign-in carries this claim is an admin. Canyon reads it at sign-in, so this takes effect for you at your next one.</p>
+        <p className={NOTE}>Anyone whose sign-in has this claim set to this value is an admin. Canyon reads it each time someone signs in, so it takes effect at your next sign-in.</p>
       </>)}
       <p className={NOTE}>Admins change these settings and the policies. Everyone else deploys and promotes; only an admin or a security responder approves a blocking finding.</p>
     </>
@@ -233,16 +234,16 @@ function ResponderFields({ record, emails, setEmails, claim, setClaim, value, se
       <p className={SUB}>{S.responders}</p>
       <p className={`${LABEL} mt-3`}>By email</p>
       <List name="Responder" values={emails} onChange={setEmails} add="Add a responder" />
-      <p className={`${LABEL} mt-3`}>By sign-in group (optional)</p>
+      <p className={`${LABEL} mt-3`}>By a group in your sign-in provider (optional)</p>
       {pinnedIn(record, "responder_claim")
         ? <Pinned keys={["responder_claim", "responder_value"]} values={pair} />
         : (
           <span className="flex flex-wrap items-center gap-2">
-            <input aria-label="Responder claim" placeholder="Claim" className={FIELD} value={claim} onChange={(event) => setClaim(event.target.value)} />
-            <input aria-label="Responder value" placeholder="Value" className={FIELD} value={value} onChange={(event) => setValue(event.target.value)} />
+            <input aria-label="Responder claim" placeholder="Claim (such as groups)" className={FIELD} value={claim} onChange={(event) => setClaim(event.target.value)} />
+            <input aria-label="Responder value" placeholder="Value it must have" className={FIELD} value={value} onChange={(event) => setValue(event.target.value)} />
           </span>
         )}
-      <p className={NOTE}>Anyone whose sign-in carries this claim is a security responder. Canyon reads it at sign-in, so this takes effect at their next one.</p>
+      <p className={NOTE}>Anyone whose sign-in has this claim set to this value is a security responder. Canyon reads it each time someone signs in, so it takes effect at their next sign-in.</p>
     </>
   );
 }
@@ -299,9 +300,11 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
   }
   const grouping: PreferencesEdit = admin && !groupsPinned && differs(record.groups_claim, groups) ? { groups_claim: groups } : {};
   const send = (edit: PreferencesEdit, took: (answer: Preferences) => void) => () => putPreferences(edit).then((answer) => { adopt(answer); took(answer); });
-  // The production switch is a choice: it saves as it is ticked, and says so (D16).
+  // The production switch decides whether agents may promote with no person, the biggest protection there is, so it
+  // asks first either way, saying what changes (D16).
   const production = useSaveChoice();
-  const approve = (on: boolean) => void production.save(() => putPreferences({ prod_approval: on }).then(adopt));
+  const [approving, setApproving] = useState<boolean | null>(null); // the state asked about, before yes
+  const approve = (on: boolean) => void production.save(() => putPreferences({ prod_approval: on }).then((answer) => { adopt(answer); setApproving(null); }));
 
   return (
     <>
@@ -329,28 +332,35 @@ export function PeopleSettings({ record, adopt }: { record: Preferences; adopt: 
         )}
         <section aria-label="Groups">
           <h2 className={H2}>Groups</h2>
-          <label className={`${LABEL} mt-3`} htmlFor="groups-claim">Groups claim</label>
+          <label className={`${LABEL} mt-3`} htmlFor="groups-claim">Group claim</label>
           {admin && groupsPinned
             ? <Pinned keys={["groups_claim"]} values={[record.groups_claim]} />
             : admin && groupsUnlocked
               ? <input id="groups-claim" className={FIELD} value={groups} onChange={(event) => setGroups(event.target.value)} />
               : admin && licence !== null
                 ? (<>
-                  <Values values={groups === "" ? [] : [groups]} empty="No groups claim is set." />
-                  {groups !== "" && <span className="mt-1 flex"><Button size="sm" variant="ghost" label="Clear the groups claim" onClick={() => setGroups("")}>Clear</Button></span>}
+                  <Values values={groups === "" ? [] : [groups]} empty="No group claim is set." />
+                  {groups !== "" && <span className="mt-1 flex"><Button size="sm" variant="ghost" label="Clear the group claim" onClick={() => setGroups("")}>Clear</Button></span>}
                   <div className="mt-1"><EnterpriseLine feature="group_sync" /></div>
                 </>)
-                : <Values values={record.groups_claim === "" ? [] : [record.groups_claim]} empty="No groups claim is set." />}
-          <p className={NOTE}>The sign-in claim that lists a person's groups. Once it is set, owners can share an app with a group. Canyon reads it at sign-in.</p>
-          <SaveSection label="Save the groups claim" changed={has(grouping)} save={send(grouping, (answer) => setGroups(answer.groups_claim))} />
+                : <Values values={record.groups_claim === "" ? [] : [record.groups_claim]} empty="No group claim is set." />}
+          <p className={NOTE}>The claim in a person's sign-in that lists their groups, often groups. Once it's set, owners can share an app with a group. Canyon reads it each time someone signs in.</p>
+          <SaveSection label="Save the group claim" changed={has(grouping)} save={send(grouping, (answer) => setGroups(answer.groups_claim))} />
         </section>
         <section aria-label="Production">
           <h2 className={H2}>Production</h2>
           <label className="mt-3 flex items-center gap-2 text-base">
-            <input type="checkbox" checked={record.prod_approval} disabled={!admin || production.sending} onChange={(event) => approve(event.target.checked)} />
+            <input type="checkbox" checked={approving ?? record.prod_approval} disabled={!admin || production.sending}
+              onChange={(event) => { production.clear(); setApproving(event.target.checked === record.prod_approval ? null : event.target.checked); }} />
             {APPROVAL.switchLabel}
           </label>
           <p className={NOTE}>{APPROVAL.switchNote}</p>
+          {approving !== null && (
+            <AskFirst question={approving ? APPROVAL.askOn : APPROVAL.askOff} yes={approving ? APPROVAL.yesOn : APPROVAL.yesOff} danger={!approving}
+              busy={production.sending} onYes={() => approve(approving)} onNo={() => setApproving(null)}>
+              <p className="text-md">{approving ? APPROVAL.meansOn : APPROVAL.meansOff}</p>
+            </AskFirst>
+          )}
           {production.line()}
         </section>
       </section>
@@ -368,7 +378,14 @@ export function Sessions({ admin }: { admin: boolean }) {
   // An answer without the list draws none: the list is a part of the page, and never takes the rest of it down.
   const read = () => listSessions().then((answer) => setSessions(Array.isArray(answer?.sessions) ? answer.sessions : null), (err: unknown) => setFailure(said(err)));
   useEffect(() => { void read(); }, []);
-  const end = (id: string) => () => void endSession(id).then(read, (err: unknown) => setFailure(said(err)));
+  // A disconnect ends someone's access, so it asks first, saying what stops (D16).
+  const [ending, setEnding] = useState<ListedSession | null>(null);
+  const [sending, setSending] = useState(false);
+  const end = (id: string) => {
+    setSending(true);
+    void endSession(id).then(() => { setEnding(null); return read(); }, (err: unknown) => setFailure(said(err))).finally(() => setSending(false));
+  };
+  const named = (s: ListedSession) => (s.flow === "oauth" ? SESSIONS.flow.oauth.replace("<client>", s.client ?? "") : SESSIONS.flow[s.flow]);
   return (
     <section aria-label={SESSIONS.title} className="mt-8">
       <h2 className={H2}>{SESSIONS.title}</h2>
@@ -390,7 +407,7 @@ export function Sessions({ admin }: { admin: boolean }) {
           </thead>
           <tbody className="max-[600px]:block">
             {sessions.map((s) => {
-              const how = s.flow === "oauth" ? SESSIONS.flow.oauth.replace("<client>", s.client ?? "") : SESSIONS.flow[s.flow];
+              const how = named(s);
               const own = s.current && s.flow === "browser";
               const dates = [`${SESSIONS.since} ${when(s.created_at)}`, ...(s.last_seen_at === null ? [] : [`${SESSIONS.lastUsed.toLowerCase()} ${when(s.last_seen_at)}`]), `${SESSIONS.expires.toLowerCase()} ${when(s.expires_at)}`];
               return (
@@ -406,13 +423,19 @@ export function Sessions({ admin }: { admin: boolean }) {
                   <td className={`py-2 text-right max-[600px]:col-start-2 max-[600px]:row-start-1 max-[600px]:row-span-3 max-[600px]:py-0 ${own ? "max-[600px]:hidden" : ""}`}>
                     {own
                       ? <span className="text-text-dim">{SESSIONS.current}</span>
-                      : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={end(s.id)}>{SESSIONS.disconnect}</Button>}
+                      : <Button size="sm" variant="ghost" label={`${SESSIONS.disconnect} ${s.id}`} onClick={() => { setFailure(null); setEnding(s); }}>{SESSIONS.disconnect}</Button>}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      )}
+      {ending !== null && (
+        <AskFirst question={(ending.person?.email !== undefined && admin ? SESSIONS.disconnectTheirs.replace("<person>", () => ending.person!.email) : SESSIONS.disconnectAsk).replace("<how>", () => named(ending))}
+          yes={SESSIONS.disconnect} danger busy={sending} onYes={() => end(ending.id)} onNo={() => setEnding(null)}>
+          <p className="text-md">{SESSIONS.disconnectMeans}</p>
+        </AskFirst>
       )}
     </section>
   );

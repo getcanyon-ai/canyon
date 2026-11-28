@@ -33,7 +33,7 @@ const CARD = "mt-3 rounded-xl border border-border bg-surface-2 px-3.5 py-3";
 const ALB_COOKIE = "AWSELBAuthSessionCookie";
 const SAMPLE = "claims-portal";
 const CHOICES = [[1, S.gateway, S.gatewayNote], [2, S.proxy, S.proxyNote]] as const;
-const GATEWAYS = [["oidc", "Standard OIDC gateway"], ["alb", "AWS load balancer sign-in"]] as const;
+const GATEWAYS = [["oidc", "A sign-in proxy that speaks OpenID Connect (OIDC)"], ["alb", "AWS load balancer sign-in"]] as const;
 const FORMS: AddressForm[] = ["app.env.domain", "app-env.domain"];
 
 // An app's address under each form, and the names the probe says its certificate must cover
@@ -247,7 +247,7 @@ function ScannerData() {
 function Stored({ door }: { door: FrontDoor }) {
   const rows = door.choice === 2
     ? [["Issuer", door.signin?.issuer], ["Client ID", door.signin?.client_id]]
-    : [["Gateway", GATEWAYS.find(([one]) => one === door.gateway)?.[1]], ["Issuer", door.issuer], ["Audience", door.audience], ["JWKS URL", door.jwks_url],
+    : [["Sign-in proxy", GATEWAYS.find(([one]) => one === door.gateway)?.[1]], ["Issuer", door.issuer], ["Audience", door.audience], ["JWKS URL", door.jwks_url],
       ["Load balancer ARN", door.alb_arn], ["Session cookie", door.cookie ?? (door.gateway === "alb" ? ALB_COOKIE : undefined)]];
   return (
     <div className={CARD}>
@@ -294,10 +294,12 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
       setStatus({ refusal: said(err) });
     }
   };
-  const field = (key: Text, label: string) => (
+  // A field keeps the name the sign-in provider's console gives it, and says what it is under it.
+  const field = (key: Text, label: string, hint?: string) => (
     <>
       <label className={LABEL} htmlFor={`front-door-${key}`}>{label}</label>
-      <input id={`front-door-${key}`} className={FIELD} value={draft[key]} onChange={(event) => edit({ [key]: event.target.value })} />
+      <input id={`front-door-${key}`} className={FIELD} value={draft[key]} aria-describedby={hint === undefined ? undefined : `front-door-${key}-hint`} onChange={(event) => edit({ [key]: event.target.value })} />
+      {hint !== undefined && <p id={`front-door-${key}-hint`} className={NOTE}>{hint}</p>}
     </>
   );
 
@@ -317,7 +319,7 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
         {draft.choice === 1 && (
           <div className={CARD}>
             <fieldset>
-              <legend className={LABEL}>Your gateway</legend>
+              <legend className={LABEL}>Your sign-in proxy</legend>
               <span className="flex flex-wrap gap-4">
                 {GATEWAYS.map(([value, word]) => (
                   <label key={value} className="flex items-center gap-1.5 text-base">
@@ -328,8 +330,8 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
               </span>
             </fieldset>
             {draft.gateway === "oidc"
-              ? <>{field("issuer", "Issuer")}{field("audience", "Audience")}{field("jwks_url", "JWKS URL")}</>
-              : field("alb_arn", "Load balancer ARN")}
+              ? <>{field("issuer", "Issuer", S.issuerHint)}{field("audience", "Audience", S.audienceHint)}{field("jwks_url", "JWKS URL", S.jwksHint)}</>
+              : field("alb_arn", "Load balancer ARN", S.albHint)}
             {field("cookie", "Session cookie")}
             <p className={NOTE}>{S.cookieNote}</p>
             {draft.gateway === "alb" && <p className={NOTE}>{S.idpResponse.replace("<app address>", () => address(draft.form, "<app>", "<env>", domain))}</p>}
@@ -337,7 +339,7 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
         )}
         {draft.choice === 2 && (
           <div className={CARD}>
-            {field("signin_issuer", "Issuer")}
+            {field("signin_issuer", "Issuer", S.issuerHint)}
             {field("client_id", "Client ID")}
             {secretSet
               ? (

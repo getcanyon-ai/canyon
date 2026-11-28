@@ -32,6 +32,13 @@ describe("the sessions list", () => {
     expect(within(list).queryByText(SESSIONS.person)).toBeNull();
     expect(within(list).getAllByRole("button", { name: /^Disconnect/ })).toHaveLength(2);
     fireEvent.click(within(list).getByRole("button", { name: "Disconnect ses_0000000000000001" }));
+    // A disconnect ends someone's access, so it asks first, saying what stops, and Cancel sends nothing (D16).
+    const ask = within(within(list).getByRole("group", { name: "Disconnect this Claude Code (MCP) session?" }));
+    expect(ask.getByText(SESSIONS.disconnectMeans)).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect(sent()).not.toContain("DELETE /api/v1/sessions/ses_0000000000000001");
+    fireEvent.click(within(list).getByRole("button", { name: "Disconnect ses_0000000000000001" }));
+    fireEvent.click(within(within(list).getByRole("group", { name: "Disconnect this Claude Code (MCP) session?" })).getByRole("button", { name: SESSIONS.disconnect }));
     await waitFor(() => expect(sent()).toContain("DELETE /api/v1/sessions/ses_0000000000000001"));
   });
 

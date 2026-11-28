@@ -90,6 +90,7 @@ describe("GitHubSettings", () => {
     expect(platform.getByText("apps/billing")).toBeDefined();
     expect(platform.getByRole("link", { name: "billing" })).toBeDefined();
     fireEvent.click(platform.getByRole("button", { name: "Unlink billing" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Unlink billing from acme/platform?" })).getByRole("button", { name: S.githubUnlinkYes }));
     await waitFor(() => expect(sent[0]).toBe("DELETE /api/v1/projects/funny-snake-4k2/repository"));
     const portal = await card("acme/claims-portal");
     fireEvent.click(portal.getByRole("button", { name: "Make it an app" }));
@@ -109,10 +110,17 @@ describe("GitHubSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Make the app" }));
     await waitFor(() => expect(sent).toEqual(['POST /api/v1/github/repositories/555/import {"folder":""}']));
     fireEvent.click(within(table.getAllByRole("row")[1]!).getByRole("button", { name: "Link to an app" }));
-    fireEvent.change(screen.getByLabelText("App id"), { target: { value: "quote-engine" } });
+    fireEvent.change(screen.getByLabelText("App (its id in Canyon)"), { target: { value: "quote-engine" } });
     fireEvent.click(screen.getByRole("button", { name: "Link" }));
     await waitFor(() => expect(sent[1]).toBe('PUT /api/v1/projects/quote-engine/repository {"repo_id":555,"folder":""}'));
     fireEvent.click(screen.getByRole("button", { name: "Unlink billing" }));
+    // Unlinking stops pushes reaching the app, so it asks first, saying what stops, and Cancel sends nothing (D16).
+    const ask = within(screen.getByRole("group", { name: "Unlink billing from acme/platform?" }));
+    expect(ask.getByText(S.githubUnlinkMeans.replace("<app>", "billing"))).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect(sent).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Unlink billing" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Unlink billing from acme/platform?" })).getByRole("button", { name: S.githubUnlinkYes }));
     await waitFor(() => expect(sent[2]).toBe("DELETE /api/v1/projects/funny-snake-4k2/repository"));
     expect(screen.getByText(S.githubImportNote)).toBeDefined();
   });

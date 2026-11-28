@@ -183,7 +183,7 @@ describe("once the platform runs apps", () => {
   });
 
   it("switching back asks first, and the server's refusal is shown in place", async () => {
-    const unchecked = "The front door hasn't passed Canyon's check of this cluster, so Canyon can't run apps here. Save the front door again so Canyon checks it, then switch.";
+    const unchecked = "How people reach apps hasn't passed Canyon's check of this cluster, so Canyon can't run apps here. Save it again so Canyon checks it, then switch.";
     const sent = server({ "GET /api/v1/platform-webhook": { body: hook }, "PUT /api/v1/preferences": { status: 409, body: { error: "front_door_unchecked", message: unchecked } } });
     const { reload, adopt } = draw({ record: org });
     fireEvent.click(await screen.findByRole("radio", { name: S.runCanyon }));

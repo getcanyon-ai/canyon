@@ -17,7 +17,7 @@ const FRESH: Preferences = {
 const MINE = FRESH.viewer!.email;
 const MY_DOMAIN = MINE.slice(MINE.indexOf("@") + 1);
 const THEIRS = "tomas@meridian.example";
-const CONSEQUENCE = "Anyone at this domain who can sign in to your identity provider can sign in to Canyon.";
+const CONSEQUENCE = "Anyone at this domain who can sign in to your sign-in provider can sign in to Canyon.";
 // The sentence the server refuses with, as cmd/canyon-server/routes_preferences.go writes it. The
 // screen recognises none of them — it renders whatever body came back.
 const NO_ADMINS = "an admin has to be able to sign in";
@@ -118,7 +118,7 @@ describe("setting a host up", () => {
     server({ body: pinned });
     show(pinned);
     next();
-    expect(screen.getByText("Set on the server, by CANYON_OIDC_ALLOWED_EMAILS. Change it there, not here.")).toBeTruthy();
+    expect(screen.getByText("Set in Canyon's server configuration, as CANYON_OIDC_ALLOWED_EMAILS, so it can't be changed here.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add person" })).toBeNull();
     expect(screen.queryByText(/Canyon does not send invitations/)).toBeNull();
   });
@@ -130,7 +130,7 @@ describe("setting a host up", () => {
     const sent = server({ body: pinned });
     show(pinned);
     next();
-    expect(screen.getByText("Set on the server, by CANYON_OIDC_ALLOWED_DOMAINS. Change it there, not here.")).toBeTruthy();
+    expect(screen.getByText("Set in Canyon's server configuration, as CANYON_OIDC_ALLOWED_DOMAINS, so it can't be changed here.")).toBeTruthy();
     expect(screen.queryByRole("checkbox")).toBeNull();
     next();
     next();

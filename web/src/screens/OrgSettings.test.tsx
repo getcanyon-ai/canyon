@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Preferences } from "../api";
-import { S } from "../strings";
+import { APPROVAL, S } from "../strings";
 import { OrganisationSettings, PeopleSettings } from "./OrgSettings";
 
 // Every address, domain and variable on this page comes from the golden at runtime; nothing here
@@ -83,7 +83,7 @@ describe("Settings › Organisation and People & sign-in", () => {
     const admins = region("Who administers Canyon");
     const granted = ADMIN.bootstrap_admins[0]!;
     expect(admins.getByText(granted)).toBeTruthy();
-    expect(admins.getByText(/Granted by CANYON_ADMINS\. They cannot be removed here\./)).toBeTruthy();
+    expect(admins.getByText(/Made admins in Canyon's server configuration, as CANYON_ADMINS, so they can't be removed here\./)).toBeTruthy();
     // Every removable row belongs to the row's own list: none of them is the bootstrap address.
     for (const button of admins.queryAllByRole("button", { name: /^Remove admin/ })) {
       fireEvent.click(button);
@@ -94,25 +94,42 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(sent()[0]!.admin_emails).not.toContain(granted);
   });
 
-  // Production is approved in the dashboard: a choice, so it saves as it is ticked and says "Saved." (D16), sending that
-  // key alone; a member reads it without being able to move it (design/AUTH.md §4.5).
-  it("the production approval switch saves as it is ticked, and a member cannot change it", async () => {
+  // Whether a person approves each promotion decides whether agents may promote with no person, so it asks first either
+  // way, saying what changes, then saves that key alone and says "Saved." (D16); a member reads it without being able to
+  // move it (design/AUTH.md §4.5).
+  it("the production approval switch asks first either way, and a member cannot change it", async () => {
     const sent = server({ body: { ...ADMIN, prod_approval: true } });
     show(ADMIN);
     const production = region("Production");
     expect(production.getByText("On: the CLI and agents only ask, and a person on the app's team approves it here in Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.")).toBeTruthy();
-    const box = production.getByRole("checkbox", { name: "Production is approved in the dashboard" }) as HTMLInputElement;
+    const box = production.getByRole("checkbox", { name: "A person approves each promotion to production, here in Canyon" }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    const on = within(production.getByRole("group", { name: APPROVAL.askOn }));
+    expect(on.getByText(APPROVAL.meansOn)).toBeTruthy();
+    expect(sent()).toHaveLength(0);
+    fireEvent.click(on.getByRole("button", { name: "Cancel" }));
     expect(box.checked).toBe(false);
     expect(sent()).toHaveLength(0);
     fireEvent.click(box);
+    fireEvent.click(within(production.getByRole("group", { name: APPROVAL.askOn })).getByRole("button", { name: APPROVAL.yesOn }));
     await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toEqual({ prod_approval: true });
     expect(await production.findByText("Saved.")).toBeTruthy();
     expect(box.checked).toBe(true);
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
     cleanup();
+    const off = server({ body: { ...ADMIN, prod_approval: false } });
+    show({ ...ADMIN, prod_approval: true });
+    fireEvent.click(region("Production").getByRole("checkbox", { name: APPROVAL.switchLabel }));
+    const ask = within(region("Production").getByRole("group", { name: APPROVAL.askOff }));
+    expect(ask.getByText(APPROVAL.meansOff)).toBeTruthy();
+    expect(off()).toHaveLength(0);
+    fireEvent.click(ask.getByRole("button", { name: APPROVAL.yesOff }));
+    await waitFor(() => expect(off()).toEqual([{ prod_approval: false }]));
+    cleanup();
     show({ ...MEMBER, prod_approval: true });
-    const read = region("Production").getByRole("checkbox", { name: "Production is approved in the dashboard" }) as HTMLInputElement;
+    const read = region("Production").getByRole("checkbox", { name: "A person approves each promotion to production, here in Canyon" }) as HTMLInputElement;
     expect(read.checked && read.disabled).toBe(true);
   });
 
@@ -131,7 +148,7 @@ describe("Settings › Organisation and People & sign-in", () => {
   it("a key the environment sets names the variable it comes from", () => {
     show(ADMIN);
     const admins = region("Who administers Canyon");
-    expect(admins.getByText(/Set on the server, by CANYON_ADMIN_CLAIM and CANYON_ADMIN_VALUE\. Change it there, not here\./)).toBeTruthy();
+    expect(admins.getByText(/Set in Canyon's server configuration, as CANYON_ADMIN_CLAIM and CANYON_ADMIN_VALUE, so it can't be changed here\./)).toBeTruthy();
     expect(admins.queryByRole("textbox", { name: "Claim" })).toBeNull();
   });
 
@@ -144,7 +161,7 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(admins.getByText("dana@meridian.example")).toBeTruthy();
     expect(admins.getByText("founder@meridian.example")).toBeTruthy();
     expect(admins.queryByText("From the environment")).toBeNull();
-    expect(admins.queryByText("By sign-in group (optional)")).toBeNull();
+    expect(admins.queryByText("By a group in your sign-in provider (optional)")).toBeNull();
     expect(region("Who may sign in").getByText(THEIRS)).toBeTruthy();
     expect(region("Who may sign in").getByText(MEMBER.allowed_domains[0]!)).toBeTruthy();
     expect(region("Groups").getByText("teams")).toBeTruthy();
@@ -184,18 +201,18 @@ describe("Settings › Organisation and People & sign-in", () => {
   it("an empty Domains list and an unset groups claim say what they are, never nobody", async () => {
     show({ ...MEMBER, allowed_emails: [THEIRS], allowed_domains: [], groups_claim: "" });
     expect(region("Who may sign in").getByText("No domain is allowed.")).toBeTruthy();
-    expect(region("Groups").getByText("No groups claim is set.")).toBeTruthy();
+    expect(region("Groups").getByText("No group claim is set.")).toBeTruthy();
     expect(screen.queryByText("Nobody.")).toBeNull();
     cleanup();
     server({ body: ADMIN }, LAPSED);
     show({ ...ADMIN, groups_claim: "" });
-    expect(await region("Groups").findByText("No groups claim is set.")).toBeTruthy();
+    expect(await region("Groups").findByText("No group claim is set.")).toBeTruthy();
     expect(region("Groups").queryByText("Nobody.")).toBeNull();
     cleanup();
     server({ body: ADMIN });
     show({ ...ADMIN, allowed_domains: [], groups_claim: "" });
-    expect(await screen.findByRole("textbox", { name: "Groups claim" })).toBeTruthy();
-    expect(screen.queryByText("No groups claim is set.")).toBeNull();
+    expect(await screen.findByRole("textbox", { name: "Group claim" })).toBeTruthy();
+    expect(screen.queryByText("No group claim is set.")).toBeNull();
     expect(screen.queryByText("No domain is allowed.")).toBeNull();
   });
 
@@ -235,8 +252,8 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(sent()[0]!.org_name).toBe("Meridian");
     cleanup();
     show(ADMIN);
-    fireEvent.change(await screen.findByRole("textbox", { name: "Groups claim" }), { target: { value: "teams" } });
-    save("Save the groups claim");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Group claim" }), { target: { value: "teams" } });
+    save("Save the group claim");
     await waitFor(() => expect(sent()).toHaveLength(2));
     // Only what changed: an untouched list is not sent, so the server does not judge it again.
     expect(sent()[1]).toEqual({ groups_claim: "teams" });
@@ -247,8 +264,8 @@ describe("Settings › Organisation and People & sign-in", () => {
   it("an admin sets the groups claim, and a member only reads it", async () => {
     const sent = server({ body: ADMIN });
     show({ ...ADMIN, groups_claim: "" });
-    fireEvent.change(await screen.findByRole("textbox", { name: "Groups claim" }), { target: { value: "groups" } });
-    save("Save the groups claim");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Group claim" }), { target: { value: "groups" } });
+    save("Save the group claim");
     await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]!.groups_claim).toBe("groups");
     cleanup();
@@ -266,29 +283,29 @@ describe("Settings › Organisation and People & sign-in", () => {
     expect(region("Groups").getByText(S.enterprise)).toBeTruthy();
     expect(region("Groups").queryByRole("textbox")).toBeNull();
     expect(region("Groups").getByText("groups")).toBeTruthy();
-    fireEvent.click(region("Groups").getByRole("button", { name: "Clear the groups claim" }));
-    save("Save the groups claim");
+    fireEvent.click(region("Groups").getByRole("button", { name: "Clear the group claim" }));
+    save("Save the group claim");
     await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]!.groups_claim).toBe("");
     cleanup();
     server({ body: ADMIN }, LAPSED);
     show({ ...ADMIN, groups_claim: "" });
     await region("Groups").findByText(S.enterprise);
-    expect(region("Groups").queryByRole("button", { name: "Clear the groups claim" })).toBeNull();
+    expect(region("Groups").queryByRole("button", { name: "Clear the group claim" })).toBeNull();
   });
 
   it("a groups claim the environment sets names its variable and is never sent", async () => {
     const sent = server({ body: ADMIN });
     show({ ...ADMIN, groups_claim: "groups", overridden: [...ADMIN.overridden, "groups_claim"] });
-    expect(region("Groups").getByText("Set on the server, by CANYON_GROUPS_CLAIM. Change it there, not here.")).toBeTruthy();
-    expect(region("Groups").queryByRole("button", { name: "Save the groups claim" })).toBeNull();
+    expect(region("Groups").getByText("Set in Canyon's server configuration, as CANYON_GROUPS_CLAIM, so it can't be changed here.")).toBeTruthy();
+    expect(region("Groups").queryByRole("button", { name: "Save the group claim" })).toBeNull();
     expect(sent()).toHaveLength(0);
   });
 
   // The organisation's name pinned by the environment has no Save: its only answer is set_by_operator.
   it("a pinned organisation name names its variable and offers no Save", () => {
     show({ ...ADMIN, overridden: [...ADMIN.overridden, "org_name"] }, "organisation");
-    expect(screen.getByText("Set on the server, by CANYON_ORG. Change it there, not here.")).toBeTruthy();
+    expect(screen.getByText("Set in Canyon's server configuration, as CANYON_ORG, so it can't be changed here.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
   });
 
@@ -400,7 +417,7 @@ describe("Settings › People & sign-in, the security responders", () => {
     const sent = server({ body: ADMIN });
     show({ ...ADMIN, overridden: [...ADMIN.overridden, "responder_claim", "responder_value"] });
     const responders = region(RESPONDERS);
-    expect(responders.getByText(/Set on the server, by CANYON_RESPONDER_CLAIM and CANYON_RESPONDER_VALUE\. Change it there, not here\./)).toBeTruthy();
+    expect(responders.getByText(/Set in Canyon's server configuration, as CANYON_RESPONDER_CLAIM and CANYON_RESPONDER_VALUE, so it can't be changed here\./)).toBeTruthy();
     expect(responders.queryByRole("textbox", { name: "Responder claim" })).toBeNull();
     expect(responders.queryByRole("button", { name: "Save the security responders" })).toBeNull();
     expect(sent()).toHaveLength(0);

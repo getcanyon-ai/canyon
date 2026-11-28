@@ -33,6 +33,11 @@ describe("Settings › Databases", () => {
     expect(screen.getByText(DATABASES.off)).toBeTruthy();
     expect(screen.getByText(DATABASES.turnOnMeans)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: DATABASES.turnOn }));
+    // It opens a way into apps' databases, so it asks first, saying what changes, and nothing is sent before yes (D16).
+    const ask = within(screen.getByRole("group", { name: DATABASES.turnOnAsk }));
+    expect(ask.getByText(DATABASES.turnOnMeans)).toBeTruthy();
+    expect(sent()).toEqual([]);
+    fireEvent.click(ask.getByRole("button", { name: DATABASES.turnOn }));
     await waitFor(() => expect(sent()).toEqual([{ db_sessions: "on" }]));
     await waitFor(() => expect(row.db_sessions).toBe("on"));
     rerender(<DatabasesSettings record={row} admin adopt={() => undefined} />);

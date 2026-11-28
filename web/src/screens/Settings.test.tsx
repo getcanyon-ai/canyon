@@ -213,7 +213,7 @@ describe("Settings › App hosting", () => {
     render(<Settings />);
     const heading = await screen.findByRole("heading", { name: "How people reach apps" });
     const first = heading.nextElementSibling?.textContent ?? "";
-    expect(first).toContain("The front door is");
+    expect(first).toBe(S.frontDoor);
     expect(first.startsWith("How people")).toBe(false);
   });
 
@@ -264,7 +264,7 @@ describe("Settings › App hosting", () => {
     const sent = server(unset, { body: golden.get });
     render(<Settings />);
     fireEvent.click(await screen.findByRole("radio", { name: S.gateway }));
-    expect(screen.getByRole("radio", { name: "Standard OIDC gateway" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: "A sign-in proxy that speaks OpenID Connect (OIDC)" })).toHaveProperty("checked", true);
     expect(screen.getByText(S.cookieNote)).toBeDefined();
     type("Issuer", "https://sso.meridian.example");
     type("Audience", "canyon");
@@ -298,7 +298,7 @@ describe("Settings › App hosting", () => {
     type("Domain", "apps.meridian.example");
     fireEvent.click(screen.getByRole("radio", { name: "https://claims-portal-preview.apps.meridian.example" }));
     expect(screen.getByText(S.idpResponse.replace("<app address>", "<app>-<env>.apps.meridian.example"))).toBeDefined();
-    fireEvent.click(screen.getByRole("radio", { name: "Standard OIDC gateway" }));
+    fireEvent.click(screen.getByRole("radio", { name: "A sign-in proxy that speaks OpenID Connect (OIDC)" }));
     expect(screen.queryByText(/oauth2\/idpresponse/)).toBeNull();
   });
 
@@ -522,7 +522,7 @@ describe("Settings › Outbound", () => {
     host([{ body: admin }]);
     const page = within(await open());
     expect((await page.findByRole("radio", { name: "Through Canyon" }) as HTMLInputElement).checked).toBe(true);
-    expect(page.getByText("Apps call out through Canyon's egress gateway, which records each destination.")).toBeDefined();
+    expect(page.getByText("Apps call out through Canyon, which records each destination.")).toBeDefined();
     expect(page.getByText("intake-forms")).toBeDefined();
     expect(page.getByText("These apps still run on their old network. Recreating one restarts it, production included, on the network this setting gives it. If that fails, the app stays stopped until you recreate it again.")).toBeDefined();
   });
@@ -883,9 +883,9 @@ describe("Settings › Outbound's replicas", () => {
     const page = within(await open());
     expect(await page.findByText(S.replicasHeading)).not.toBeNull();
     const line = (name: string) => page.getByText(name).parentElement?.textContent;
-    expect(line("canyon-egress-a")).toBe("canyon-egress-apolicy up to date");
-    expect(line("canyon-egress-b")).toBe("canyon-egress-bpolicy 47m old");
-    expect(line("canyon-egress-c")).toBe("canyon-egress-cno policy yet");
+    expect(line("canyon-egress-a")).toBe("canyon-egress-arules up to date");
+    expect(line("canyon-egress-b")).toBe("canyon-egress-brules 47m old");
+    expect(line("canyon-egress-c")).toBe("canyon-egress-cno rules yet");
   });
 
   it("draws no heading with no replica", async () => {
@@ -904,7 +904,7 @@ describe("Settings › Outbound's replicas", () => {
     const advanced = async () => (await within(await open()).findByText("Advanced")).closest("details") as HTMLDetailsElement;
     let folded = await advanced();
     expect(folded.open).toBe(false);
-    expect(within(folded).getByText("Limits, gateway replicas and credential certificates")).toBeDefined();
+    expect(within(folded).getByText("Limits, outbound proxies and credential certificates")).toBeDefined();
     expect(within(folded).getByRole("region", { name: S.capsHeading })).toBeDefined();
     expect(within(folded).getByText(S.replicasHeading)).toBeDefined();
     expect(within(folded).getByRole("region", { name: S.keysHeading })).toBeDefined();
@@ -1047,7 +1047,7 @@ describe("Settings › Outbound's mode", () => {
     expect(changes().getAllByRole("button", { name: /^Allow / }).map((one) => one.getAttribute("aria-label"))).toEqual(["Allow registry.npmjs.org", "Allow hooks.slack.com"]);
     expect(within(changes().getByRole("region", { name: "claims-portal Production" })).getByText("hooks.slack.com:443")).toBeDefined();
     expect(sent()).toEqual([]);
-    expect(changes().getByText("Refuse 2 destinations now? Apps that call them get a 403 from Canyon until they're allowed or you switch back to Observe.")).toBeDefined();
+    expect(changes().getByText("Refuse 2 destinations now? Canyon refuses apps' calls to them until they're allowed or you switch back to Observe.")).toBeDefined();
     await waitFor(() => expect(document.activeElement).toBe(changes().getByRole("button", { name: S.modeYes }))); // the question takes the keyboard once read
     fireEvent.click(changes().getByRole("button", { name: S.modeYes }));
     expect(await page.findByText(`${SAVE.saved} ${S.modeSavedThen}`)).toBeDefined();

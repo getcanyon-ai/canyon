@@ -75,8 +75,8 @@ describe("Settings › Outbound's certificates", () => {
     const logged = (["log", "info", "warn", "error", "debug"] as const).map((level) => vi.spyOn(console, level));
     render(<Keys setting={egress.setting_admin} />);
     const form = within(screen.getByRole("form", { name: S.keysByoHeading }));
-    fireEvent.change(form.getByLabelText("Certificates: the sub-CA first, ending at your root"), { target: { value: CERT } });
-    fireEvent.change(form.getByLabelText("Private key (PKCS #8)"), { target: { value: KEY } });
+    fireEvent.change(form.getByLabelText("Certificate chain: yours first, ending at your root"), { target: { value: CERT } });
+    fireEvent.change(form.getByLabelText("Private key (PEM, PKCS #8)"), { target: { value: KEY } });
     expect(document.body.innerHTML).not.toContain(KEY_BODY);
     fireEvent.click(form.getByRole("button", { name: S.keysByoYes }));
     // Apps trust it from their next deploy, so it asks first, and nothing is sent before yes (D16).
@@ -84,7 +84,7 @@ describe("Settings › Outbound's certificates", () => {
     fireEvent.click(within(form.getByRole("group", { name: S.keysByoAsk })).getByRole("button", { name: S.keysByoYes }));
     expect((await screen.findByRole("status")).textContent).toBe(`${SAVE.saved} ${S.keysSavedThen}`);
     expect(posts()).toEqual([["/api/v1/egress/ca/rotate", { cert: CERT, key: KEY }]]);
-    expect((form.getByLabelText("Private key (PKCS #8)") as HTMLTextAreaElement).value).toBe("");
+    expect((form.getByLabelText("Private key (PEM, PKCS #8)") as HTMLTextAreaElement).value).toBe("");
     expect(document.body.innerHTML).not.toContain(KEY_BODY);
     for (const spy of logged) expect(JSON.stringify(spy.mock.calls)).not.toContain(KEY_BODY);
   });
@@ -102,7 +102,7 @@ describe("Settings › Outbound's certificates", () => {
     const byo = { fingerprint: "e".repeat(64), byo: true, created_at: "2026-11-01T00:00:00Z", not_after: "2027-01-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" };
     const setting = { ...egress.setting_admin, ca: { signing: byo.fingerprint, roots: [byo], rotates_at: null } };
     render(<Keys setting={setting} now={Date.parse("2026-11-03T00:00:00Z")} />);
-    expect(screen.getByRole("note").textContent).toBe("Your sub-CA ends on 1 Jan 2027. Canyon doesn't replace it on its own: bring a new one, or switch back to Canyon's own root, before then.");
+    expect(screen.getByRole("note").textContent).toBe("Your certificate ends on 1 Jan 2027. Canyon doesn't replace it on its own: bring a new one, or switch back to Canyon's own certificate, before then.");
     cleanup();
     render(<Keys setting={setting} now={Date.parse("2026-11-01T00:00:00Z")} />);
     expect(screen.getByText(S.keysByo)).toBeDefined();

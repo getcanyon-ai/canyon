@@ -560,7 +560,11 @@ func TestADeploysImageScanGoesBeforeTheFleetsReads(t *testing.T) {
 	tick := RescanWorkflow + "-2026-11-27T16:45:00Z"
 	var fleet []string
 	for range 4 {
-		fleet = append(fleet, ImageDigest(freshImage(t, f)))
+		d := freshImage(t, f) // its digest; f.Image is the reference the read names
+		if d == "" || ImageDigest(f.Image) != d {
+			t.Fatalf("the fleet's image %q has no digest the test can find it by: %q", f.Image, d)
+		}
+		fleet = append(fleet, d)
 		if err := askImageSBOM(durable, imageScan{Run: tick, Project: project, Image: f.Image}, true); err != nil {
 			t.Fatal(err)
 		}

@@ -435,7 +435,7 @@ promotion row already carries `deployed_by` (the preview deploy's actor) and `pr
 person who confirmed), as two separate names (`contracts/routes.md:54`). Comparing them is a rule,
 not a schema change, and it is not in this cut.
 
-### 4.5 The org setting: "Production is approved in the dashboard"
+### 4.5 The org setting: "A person approves each promotion to production, here in Canyon"
 
 > **Decided 2026-10-07** (#1820, the owner). The named trigger came from Canyon's own first
 > tester run rather than a customer: carol's headless Claude Code ran `canyon deploy --env prod --yes`
@@ -447,12 +447,12 @@ Some organisations will not accept §4.4's answer, and they should not have to a
 product about it. One setting, **off by default**, admin-only, on Settings › People & sign-in, the
 page about who is who:
 
-> **Production is approved in the dashboard.** On: the CLI and agents only ask, and a person on the
+> **A person approves each promotion to production, here in Canyon.** On: the CLI and agents only ask, and a person on the
 > app's team approves it here in Canyon. Off: anyone on the app's team can promote, and so can an
 > agent they ask, through the CLI or Canyon's tools. (Amended 2026-11-22: agents also promote through
 > Canyon's MCP tools, signed in as their person.)
 
-Wording rule: it names a place, not a prohibition. "Production is approved in the dashboard"
+Wording rule: it names a place, not a prohibition. "A person approves each promotion to production, here in Canyon"
 describes where the act happens. "Agents can't promote" would describe a control §4.4 has just
 admitted is not airtight, and it would be the second sentence a sceptical platform engineer
 disbelieves.

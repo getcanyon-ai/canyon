@@ -209,7 +209,7 @@ Only an admin can change a rule or a custom rule, and only as a person: Canyon r
 from anything else, such as the token your own deployment platform uses under
 [hand-off](/self-host/hand-off/). A coding agent using your CLI sign-in counts as you.
 
-When "Production is approved in the dashboard" is on (Settings › People & sign-in), rules, custom
+When "A person approves each promotion to production, here in Canyon" is on (Settings › People & sign-in), rules, custom
 rules, the approved buildpacks and the design system can be changed only in the dashboard, not from
 a CLI sign-in. [Who can do what](/org/who-can-do-what/) lists every role and what each may change.
 

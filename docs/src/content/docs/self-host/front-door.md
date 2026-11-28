@@ -35,7 +35,7 @@ itself, so there's nothing to set here."
 ## On Kubernetes
 
 An admin sets three things in **Settings › App hosting**. Until they are saved, no app can run: a
-deploy ends "No front door is set, so no app can run on this Canyon yet. An admin sets it in
+deploy ends "Nobody can reach an app until this is set, so no app can run on this Canyon yet. An admin sets it in
 Settings › App hosting."
 
 - **The domain** apps live under: Canyon's own host, unless the admin names another.
@@ -51,13 +51,13 @@ Canyon's token. Only the sidecar can reach the app's port.
 
 ### Who signs people in
 
-The dashboard offers two choices, "Your gateway signs people in" and "Canyon signs people in", and
+The dashboard offers two choices, "Your sign-in proxy signs people in" and "Canyon signs people in", and
 the first comes in two kinds. Pick one:
 
-- **Your gateway signs people in, as a standard OIDC gateway**, if an OIDC proxy already sits in
+- **Your sign-in proxy signs people in, as a standard OIDC gateway**, if an OIDC proxy already sits in
   front of your internal apps and can pass on the signed-in person's ID token as
   `Authorization: Bearer`. People sign in once, at your gateway, for every app.
-- **Your gateway signs people in, as AWS load balancer sign-in**, if your apps sit behind an AWS
+- **Your sign-in proxy signs people in, as AWS load balancer sign-in**, if your apps sit behind an AWS
   Application Load Balancer whose listener rule signs people in with OIDC. The load balancer sends
   each person to your provider with `redirect_uri=https://<address>/oauth2/idpresponse`, an address
   AWS fixes for each host. The OIDC client its listener rule names must accept each app's
@@ -70,7 +70,7 @@ the first comes in two kinds. Pick one:
   each app's `https://<address>/oauth2/callback`, in both environments, or a wildcard where your
   provider allows one.
 
-```mermaid title="Your gateway signs people in, standard OIDC: the sidecar verifies the gateway's ID token"
+```mermaid title="Your sign-in proxy signs people in, standard OIDC: the sidecar verifies the gateway's ID token"
 flowchart TD
   browser["Browser"]
   gw["Your OIDC gateway<br>signs the person in"]
@@ -87,7 +87,7 @@ flowchart TD
   sidecar -->|"Canyon's identity token"| app
 ```
 
-```mermaid title="Your gateway signs people in, AWS load balancer: the sidecar verifies what the load balancer signed"
+```mermaid title="Your sign-in proxy signs people in, AWS load balancer: the sidecar verifies what the load balancer signed"
 flowchart TD
   browser["Browser"]
   alb["Your AWS load balancer<br>its listener rule signs the person in"]
@@ -126,7 +126,7 @@ flowchart TD
 `canyon-router` in these pictures is Canyon's own, there only while Canyon runs the apps. When
 [your platform runs them](/self-host/hand-off/), your platform routes each request to the sidecar.
 
-| | Standard OIDC gateway | AWS load balancer sign-in | Canyon signs people in |
+| | A sign-in proxy that speaks OpenID Connect (OIDC) | AWS load balancer sign-in | Canyon signs people in |
 |---|---|---|---|
 | Who signs people in | Your gateway | Your load balancer | oauth2-proxy, beside each app |
 | What you give Canyon | The gateway's issuer, audience and key set URL, and its session cookie's name | The load balancer's ARN, and its session cookie's name if it isn't `AWSELBAuthSessionCookie` | Your OIDC client's issuer, client ID and secret |
@@ -166,7 +166,7 @@ enforces NetworkPolicy and the certificate covers two addresses under the app wi
 a change reaches each app at its next deploy or promotion.
 
 One exception, for an organization whose own platform runs the apps: with a platform webhook or a deploy repo saved,
-a **Your gateway signs people in** front door that fails the check is saved anyway, marked **not
+a **Your sign-in proxy signs people in** front door that fails the check is saved anyway, marked **not
 checked on this cluster**, with what the check found beside it. A check that can't finish still
 refuses the save, and changes nothing, while Canyon runs the apps. Your platform can run apps behind it;
 Canyon never runs one behind it, and switching back to Canyon running apps waits until a save

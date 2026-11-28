@@ -384,7 +384,7 @@ administers Canyon reads `Admins change these settings and the policies. Everyon
 promotes; only an admin or a security responder approves a blocking finding.`, and an address list's
 *Add* puts the cursor in the row it adds, a field wide enough for a whole address (amended 2026-10-15,
 #2258) — the groups claim, and
-*Production is approved in the dashboard*, a switch
+*A person approves each promotion to production, here in Canyon*, a switch
 with the one line `On: the CLI and agents only ask, and a person on the app's team approves it here in
 Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.`
 (amended 2026-10-07, #1820; amended 2026-11-22: agents also promote through Canyon's tools; `design/AUTH.md` §4.5); on a host with sign-in off, one line saying so and no

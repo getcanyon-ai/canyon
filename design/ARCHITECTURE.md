@@ -203,7 +203,7 @@ the compose demo's port mapping, from the address the host publishes it on — a
 those two modes; an authenticated host shows the signed-in person instead. **A
 person's session is that person**: whatever runs under it, a terminal or an agent in a harness,
 acts and is recorded as them, so `prod.human-approval` names somebody. One org preference,
-*Production is approved in the dashboard* (`design/AUTH.md` §4.5, decided 2026-10-07, #1820), is for orgs
+*A person approves each promotion to production, here in Canyon* (`design/AUTH.md` §4.5, decided 2026-10-07, #1820), is for orgs
 that want that act in the dashboard: on, the CLI files a production approval and prints its link,
 and a person signed in to the dashboard approves it. **Who may sign in is the union of two lists**, the email
 domains that may sign in and the individual addresses that may, with at least one non-empty, so a

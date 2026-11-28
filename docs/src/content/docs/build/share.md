@@ -73,7 +73,7 @@ team as it now stands:
 
 - **Read-only is the default.** `--level` is `owner`, `contributor` or `read-only`.
 - **Everyone** means everyone who may sign in to your Canyon. It is always read-only.
-- **Groups** come from your identity provider. They work once an admin sets the **Groups claim**
+- **Groups** come from your identity provider. They work once an admin sets the **Group claim**
   (the field of the sign-in token that lists a person's groups) in Settings › People & sign-in →
   Groups.
 - **App roles** are roles your app defines for itself, such as `expense-approver`, declared in its

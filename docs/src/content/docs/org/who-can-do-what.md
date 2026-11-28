@@ -232,7 +232,7 @@ refused and told to use the dashboard. The API calls behind each are listed in
 - Approve a blocking finding.
 - Lift a hold on production.
 
-**Production approval** is the setting **Production is approved in the dashboard**, in Settings ›
+**Production approval** is the setting **A person approves each promotion to production, here in Canyon**, in Settings ›
 People & sign-in → Production. An admin turns it on to make every promotion a person's decision in
 the dashboard. While it is on, these move to the dashboard too:
 

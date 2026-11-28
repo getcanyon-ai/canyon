@@ -182,7 +182,7 @@ test.describe("Settings › Hosting at 320px", () => {
   test.beforeEach(async ({ page }) => { await answered(page); });
   test("leaves the page its width", async ({ page }) => {
     await page.goto("/#/settings/hosting");
-    await expect(page.getByText("Who signs people in")).toBeVisible();
+    await expect(page.getByText("Who signs people in", { exact: true })).toBeVisible(); // the legend, not the line above it that says the same words
     expect(await page.evaluate(() => document.documentElement.scrollWidth), "the page's width").toBeLessThanOrEqual(320);
   });
 });

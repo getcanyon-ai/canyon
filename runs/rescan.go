@@ -51,7 +51,11 @@ func (p *Pipeline) registerRescan(dc dbos.Context) error {
 	dbos.RegisterWorkflow(dc, p.imageSBOM, dbos.WithWorkflowName(ImageSBOMWorkflow), dbos.WithMaxRecoveryAttempts(3))
 	dbos.RegisterWorkflow(dc, p.rescan, dbos.WithWorkflowName(RescanWorkflow), dbos.WithMaxRecoveryAttempts(3))
 	for q, n := range map[string]int{PatchesQueue: positive(p.PatchConcurrency, 1), ImageQueue: 1, RescanQueue: 1} {
-		if _, err := dbos.RegisterQueue(dc, q, dbos.WithGlobalConcurrency(n)); err != nil {
+		opts := []dbos.QueueOption{dbos.WithGlobalConcurrency(n)}
+		if q == ImageQueue { // a deploy's before the fleet's (askImageSBOM)
+			opts = append(opts, dbos.WithPriorityEnabled())
+		}
+		if _, err := dbos.RegisterQueue(dc, q, opts...); err != nil {
 			return err
 		}
 	}
@@ -139,7 +143,7 @@ func (p *Pipeline) rescan(ctx dbos.Context, tick dbos.ScheduledWorkflowInput) (i
 	}
 	for _, in := range plan.Read {
 		in.Run = RescanWorkflow + "-" + tick.ScheduledTime.UTC().Format(time.RFC3339)
-		if _, err := dbos.Enqueue[any](ctx, ImageQueue, ImageSBOMWorkflow, in, dbos.WithEnqueueWorkflowID(imageScanID(in.Project, ImageDigest(in.Image), in.Run))); err != nil {
+		if err := askImageSBOM(ctx, in, true); err != nil { // behind any deploy's (#264)
 			return 0, err
 		}
 	}

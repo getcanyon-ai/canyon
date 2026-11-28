@@ -149,6 +149,7 @@ var notFinishedWords = map[string]string{
 	"timeout": "did not finish in time", "killed": "stopped before it finished", "not_sarif": "did not answer an SBOM",
 	"no_image": "this Canyon host has no image for it", "no_room": "the cluster had no room to run it",
 	"db_missing": "its Java database could not be downloaded", "db_stale": "its Java database is over 5 days old",
+	"busy": "Canyon's scanner was busy with other apps, and checks again on its next round", // Canyon's own (#264)
 }
 
 func scanWords(notFinished, reason string) string {

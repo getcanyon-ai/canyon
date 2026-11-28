@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useSaveChoice } from "../ui/Saved";
+import { useUnsaved } from "../ui/Unsaved";
 import { getGitHub, getGitHubRepositories, importRepository, linkRepository, said, setGitHubClientSecret, setGitHubOrg, unlinkRepository, type GitHubOrg, type GitHubRead, type GitHubRepository } from "../api";
 import { S } from "../strings";
 import { Age } from "../ui/Age";
@@ -218,6 +220,7 @@ const FIELD = "rounded-lg border border-border bg-surface px-2.5 py-1.5 text-bas
 function ImportForm({ repo, folder, cancel, act }: { repo: GitHubRepository; folder: boolean; cancel: () => void; act: (work: Promise<unknown>) => void }) {
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
+  useUnsaved(path !== "" || name !== ""); // typed and not made yet: leaving asks first (D16)
   const fallback = path.trim() === "" ? repo.full_name.split("/")[1]! : path.trim().split("/").pop()!;
   return (
     <span className="flex flex-wrap items-end gap-2">
@@ -239,6 +242,7 @@ function ImportForm({ repo, folder, cancel, act }: { repo: GitHubRepository; fol
 function LinkForm({ repo, cancel, act }: { repo: GitHubRepository; cancel: () => void; act: (work: Promise<unknown>) => void }) {
   const [app, setApp] = useState("");
   const [path, setPath] = useState("");
+  useUnsaved(app !== "" || path !== "");
   return (
     <span className="flex flex-wrap items-end gap-2">
       <label className="grid gap-1 text-sm text-text-dim">App id
@@ -259,8 +263,8 @@ function LinkForm({ repo, cancel, act }: { repo: GitHubRepository; cancel: () =>
 // be careful under it while it is on.
 function NewRepositories({ org }: { org: GitHubOrg }) {
   const [on, setOn] = useState(org.imports_new);
-  const [failure, setFailure] = useState<string | null>(null);
-  const flip = (next: boolean) => setGitHubOrg(org.account, next).then(({ org: saved }) => { setOn(saved.imports_new); setFailure(null); }, (err: unknown) => setFailure(said(err)));
+  const choice = useSaveChoice(); // a choice: it saves as it is made, and says so (D16)
+  const flip = (next: boolean) => choice.save(() => setGitHubOrg(org.account, next).then(({ org: saved }) => setOn(saved.imports_new)));
   return (
     <span className="grid gap-1 whitespace-normal">
       <select aria-label={`New repositories in ${org.account}`} className="w-fit rounded-md border border-border bg-surface px-1.5 py-0.5 text-base" value={on ? "apps" : "admin"} onChange={(event) => void flip(event.target.value === "apps")}>
@@ -268,7 +272,7 @@ function NewRepositories({ org }: { org: GitHubOrg }) {
         <option value="admin">Picked by an admin</option>
       </select>
       {on && <span className="max-w-[320px] text-sm text-text-dim">{S.githubImportsWarning.replaceAll("<org>", org.account)}</span>}
-      {failure !== null && <span className="text-sm text-critical">{failure}</span>}
+      {choice.line()}
     </span>
   );
 }
@@ -279,6 +283,7 @@ function NewRepositories({ org }: { org: GitHubOrg }) {
 function ClientSecret({ org, saved }: { org: GitHubOrg; saved: (org: GitHubOrg) => void }) {
   const [secret, setSecret] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
+  useUnsaved(secret.trim() !== ""); // typed: its Save shows once pasted, and leaving asks first (D16)
   const save = () => setGitHubClientSecret(org.account, secret.trim()).then(({ org: next }) => saved(next), (err: unknown) => setFailure(said(err)));
   const callback = `${window.location.origin}/api/v1/github/link/callback`;
   return (
@@ -288,9 +293,7 @@ function ClientSecret({ org, saved }: { org: GitHubOrg; saved: (org: GitHubOrg) 
       <label className={LABEL} htmlFor={`github-secret-${org.app_slug}`}>Client secret</label>
       <span className="flex max-w-[520px] flex-wrap items-center gap-2">
         <input id={`github-secret-${org.app_slug}`} type="password" autoComplete="off" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-base" value={secret} onChange={(event) => setSecret(event.target.value)} />
-        {secret.trim() === ""
-          ? <Button disabled reason="Paste the secret GitHub generated first.">{S.githubSecretSave}</Button>
-          : <Button variant="primary" onClick={() => void save()}>{S.githubSecretSave}</Button>}
+        {secret.trim() !== "" && <Button variant="primary" onClick={() => void save()}>{S.githubSecretSave}</Button>}
       </span>
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}
     </div>

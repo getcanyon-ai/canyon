@@ -41,7 +41,7 @@ test("H1 the admin saves the webhook and the front door, and stores the two valu
   await page.getByLabel("JWKS URL", { exact: true }).fill(`${env("HANDOFF_ISSUER")}/keys`);
   await page.getByLabel("Session cookie", { exact: true }).fill("_gw");
   await page.getByLabel("Domain", { exact: true }).fill(env("HANDOFF_DOMAIN"));
-  await page.getByRole("button", { name: "Save the front door" }).click();
+  await page.getByRole("button", { name: "Save how people reach apps" }).click();
   await expect(page.getByText("Saved. Apps change at their next deploy.")).toBeVisible({ timeout: 180_000 }); // the probe takes its time
   await expect(page.getByRole("heading", { name: "✓ Your gateway signs people in" })).toBeVisible();
 });

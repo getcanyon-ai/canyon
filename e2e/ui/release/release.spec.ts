@@ -108,11 +108,11 @@ async function people(page: Page, who: string) {
   await expect(page.getByRole("region", { name: "Who may sign in" })).toBeVisible();
   if (who === "admin") {
     await expect(page.getByRole("region", { name: "Security responders" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save people and sign-in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add person" })).toBeVisible(); // each section's Save shows once it changes (D16)
   } else {
     await expect(page.getByText("An admin changes these settings.")).toBeVisible();
     await expect(page.getByRole("region", { name: "Security responders" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Save people and sign-in" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add person" })).toHaveCount(0);
   }
   await walked(page, "people", who);
 }

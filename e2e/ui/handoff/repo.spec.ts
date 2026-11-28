@@ -20,7 +20,10 @@ test("R1 the admin saves and checks the deploy repo, stores the two values, and 
   await page.goto("/#/settings/hosting");
   await page.getByRole("radio", { name: "Your platform runs apps" }).check();
   const repo = page.getByRole("radio", { name: "Canyon commits to your deploy repo (recommended)" });
-  await repo.click(); // checked once the server saves the preference: the radio follows the record, not the click
+  await repo.click();
+  // It changes how releases reach the platform, so it asks first (design/EXPERIENCE.md, D16).
+  await page.getByRole("group", { name: "Change how releases reach your platform?" }).getByRole("button", { name: "Change it" }).click();
+  await expect(page.getByRole("group", { name: "Change how releases reach your platform?" })).toHaveCount(0); // saved: the question goes
   await expect(repo).toBeChecked();
   await page.getByLabel("Repository URL", { exact: true }).fill(env("HANDOFF_REPO_URL"));
   await page.getByLabel("User name", { exact: true }).fill(env("HANDOFF_REPO_USER"));
@@ -50,7 +53,7 @@ test("R1 the admin saves and checks the deploy repo, stores the two values, and 
   await page.getByLabel("JWKS URL", { exact: true }).fill(`${env("HANDOFF_ISSUER")}/keys`);
   await page.getByLabel("Session cookie", { exact: true }).fill("_gw");
   await page.getByLabel("Domain", { exact: true }).fill(env("HANDOFF_DOMAIN"));
-  await page.getByRole("button", { name: "Save the front door" }).click();
+  await page.getByRole("button", { name: "Save how people reach apps" }).click();
   await expect(page.getByText("Saved. Apps change at their next deploy.")).toBeVisible({ timeout: 180_000 }); // the probe takes its time
 });
 

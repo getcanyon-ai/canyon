@@ -3,6 +3,7 @@ import { getTelemetry, putTelemetry, said, type TelemetryState } from "../api";
 import { S } from "../strings";
 import { ago } from "../ui/Age";
 import { Button } from "../ui/Button";
+import { useSaveChoice } from "../ui/Saved";
 
 // Telemetry (#2807; contracts/routes.md, Telemetry): Settings › Telemetry, an admin's alone: a member's screen never asks
 // the routes, which would answer 403. It is on by default, and no screen marks it seen (the owner, 2026-11-12).
@@ -32,19 +33,20 @@ function Report({ sent }: { sent: string }) {
 export function TelemetrySettings() {
   const [state, setState] = useState<TelemetryState | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const turn = useSaveChoice(); // a choice: it saves as it is made, and says so (D16)
   const load = () => getTelemetry().then(setState, (err: unknown) => setFailure(said(err)));
   useEffect(() => { void load(); }, []);
   if (state === null) return failure === null ? null : <p className="text-base text-critical">{failure}</p>;
-  const set = (enabled: boolean) => putTelemetry(enabled).then((next) => { setState(next); setFailure(null); }, (err: unknown) => setFailure(said(err)));
+  const set = (enabled: boolean) => void turn.save(() => putTelemetry(enabled).then(setState));
   const canTurnOn = !state.enabled && (state.off_because === "admin" || state.off_because === "unreachable");
   return (
     <section aria-label="Telemetry" className="grid gap-3">
       <p className="text-base">{statusLine(state)}</p>
       <div className="flex flex-wrap gap-2">
-        {state.enabled && <Button variant="ghost" size="sm" onClick={() => void set(false)}>{S.telemetryTurnOff}</Button>}
-        {canTurnOn && <Button variant="ghost" size="sm" onClick={() => void set(true)}>{S.telemetryTurnOn}</Button>}
+        {state.enabled && <Button variant="ghost" size="sm" onClick={() => set(false)}>{S.telemetryTurnOff}</Button>}
+        {canTurnOn && <Button variant="ghost" size="sm" onClick={() => set(true)}>{S.telemetryTurnOn}</Button>}
       </div>
-      {failure !== null && <p className="text-base text-critical">{failure}</p>}
+      {turn.line()}
       <div className={CARD}>
         <p className="text-md text-text-dim">{S.telemetryNext}</p>
         <Report sent={state.report} />

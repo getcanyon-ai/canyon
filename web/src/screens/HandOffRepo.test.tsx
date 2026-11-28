@@ -156,11 +156,20 @@ describe("the deploy repo (delivery: repo)", () => {
     expect(title(2).textContent).toBe(`2. ${S.stepRepo}`);
   });
 
-  it("is chosen in the dashboard: a pick saves delivery", async () => {
+  // It changes how every release reaches the platform, so a pick asks first, saying what changes, and Cancel sends
+  // nothing (D16).
+  it("is chosen in the dashboard: a pick asks first, then saves delivery", async () => {
     const answered = server({ "PUT /api/v1/preferences": { body: { ...viaRepo, delivery: "webhook" } } });
     const { adopt } = draw();
     fireEvent.click(await screen.findByRole("radio", { name: S.runOrg }));
     fireEvent.click(screen.getByRole("radio", { name: S.deliveryWebhook }));
+    const ask = within(screen.getByRole("group", { name: S.deliveryAsk }));
+    expect(ask.getByText(S.deliveryWebhookNote)).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect((screen.getByRole("radio", { name: S.deliveryRepo }) as HTMLInputElement).checked).toBe(true);
+    expect(answered("PUT", "/api/v1/preferences")).toEqual([]);
+    fireEvent.click(screen.getByRole("radio", { name: S.deliveryWebhook }));
+    fireEvent.click(within(screen.getByRole("group", { name: S.deliveryAsk })).getByRole("button", { name: S.deliveryYes }));
     await waitFor(() => expect(adopt).toHaveBeenCalled());
     expect(answered("PUT", "/api/v1/preferences")).toEqual([{ delivery: "webhook" }]);
   });

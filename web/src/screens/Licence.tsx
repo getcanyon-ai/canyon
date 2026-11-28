@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getLicence, putLicence, said, type LicenceFeature, type LicenceState } from "../api";
 import { S } from "../strings";
-import { Button } from "../ui/Button";
+import { SaveSection } from "../ui/SaveSection";
 import { EnterpriseBadge, FEATURE_NAME, licenceDate } from "../ui/Enterprise";
 
 // Settings › Licence (#2879; contracts/routes.md, Licence): an admin's alone, as Telemetry is: a member's screen never asks
@@ -31,13 +31,10 @@ export function LicenceSettings() {
   const [licence, setLicence] = useState<LicenceState | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [text, setText] = useState("");
-  const [saving, setSaving] = useState(false);
   useEffect(() => { getLicence().then(setLicence, (err: unknown) => setFailure(said(err))); }, []);
   if (licence === null) return failure === null ? null : <p className="text-base text-critical">{failure}</p>;
-  const save = () => {
-    setSaving(true);
-    putLicence(text.trim()).then((next) => { setLicence(next); setText(""); setFailure(null); setSaving(false); }, (err: unknown) => { setFailure(said(err)); setSaving(false); });
-  };
+  // Typed, so it has its Save, shown once something is pasted (D16).
+  const save = () => putLicence(text.trim()).then((next) => { setLicence(next); setText(""); });
   return (
     <section aria-label="Licence" className="grid gap-3">
       <p className="text-base">{stateLine(licence)}</p>
@@ -56,10 +53,7 @@ export function LicenceSettings() {
             <label htmlFor="licence-text" className={LABEL}>{S.licencePaste}</label>
             <textarea id="licence-text" value={text} onChange={(e) => setText(e.target.value)} rows={5} spellCheck={false}
               className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-sm" />
-            <span>
-              {saving ? <Button size="sm" disabled reason="Saving…">{S.licenceSave}</Button>
-                : <Button size="sm" onClick={save}>{S.licenceSave}</Button>}
-            </span>
+            <SaveSection label={S.licenceSave} changed={text.trim() !== ""} save={save} />
           </div>
         )}
       {failure !== null && <p className="text-base text-critical">{failure}</p>}

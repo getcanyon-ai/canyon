@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Preferences } from "../api";
 import { DATABASES } from "../strings";
@@ -38,6 +38,23 @@ describe("Settings › Databases", () => {
     rerender(<DatabasesSettings record={row} admin adopt={() => undefined} />);
     expect(screen.getByText(DATABASES.on)).toBeTruthy();
     expect(screen.getByRole("button", { name: DATABASES.turnOff })).toBeTruthy();
+    expect(screen.getByText("Saved.")).toBeTruthy(); // a choice says it saved (D16)
+  });
+
+  // Turning them off ends every open session, so it asks first, saying so, and Cancel sends nothing (D16).
+  it("asks before turning database sessions off, and sends nothing on Cancel", async () => {
+    const sent = server({ ...golden.preferences_admin, db_sessions: "off" });
+    render(<DatabasesSettings record={{ ...golden.preferences_admin, db_sessions: "on" }} admin adopt={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: DATABASES.turnOff }));
+    const ask = screen.getByRole("group", { name: DATABASES.turnOffAsk });
+    expect(within(ask).getByText(DATABASES.turnOffMeans)).toBeTruthy();
+    expect(sent()).toEqual([]);
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: DATABASES.turnOffAsk })).toBeNull();
+    expect(sent()).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: DATABASES.turnOff }));
+    fireEvent.click(within(screen.getByRole("group", { name: DATABASES.turnOffAsk })).getByRole("button", { name: DATABASES.turnOff }));
+    await waitFor(() => expect(sent()).toEqual([{ db_sessions: "off" }]));
   });
 
   it("a member reads the switch, and changes nothing", () => {

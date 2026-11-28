@@ -135,7 +135,7 @@ describe("an App's client secret", () => {
     const ask = await screen.findByRole("heading", { name: S.githubSecretTitle.replace("<org>", "acme-labs") });
     expect(screen.queryByRole("heading", { name: S.githubSecretTitle.replace("<org>", "acme-canyon") })).toBeNull();
     expect(ask.parentElement?.textContent).toContain(`${window.location.origin}/api/v1/github/link/callback`);
-    expect((screen.getByRole("button", { name: S.githubSecretSave }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: S.githubSecretSave })).toBeNull(); // nothing pasted, nothing to save (D16)
     fireEvent.change(screen.getByLabelText("Client secret"), { target: { value: " 0123abcd " } });
     fireEvent.click(screen.getByRole("button", { name: S.githubSecretSave }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: S.githubSecretTitle.replace("<org>", "acme-labs") })).toBeNull());

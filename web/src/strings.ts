@@ -344,6 +344,7 @@ export const S = {
   integrationsTeamsHow: "In the channel, choose More options (…) → Workflows → \"Send webhook alerts to a channel\", then copy its URL.",
   integrationsKeep: "Leave it empty to keep the current URL.",
   integrationsSaveNote: "Saving posts a summary of what needs a person now to the channel. If that post fails, nothing is saved.",
+  integrationsSave: "Save the channel",
   integrationsSaved: "Saved. <channel> got a summary of what needs a person now.",
   integrationsTest: "Send a test message",
   integrationsTested: "Sent <channel> a summary of what needs a person now.",
@@ -388,7 +389,11 @@ export const S = {
   routesOnNote: "Canyon adds the credential an app's team sets for a destination to the app's calls there, so the app never holds it. To add it, Canyon decrypts calls to that destination alone, so each app trusts Canyon's certificate from its next deploy or promotion.",
   routesTurningOff: "Canyon stops adding credentials at once, so calls that need one will fail. Apps keep trusting its certificate until their next deploy or promotion.",
   routesUnread: "Canyon couldn't read whether it adds credentials. Reload the page to try again.",
-  routesSaved: "Saved.",
+  // The question before turning credentials on or off (D16), and its answers.
+  routesAskOn: "Add credentials to apps' calls?",
+  routesAskOff: "Stop adding credentials to apps' calls?",
+  routesYesOn: "Add credentials",
+  routesYesOff: "Stop adding credentials",
   modeViaOff: "Turn on Through Canyon first: the mode applies only to calls that go through Canyon.",
   modeNow: "This applies to running apps within seconds, not at their next deploy.",
   modeRefuses: "Allowlist would refuse <n> destinations apps called in the last 30 days:",
@@ -400,7 +405,9 @@ export const S = {
   modeAskOne: "Refuse 1 destination now? Apps that call it get a 403 from Canyon until it's allowed or you switch back to Observe.",
   modeAskNone: "Switch to allowlist now? Apps get a 403 from Canyon for any destination not on their allowlist.",
   modeYes: "Switch to allowlist",
-  modeSaved: "Saved. Running apps follow it within seconds.",
+  modeAskObserve: "Switch back to Observe?",
+  modeYesObserve: "Switch to Observe",
+  modeSavedThen: "Running apps follow it within seconds.",
   // An outbound rule change saved while a gateway replica hadn't taken it (contracts/routes.md, Canyon-Egress-Pending;
   // #2789), in place of the change's own confirmation: a widening or a narrowing alike.
   gatewayPending: "Saved, but one of Canyon's gateways (<replica>) hasn't taken it yet. Until it does, it may still let calls through or refuse them as before this change.",
@@ -419,6 +426,11 @@ export const S = {
   viaUnseen: "While calls don't go through Canyon it records none, so it can't say all that allowlist will refuse.",
   viaAsk: "Send calls through Canyon under allowlist? From each app's next deploy, Canyon refuses every destination not on its allowlist.",
   viaYes: "Turn on Through Canyon",
+  // The question before a change to how apps call out that starts refusing nothing (D16), and its answer.
+  readingCalls: "Reading what apps called…",
+  viaAskOn: "Send apps' calls through Canyon?",
+  viaAskOff: "Let apps call out directly?",
+  viaYesOff: "Let apps call out directly",
   allow: "Allow",
   allowed: "Allowed <destination>",
   allowlist: "Allowlist: <entries>",
@@ -489,7 +501,7 @@ export const S = {
   capPending: "Requests waiting",
   capPendingNote: "How many requests to allow a destination can wait at once. Past this, a refused call files no new request.",
   capRange: "<min> to <max>",
-  capsSaved: "Limits saved.",
+  capsSave: "Save limits",
   // In place of the Outbound card while nothing of the app goes through Canyon (#2561).
   outboundOff: "Outbound is Off on this Canyon, so it records none of this app's calls. An admin can turn it on in Settings › Outbound.",
   // Layer 3's screens (#2145): an env's credentials on the Outbound card, never a value, and the roots Canyon signs under
@@ -525,7 +537,10 @@ export const S = {
   keysByoHeading: "Use your own sub-CA",
   keysByoNote: "A sub-CA your devices already trust, name-constrained to the destinations Canyon adds credentials to, and allowing no IP addresses.",
   keysKeyNote: "Canyon never shows the key again.",
-  keysSaved: "Saved. Apps trust it from their next deploy or promotion.",
+  keysSavedThen: "Apps trust it from their next deploy or promotion.",
+  // The question before an admin's own sub-CA replaces Canyon's root (D16), and its answer.
+  keysByoAsk: "Use this sub-CA for credential certificates?",
+  keysByoYes: "Use this sub-CA",
   frontDoorNone: "No front door is set, so no app can run on this Canyon yet.",
   // Beside a front door saved with the probe's warning (#118): the dashboard's plain line, and the docs a link away.
   reachesNode: "Apps on this cluster can reach the server they run on.",
@@ -542,7 +557,8 @@ export const S = {
   secretAsk: "Canyon never shows the secret again.",
   secretSet: "A secret is set for <client_id>.",
   checking: "Checking this cluster and the certificate…",
-  frontDoorSaved: "Saved. Apps change at their next deploy.",
+  frontDoorSave: "Save how people reach apps",
+  frontDoorSavedThen: "Apps change at their next deploy.",
   // Where apps run: Canyon, or the org's platform (design/HAND-OFF.md §1; #2439).
   runWhere: "Where apps run",
   runCanyon: "Canyon runs apps on this cluster",
@@ -594,6 +610,12 @@ export const S = {
   teamDocs: "The exact shapes are release.schema.json, in Canyon's docs under Contracts. How it all works is Your platform runs the apps, in Canyon's docs under Self-host.",
   // How releases reach the platform: the deploy repo or the webhook (design/HAND-OFF.md §3b; #2470).
   deliveryLegend: "How releases reach your platform",
+  // The question before a change to how releases reach the platform (D16), and its answer.
+  deliveryAsk: "Change how releases reach your platform?",
+  deliveryYes: "Change it",
+  webhookSave: "Save the webhook",
+  webhookSaveNew: "Save the new webhook URL",
+  graceSave: "Save the access grace",
   deliveryRepo: "Canyon commits to your deploy repo (recommended)",
   deliveryRepoNote: "Canyon writes each release's files to the git repo your Argo CD or Flux syncs: previews are pushed, production is a pull request.",
   deliveryWebhook: "Canyon calls your webhook",
@@ -623,6 +645,7 @@ export const S = {
   repoGitLabNote: "Production goes through a merge request, which Canyon's lines call a pull request. GitLab's API is on the repo's own host: https://<host>/api/v4 when the address is left empty.",
   repoTokenReplace: "Replace the repo token",
   repoTokenAsk: "Replace the repo token? Canyon commits with the new one from now on.",
+  repoSave: "Save the deploy repo",
   repoHostReplace: "Replace the host token",
   repoHostAsk: "Replace the host token? The current one stops working at once: your platform reports with the new one from now on.",
   fetchReplace: "Replace the fetch-only token",
@@ -838,6 +861,17 @@ export const S = {
 // A box's title and its line are two keys, `<key>` and `<key>Line`.
 // The fleet and first run (the dashboard UX review, 2026-11-23): the empty fleet's two ways in, setup's intro, the
 // Access column's one line, a row the reader can't open whole, and the counts' scope.
+// How every change saves (design/EXPERIENCE.md, D16 — Saving): what a save says, and the question before leaving typing
+// unsaved.
+export const SAVE = {
+  saved: "Saved.",
+  discardTitle: "Discard your changes?",
+  discardWhy: "Something you typed on this page isn't saved. Leaving drops it.",
+  discard: "Discard",
+  keepEditing: "Keep editing",
+  cancel: "Cancel",
+};
+
 export const FLEET = {
   emptyTitle: "No apps yet",
   emptyLead: "Add your first app in one of two ways:",
@@ -999,6 +1033,7 @@ export const DATABASES = {
   off: "Off. Nobody can open a database session, admins included.",
   turnOnMeans: "Turning this on lets an app's owners, contributors and admins into its preview databases through Canyon. Each session runs as the person who opened it, and every one is in the audit log.",
   turnOffMeans: "Turning this off ends every open database session at once.",
+  turnOffAsk: "Turn off database sessions?",
   turnOn: "Turn on database sessions",
   turnOff: "Turn off database sessions",
   admin: "An admin turns database sessions on or off.",
@@ -1024,6 +1059,15 @@ export const PATCHING = {
   waiting: "fix ready for production",
   title: "Patching",
   off: "Canyon doesn't patch apps",
+  // The questions before patching or rebuilds change (D16), and their answers.
+  askOn: "Let Canyon patch apps?",
+  askOff: "Stop Canyon patching apps?",
+  yesOn: "Turn on patching",
+  yesOff: "Turn off patching",
+  rebuildsAskOn: "Let Canyon rebuild apps?",
+  rebuildsAskOff: "Stop Canyon rebuilding apps?",
+  rebuildsYesOn: "Turn on rebuilds",
+  rebuildsYesOff: "Turn off rebuilds",
   rebuildsTitle: "Rebuilds",
   rebuildsOff: "Canyon doesn't rebuild apps",
   rebuildsAsk: "Canyon rebuilds previews on newer Node.js, Python, Java and Go releases and asks before production",

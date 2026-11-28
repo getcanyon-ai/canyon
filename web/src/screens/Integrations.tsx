@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useUnsaved } from "../ui/Unsaved";
 import { getChannels, putChannel, removeChannel, said, testChannel, type Channel } from "../api";
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
@@ -92,6 +93,9 @@ function ChannelForm({ channel, taken, done, cancel }: { channel?: Channel; take
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const id = channel?.id ?? idFor(name, taken);
+  // Typed, so its Save shows only while the form differs from the channel saved, and leaving asks first (D16).
+  const changed = url.trim() !== "" || name.trim() !== (channel?.name ?? "") || kind !== (channel?.kind ?? "slack");
+  useUnsaved(changed);
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -130,7 +134,7 @@ function ChannelForm({ channel, taken, done, cancel }: { channel?: Channel; take
       <p className={NOTE}>{S.integrationsSaveNote}</p>
       {failure !== null && <p role="alert" className="mt-2 text-base text-critical">{failure}</p>}
       <span className="mt-3 flex gap-2">
-        <button type="submit" className={buttonClass("primary", "md")}>Save</button>
+        {changed && <button type="submit" className={buttonClass("primary", "md")}>{S.integrationsSave}</button>}
         <Button variant="ghost" onClick={cancel}>Cancel</Button>
       </span>
     </form>

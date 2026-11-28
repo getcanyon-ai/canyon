@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EgressSetting, FrontDoorRead, Preferences, ProjectEgress } from "../api";
-import { S } from "../strings";
+import { PATCHING, S, SAVE } from "../strings";
+// The yes of the question a change to how apps call out asks first (D16), whichever way it goes.
+const VIA_YES = new RegExp(`^(${S.viaYes}|${S.viaYesOff})$`);
 import { Settings } from "./Settings";
 
 // The contract's own front door: its PUT is what the form sends, its GET what the server answers.
@@ -36,7 +38,7 @@ function server(door: FrontDoorRead, put: Answer | (() => Promise<Answer>) = { s
   vi.stubGlobal("fetch", fetch);
   return () => fetch.mock.calls.filter(([url, init]) => url === "/api/v1/front-door" && init?.method === "PUT").map(([, init]) => JSON.parse(String(init?.body)) as unknown);
 }
-const save = () => screen.getByRole("button", { name: "Save the front door" });
+const save = () => screen.getByRole("button", { name: S.frontDoorSave });
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
 afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ""; });
@@ -102,7 +104,7 @@ describe("Settings' pages", () => {
     render(<Settings />);
     expect(await screen.findByRole("region", { name: "Who may sign in" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Who administers Canyon" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Save people and sign-in" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull(); // nothing typed yet, so nothing to save (D16)
   });
 
   // Agents is every member's tab (#100's review): Connect an agent, then Sessions, found by name; People & sign-in keeps
@@ -215,7 +217,9 @@ describe("Settings › App hosting", () => {
     expect(first.startsWith("How people")).toBe(false);
   });
 
-  it("an admin sets Canyon's sign-in: the check shows while it runs, the form stays, and the keyboard stays on Save", async () => {
+  // D16: a typed form's Save shows while the form differs from what is saved, says what it is doing while the check runs,
+  // and goes once the server has it, "Saved." in its place.
+  it("an admin sets Canyon's sign-in: the check shows while it runs, the form stays, and Saved. replaces the Save", async () => {
     let answer: (value: Answer) => void = () => {};
     const sent = server(unset, () => new Promise((resolve) => { answer = resolve; }));
     render(<Settings />);
@@ -226,18 +230,16 @@ describe("Settings › App hosting", () => {
     type("Client ID", "canyon-apps");
     type("Client secret", "redacted");
     expect(screen.getByText(S.callbacks.replace("<address>", "<app>.<env>.canyon.meridian.example"))).toBeDefined();
-    save().focus();
     fireEvent.click(save());
     expect(await screen.findByText(S.checking)).toBeDefined();
     expect(screen.getByRole("group", { name: "Who signs people in" })).toHaveProperty("disabled", true);
     expect(screen.getByLabelText("Client ID")).toHaveProperty("value", "canyon-apps");
-    expect(document.activeElement).toBe(save());
     await act(async () => answer({ body: golden.get }));
-    expect(screen.getByRole("status").textContent).toBe(S.frontDoorSaved);
+    expect(screen.getByRole("status").textContent).toBe(`${SAVE.saved} ${S.frontDoorSavedThen}`);
     expect(sent()).toEqual([golden.put]);
     expect(screen.getByText(S.secretSet.replace("<client_id>", "canyon-apps"))).toBeDefined();
     expect(screen.queryByLabelText("Client secret")).toBeNull();
-    expect(document.activeElement).toBe(save());
+    expect(screen.queryByRole("button", { name: S.frontDoorSave })).toBeNull();
   });
 
   // Under hand-off the save runs the probe too, and may wait on it up to 150 s (#2438): the page says it is checking
@@ -255,7 +257,7 @@ describe("Settings › App hosting", () => {
     expect(await screen.findByText(S.checking)).toBeDefined();
     expect(screen.getByRole("group", { name: "Who signs people in" })).toHaveProperty("disabled", true);
     await act(async () => answer({ body: golden.get_unprobed }));
-    expect(screen.getAllByRole("status").map((one) => one.textContent)).toContain(S.frontDoorSaved);
+    expect(screen.getAllByRole("status").map((one) => one.textContent)).toContain(`${SAVE.saved} ${S.frontDoorSavedThen}`);
   });
 
   it("an admin's gateway: an OIDC gateway's four fields, or a load balancer's ARN with its cookie filled in and left out", async () => {
@@ -270,14 +272,14 @@ describe("Settings › App hosting", () => {
     type("Session cookie", "_pomerium");
     type("Domain", "apps.meridian.example");
     fireEvent.click(save());
-    await screen.findByText(S.frontDoorSaved);
+    await screen.findByText(`${SAVE.saved} ${S.frontDoorSavedThen}`);
     fireEvent.click(screen.getByRole("radio", { name: S.gateway }));
     fireEvent.click(screen.getByRole("radio", { name: "AWS load balancer sign-in" }));
     expect(screen.queryByLabelText("JWKS URL")).toBeNull();
     expect(screen.getByLabelText("Session cookie")).toHaveProperty("value", "AWSELBAuthSessionCookie");
     type("Load balancer ARN", ARN);
     fireEvent.click(save());
-    await screen.findByText(S.frontDoorSaved);
+    await screen.findByText(`${SAVE.saved} ${S.frontDoorSavedThen}`);
     expect(sent()).toEqual([
       { choice: 1, gateway: "oidc", issuer: "https://sso.meridian.example", audience: "canyon", jwks_url: "https://sso.meridian.example/jwks", cookie: "_pomerium", domain: "apps.meridian.example", form: "app.env.domain" },
       { choice: 1, gateway: "alb", alb_arn: ARN, form: "app.env.domain" },
@@ -315,9 +317,11 @@ describe("Settings › App hosting", () => {
     render(<Settings />);
     expect(await screen.findByText(S.secretSet.replace("<client_id>", "canyon-apps"))).toBeDefined();
     expect(screen.queryByLabelText("Client secret")).toBeNull();
+    expect(screen.queryByRole("button", { name: S.frontDoorSave })).toBeNull(); // nothing changed, nothing to save (D16)
+    type("Domain", "apps.meridian.example");
     fireEvent.click(save());
-    await screen.findByText(S.frontDoorSaved);
-    expect(sent()).toEqual([{ choice: 2, signin: { issuer: "https://login.meridian.example", client_id: "canyon-apps" }, form: "app.env.domain" }]);
+    await screen.findByText(`${SAVE.saved} ${S.frontDoorSavedThen}`);
+    expect(sent()).toEqual([{ choice: 2, signin: { issuer: "https://login.meridian.example", client_id: "canyon-apps" }, domain: "apps.meridian.example", form: "app.env.domain" }]);
     fireEvent.click(screen.getByRole("button", { name: "Replace the secret" }));
     const secret = screen.getByLabelText("Client secret");
     expect(secret).toHaveProperty("value", "");
@@ -351,7 +355,7 @@ describe("Settings › App hosting", () => {
       type("Client secret", "typed-again");
       fireEvent.click(save());
       expect((await screen.findByRole("alert")).textContent).toBe((refused.body as { message: string }).message);
-      expect(screen.getByRole("status").textContent).toBe("");
+      expect(screen.queryByText(/^Saved\./)).toBeNull();
       expect(screen.getByLabelText("Client secret")).toHaveProperty("value", "typed-again");
     });
   }
@@ -397,7 +401,7 @@ describe("Settings › App hosting", () => {
     const note = await screen.findByText(OTHER_ISSUER);
     expect(note.getAttribute("role")).toBe("note");
     expect(note.className).toContain("text-amber");
-    expect(screen.getByRole("status").textContent).toBe(S.frontDoorSaved);
+    expect(screen.getByRole("status").textContent).toBe(`${SAVE.saved} ${S.frontDoorSavedThen}`);
     unmount();
     server(unset, { body: { ...golden.get, warning: "" } });
     render(<Settings />);
@@ -406,7 +410,7 @@ describe("Settings › App hosting", () => {
     type("Client ID", "canyon-apps");
     type("Client secret", "redacted");
     fireEvent.click(save());
-    expect(await screen.findByText(S.frontDoorSaved)).toBeDefined();
+    expect(await screen.findByText(`${SAVE.saved} ${S.frontDoorSavedThen}`)).toBeDefined();
     expect(screen.queryByRole("note")).toBeNull();
   });
 
@@ -424,7 +428,7 @@ describe("Settings › App hosting", () => {
     const note = await screen.findByText(GATEWAY_NOTE);
     expect(note.getAttribute("role")).toBe("note");
     expect(note.className).toContain("text-amber");
-    expect(screen.getByRole("status").textContent).toBe(S.frontDoorSaved);
+    expect(screen.getByRole("status").textContent).toBe(`${SAVE.saved} ${S.frontDoorSavedThen}`);
   });
 
   // A choice 2 door whose provider's discovery Canyon couldn't read yet is saved all the same — the save never waits
@@ -618,7 +622,7 @@ describe("Settings › Outbound", () => {
     fireEvent.click(yes);
     fireEvent.click(yes);
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Recreating intake-forms's network…");
-    for (const button of [screen.getByRole("button", { name: "Save how apps call out" }), screen.getByRole("button", { name: "Recreate case-files's network" })]) {
+    for (const button of [screen.getByRole("button", { name: VIA_YES }), screen.getByRole("button", { name: "Recreate case-files's network" })]) {
       expect((button.closest("fieldset[disabled]"))).not.toBeNull();
     }
     await act(async () => { answer({ body: { ...admin, networks_to_recreate: ["case-files"] } }); });
@@ -669,10 +673,10 @@ describe("Settings › Outbound", () => {
     const { sent } = host([{ body: admin }], { "PUT /api/v1/egress": { body: { ...admin, via: "off", networks_to_recreate: ["case-files"] } } });
     await open();
     fireEvent.click(await screen.findByRole("radio", { name: "Off" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(screen.getByRole("button", { name: VIA_YES }));
     expect(await screen.findByText("case-files")).toBeDefined();
     expect((screen.getByRole("radio", { name: "Off" }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByRole("button", { name: "Save how apps call out" })).toBeNull();
+    expect(screen.queryByRole("button", { name: VIA_YES })).toBeNull();
     expect(sent()).toEqual(['PUT /api/v1/egress {"via":"off"}']);
   });
 
@@ -700,7 +704,7 @@ describe("Settings › Outbound", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(refusal.message);
     fireEvent.change(field(S.capNewNames), { target: { value: "60" } });
     fireEvent.click(limits.getByRole("button", { name: "Save limits" }));
-    expect(await limits.findByText(S.capsSaved)).toBeDefined();
+    expect(await limits.findByText(SAVE.saved)).toBeDefined();
     expect(field(S.capNewNames).value).toBe("60");
     expect(sent()).toEqual(['PUT /api/v1/egress {"caps":{"new_names":60}}', 'PUT /api/v1/egress {"caps":{"new_names":60}}']);
   });
@@ -714,7 +718,7 @@ describe("Settings › Outbound", () => {
     fireEvent.change(limits.getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "60" } });
     fireEvent.click(limits.getByRole("button", { name: "Save limits" }));
     expect((await limits.findByText(S.gatewayPending.replace("<replica>", replica))).getAttribute("role")).toBe("status");
-    expect(limits.queryByText(S.capsSaved)).toBeNull();
+    expect(limits.queryByText(SAVE.saved)).toBeNull();
   });
 
   // #2789: the limits' save waits for the gateway, up to 30 s: while its answer is out the page says Saving… and the
@@ -729,7 +733,7 @@ describe("Settings › Outbound", () => {
     expect((await page.findByText("Saving…")).getAttribute("role")).toBe("status");
     expect((limits.getByRole("spinbutton", { name: S.capNewNames }) as HTMLInputElement).closest("fieldset[disabled]")).not.toBeNull();
     await act(async () => { answer({ body: { ...admin, caps: { destinations: 500, new_names: 60, pending: 50 } } }); });
-    expect(await limits.findByText(S.capsSaved)).toBeDefined();
+    expect(await limits.findByText(SAVE.saved)).toBeDefined();
   });
 
   it("shows no limits when the server names none", async () => {
@@ -745,14 +749,14 @@ describe("Settings › Outbound", () => {
     const { sent } = host([{ body: { ...admin, via: "off", networks_to_recreate: [] } }], { "PUT /api/v1/egress": { status: 409, body: refusal } });
     await open();
     expect(await screen.findByText("None.")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Save how apps call out" })).toBeNull();
+    expect(screen.queryByRole("button", { name: VIA_YES })).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "Through Canyon" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(screen.getByRole("button", { name: VIA_YES }));
     expect((await screen.findByRole("alert")).textContent).toBe(refusal.message);
     expect(sent()).toEqual(['PUT /api/v1/egress {"via":"canyon"}']);
     // the form is the host's again, never the refused choice with Save still showing (#2300)
     expect((screen.getByRole("radio", { name: "Off" }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByRole("button", { name: "Save how apps call out" })).toBeNull();
+    expect(screen.queryByRole("button", { name: VIA_YES })).toBeNull();
   });
 
   // A save whose answer was lost may still have been taken: the form shows what the host reads after it,
@@ -761,11 +765,11 @@ describe("Settings › Outbound", () => {
     host([{ body: { ...admin, via: "canyon" } }, { body: { ...admin, via: "off" } }], { "PUT /api/v1/egress": { status: 0, body: null } });
     await open();
     fireEvent.click(await screen.findByRole("radio", { name: "Off" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(screen.getByRole("button", { name: VIA_YES }));
     expect(await screen.findByRole("alert")).toBeDefined();
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect((screen.getByRole("radio", { name: "Off" }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByRole("button", { name: "Save how apps call out" })).toBeNull();
+    expect(screen.queryByRole("button", { name: VIA_YES })).toBeNull();
   });
 
   // Fail closed: when the read after a failed save fails too, no choice is shown as the host's.
@@ -773,7 +777,7 @@ describe("Settings › Outbound", () => {
     host([{ body: admin }, { status: 500, body: { error: "internal", message: "internal error" } }], { "PUT /api/v1/egress": { status: 409, body: { error: "egress_not_ready", message: "refused" } } });
     await open();
     fireEvent.click(await screen.findByRole("radio", { name: "Off" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(screen.getByRole("button", { name: VIA_YES }));
     await waitFor(() => expect(screen.queryByRole("radio")).toBeNull());
     expect(screen.getByRole("alert").textContent).toBe("refused");
   });
@@ -786,14 +790,14 @@ describe("Settings › Outbound", () => {
       { "PUT /api/v1/egress": { status: 409, body: { error: "egress_not_ready", message: refused } } });
     const page = within(await open());
     fireEvent.click(await page.findByRole("radio", { name: "Through Canyon" }));
-    fireEvent.click(page.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(page.getByRole("button", { name: VIA_YES }));
     await waitFor(() => expect((page.getByRole("radio", { name: "Through Canyon" }) as HTMLInputElement).disabled).toBe(true));
     expect(page.queryByText("Networks to recreate")).toBeNull();
     expect(page.queryByText("None.")).toBeNull();
     expect((page.getByRole("radio", { name: "Off" }) as HTMLInputElement).checked).toBe(true);
     expect(page.getAllByText(refused)).toHaveLength(1); // the reason once, above the choice
     expect(page.getByRole("alert").textContent).toBe(refused); // and announced, as the save's refusal
-    expect(page.queryByRole("button", { name: "Save how apps call out" })).toBeNull();
+    expect(page.queryByRole("button", { name: VIA_YES })).toBeNull();
   });
 
   // A host that would refuse Through Canyon says so before the choice, which is off (#2300): the admin
@@ -918,6 +922,29 @@ describe("Settings › Outbound's replicas", () => {
     expect(folded.open).toBe(true);
   });
 
+  // D16: one section's save never takes another's typing. A limit typed and not saved stays typed when credentials are
+  // saved, and its Save stays.
+  it("keeps a typed limit when another section saves", async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const answer = url === "/auth/config" ? { canyon: true, auth: "oidc" } : url === "/api/v1/preferences" ? prefs.preferences_admin
+        : url === "/api/v1/licence" ? { state: "valid", allows: ["outbound_keys"] }
+        : url === "/api/v1/egress" ? (init?.method === "PUT" ? { ...admin, credential_routes: !admin.credential_routes } : admin) : { error: "not_found" };
+      return { ok: true, status: 200, json: async () => answer } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    const page = within(await open());
+    const folded = (await page.findByText("Advanced")).closest("details") as HTMLDetailsElement;
+    folded.open = true; fireEvent(folded, new Event("toggle"));
+    fireEvent.change(page.getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "31" } });
+    fireEvent.click(page.getByRole("checkbox", { name: S.routesAdd }));
+    const ask = within(page.getByRole("group", { name: admin.credential_routes ? S.routesAskOff : S.routesAskOn }));
+    fireEvent.click(ask.getByRole("button", { name: admin.credential_routes ? S.routesYesOff : S.routesYesOn }));
+    await waitFor(() => expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true));
+    expect(await page.findByText(SAVE.saved)).toBeDefined();
+    expect(page.getByRole("spinbutton", { name: S.capNewNames })).toHaveProperty("value", "31");
+    expect(page.getByRole("button", { name: S.capsSave })).toBeDefined();
+  });
+
   // #139: a limit typed and not saved stays typed when Advanced is folded, so the fold says a change is waiting, until
   // the limit is the saved one again.
   it("says on a folded Advanced that a typed limit isn't saved", async () => {
@@ -952,7 +979,7 @@ describe("Settings › Outbound's replicas", () => {
     expect(folded.open).toBe(true);
     fireEvent.change(within(folded).getByRole("spinbutton", { name: S.capNewNames }), { target: { value: "60" } });
     fireEvent.click(within(folded).getByRole("button", { name: "Save limits" }));
-    expect(await within(folded).findByText(S.capsSaved)).toBeDefined();
+    expect(await within(folded).findByText(SAVE.saved)).toBeDefined();
     expect(folded.open).toBe(true);
   });
 });
@@ -995,18 +1022,19 @@ describe("Settings › Outbound's mode", () => {
     "GET /api/v1/projects/claims-portal/egress": () => ({ body: project() }),
     "GET /api/v1/projects/intake-bot/egress": { body: intakeBot },
   });
-  // Save, once the list is read: while it is read, Save is off.
-  const listed = (name = "Save what apps may call") => waitFor(() => {
-    const save = changes().getByRole("button", { name }) as HTMLButtonElement;
-    expect(save.disabled).toBe(false);
-    return save;
+  // The question's yes, once the list is read: while it is read, yes waits (D16).
+  const listed = (name: string = S.modeYes) => waitFor(() => {
+    const yes = changes().getByRole("button", { name }) as HTMLButtonElement;
+    expect(yes.disabled).toBe(false);
+    return yes;
   });
   const open = async () => {
     window.location.hash = "#/settings/outbound";
     render(<Settings />);
     return within(await screen.findByRole("region", { name: "Outbound" }));
   };
-  const changes = () => within(screen.getByRole("group", { name: "What changes" }));
+  // The question a choice that changes what apps can do asks, with what changes (D16).
+  const changes = () => within(screen.getByRole("group", { name: /\?/ }));
 
   // The boundary (design/PERMISSIONS.md, Outbound, Host settings): an admin changes the org's mode.
   it("an admin switches to allowlist: what it would refuse, each with Allow, the question, then {mode}", async () => {
@@ -1018,12 +1046,11 @@ describe("Settings › Outbound's mode", () => {
     expect(changes().getByText(S.modeNow)).toBeDefined();
     expect(changes().getAllByRole("button", { name: /^Allow / }).map((one) => one.getAttribute("aria-label"))).toEqual(["Allow registry.npmjs.org", "Allow hooks.slack.com"]);
     expect(within(changes().getByRole("region", { name: "claims-portal Production" })).getByText("hooks.slack.com:443")).toBeDefined();
-    fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
     expect(sent()).toEqual([]);
     expect(changes().getByText("Refuse 2 destinations now? Apps that call them get a 403 from Canyon until they're allowed or you switch back to Observe.")).toBeDefined();
-    expect(document.activeElement).toBe(changes().getByRole("button", { name: S.modeYes })); // the question takes the focus Save had
+    await waitFor(() => expect(document.activeElement).toBe(changes().getByRole("button", { name: S.modeYes }))); // the question takes the keyboard once read
     fireEvent.click(changes().getByRole("button", { name: S.modeYes }));
-    expect(await page.findByText(S.modeSaved)).toBeDefined();
+    expect(await page.findByText(`${SAVE.saved} ${S.modeSavedThen}`)).toBeDefined();
     expect(sent()).toEqual(['PUT /api/v1/egress {"mode":"allowlist"}']);
     expect((page.getByRole("radio", { name: "Allowlist" }) as HTMLInputElement).checked).toBe(true);
   });
@@ -1032,9 +1059,10 @@ describe("Settings › Outbound's mode", () => {
     const { sent } = host([{ body: admin }], reads());
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Allowlist" }));
-    fireEvent.click(await listed());
+    await listed();
     fireEvent.click(changes().getByRole("button", { name: "Cancel" }));
-    expect(changes().queryByRole("button", { name: S.modeYes })).toBeNull();
+    expect(screen.queryByRole("group", { name: /\?/ })).toBeNull();
+    expect((page.getByRole("radio", { name: "Observe" }) as HTMLInputElement).checked).toBe(true); // back to what is saved
     expect(sent()).toEqual([]);
   });
 
@@ -1058,7 +1086,6 @@ describe("Settings › Outbound's mode", () => {
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Allowlist" }));
     expect(await changes().findByText(S.modeRefusesNone)).toBeDefined();
-    fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
     expect(changes().getByText(S.modeAskNone)).toBeDefined();
   });
 
@@ -1070,13 +1097,12 @@ describe("Settings › Outbound's mode", () => {
     const { sent } = host([{ body: { ...admin, via: "off", mode: "allowlist" } }], { ...reads(() => off), "PUT /api/v1/egress": { body: { ...admin, via: "canyon", mode: "allowlist" } } });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Through Canyon" }));
-    fireEvent.click(page.getByRole("button", { name: "Save how apps call out" }));
     expect(sent()).toEqual([]);
     expect(await changes().findByText(S.viaUnderAllowlist)).toBeDefined();
     expect(changes().getByText(S.viaUnseen)).toBeDefined();
     expect(await changes().findByText("Allowlist would refuse 2 destinations apps called in the last 30 days:")).toBeDefined();
     expect(changes().getAllByRole("button", { name: /^Allow / }).map((one) => one.getAttribute("aria-label"))).toEqual(["Allow registry.npmjs.org", "Allow hooks.slack.com"]);
-    fireEvent.click(await listed("Save how apps call out"));
+    await listed(S.viaYes);
     expect(changes().getByText(S.viaAsk)).toBeDefined();
     expect(document.activeElement).toBe(changes().getByRole("button", { name: S.viaYes }));
     fireEvent.click(changes().getByRole("button", { name: S.viaYes }));
@@ -1087,9 +1113,8 @@ describe("Settings › Outbound's mode", () => {
     host([{ body: { ...admin, via: "off", mode: "allowlist" } }], { ...reads(() => ({ ...golden, envs: { preview: { ...golden.envs.preview, via: "off", destinations: [] }, prod: { ...golden.envs.prod, destinations: [] } } })) });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Through Canyon" }));
-    fireEvent.click(page.getByRole("button", { name: "Save how apps call out" }));
     expect(await changes().findByText(S.viaUnseen)).toBeDefined();
-    fireEvent.click(await listed("Save how apps call out"));
+    await listed(S.viaYes);
     expect(changes().getByText(S.viaAsk)).toBeDefined();
     expect(changes().queryByText(S.modeRefusesNone)).toBeNull();
   });
@@ -1115,20 +1140,20 @@ describe("Settings › Outbound's mode", () => {
       fireEvent.click(await page.findByRole("radio", { name: "Allowlist" }));
       expect(await changes().findByText(S.modeUnread)).toBeDefined();
       expect(changes().queryByText(S.modeRefusesNone)).toBeNull();
-      fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
       expect(changes().getByText(S.modeAskNone)).toBeDefined();
       expect(sent()).toEqual([]);
     });
   }
 
-  // Back to observe widens: it refuses nothing, so it is saved with no question and no list read.
-  it("switches back to observe with no question", async () => {
+  // Back to observe widens: it refuses nothing and reads no list, but it changes what apps can do, so it asks (D16).
+  it("asks before switching back to observe, and reads no list", async () => {
     const { sent, asked } = host([{ body: { ...admin, mode: "allowlist" } }], { "PUT /api/v1/egress": { body: { ...admin, mode: "observe" } } });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Observe" }));
     expect(changes().getByText(S.modeWiden)).toBeDefined();
-    fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
-    expect(await page.findByText(S.modeSaved)).toBeDefined();
+    expect(sent()).toEqual([]);
+    fireEvent.click(changes().getByRole("button", { name: S.modeYesObserve }));
+    expect(await page.findByText(`${SAVE.saved} ${S.modeSavedThen}`)).toBeDefined();
     expect(sent()).toEqual(['PUT /api/v1/egress {"mode":"observe"}']);
     expect(asked("/api/v1/projects")).toBe(0);
   });
@@ -1140,9 +1165,9 @@ describe("Settings › Outbound's mode", () => {
       host([{ body: { ...admin, mode: "allowlist" } }], { "PUT /api/v1/egress": { body: { ...admin, mode: "observe" }, pending } });
       const page = await open();
       fireEvent.click(await page.findByRole("radio", { name: "Observe" }));
-      fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
+      fireEvent.click(changes().getByRole("button", { name: S.modeYesObserve }));
       expect((await page.findByText(line)).getAttribute("role")).toBe("status");
-      expect(page.queryByText(S.modeSaved)).toBeNull();
+      expect(page.queryByText(`${SAVE.saved} ${S.modeSavedThen}`)).toBeNull();
     });
   }
 
@@ -1153,15 +1178,15 @@ describe("Settings › Outbound's mode", () => {
     host([{ body: { ...admin, mode: "allowlist" } }], { "PUT /api/v1/egress": { status: 409, body: { error: "held", message, hold: { by: { kind: "person", subject: "dana", display: "Dana Whitfield" }, at: "2026-11-08T21:19:27Z", reason: "Stopped while we rotate the Stripe key" }, admins: [] } } });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Observe" }));
-    fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
+    fireEvent.click(changes().getByRole("button", { name: S.modeYesObserve }));
     const alert = await page.findByRole("alert");
     expect([...alert.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
       "Not saved. A held production can't be given more than it may call now: lift its hold, or give that app's production a mode of its own, then save again.",
       message,
     ]);
     await waitFor(() => expect((page.getByRole("radio", { name: "Allowlist" }) as HTMLInputElement).checked).toBe(true));
-    expect(screen.queryByRole("group", { name: "What changes" })).toBeNull();
-    expect(page.queryByText(S.modeSaved)).toBeNull();
+    expect(screen.queryByRole("group", { name: /\?/ })).toBeNull();
+    expect(page.queryByText(`${SAVE.saved} ${S.modeSavedThen}`)).toBeNull();
   });
 
   it("says calling out directly a hold refused wasn't saved, why, and what lets it through, then the server's line", async () => {
@@ -1169,7 +1194,7 @@ describe("Settings › Outbound's mode", () => {
     host([{ body: { ...admin, via: "canyon" } }], { "PUT /api/v1/egress": { status: 409, body: { error: "held", message, hold: { by: { kind: "person", subject: "dana", display: "Dana Whitfield" }, at: "2026-11-08T21:19:27Z", reason: "Stopped while we rotate the Stripe key" }, admins: [] } } });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Off" }));
-    fireEvent.click(page.getByRole("button", { name: "Save how apps call out" }));
+    fireEvent.click(page.getByRole("button", { name: VIA_YES }));
     const alert = await page.findByRole("alert");
     expect([...alert.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
       "Not saved. A held production can't start calling out directly: lift its hold, then save again.",
@@ -1184,7 +1209,7 @@ describe("Settings › Outbound's mode", () => {
     host([{ body: { ...admin, mode: "allowlist" } }], { "PUT /api/v1/egress": { status: 409, body: { error: "conflict", message } } });
     const page = await open();
     fireEvent.click(await page.findByRole("radio", { name: "Observe" }));
-    fireEvent.click(changes().getByRole("button", { name: "Save what apps may call" }));
+    fireEvent.click(changes().getByRole("button", { name: S.modeYesObserve }));
     expect((await page.findByRole("alert")).textContent).toBe(message);
   });
 
@@ -1220,14 +1245,16 @@ describe("Settings › Outbound's mode", () => {
     expect(box.checked).toBe(true);
     expect(page.queryByText(S.routesTurningOff)).toBeNull();
     fireEvent.click(box);
-    expect(page.getByRole("note").textContent).toBe(S.routesTurningOff);
-    fireEvent.click(page.getByRole("button", { name: "Save whether Canyon adds credentials" }));
-    expect(await page.findByText(S.routesSaved)).toBeDefined();
+    expect(sent()).toEqual([]);
+    const off = within(page.getByRole("group", { name: S.routesAskOff }));
+    expect(off.getByText(S.routesTurningOff)).toBeDefined();
+    fireEvent.click(off.getByRole("button", { name: S.routesYesOff }));
+    expect(await page.findByText(SAVE.saved)).toBeDefined();
     expect(sent()).toEqual(['PUT /api/v1/egress {"credential_routes":false}']);
     expect(box.checked).toBe(false);
     fireEvent.click(box);
     expect(page.queryByText(S.routesTurningOff)).toBeNull();
-    expect(page.getByRole("button", { name: "Save whether Canyon adds credentials" })).toBeDefined();
+    expect(within(page.getByRole("group", { name: S.routesAskOn })).getByRole("button", { name: S.routesYesOn })).toBeDefined();
   });
 
   // Turning credentials on is Canyon Enterprise's (#2879): with a lapsed licence an admin turns them off, never on, and is
@@ -1238,7 +1265,7 @@ describe("Settings › Outbound's mode", () => {
     const page = await open();
     const box = await page.findByRole("checkbox", { name: S.routesAdd });
     fireEvent.click(box);
-    fireEvent.click(page.getByRole("button", { name: "Save whether Canyon adds credentials" }));
+    fireEvent.click(within(page.getByRole("group", { name: S.routesAskOff })).getByRole("button", { name: S.routesYesOff }));
     expect(await page.findByText(S.licenceRequiredOutbound)).toBeDefined();
     expect(page.queryByRole("checkbox", { name: S.routesAdd })).toBeNull();
     expect(page.getByText(S.enterprise)).toBeDefined();
@@ -1329,6 +1356,7 @@ describe("Settings › App hosting › Patching", () => {
     expect(await section.findByText(S.licenceRequiredPatching)).toBeDefined(); // rebuilds are off: no turning them on
     expect(section.queryByRole("radio", { name: "Canyon rebuilds previews on newer Node.js, Python, Java and Go releases and asks before production" })).toBeNull();
     fireEvent.click(section.getByRole("radio", { name: "Canyon doesn't patch apps" }));
+    fireEvent.click(within(section.getByRole("group", { name: PATCHING.askOff })).getByRole("button", { name: PATCHING.yesOff }));
     await waitFor(() => expect(sent("/api/v1/preferences").filter((call) => call.startsWith("PUT"))).toEqual(['PUT /api/v1/preferences {"patching":"off"}']));
     expect(await section.findByText(S.licenceRequiredPatching)).toBeDefined();
     expect(section.queryByRole("radio", { name: "Canyon patches previews and asks before production" })).toBeNull();
@@ -1361,7 +1389,16 @@ describe("Settings › App hosting › Patching", () => {
     render(<Settings />);
     expect(await screen.findByText("No app waits for newer system libraries")).toBeDefined();
     fireEvent.click(screen.getByRole("radio", { name: "Canyon doesn't patch apps" }));
+    // It changes what Canyon does to apps, so it asks first, and Cancel sends nothing (D16).
+    const ask = within(screen.getByRole("group", { name: PATCHING.askOff }));
+    expect(ask.getByText(PATCHING.off)).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect((screen.getByRole("radio", { name: "Canyon patches previews and asks before production" }) as HTMLInputElement).checked).toBe(true);
+    expect(sent("/api/v1/preferences").filter((call) => call.startsWith("PUT"))).toEqual([]);
+    fireEvent.click(screen.getByRole("radio", { name: "Canyon doesn't patch apps" }));
+    fireEvent.click(within(screen.getByRole("group", { name: PATCHING.askOff })).getByRole("button", { name: PATCHING.yesOff }));
     await waitFor(() => expect(sent("/api/v1/preferences").filter((call) => call.startsWith("PUT"))).toEqual(['PUT /api/v1/preferences {"patching":"off"}']));
+    expect(await screen.findByText(SAVE.saved)).toBeDefined();
   });
 
   // #2117 — a rebuild is always its team's to approve
@@ -1382,6 +1419,7 @@ describe("Settings › App hosting › Patching", () => {
     await screen.findByRole("group", { name: "Newest build tools" });
     expect((screen.getByRole("radio", { name: "Canyon doesn't rebuild apps" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole("radio", { name: "Canyon rebuilds previews on newer Node.js, Python, Java and Go releases and asks before production" }));
+    fireEvent.click(within(screen.getByRole("group", { name: PATCHING.rebuildsAskOn })).getByRole("button", { name: PATCHING.rebuildsYesOn }));
     await waitFor(() => expect(sent("/api/v1/preferences").filter((call) => call.startsWith("PUT"))).toEqual(['PUT /api/v1/preferences {"rebuilds":"ask"}']));
   });
 

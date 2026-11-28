@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { AskFirst } from "../ui/AskFirst";
+import { Saved } from "../ui/Saved";
 import { approveIdentity, getIdentities, putPreferences, resumeIdentity, said, type ApiError, type Identities, type Identity, type PlanSaid, type Preferences } from "../api";
 import { PATCHING, S } from "../strings";
 import { Button } from "../ui/Button";
@@ -46,10 +48,19 @@ export function PatchingSettings({ record, adopt }: { record: Preferences; adopt
     else setFailure(said(err));
   });
   useEffect(() => { void load(); }, []);
-  const choose = (edit: { patching: "off" | "ask" } | { rebuilds: "off" | "ask" }) => {
-    setFailure(null);
-    putPreferences(edit).then(adopt, (err: unknown) => setFailure(said(err)));
+  // Patching and rebuilds change what Canyon does to apps, so a choice asks first, saying what changes (D16).
+  type Edit = { patching: "off" | "ask" } | { rebuilds: "off" | "ask" };
+  const [asking, setAsking] = useState<Edit | null>(null);
+  const [saved, setSaved] = useState<"patching" | "rebuilds" | null>(null);
+  const choose = (edit: Edit) => { setFailure(null); setSaved(null); setAsking(edit); };
+  const send = (edit: Edit) => putPreferences(edit).then((row) => { adopt(row); setAsking(null); setSaved("patching" in edit ? "patching" : "rebuilds"); }, (err: unknown) => setFailure(said(err)));
+  const question = (edit: Edit) => {
+    const on = ("patching" in edit ? edit.patching : edit.rebuilds) === "ask";
+    const [ask, yes, means] = "patching" in edit ? (on ? [PATCHING.askOn, PATCHING.yesOn, PATCHING.ask] : [PATCHING.askOff, PATCHING.yesOff, PATCHING.off])
+      : on ? [PATCHING.rebuildsAskOn, PATCHING.rebuildsYesOn, PATCHING.rebuildsAsk] : [PATCHING.rebuildsAskOff, PATCHING.rebuildsYesOff, PATCHING.rebuildsOff];
+    return <AskFirst question={ask} yes={yes} danger={!on} onYes={() => void send(edit)} onNo={() => setAsking(null)}><p className="text-md">{means}</p></AskFirst>;
   };
+  const shownAs = <K extends "patching" | "rebuilds">(key: K) => (asking !== null && key in asking ? (asking as Record<K, "off" | "ask">)[key] : record[key]);
   const identities = read === null || read === "unserved" ? null : read;
   // The system libraries image Canyon uses now and any identity with work left or a breaker to resume show; earlier ones with
   // nothing left fold under them (#2582).
@@ -74,22 +85,26 @@ export function PatchingSettings({ record, adopt }: { record: Preferences; adopt
         <legend className="sr-only">{PATCHING.title}</legend>
         {([["off", PATCHING.off], ["ask", PATCHING.ask]] as const).filter(offered(record.patching)).map(([value, word]) => (
           <label key={value} className="mt-1 flex items-center gap-2 text-base">
-            <input type="radio" name="patching" checked={record.patching === value} onChange={() => choose({ patching: value })} />
+            <input type="radio" name="patching" checked={shownAs("patching") === value} onChange={() => (value === record.patching ? setAsking(null) : choose({ patching: value }))} />
             {word}
           </label>
         ))}
         {record.patching === "off" && licence !== null && !keys && <div className="mt-1"><EnterpriseLine feature="platform_patching" /></div>}
+        {asking !== null && "patching" in asking && question(asking)}
+        {saved === "patching" && asking === null && <Saved />}
       </fieldset>
       {record.patching === "ask" && (
         <fieldset className="mt-3">
           <legend className="text-base font-medium">{PATCHING.rebuildsTitle}</legend>
           {([["off", PATCHING.rebuildsOff], ["ask", PATCHING.rebuildsAsk]] as const).filter(offered(record.rebuilds)).map(([value, word]) => (
             <label key={value} className="mt-1 flex items-center gap-2 text-base">
-              <input type="radio" name="rebuilds" checked={record.rebuilds === value} onChange={() => choose({ rebuilds: value })} />
+              <input type="radio" name="rebuilds" checked={shownAs("rebuilds") === value} onChange={() => (value === record.rebuilds ? setAsking(null) : choose({ rebuilds: value }))} />
               {word}
             </label>
           ))}
           {record.rebuilds === "off" && licence !== null && !keys && <div className="mt-1"><EnterpriseLine feature="platform_patching" /></div>}
+          {asking !== null && "rebuilds" in asking && question(asking)}
+          {saved === "rebuilds" && asking === null && <Saved />}
         </fieldset>
       )}
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}

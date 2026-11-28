@@ -64,6 +64,7 @@ describe("Settings › Telemetry", () => {
     await screen.findByText(S.telemetryOn);
     fireEvent.click(screen.getByRole("button", { name: S.telemetryTurnOff }));
     await screen.findByText(S.telemetryOffAdmin);
+    expect(screen.getByText("Saved.")).toBeTruthy(); // a choice says it saved (D16)
   });
 
   it("says while no report has reached the collector that it still tries, when next and until when", async () => {

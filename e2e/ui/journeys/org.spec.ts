@@ -19,7 +19,7 @@ journey("rename the organization, then name it back", {
       name: "rename it",
       do: async (page) => {
         await page.getByLabel("Organization name").fill("Meridian UX");
-        await page.getByRole("region", { name: "Organization" }).getByRole("button", { name: "Save" }).click();
+        await page.getByRole("region", { name: "Organization" }).getByRole("button", { name: "Save the organization name" }).click();
       },
       see: async (page) => {
         await expect(page.getByRole("region", { name: "Organization" }).getByText("Saved.")).toBeVisible();
@@ -35,7 +35,7 @@ journey("rename the organization, then name it back", {
       do: async (page, { was }) => {
         await page.goto("/#/settings/organisation");
         await page.getByLabel("Organization name").fill(was);
-        await page.getByRole("region", { name: "Organization" }).getByRole("button", { name: "Save" }).click();
+        await page.getByRole("region", { name: "Organization" }).getByRole("button", { name: "Save the organization name" }).click();
       },
       see: async (page) => { await expect(page.getByRole("region", { name: "Organization" }).getByText("Saved.")).toBeVisible(); },
       changes: { org_preferences: { changed: 1 }, audit_events: { added: 1, actions: [put] } },

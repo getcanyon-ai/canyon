@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UNAUTHENTICATED, type FleetPage, type Preferences } from "../api";
 import { AUTH, S } from "../strings";
@@ -196,6 +196,37 @@ describe("the shell", () => {
     const sent = server(prefs);
     render(<Shell />);
     await waitFor(() => expect(sent()).toContain("GET /api/v1/front-door"));
+  });
+
+  // D16: leaving a page with typing not saved asks first. The address goes back to the page, Keep editing keeps the typing,
+  // and Discard goes where the person was going; with nothing typed, leaving asks nothing. A reload or a closed tab asks
+  // the browser's own question.
+  it("asks before leaving a page with typing not saved, and only then", async () => {
+    window.location.hash = "#/settings/organisation";
+    server(prefs, () => answer(200, signedIn));
+    const { unmount } = render(<Shell />);
+    const field = await screen.findByRole("textbox", { name: "Organization name" });
+    const unload = () => { const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; };
+    expect(unload()).toBe(false);
+    fireEvent.change(field, { target: { value: "Meridian Group" } });
+    expect(unload()).toBe(true);
+    act(() => { window.location.hash = "#/fleet"; });
+    const question = await screen.findByRole("dialog", { name: "Discard your changes?" });
+    expect(window.location.hash).toBe("#/settings/organisation");
+    fireEvent.click(within(question).getByRole("button", { name: "Keep editing" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Organization name" })).toHaveProperty("value", "Meridian Group");
+    act(() => { window.location.hash = "#/fleet"; });
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Discard your changes?" })).getByRole("button", { name: "Discard" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Meridian Insurance" })).toBeDefined();
+    expect(window.location.hash).toBe("#/fleet");
+    expect(unload()).toBe(false);
+    act(() => { window.location.hash = "#/settings/organisation"; });
+    expect(await screen.findByRole("textbox", { name: "Organization name" })).toBeDefined();
+    act(() => { window.location.hash = "#/fleet"; });
+    expect(await screen.findByRole("heading", { level: 1, name: "Meridian Insurance" })).toBeDefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    unmount();
   });
 
   // The org's name comes from the config read the shell already makes: no second request for it.

@@ -38,6 +38,9 @@ describe("Settings › Licence", () => {
     expect(screen.getByText(S.licenceValidUntil).nextElementSibling?.textContent).toBe("14 Nov 2027");
     for (const name of [S.featureOutbound, S.featurePatching, S.featureGroups]) expect(screen.getByText(name)).toBeDefined();
     expect(screen.getByLabelText(S.licencePaste)).toBeDefined();
+    // Its Save shows once something is pasted, and nothing typed asks nothing on leaving (D16).
+    expect(screen.queryByRole("button", { name: S.licenceSave })).toBeNull();
+    fireEvent.change(screen.getByLabelText(S.licencePaste), { target: { value: "canyon-licence-v1 x" } });
     expect(screen.getByRole("button", { name: S.licenceSave })).toBeDefined();
   });
 
@@ -79,6 +82,7 @@ describe("Settings › Licence", () => {
     fireEvent.click(screen.getByRole("button", { name: S.licenceSave }));
     expect(await screen.findByText("Canyon Enterprise, licensed to Meridian Insurance until 14 Nov 2027.")).toBeDefined();
     expect(calls().filter((call) => call.startsWith("PUT"))).toEqual([`PUT ${LICENCE} ${JSON.stringify(golden.set)}`]);
+    expect(screen.getByText("Saved.")).toBeDefined(); // D16
   });
 
   it("shows a refused licence in the server's own words", async () => {

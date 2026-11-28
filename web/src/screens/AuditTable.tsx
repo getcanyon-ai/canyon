@@ -144,7 +144,7 @@ export function tableWords(event: AuditEvent): { verb: string; rest?: string } |
       const delivery = beforeAfter(d.delivery);
       if (delivery !== null) return { verb: "Changed how releases reach the platform", rest: `${text(delivery.before) || "—"} → ${text(delivery.after)}` };
       const grace = beforeAfter(d.access_grace);
-      if (grace !== null) return { verb: "Changed how long access lasts after someone leaves", rest: `${String(grace.before ?? "—")} → ${String(grace.after ?? "—")}` };
+      if (grace !== null) return { verb: "Changed how long apps keep letting people in when they can't reach Canyon", rest: `${String(grace.before ?? "—")} → ${String(grace.after ?? "—")}` };
       return { verb: "Changed the org's settings", rest: Object.keys(d).join(", ") };
     }
     case "sign in": return { verb: "Signed in", rest: d.flow === "device" ? "from the CLI" : d.flow === "browser" ? "in a browser" : undefined };

@@ -629,7 +629,10 @@ export const S = {
   deliveryYes: "Change it",
   webhookSave: "Save the webhook",
   webhookSaveNew: "Save the new webhook URL",
-  graceSave: "Save the access grace",
+  // access_grace (design/HAND-OFF.md §1): how long a handed-off app keeps letting people in on its last access list when it
+  // can't reach Canyon, by the words the audit trail says it in too.
+  graceLabel: "How long apps keep letting people in when they can't reach Canyon",
+  graceSave: "Save how long apps keep letting people in",
   deliveryRepo: "Canyon commits to your deploy repo (recommended)",
   deliveryRepoNote: "Canyon writes each release's files to the git repo your Argo CD or Flux syncs: previews are pushed, production is a pull request.",
   deliveryWebhook: "Canyon calls your webhook",

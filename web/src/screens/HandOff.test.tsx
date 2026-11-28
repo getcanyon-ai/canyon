@@ -165,7 +165,7 @@ describe("once the platform runs apps", () => {
     draw({ record: org });
     expect(await screen.findByText(S.onSummary.replace("<url>", hook.url))).toBeDefined();
     expect(screen.getByText(S.lastNoneOn)).toBeDefined();
-    expect(screen.getByLabelText("Access grace")).toHaveProperty("value", "1h");
+    expect(screen.getByLabelText(S.graceLabel)).toHaveProperty("value", "1h");
     const card = screen.getByRole("region", { name: S.teamTitle });
     expect(within(card).getByText(S.teamWebhook.replace("<url>", hook.url))).toBeDefined();
     expect(within(card).getByText(S.teamDocs)).toBeDefined();
@@ -208,12 +208,12 @@ describe("once the platform runs apps", () => {
     const message = "access_grace: a duration from 0 to 24h";
     server({ "GET /api/v1/platform-webhook": { body: hook }, "PUT /api/v1/preferences": { status: 400, body: { error: "invalid_access_grace", message } } });
     const { reload, rerender } = draw({ record: org });
-    fireEvent.change(await screen.findByLabelText("Access grace"), { target: { value: "25h" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save the access grace" }));
+    fireEvent.change(await screen.findByLabelText(S.graceLabel), { target: { value: "25h" } });
+    fireEvent.click(screen.getByRole("button", { name: S.graceSave }));
     expect((await screen.findByRole("alert")).textContent).toBe(message);
     expect(reload).toHaveBeenCalledOnce();
     rerender({ record: { ...org, access_grace: "30m" } });
-    expect(screen.getByLabelText("Access grace")).toHaveProperty("value", "30m");
+    expect(screen.getByLabelText(S.graceLabel)).toHaveProperty("value", "30m");
   });
 });
 

@@ -202,7 +202,7 @@ The next deploy or promotion is the first one Canyon hands to your platform. Und
 **Where apps run** then reads "Your platform runs apps. Canyon commits each release to" your repo's
 address, and "Committed, waiting for the first check-in." until a release has gone live. Under a
 webhook, it shows where releases go and the last release your platform answered. Either way it shows
-the access grace and what your platform team needs. Every member can read it; only an admin can change
+**How long apps keep letting people in when they can't reach Canyon** (the access grace) and what your platform team needs. Every member can read it; only an admin can change
 it.
 
 Once a deploy repo is saved, every member also sees **For your platform team**, under the repo's step
@@ -1758,7 +1758,8 @@ Every case below follows from three things the sidecar keeps.
 - **The last list it pulled**, in memory. A pull that fails never replaces it. A pull fails when
   Canyon doesn't answer within 10 seconds, answers anything but `200`, or sends a list the sidecar
   can't read. Canyon refusing the pod's token is a failed pull too.
-- **The access grace**: how long it keeps letting people in on that list once pulls fail. It is the
+- **The access grace**, **How long apps keep letting people in when they can't reach Canyon** in the dashboard: how long it keeps letting people in on that
+  list once pulls fail. It is the
   `access_grace` preference: a duration from `0` to `24h`, written like `30m` or `1h30m`, default
   `1h`. It counts from the last pull that succeeded; a sidecar that keeps running starts counting at
   its first failed pull, at most about a minute later. Past the grace, the sidecar answers every

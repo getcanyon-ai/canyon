@@ -250,12 +250,12 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const repoNext = repoSaved && <RepoTeamCard repo={repo} next />; // in the checklist, under the repo step: the platform team's part comes next
   const graceField = admin ? (
     <>
-      <label className={LABEL} htmlFor="hand-off-grace">Access grace</label>
+      <label className={LABEL} htmlFor="hand-off-grace">{S.graceLabel}</label>
       <input id="hand-off-grace" className={`${FIELD} max-w-[160px]`} value={grace} onChange={(event) => setGrace(event.target.value)} />
       <p className={NOTE}>{S.graceNote}</p>
       <SaveSection label={S.graceSave} changed={grace !== record.access_grace} save={saveGrace} />
     </>
-  ) : <p className={NOTE}>Access grace: <span className="font-mono">{record.access_grace}</span></p>;
+  ) : <p className={NOTE}>{S.graceLabel}: <span className="font-mono">{record.access_grace}</span></p>;
 
   return (
     <section aria-labelledby="run-where">

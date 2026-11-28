@@ -375,10 +375,11 @@ func (p *Pipeline) checkConfig(ctx context.Context, in Input) (configCheck, erro
 	if err != nil {
 		return configCheck{}, err
 	}
-	var was RunConfig
-	if sha == nil || spec == nil || (spec.Via != "off" && spec.Via != "canyon") || json.Unmarshal(stored, &was) != nil {
+	if !ConfigRecorded(spec, stored, sha) {
 		return configCheck{Changed: "Its configuration"}, nil
 	}
+	var was RunConfig
+	_ = json.Unmarshal(stored, &was) // it reads: ConfigRecorded said so
 	now, _, _, err := p.runConfig(ctx, in.Project, "preview", *spec, false)
 	if errors.Is(err, errDoorUnchecked) {
 		return configCheck{Unchecked: true}, nil
@@ -659,6 +660,9 @@ func (p *Pipeline) patch(ctx dbos.Context, in Input, cleared bool, state string,
 		return err
 	}
 	end := func(outcome, state, reason, notPlatform, key, text string) (Result, error) {
+		if state == "failed" {
+			log.Print(patchFailedLine(in.Run, in.Project, reason, notPlatform))
+		}
 		if text != "" {
 			if err := line(key, text); err != nil {
 				return Result{}, err
@@ -900,6 +904,16 @@ func refusedLine(version, code string) string {
 // couldNotCheck opens an image read's why that did not check (contracts/routes.md, platform.known-vuln's row); the
 // lines unchecked and unread say the reason after it.
 const couldNotCheck = "could not check: "
+
+// patchFailedLine is the server's line for a patch run that ended failed (#265): the run, its app, and its
+// failure_reason with the not_platform_only sub-reason where it has one, as the runs row records them.
+func patchFailedLine(run, project, reason, notPlatform string) string {
+	line := fmt.Sprintf("runs: run %s (%s): the patch run failed: %s", run, project, cmp.Or(reason, "no reason recorded"))
+	if notPlatform != "" {
+		line += " (" + notPlatform + ")"
+	}
+	return line
+}
 
 // movedLine and changedLine are a patch run's lines moved and changed (contracts/routes.md, Patch runs).
 func movedLine(version string) string {

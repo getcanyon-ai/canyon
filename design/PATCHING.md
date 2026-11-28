@@ -473,6 +473,12 @@ rescan still reads and matches every running image, and nothing is planned or pa
   identity too, and a pause, like `patching: off`, turns the identity's pending patch approvals
   `outdated` (review of #2340, 2026-10-18). A resume makes the identity's unexpired pending patch approvals current
   again, and under a fleet approval the next tick decides them (#2571).
+  A patch run that ends before its `/run` — blocked by its gate, its proof or its config check failed, a
+  regression — deployed nothing and counts toward neither (#265, 2026-11-27): it says something of that
+  app and its image, not of the run image, and no app ran it. Its outcome is `failed`: the app is not
+  tried onto that run image again until its preview runs another image, and when it was the canary the
+  next tick names the next app in canary order in its place, each app tried once onto it. A preview that
+  could never pass the config check is not planned at all (below).
 - **Production held or stopped** (OPERATIONS.md §3.4) is never planned. Neither is a stopped preview.
 - **A rebase refused for what the images are is never planned again** (#2089, 2026-10-18). A `409
   another_run_image` or `another_stack` is permanent for that pair — the image's digest and the run
@@ -481,9 +487,17 @@ rescan still reads and matches every running image, and nothing is planned or pa
   onto `canyon-run:<hex>`, or before `CANYON_IMAGE_RUN` was set, unset or moved to another repository,
   answers so, and the next deploy is what patches it. `not_rebasable` is the same. `run_image_moved`
   is not: the plan is simply stale, and the next tick plans again.
+- **A preview whose deploy recorded no run-config fingerprint is never planned** (#265, 2026-11-27). A
+  patch proves what preview would run with is unchanged against the fingerprint its deploy row recorded
+  (§4.3, step 5), and a row with none — written before the fingerprint existed (#2094), by a release
+  before it, or by a retry that found its version running — or whose spec or parts do not read, can only
+  fail that proof, `config_changed`, every time. So the plan reads it before it names the app, of a
+  preview Canyon runs, and never names it: not as the canary, not in a wave, not for a rebuild. Its cause
+  says what to do: `Canyon didn't record the settings its preview was deployed with: deploy it once to
+  patch it`. Its next deploy records one. The proof itself is unchanged, and still fails such a row.
 - **Each tick says what it planned** (#2575): one server log line naming the run image, the apps whose
   patch runs started, and every other app it read under one cause each: the rule off, no counted
-  finding at `high` or above, none the run image fixes, a refusal for good, a revert or failed start
+  finding at `high` or above, none the run image fixes, a refusal for good, no run-config fingerprint recorded, a revert or failed start
   not retried, its wave, a pause or a stall, a person's run first. Before it reads an app the line says
   why it read none: patching off on the server or for the org, no app with `platform.known-vuln` on, or no preview. A plan that fails says
   why in its own line. Names and counts only, never an image's contents; an app given no cause reads
@@ -946,6 +960,7 @@ one model change, made in PERMISSIONS.md as PR 9's first commit, before PR 16.
 | Proof fails, or its facts are missing | `not_platform_only`; nothing deployed |
 | A rebuild's inputs differ, can't be compared (another key version), or were never recorded | `not_same_inputs`, or never planned; nothing deployed |
 | Config fingerprint differs | `config_changed`; nothing deployed; the team is told to deploy |
+| Preview's deploy recorded no config fingerprint | never planned; the plan says to deploy it once (§4.2) |
 | New `high`, or the planned finding still there | `patch_regressed` / `patch_ineffective` |
 | `/run` of the patch fails | the old container is handed back (today's `/run`) |
 | Exit or restart in the watch | revert by compare-and-set, with the hold and the row re-checked in one transaction |

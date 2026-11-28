@@ -78,7 +78,18 @@ func matchedRunImage(t *testing.T, ctx context.Context, p *pgxpool.Pool, digest 
 func runningPreview(t *testing.T, ctx context.Context, p *pgxpool.Pool, f *executortest.Fake, app, digest string) {
 	t.Helper()
 	storedAs(t, ctx, p, nil, app, digest)
+	recordedConfig(t, ctx, p, app)
 	f.Start(app, "preview")
+}
+
+// recordedConfig is app's preview row recording a run-config fingerprint, as a deploy since #2094 records one, so
+// the plan may name it (design/PATCHING.md §4.2; #265).
+func recordedConfig(t *testing.T, ctx context.Context, p *pgxpool.Pool, app string) {
+	t.Helper()
+	if _, err := p.Exec(ctx, `UPDATE deploys SET egress = '{"via": "off"}', run_config = '{"egress": {"via": "off"}, "run_by": "canyon"}',
+		run_config_sha256 = repeat('0', 64), run_config_at = now() WHERE project_id = $1 AND env = 'preview'`, app); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func sha(c byte) string { return "sha256:" + strings.Repeat(string(c), 64) }
@@ -429,7 +440,8 @@ func TestARedeployNeverUndoesARevert(t *testing.T) {
 	if err := pipe.RecordPatchOutcome(ctx, fakeRunImage, "redo-a", PatchReverted); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id IN ('redo-a', 'redo-c') AND env = 'preview'", "canyon/redo-x@"+sha('b')); err != nil {
+	// redeployed: a deploy since #2094 records its run-config fingerprint again, so the plan may name it (#265)
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id IN ('redo-a', 'redo-c') AND env = 'preview'", "canyon/redo-x@"+sha('b')); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 0 {
@@ -466,6 +478,7 @@ func TestTheCanaryIsReplacedNeverWaitedOn(t *testing.T) {
 	slices.SortFunc(apps, func(x, y string) int { return strings.Compare(canaryOrder(x), canaryOrder(y)) })
 	for _, app := range apps {
 		storedAs(t, ctx, p, nil, app, sha('a'))
+		recordedConfig(t, ctx, p, app)
 		if app != apps[0] {
 			f.Start(app, "preview")
 		}
@@ -516,7 +529,7 @@ func TestARefusedPairIsNeverPlannedAgain(t *testing.T) {
 	if err := p.QueryRow(ctx, "SELECT outcome FROM patch_wave_apps WHERE project_id = 'refused-a'").Scan(&outcome); err != nil || outcome != PatchRefused {
 		t.Fatalf("the refused app's patch: %q (%v)", outcome, err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('b')); err != nil {
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('b')); err != nil { // a deploy, which records its fingerprint (#265)
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 1 {
@@ -528,7 +541,7 @@ func TestARefusedPairIsNeverPlannedAgain(t *testing.T) {
 	if _, err := p.Exec(ctx, "UPDATE runs SET state = 'clean', ended_at = now() WHERE project_id = 'refused-a' AND kind = 'patch' AND ended_at IS NULL"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1 WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('a')); err != nil { // the refused image, reused
+	if _, err := p.Exec(ctx, "UPDATE deploys SET image = $1, run_config_at = now() WHERE project_id = 'refused-a' AND env = 'preview'", "canyon/refused-a@"+sha('a')); err != nil { // the refused image, reused
 		t.Fatal(err)
 	}
 	if n, err := pipe.planPatches(ctx); err != nil || n != 0 {
@@ -740,12 +753,16 @@ func TestPatchTickSaysWhyNothingWasPlanned(t *testing.T) {
 	probes := []string{"probe-a", "probe-b"}
 	slices.SortFunc(probes, func(x, y string) int { return strings.Compare(canaryOrder(x), canaryOrder(y)) })
 	canary, next := probes[0], probes[1]
-	for _, app := range []string{"probe-a", "probe-b", "nofix", "low", "unread", "npm", "ruleoff", "uncomposed", "refused"} {
+	for _, app := range []string{"probe-a", "probe-b", "nofix", "low", "unread", "npm", "ruleoff", "uncomposed", "refused", "unrecorded"} {
 		runningPreview(t, ctx, p, f, app, sha('a'))
+	}
+	// deployed before Canyon recorded its run-config fingerprint (#2094): a patch could only fail its config check, so it is never named (#265)
+	if _, err := p.Exec(ctx, "UPDATE deploys SET run_config = NULL, run_config_sha256 = NULL, run_config_at = NULL WHERE project_id = 'unrecorded'"); err != nil {
+		t.Fatal(err)
 	}
 	storedAs(t, ctx, p, nil, "stopped", sha('a'))
 	if n, line := saidTick(t, ctx); n != 0 || !strings.HasPrefix(line, onto+"0 patch run(s): ") ||
-		!strings.Contains(line, "5 not, the run image's own scan could not be read (nofix, probe-a, probe-b, refused, stopped)") {
+		!strings.Contains(line, "6 not, the run image's own scan could not be read (nofix, probe-a, probe-b, refused, stopped and 1 more)") {
 		t.Fatalf("no run image match stored: %d, %s", n, line)
 	}
 
@@ -754,7 +771,8 @@ func TestPatchTickSaysWhyNothingWasPlanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := onto + "1 patch run(s) (" + canary + ")" +
-		": 1 not, a rebase of its image onto this run image was refused for good (refused)" +
+		": 1 not, Canyon didn't record the settings its preview was deployed with: deploy it once to patch it (unrecorded)" +
+		"; 1 not, a rebase of its image onto this run image was refused for good (refused)" +
 		"; 1 not, it waits for its wave (" + next + ")" +
 		"; 1 not, its counted findings are in runtimes or build tools, which a rebase does not fix (npm)" +
 		"; 1 not, its image's read could not check (unread)" +

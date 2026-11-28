@@ -170,7 +170,7 @@
               "why": { "enum": ["server_off", "org_off", "not_wired", "no_preview", "rule_off", "failed"] },
               "apps": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["project", "why"],
                 "properties": { "project": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-                  "why": { "enum": ["started", "refused", "no_digest", "policy", "rule_off", "unread", "no_finding", "no_fix", "runtime",
+                  "why": { "enum": ["started", "refused", "no_fingerprint", "no_digest", "policy", "rule_off", "unread", "no_finding", "no_fix", "runtime",
                     "run_image_unread", "stopped", "under_way", "passed", "ended_early", "reverted", "failed_start", "failed", "paused", "wave",
                     "stalled", "goes_first", "offline", "moved", "unknown"] } } } } } }] } }
     }

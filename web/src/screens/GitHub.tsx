@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { AskFirst } from "../ui/AskFirst";
+import { useSaveChoice } from "../ui/Saved";
+import { useUnsaved } from "../ui/Unsaved";
 import { getGitHub, getGitHubRepositories, importRepository, linkRepository, said, setGitHubClientSecret, setGitHubOrg, unlinkRepository, type GitHubOrg, type GitHubRead, type GitHubRepository } from "../api";
 import { S } from "../strings";
 import { Age } from "../ui/Age";
@@ -127,17 +130,26 @@ function Repositories() {
   const [list, setList] = useState<{ repositories: GitHubRepository[]; unreachable: string[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [form, setForm] = useState<{ repo: number; kind: "import" | "folder" | "link" } | null>(null);
+  // Unlinking stops the app's pushes reaching it, so it asks first, saying what stops (D16).
+  const [unlinking, setUnlinking] = useState<{ id: string; name: string; repo: string } | null>(null);
   const phone = useMedia("(max-width: 719px)"); // the table's 640px and the page's gutters
   const load = () => getGitHubRepositories().then((answer) => { setList(answer); setFailure(null); }, (err: unknown) => setFailure(said(err)));
   useEffect(() => { void load(); }, []);
-  const act = (work: Promise<unknown>) => work.then(() => { setForm(null); return load(); }, (err: unknown) => setFailure(said(err)));
+  const act = (work: Promise<unknown>) => work.then(() => { setForm(null); setUnlinking(null); return load(); }, (err: unknown) => setFailure(said(err)));
   if (list === null) return failure === null ? null : <p className="text-base text-critical">{failure}</p>;
-  const row = (repo: GitHubRepository): RepositoryProps => ({ repo, open: form?.repo === repo.repo_id ? form.kind : null, ask: (kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind }), act });
+  const row = (repo: GitHubRepository): RepositoryProps => ({ repo, open: form?.repo === repo.repo_id ? form.kind : null, ask: (kind) => setForm(kind === null ? null : { repo: repo.repo_id, kind }), act,
+    unlink: (app) => setUnlinking({ id: app.id, name: app.name, repo: repo.full_name }) });
   return (
     <div>
       <h2 className="text-base font-semibold">{S.githubRepositories}</h2>
       {list.unreachable.map((org) => <p key={org} className={NOTE}>{S.githubUnanswered.replace("<org>", () => org)}</p>)}
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}
+      {unlinking !== null && (
+        <AskFirst question={S.githubUnlinkAsk.replace("<app>", () => unlinking.name).replace("<repo>", () => unlinking.repo)} yes={S.githubUnlinkYes} danger
+          onYes={() => act(unlinkRepository(unlinking.id))} onNo={() => setUnlinking(null)}>
+          <p className="text-md">{S.githubUnlinkMeans.replace("<app>", () => unlinking.name)}</p>
+        </AskFirst>
+      )}
       {/* on a phone each repository is a card: the table's buttons start past its edge (#126) */}
       {phone && list.repositories.length > 0
         ? <ul className="mt-2.5 grid gap-2.5">{list.repositories.map((repo) => <RepositoryCard key={repo.repo_id} {...row(repo)} />)}</ul>
@@ -154,11 +166,14 @@ function Repositories() {
 
 const NO_REPOSITORIES = "None of Canyon's Apps sees a repository yet";
 
-interface RepositoryProps { repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void }
+interface RepositoryProps {
+  repo: GitHubRepository; open: "import" | "folder" | "link" | null; ask: (kind: "import" | "folder" | "link" | null) => void; act: (work: Promise<unknown>) => void;
+  unlink: (app: GitHubRepository["apps"][number]) => void;
+}
 
 // A repository's parts, the same in the table and in a phone's card: its name, what an admin does with one no app is
 // linked to, each app linked to it, and the form open on it.
-function repositoryParts({ repo, open, ask, act }: RepositoryProps) {
+function repositoryParts({ repo, open, ask, act, unlink }: RepositoryProps) {
   return {
     name: <a className="font-medium text-text no-underline hover:underline" href={`https://github.com/${repo.full_name}`}>{repo.full_name}</a>,
     unlinked: (
@@ -172,7 +187,7 @@ function repositoryParts({ repo, open, ask, act }: RepositoryProps) {
       app: (
         <span className="flex flex-wrap items-center gap-2">
           <a className="text-link no-underline hover:underline" href={`#/apps/${app.id}`}>{app.name}</a>
-          <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => act(unlinkRepository(app.id))}>Unlink</Button>
+          <Button size="sm" variant="ghost" label={`Unlink ${app.name}`} onClick={() => unlink(app)}>Unlink</Button>
           {at === repo.apps.length - 1 && <Button size="sm" variant="ghost" onClick={() => ask("folder")}>Add another folder</Button>}
         </span>
       ),
@@ -218,6 +233,7 @@ const FIELD = "rounded-lg border border-border bg-surface px-2.5 py-1.5 text-bas
 function ImportForm({ repo, folder, cancel, act }: { repo: GitHubRepository; folder: boolean; cancel: () => void; act: (work: Promise<unknown>) => void }) {
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
+  useUnsaved(path !== "" || name !== ""); // typed and not made yet: leaving asks first (D16)
   const fallback = path.trim() === "" ? repo.full_name.split("/")[1]! : path.trim().split("/").pop()!;
   return (
     <span className="flex flex-wrap items-end gap-2">
@@ -239,9 +255,10 @@ function ImportForm({ repo, folder, cancel, act }: { repo: GitHubRepository; fol
 function LinkForm({ repo, cancel, act }: { repo: GitHubRepository; cancel: () => void; act: (work: Promise<unknown>) => void }) {
   const [app, setApp] = useState("");
   const [path, setPath] = useState("");
+  useUnsaved(app !== "" || path !== "");
   return (
     <span className="flex flex-wrap items-end gap-2">
-      <label className="grid gap-1 text-sm text-text-dim">App id
+      <label className="grid gap-1 text-sm text-text-dim">App (its id in Canyon)
         <input className={FIELD} value={app} placeholder="funny-snake-4k2" onChange={(event) => setApp(event.target.value)} />
       </label>
       <label className="grid gap-1 text-sm text-text-dim">Folder (empty for the whole repository)
@@ -259,8 +276,8 @@ function LinkForm({ repo, cancel, act }: { repo: GitHubRepository; cancel: () =>
 // be careful under it while it is on.
 function NewRepositories({ org }: { org: GitHubOrg }) {
   const [on, setOn] = useState(org.imports_new);
-  const [failure, setFailure] = useState<string | null>(null);
-  const flip = (next: boolean) => setGitHubOrg(org.account, next).then(({ org: saved }) => { setOn(saved.imports_new); setFailure(null); }, (err: unknown) => setFailure(said(err)));
+  const choice = useSaveChoice(); // a choice: it saves as it is made, and says so (D16)
+  const flip = (next: boolean) => choice.save(() => setGitHubOrg(org.account, next).then(({ org: saved }) => setOn(saved.imports_new)));
   return (
     <span className="grid gap-1 whitespace-normal">
       <select aria-label={`New repositories in ${org.account}`} className="w-fit rounded-md border border-border bg-surface px-1.5 py-0.5 text-base" value={on ? "apps" : "admin"} onChange={(event) => void flip(event.target.value === "apps")}>
@@ -268,7 +285,7 @@ function NewRepositories({ org }: { org: GitHubOrg }) {
         <option value="admin">Picked by an admin</option>
       </select>
       {on && <span className="max-w-[320px] text-sm text-text-dim">{S.githubImportsWarning.replaceAll("<org>", org.account)}</span>}
-      {failure !== null && <span className="text-sm text-critical">{failure}</span>}
+      {choice.line()}
     </span>
   );
 }
@@ -279,6 +296,7 @@ function NewRepositories({ org }: { org: GitHubOrg }) {
 function ClientSecret({ org, saved }: { org: GitHubOrg; saved: (org: GitHubOrg) => void }) {
   const [secret, setSecret] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
+  useUnsaved(secret.trim() !== ""); // typed: its Save shows once pasted, and leaving asks first (D16)
   const save = () => setGitHubClientSecret(org.account, secret.trim()).then(({ org: next }) => saved(next), (err: unknown) => setFailure(said(err)));
   const callback = `${window.location.origin}/api/v1/github/link/callback`;
   return (
@@ -288,9 +306,7 @@ function ClientSecret({ org, saved }: { org: GitHubOrg; saved: (org: GitHubOrg) 
       <label className={LABEL} htmlFor={`github-secret-${org.app_slug}`}>Client secret</label>
       <span className="flex max-w-[520px] flex-wrap items-center gap-2">
         <input id={`github-secret-${org.app_slug}`} type="password" autoComplete="off" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 font-mono text-base" value={secret} onChange={(event) => setSecret(event.target.value)} />
-        {secret.trim() === ""
-          ? <Button disabled reason="Paste the secret GitHub generated first.">{S.githubSecretSave}</Button>
-          : <Button variant="primary" onClick={() => void save()}>{S.githubSecretSave}</Button>}
+        {secret.trim() !== "" && <Button variant="primary" onClick={() => void save()}>{S.githubSecretSave}</Button>}
       </span>
       {failure !== null && <p className="mt-1 text-base text-critical">{failure}</p>}
     </div>

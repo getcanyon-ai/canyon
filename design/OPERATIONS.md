@@ -173,7 +173,7 @@ as §1.1 step 4 says and ends `failed`/`image_gone`, nothing built, before anyth
 (design/specs/cli.md §6.3.3); the dashboard's *Put back* is disabled up front on a row whose image is
 not `kept` (§1.7). (Corrected 2026-10-12, #2207: this said the CLI's rollback refuses at once.)
 
-### 1.6 "Production is approved in the dashboard", hand-off, and what is not put back
+### 1.6 "A person approves each promotion to production, here in Canyon", hand-off, and what is not put back
 
 - **The setting covers rollback**, which is a promotion: the CLI files a production approval naming
   the review run, its package and image, and prints the link (design/AUTH.md §4.5); it is `outdated`

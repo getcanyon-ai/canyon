@@ -3,6 +3,7 @@ import { allowDestination, ApiError, caOf, getAuthConfig, getEgress, getFrontDoo
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, age } from "../ui/Age";
+import { AskFirst } from "../ui/AskFirst";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { shownIntoView } from "../ui/media";
@@ -13,6 +14,8 @@ import { HandOff } from "./HandOff";
 import { ConnectAgents } from "./ConnectAgents";
 import { isAdmin, OrganisationSettings, PeopleSettings, Sessions } from "./OrgSettings";
 import { pendingLine } from "../ui/pending";
+import { Saved } from "../ui/Saved";
+import { useUnsaved } from "../ui/Unsaved";
 import { AllowedLine, allowedLine, Refusals, wouldRefuse } from "./Outbound";
 import { DatabasesSettings } from "./Databases";
 import { OutboundKeys, subCAEnding } from "./OutboundKeys";
@@ -30,7 +33,7 @@ const CARD = "mt-3 rounded-xl border border-border bg-surface-2 px-3.5 py-3";
 const ALB_COOKIE = "AWSELBAuthSessionCookie";
 const SAMPLE = "claims-portal";
 const CHOICES = [[1, S.gateway, S.gatewayNote], [2, S.proxy, S.proxyNote]] as const;
-const GATEWAYS = [["oidc", "Standard OIDC gateway"], ["alb", "AWS load balancer sign-in"]] as const;
+const GATEWAYS = [["oidc", "A sign-in proxy that speaks OpenID Connect (OIDC)"], ["alb", "AWS load balancer sign-in"]] as const;
 const FORMS: AddressForm[] = ["app.env.domain", "app-env.domain"];
 
 // An app's address under each form, and the names the probe says its certificate must cover
@@ -244,7 +247,7 @@ function ScannerData() {
 function Stored({ door }: { door: FrontDoor }) {
   const rows = door.choice === 2
     ? [["Issuer", door.signin?.issuer], ["Client ID", door.signin?.client_id]]
-    : [["Gateway", GATEWAYS.find(([one]) => one === door.gateway)?.[1]], ["Issuer", door.issuer], ["Audience", door.audience], ["JWKS URL", door.jwks_url],
+    : [["Sign-in proxy", GATEWAYS.find(([one]) => one === door.gateway)?.[1]], ["Issuer", door.issuer], ["Audience", door.audience], ["JWKS URL", door.jwks_url],
       ["Load balancer ARN", door.alb_arn], ["Session cookie", door.cookie ?? (door.gateway === "alb" ? ALB_COOKIE : undefined)]];
   return (
     <div className={CARD}>
@@ -267,6 +270,9 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
   const domain = draft.domain === "" ? read.default_domain : draft.domain;
   const stored = read.front_door?.signin;
   const secretSet = stored !== undefined && !draft.replacing && stored.issuer === draft.signin_issuer && stored.client_id === draft.client_id;
+  // Typed, so it has its own Save, shown only while the form differs from what is saved, and leaving asks first (D16).
+  const changed = JSON.stringify(draft) !== JSON.stringify(draftOf(read));
+  useUnsaved(changed);
 
   // Any edit makes "Saved." stale; a refusal stays until the next Save answers.
   const edit = (patch: Partial<Draft>) => {
@@ -288,10 +294,12 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
       setStatus({ refusal: said(err) });
     }
   };
-  const field = (key: Text, label: string) => (
+  // A field keeps the name the sign-in provider's console gives it, and says what it is under it.
+  const field = (key: Text, label: string, hint?: string) => (
     <>
       <label className={LABEL} htmlFor={`front-door-${key}`}>{label}</label>
-      <input id={`front-door-${key}`} className={FIELD} value={draft[key]} onChange={(event) => edit({ [key]: event.target.value })} />
+      <input id={`front-door-${key}`} className={FIELD} value={draft[key]} aria-describedby={hint === undefined ? undefined : `front-door-${key}-hint`} onChange={(event) => edit({ [key]: event.target.value })} />
+      {hint !== undefined && <p id={`front-door-${key}-hint`} className={NOTE}>{hint}</p>}
     </>
   );
 
@@ -311,7 +319,7 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
         {draft.choice === 1 && (
           <div className={CARD}>
             <fieldset>
-              <legend className={LABEL}>Your gateway</legend>
+              <legend className={LABEL}>Your sign-in proxy</legend>
               <span className="flex flex-wrap gap-4">
                 {GATEWAYS.map(([value, word]) => (
                   <label key={value} className="flex items-center gap-1.5 text-base">
@@ -322,8 +330,8 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
               </span>
             </fieldset>
             {draft.gateway === "oidc"
-              ? <>{field("issuer", "Issuer")}{field("audience", "Audience")}{field("jwks_url", "JWKS URL")}</>
-              : field("alb_arn", "Load balancer ARN")}
+              ? <>{field("issuer", "Issuer", S.issuerHint)}{field("audience", "Audience", S.audienceHint)}{field("jwks_url", "JWKS URL", S.jwksHint)}</>
+              : field("alb_arn", "Load balancer ARN", S.albHint)}
             {field("cookie", "Session cookie")}
             <p className={NOTE}>{S.cookieNote}</p>
             {draft.gateway === "alb" && <p className={NOTE}>{S.idpResponse.replace("<app address>", () => address(draft.form, "<app>", "<env>", domain))}</p>}
@@ -331,7 +339,7 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
         )}
         {draft.choice === 2 && (
           <div className={CARD}>
-            {field("signin_issuer", "Issuer")}
+            {field("signin_issuer", "Issuer", S.issuerHint)}
             {field("client_id", "Client ID")}
             {secretSet
               ? (
@@ -364,16 +372,12 @@ function Form({ read, adopt }: { read: FrontDoorRead; adopt: (answer: FrontDoorR
         </fieldset>
         <p className={NOTE}>{certificate(draft.form, domain)}</p>
       </fieldset>
-      {draft.choice !== null && (
-        <span className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="primary" label="Save the front door" onClick={() => void save()}>Save</Button>
-          {/* Always drawn, so the check and its outcome are announced as they replace each other. */}
-          <span role="status" className={`text-base ${status === "saved" ? "text-ok" : "text-text-dim"}`}>
-            {checking ? S.checking : status === "saved" ? S.frontDoorSaved : ""}
-          </span>
-          {typeof status === "object" && status !== null && <span role="alert" className="text-base text-critical">{status.refusal}</span>}
-        </span>
-      )}
+      {/* The check is said as it runs, then "Saved." in its place: one status line at a time, announced as it changes. */}
+      {draft.choice !== null && changed && (checking ? <p role="status" className="mt-4 text-base text-text-dim">{S.checking}</p> : (
+        <span className="mt-4 flex"><Button variant="primary" onClick={() => void save()}>{S.frontDoorSave}</Button></span>
+      ))}
+      {typeof status === "object" && status !== null && <p role="alert" className="mt-2 text-base text-critical">{status.refusal}</p>}
+      {status === "saved" && !changed && <Saved then={S.frontDoorSavedThen} />}
     </>
   );
 }
@@ -433,8 +437,8 @@ function OutboundSettings() {
   const [routesSaved, setRoutesSaved] = useState(false);
   const [routesPending, setRoutesPending] = useState<string | null>(null); // the same, of credential routes (#2789)
   const [impact, setImpact] = useState<null | "reading" | "unread" | Refused[]>(null);
-  const [askingMode, setAskingMode] = useState(false); // the question before a change that starts refusing
   const [modeSaved, setModeSaved] = useState(false);
+  const [viaSaved, setViaSaved] = useState(false);
   // a gateway replica that hadn't taken a saved change, said in place of its confirmation (#2789): via's and the mode's
   const [viaPending, setViaPending] = useState<string | null>(null);
   const [modePending, setModePending] = useState<string | null>(null);
@@ -463,18 +467,19 @@ function OutboundSettings() {
   const sending = useRef(false);
   const live = useRef(true);
   const impactRead = useRef(0); // reads overlap: only the newest one's answer is drawn
-  const yes = useRef<HTMLButtonElement>(null);
   // Advanced (#118) opens by itself when a read lands that needs a person, judged as it lands and never again as the page
   // redraws; nothing here closes it. `landed` is when, so a replica's age says what the read said.
   const [advanced, setAdvanced] = useState(false);
+  const capsTyped = useRef(false); // limits typed since they were last saved or read
   const [landed, setLanded] = useState(0);
   const adopt = (answer: EgressSetting) => {
     if (!live.current) return;
     const now = Date.now();
     setLanded(now);
     if (needsPerson(answer, now)) setAdvanced(true);
-    setRead(answer); setVia(answer.via); setMode(answer.mode); setRoutes(answer.credential_routes); setAskingMode(false);
-    setCaps(answer.caps === undefined ? null : { new_names: String(answer.caps.new_names), destinations: String(answer.caps.destinations), pending: String(answer.caps.pending) });
+    setRead(answer); setVia(answer.via); setMode(answer.mode); setRoutes(answer.credential_routes);
+    // Limits typed and not saved stay as typed: another section's save, or a read again, never takes them (D16).
+    if (!capsTyped.current) setCaps(answer.caps === undefined ? null : { new_names: String(answer.caps.new_names), destinations: String(answer.caps.destinations), pending: String(answer.caps.pending) });
   };
   // Each listed app's network, internal, open, or one Canyon can't tell (a recreation under way or one that didn't finish),
   // from this same read (contracts/routes.md, GET /api/v1/egress's networks; #2767). A read that names none, or an
@@ -483,7 +488,6 @@ function OutboundSettings() {
   const networks = named !== null && named !== undefined && Array.isArray(read?.networks_to_recreate) && read.networks_to_recreate.every((app) => Object.hasOwn(named, app)) ? named : null; // own keys: an app may be called constructor
   const reread = () => getEgress().then(adopt, (err: unknown) => { if (live.current) { setRead(null); setRefusal((was) => was ?? said(err)); } });
   useEffect(() => { live.current = true; void reread(); return () => { live.current = false; }; }, []);
-  useEffect(() => { if (askingMode) yes.current?.focus(); }, [askingMode]);
   const change = async (line: string, send: () => Promise<EgressSetting>, after?: () => Promise<void>, heldLine?: string) => {
     if (sending.current) return false;
     sending.current = true;
@@ -507,7 +511,10 @@ function OutboundSettings() {
   };
   const save = () => putEgress({ via }).then(({ answer, pending }) => { if (live.current) setViaPending(pendingLine(pending)); return answer; })
     .catch(async (err: unknown) => { await reread(); throw err; });
-  const saveVia = () => void change("Saving…", save, undefined, S.viaHeld);
+  const saveVia = async () => {
+    const taken = await change("Saving…", save, undefined, S.viaHeld);
+    if (taken && live.current) setViaSaved(true);
+  };
   const recreate = (app: string) => void change(S.recreating.replace("<app>", () => app), () => recreateNetwork(app), reread);
   // Through Canyon under an org on allowlist starts refusing at each app's next deploy: weighed and asked as a mode switch is.
   const viaRefuses = read !== null && read.via === "off" && via === "canyon" && read.mode === "allowlist";
@@ -519,14 +526,13 @@ function OutboundSettings() {
   };
   const chooseVia = (to: EgressSetting["via"]) => {
     setVia(to);
-    setAskingMode(false);
+    setViaSaved(false);
     setAllowed("");
     setViaPending(null);
     if (to === "canyon" && read?.via === "off" && read.mode === "allowlist") void weigh(true);
   };
   const choose = (to: EgressMode) => {
     setMode(to);
-    setAskingMode(false);
     setModeSaved(false);
     setModePending(null);
     setAllowed("");
@@ -564,8 +570,9 @@ function OutboundSettings() {
     const saved = read?.caps;
     return caps !== null && saved !== undefined && CAPS.some(([key]) => !/^[0-9]+$/.test(caps[key]) || Number(caps[key]) !== saved[key]);
   };
+  useUnsaved(capsUnsaved());
   const saveCaps = async (moved: Partial<EgressCaps>) => {
-    const taken = await change("Saving…", () => putEgress({ caps: moved }).then(({ answer, pending }) => { if (live.current) setCapsPending(pendingLine(pending)); return answer; })
+    const taken = await change("Saving…", () => putEgress({ caps: moved }).then(({ answer, pending }) => { capsTyped.current = false; if (live.current) setCapsPending(pendingLine(pending)); return answer; })
       .catch(async (err: unknown) => { await reread(); throw err; }));
     if (taken && live.current) setCapsSaved(true);
   };
@@ -592,15 +599,6 @@ function OutboundSettings() {
       ))}
       <AllowedLine line={allowed} />
     </>
-  );
-  const question = (line: string, yesWord: string, send: () => void) => (
-    <div className="mt-1 grid gap-2">
-      <p className="text-base">{line}</p>
-      <span className="flex flex-wrap gap-2">
-        <Button variant="danger" ref={yes} onClick={send}>{yesWord}</Button>
-        <Button variant="ghost" onClick={() => setAskingMode(false)}>Cancel</Button>
-      </span>
-    </div>
   );
   const reading = impact === "reading" || impact === null;
   return (
@@ -632,20 +630,19 @@ function OutboundSettings() {
               </div>
             ))}
           </fieldset>
-          {via !== read.via && !viaRefuses && <span className="mt-3 flex"><Button variant="primary" label="Save how apps call out" onClick={saveVia}>Save</Button></span>}
-          {viaPending !== null && via === read.via && <p role="status" className="mt-2 text-md text-amber">{viaPending}</p>}
+          {/* A choice that changes what apps can do asks first, saying what changes (D16): nothing is sent before yes. */}
+          {via !== read.via && !viaRefuses && (
+            <AskFirst question={via === "canyon" ? S.viaAskOn : S.viaAskOff} yes={via === "canyon" ? S.viaYes : S.viaYesOff} onYes={() => void saveVia()} onNo={() => chooseVia(read.via)}>
+              <p className="text-md">{via === "canyon" ? S.viaCanyonNote : S.viaOffNote}</p>
+            </AskFirst>
+          )}
+          {via === read.via && viaSaved && <Saved pending={viaPending} />}
           {viaRefuses && (
-            <div aria-label="What changes" role="group" className={`${CARD} grid grid-cols-[minmax(0,1fr)] gap-2`}>
-              <p className="text-base font-semibold">{S.viaUnderAllowlist}</p>
+            <AskFirst question={S.viaAsk} yes={S.viaYes} wait={reading ? S.readingCalls : null} onYes={() => void saveVia()} onNo={() => chooseVia(read.via)}>
+              <p className="text-base">{S.viaUnderAllowlist}</p>
               <p role="note" className="text-md text-amber">{S.viaUnseen}</p>
               {weighed(true)}
-              {askingMode ? question(S.viaAsk, S.viaYes, saveVia) : (
-                <span className="mt-1 flex">
-                  {reading ? <Button disabled reason="Reading what apps called…" label="Save how apps call out">Save</Button>
-                    : <Button variant="primary" label="Save how apps call out" onClick={() => setAskingMode(true)}>Save</Button>}
-                </span>
-              )}
-            </div>
+            </AskFirst>
           )}
           {!known(read.mode) ? <p className="mt-6 text-md text-critical">What apps may call couldn't be read.</p> : (<>
             <fieldset aria-describedby="egress-mode-beta" disabled={!through} className="mt-6">
@@ -662,23 +659,18 @@ function OutboundSettings() {
               ))}
               <p className={`mt-3 ${NOTE}`}>{S.modeFollowed}</p>
             </fieldset>
-            {through && mode !== read.mode && (
-              <div aria-label="What changes" role="group" className={`${CARD} grid grid-cols-[minmax(0,1fr)] gap-2`}>
-                {mode === "observe" ? <p className="text-base">{S.modeWiden}</p> : (<>
-                  <p className="text-base font-semibold">{S.modeNow}</p>
+            {through && mode !== read.mode && (mode === "observe"
+              ? (
+                <AskFirst question={S.modeAskObserve} yes={S.modeYesObserve} onYes={() => void saveMode()} onNo={() => choose(read.mode)}>
+                  <p className="text-md">{S.modeWiden}</p>
+                </AskFirst>
+              ) : (
+                <AskFirst question={ask} yes={S.modeYes} danger wait={reading ? S.readingCalls : null} onYes={() => void saveMode()} onNo={() => choose(read.mode)}>
+                  <p className="text-md">{S.modeNow}</p>
                   {weighed(false)}
-                </>)}
-                {askingMode ? question(ask, S.modeYes, () => void saveMode()) : (
-                  <span className="mt-1 flex">
-                    {mode === "allowlist" && reading
-                      ? <Button disabled reason="Reading what apps called…" label="Save what apps may call">Save</Button>
-                      : <Button variant="primary" label="Save what apps may call" onClick={() => (mode === "allowlist" ? setAskingMode(true) : void saveMode())}>Save</Button>}
-                  </span>
-                )}
-              </div>
-            )}
-            {modeSaved && mode === read.mode && (modePending === null ? <p role="status" className="mt-2 text-md text-ok">{S.modeSaved}</p>
-              : <p role="status" className="mt-2 text-md text-amber">{modePending}</p>)}
+                </AskFirst>
+              ))}
+            {modeSaved && mode === read.mode && <Saved then={S.modeSavedThen} pending={modePending} />}
           </>)}
           {typeof read.credential_routes !== "boolean" ? <p className="mt-6 text-md text-critical">{S.routesUnread}</p> : (<>
             <fieldset aria-describedby="egress-routes-beta" className="mt-6">
@@ -690,13 +682,12 @@ function OutboundSettings() {
               <p id="egress-routes-note" className={`${NOTE} ml-6`}>{S.routesOnNote}</p>
             </fieldset>
             {routes !== read.credential_routes && (
-              <div className="mt-3 grid gap-2">
-                {!routes && <p role="note" className="text-md text-amber">{S.routesTurningOff}</p>}
-                <span className="flex"><Button variant="primary" label="Save whether Canyon adds credentials" onClick={() => void saveRoutes()}>Save</Button></span>
-              </div>
+              <AskFirst question={routes ? S.routesAskOn : S.routesAskOff} yes={routes ? S.routesYesOn : S.routesYesOff} danger={!routes}
+                onYes={() => void saveRoutes()} onNo={() => { setRoutes(read.credential_routes); setRoutesSaved(false); }}>
+                <p className={routes ? "text-md" : "text-md text-amber"}>{routes ? S.routesOnNote : S.routesTurningOff}</p>
+              </AskFirst>
             )}
-            {routesSaved && routes === read.credential_routes && (routesPending === null ? <p role="status" className="mt-2 text-md text-ok">{S.routesSaved}</p>
-              : <p role="status" className="mt-2 text-md text-amber">{routesPending}</p>)}
+            {routesSaved && routes === read.credential_routes && <Saved pending={routesPending} />}
           </>)}
           {listed !== null && (<>
             <h2 className="mt-6 text-base font-semibold">{S.recreateHeading}</h2>
@@ -746,13 +737,12 @@ function OutboundSettings() {
                       <label htmlFor={`egress-cap-${key}`} className="text-base font-semibold">{label}</label>
                       <input id={`egress-cap-${key}`} type="number" inputMode="numeric" min={min} max={max} step={1} value={caps[key]} aria-describedby={`egress-cap-${key}-note`}
                         className="w-32 rounded border border-border bg-surface px-2 py-1 text-base"
-                        onChange={(e) => { setCaps({ ...caps, [key]: e.target.value }); setCapsSaved(false); setCapsPending(null); }} />
+                        onChange={(e) => { capsTyped.current = true; setCaps({ ...caps, [key]: e.target.value }); setCapsSaved(false); setCapsPending(null); }} />
                       <p id={`egress-cap-${key}-note`} className={NOTE}>{note} {S.capRange.replace("<min>", () => min.toLocaleString("en")).replace("<max>", () => max.toLocaleString("en"))}.</p>
                     </div>
                   ))}
-                  {moved !== null && <span className="mt-3 flex"><Button variant="primary" label="Save limits" onClick={() => void saveCaps(moved)}>Save</Button></span>}
-                  {capsSaved && moved === null && (capsPending === null ? <p role="status" className="mt-2 text-md text-ok">{S.capsSaved}</p>
-                    : <p role="status" className="mt-2 text-md text-amber">{capsPending}</p>)}
+                  {moved !== null && <span className="mt-3 flex"><Button variant="primary" onClick={() => void saveCaps(moved)}>{S.capsSave}</Button></span>}
+                  {capsSaved && moved === null && <Saved pending={capsPending} />}
                 </section>
               );
             })()}

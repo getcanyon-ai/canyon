@@ -80,7 +80,7 @@ Hand-off is a setting on your organization's preferences, `run_by`: `canyon` (th
 2. **The way releases reach your platform is saved**: under the deploy repo, **your deploy repo**;
    under a webhook, **the platform webhook**, the address releases are sent to.
 3. **A front door is set** in **Settings › App hosting**.
-4. **The front door is "Your gateway signs people in".** Your own gateway, such as an OIDC proxy or
+4. **The front door is "Your sign-in proxy signs people in".** Your own gateway, such as an OIDC proxy or
    an AWS load balancer, signs people in, and the sidecar beside the app checks the token it passes
    on. "Canyon signs people in" isn't supported under hand-off.
 
@@ -102,7 +102,7 @@ as well: `repo_required` or `webhook_required` otherwise, and nothing changes.
 Saving the front door runs Canyon's check of its own cluster ([Saving it](/self-host/front-door/#saving-it)): whether the cluster enforces
 NetworkPolicy, so an app's port can't be reached without signing in, and whether the app addresses
 have a certificate. Your platform's cluster isn't the one checked, so under hand-off the check never
-blocks a "Your gateway signs people in" front door, as long as the platform webhook or the deploy repo
+blocks a "Your sign-in proxy signs people in" front door, as long as the platform webhook or the deploy repo
 is saved first. A front door that fails it is saved **not checked on this cluster**, and **Settings ›
 App hosting** says so beside it, with what the check found. A check that can't finish at all refuses
 the save and changes nothing while Canyon still runs the apps, so a passing failure never takes a
@@ -190,8 +190,8 @@ the choice. Each change is in the [audit trail](/org/audit-trail/).
    address isn't the final one, since Canyon follows none. If nothing answers in 10 seconds, Canyon's
    server can't reach your platform: allow it, as [Install on Kubernetes](/self-host/kubernetes/)
    describes. The host token isn't used until the first release.
-3. **Your gateway signs people in.** **Go to the front door** takes you to the front door, further
-   down the page. Set it to **Your gateway signs people in** and save it there: the step is ticked once
+3. **Your sign-in proxy signs people in.** **Go to How people reach apps** takes you to the front door, further
+   down the page. Set it to **Your sign-in proxy signs people in** and save it there: the step is ticked once
    it is saved and the check found NetworkPolicy enforced, whatever it found of the certificate. Until
    then the step stays open with the amber note saying why, and **Hand apps to your platform** waits for
    it. Save the webhook or the deploy repo first, so that a cluster that fails the check still saves it.
@@ -202,7 +202,7 @@ The next deploy or promotion is the first one Canyon hands to your platform. Und
 **Where apps run** then reads "Your platform runs apps. Canyon commits each release to" your repo's
 address, and "Committed, waiting for the first check-in." until a release has gone live. Under a
 webhook, it shows where releases go and the last release your platform answered. Either way it shows
-the access grace and what your platform team needs. Every member can read it; only an admin can change
+**How long apps keep letting people in when they can't reach Canyon** (the access grace) and what your platform team needs. Every member can read it; only an admin can change
 it.
 
 Once a deploy repo is saved, every member also sees **For your platform team**, under the repo's step
@@ -275,7 +275,7 @@ session=$(jq -r .session ~/.config/canyon/config.json)
    You should see `200` and a JSON object with `url`, `set_by` and `set_at`, and, on this first
    save only, `secret` (the webhook secret) and `token` (the host token). Store both in your
    platform's secret store now: Canyon never shows either again.
-3. In **Settings › App hosting**, set the front door to **Your gateway signs people in**.
+3. In **Settings › App hosting**, set the front door to **Your sign-in proxy signs people in**.
 4. Under a webhook, send a test delivery:
 
    ```sh
@@ -348,8 +348,8 @@ needs it. Until the app is deleted, the app page lists both, Canyon's and your p
 
 To have Canyon run apps again, choose **Canyon runs apps on this cluster** under **Where apps run**,
 which asks first, or send `{"run_by": "canyon"}`. Canyon refuses it with `409 front_door_unchecked`
-while the front door hasn't passed its check of this cluster. Save the front door again so Canyon
-checks it, then switch.
+while the front door hasn't passed its check of this cluster. Save **How people reach apps** again
+so Canyon checks it, then switch.
 
 ## Your deploy repo
 
@@ -462,7 +462,7 @@ repo, with no hand step.
 | **Pull requests API** | `api` | **GitHub's (GitHub, GitHub Enterprise, Gitea, Forgejo)** (`github`, the default), **GitLab's merge requests (GitLab.com, GitLab self-managed)** (`gitlab`: [On GitLab](#on-gitlab)) or **None** (`none`). With **None**, production is pushed, and the form says in amber, before you save: "With no pull requests API, Canyon pushes production to its branch with no review in git." |
 | **API address** | `api_url` | Where that API answers: `https://api.github.com` when left empty; `https://<host>/api/v3` on GitHub Enterprise Server; `https://<host>/api/v1` on Gitea and Forgejo. On GitLab, `https://<host>/api/v4` on the repository's own host when left empty: always on that host and port, ending `/api/v4`, with any path before it the start of the repository URL's path (a GitLab served under `/gitlab`). |
 | **Secret store** | `store` | The name of the ClusterSecretStore each release's access token comes through: `canyon` when left empty. |
-| **CA for the sign-in sidecar and External Secrets (optional)** | `ca` | "Only when a private CA signed Canyon's own address: the sign-in sidecar in each pod and External Secrets trust it. A git host on a private CA needs its CA in Canyon's server instead: A git host at a private address, under Your deploy repo in Canyon's docs." PEM, up to 64 KiB. Canyon then commits it in a ConfigMap beside each app, and **For your platform team** puts it in the ClusterSecretStore's `caBundle`. It is never the git host's CA: see [A git host at a private address](#a-git-host-at-a-private-address). |
+| **Your private certificate authority, if one signed Canyon's address (optional)** | `ca` | "Only when a private CA signed Canyon's own address: the sign-in sidecar in each pod and External Secrets trust it. A git host on a private CA needs its CA in Canyon's server instead: A git host at a private address, under Your deploy repo in Canyon's docs." PEM, up to 64 KiB. Canyon then commits it in a ConfigMap beside each app, and **For your platform team** puts it in the ClusterSecretStore's `caBundle`. It is never the git host's CA: see [A git host at a private address](#a-git-host-at-a-private-address). |
 
 ### Its calls
 
@@ -1175,7 +1175,7 @@ no redirect, and sends the token only in one HTTP header, never in an address or
 If a private CA signed your git host's certificate, Canyon's server needs to trust it, or every check
 and every commit is refused at once: "Canyon doesn't trust the repo's certificate. Give Canyon's server
 the CA that signed it: A git host at a private address, under Your deploy repo in Canyon's docs." The
-form's **CA for the sign-in sidecar and External Secrets (optional)** doesn't do this: it is for
+form's **Your private certificate authority, if one signed Canyon's address (optional)** doesn't do this: it is for
 Canyon's own address, in your cluster.
 
 Mount a bundle into `canyon-server` and point `SSL_CERT_FILE` at it. Git and the pull requests API
@@ -1758,7 +1758,8 @@ Every case below follows from three things the sidecar keeps.
 - **The last list it pulled**, in memory. A pull that fails never replaces it. A pull fails when
   Canyon doesn't answer within 10 seconds, answers anything but `200`, or sends a list the sidecar
   can't read. Canyon refusing the pod's token is a failed pull too.
-- **The access grace**: how long it keeps letting people in on that list once pulls fail. It is the
+- **The access grace**, **How long apps keep letting people in when they can't reach Canyon** in the dashboard: how long it keeps letting people in on that
+  list once pulls fail. It is the
   `access_grace` preference: a duration from `0` to `24h`, written like `30m` or `1h30m`, default
   `1h`. It counts from the last pull that succeeded; a sidecar that keeps running starts counting at
   its first failed pull, at most about a minute later. Past the grace, the sidecar answers every

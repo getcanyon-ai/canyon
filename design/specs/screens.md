@@ -374,7 +374,7 @@ are deliberately not what authentication waits for.
 
 What stays true here: on a host that has been onboarded, A0 is the first screen. The organisation's
 settings live under **Settings** (amended 2026-10-02, redesign #1401, #1348; they were under
-Guardrails), as four pages, each its own address and one Save: **Organisation**
+Guardrails), as pages, each its own address, and each section of typed values its own Save (D16): **Organisation**
 (`#/settings/organisation`, the name), **People & sign-in** (`#/settings/people`: who may sign in,
 who administers Canyon, the security responders — to an admin alone, since the read answers their
 keys to nobody else: `Security responders can stop any app's production and approve its blocking
@@ -384,14 +384,16 @@ administers Canyon reads `Admins change these settings and the policies. Everyon
 promotes; only an admin or a security responder approves a blocking finding.`, and an address list's
 *Add* puts the cursor in the row it adds, a field wide enough for a whole address (amended 2026-10-15,
 #2258) — the groups claim, and
-*Production is approved in the dashboard*, a switch
+*A person approves each promotion to production, here in Canyon*, a switch
 with the one line `On: the CLI and agents only ask, and a person on the app's team approves it here in
 Canyon. Off: anyone on the app's team can promote, and so can an agent they ask, through the CLI or Canyon's tools.`
 (amended 2026-10-07, #1820; amended 2026-11-22: agents also promote through Canyon's tools; `design/AUTH.md` §4.5); on a host with sign-in off, one line saying so and no
 form), **App hosting** (`#/settings/hosting`, *How people reach apps*: the front door), and **AI
 review** (`#/settings/ai`: whether a model is set up). A key the environment pins is shown with its
-variable and never sent, and a Save sends only what changed. An edit not saved is dropped when the
-page changes. Guardrails keeps only the rules.
+variable and never sent, and each section's Save sends only what changed. Every control saves as
+design/EXPERIENCE.md D16 says (amended 2026-11-28): a choice as it is made, or after its question when it
+changes what apps can do, typed values with their section's Save, and leaving with typing not saved asks
+`Discard your changes?` first. Guardrails keeps only the rules.
 
 **Patching**, on App hosting, is an admin's alone (design/PERMISSIONS.md, *Platform patches*; #2105): a member
 sees none of it and the page never reads the identities for them. Marked Beta: the `patching` switch as two

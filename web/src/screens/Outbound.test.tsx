@@ -442,7 +442,7 @@ describe("the Outbound card's mode and Allow", () => {
     expect(env("Preview").queryByRole("button", { name: "Allow invalid" })).toBeNull(); // refused in every mode: no allowlist's to allow
     fireEvent.click(env("Preview").getByRole("button", { name: "Save Preview's mode" }));
     expect(sent()).toEqual([]);
-    expect(env("Preview").getByText("Refuse 1 destination in Preview now? Its calls to it get a 403 from Canyon until it's allowed.")).toBeDefined();
+    expect(env("Preview").getByText("Refuse 1 destination in Preview now? Canyon refuses its calls to it until it's allowed.")).toBeDefined();
     expect(document.activeElement).toBe(env("Preview").getByRole("button", { name: S.modeYes }));
     fireEvent.click(env("Preview").getByRole("button", { name: S.modeYes }));
     await settle();

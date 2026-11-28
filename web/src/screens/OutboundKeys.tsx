@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { caOf, rotateCA, said, type EgressRoot, type EgressSetting } from "../api";
 import { S } from "../strings";
+import { AskFirst } from "../ui/AskFirst";
 import { Button } from "../ui/Button";
+import { Saved } from "../ui/Saved";
+import { useUnsaved } from "../ui/Unsaved";
 
 // Settings › Outbound's roots, an admin's (design/EGRESS.md §4.5, §8.3; contracts/routes.md, POST
 // /api/v1/egress/ca/rotate; #2145): each root Canyon signs credentials' certificates under, its key dates, never a key;
@@ -44,6 +47,10 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // The sub-CA pasted and not yet used: leaving asks first, and using it asks first too, since apps trust it (D16).
+  const [typed, setTyped] = useState(false);
+  const [usingByo, setUsingByo] = useState(false);
+  useUnsaved(typed);
   const cert = useRef<HTMLTextAreaElement>(null);
   const key = useRef<HTMLTextAreaElement>(null); // the sub-CA's key lives in the field alone
   const live = useRef(true);
@@ -57,7 +64,8 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
     try {
       const answer = await rotateCA(body);
       if (key.current !== null) key.current.value = ""; // taken: the field holds it no longer
-      if (live.current) { adopt(answer); setSaved(true); setAsking(false); }
+      if (cert.current !== null && "cert" in body) cert.current.value = "";
+      if (live.current) { adopt(answer); setSaved(true); setAsking(false); setUsingByo(false); if ("cert" in body) setTyped(false); }
     } catch (err) {
       if (live.current) setRefusal(said(err));
     }
@@ -74,7 +82,7 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
       {ca.rotates_at !== null && <p className={NOTE}>{S.keysRotatesAt.replace("<date>", () => day(ca.rotates_at ?? ""))}</p>}
       {byoEnding !== null && <p role="note" className="mt-1 text-md text-amber">{S.keysByoEnds.replace("<date>", () => day(byoEnding.ends_at))}</p>}
       {refusal !== null && <p role="alert" className="mt-2 text-md text-critical">{refusal}</p>}
-      {saved && <p role="status" className="mt-2 text-md text-ok">{S.keysSaved}</p>}
+      {saved && <Saved then={S.keysSavedThen} />}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {!asking ? <Button onClick={() => { setAsking(true); setSaved(false); }}>{S.keysRotate}</Button> : (<>
           <p className="basis-full text-base">{S.keysRotateAsk}</p>
@@ -86,16 +94,19 @@ export function OutboundKeys({ setting, adopt, now = Date.now() }: { setting: Eg
         <h3 className="text-base font-semibold">{S.keysByoHeading}</h3>
         <p className={NOTE}>{S.keysByoNote}</p>
         <fieldset disabled={busy} className="contents">
-          <label htmlFor="egress-ca-cert" className={LABEL}>Certificates: the sub-CA first, ending at your root</label>
-          <textarea id="egress-ca-cert" ref={cert} rows={6} className={FIELD} spellCheck={false} autoComplete="off" />
-          <label htmlFor="egress-ca-key" className={LABEL}>Private key (PKCS #8)</label>
-          <textarea id="egress-ca-key" ref={key} rows={4} className={FIELD} spellCheck={false} autoComplete="off" aria-describedby="egress-ca-key-note" />
+          <label htmlFor="egress-ca-cert" className={LABEL}>Certificate chain: yours first, ending at your root</label>
+          <textarea id="egress-ca-cert" ref={cert} rows={6} className={FIELD} spellCheck={false} autoComplete="off" onChange={() => setTyped(true)} />
+          <label htmlFor="egress-ca-key" className={LABEL}>Private key (PEM, PKCS #8)</label>
+          <textarea id="egress-ca-key" ref={key} rows={4} className={FIELD} spellCheck={false} autoComplete="off" aria-describedby="egress-ca-key-note" onChange={() => setTyped(true)} />
           <p id="egress-ca-key-note" className={NOTE}>{S.keysKeyNote}</p>
         </fieldset>
-        <span className="mt-2 flex">
-          {busy ? <Button disabled reason="Saving…">Use this sub-CA</Button>
-            : <Button variant="primary" onClick={() => void rotate({ cert: cert.current?.value ?? "", key: key.current?.value ?? "" })}>Use this sub-CA</Button>}
-        </span>
+        {usingByo
+          ? (
+            <AskFirst question={S.keysByoAsk} yes={S.keysByoYes} busy={busy} onYes={() => void rotate({ cert: cert.current?.value ?? "", key: key.current?.value ?? "" })} onNo={() => setUsingByo(false)}>
+              <p className="text-md">{S.keysSavedThen}</p>
+            </AskFirst>
+          )
+          : typed && <span className="mt-2 flex"><Button variant="primary" onClick={() => { setSaved(false); setUsingByo(true); }}>{S.keysByoYes}</Button></span>}
       </form>
     </section>
   );

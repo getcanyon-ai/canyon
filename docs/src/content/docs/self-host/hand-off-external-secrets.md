@@ -51,7 +51,7 @@ ${CA_BUNDLE}
 |---|---|
 | `${STORE}` | The **Secret store** you named in Canyon's form: `canyon` unless you chose another |
 | `${CANYON_URL}` | Your Canyon's address, `CANYON_PUBLIC_URL` |
-| `${CA_BUNDLE}` | Nothing, when a public CA signed Canyon's address. Otherwise the line `      caBundle: <base64 of the CA that signed Canyon's address>`, indented under `webhook`. **For your platform team** fills it in from **CA for the sign-in sidecar and External Secrets (optional)** |
+| `${CA_BUNDLE}` | Nothing, when a public CA signed Canyon's address. Otherwise the line `      caBundle: <base64 of the CA that signed Canyon's address>`, indented under `webhook`. **For your platform team** fills it in from **Your private certificate authority, if one signed Canyon's address (optional)** |
 
 How it works: each release's ExternalSecret names the release as its key, so External Secrets calls
 `GET <your Canyon>/releases/<release>/access-token` with the fetch-only token. Canyon answers

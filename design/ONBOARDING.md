@@ -45,7 +45,7 @@ or one that is air-gapped, configures a host with almost no human clicking anyth
 remains, on Finish: the setup state ends when somebody sets `onboarded_at`, and treating an
 all-overridden host as already set up is more logic than the saved click is worth — and an operator who
 wants the membership lists pinned in code review can pin them. A key the environment sets is shown
-**read-only** on screen, naming the variable it comes from (`Set on the server, by <VARIABLE>.
+**read-only** on screen, naming the variable it comes from (`Set in Canyon's server configuration, as <VARIABLE>.
 Change it there, not here.`), so nobody edits a value that will not take. With the addresses pinned,
 step 2 offers no Add and drops its line about adding an address.
 

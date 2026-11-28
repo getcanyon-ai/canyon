@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { AskFirst } from "../ui/AskFirst";
+import { useUnsaved } from "../ui/Unsaved";
 import { getChannels, putChannel, removeChannel, said, testChannel, type Channel } from "../api";
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
@@ -52,6 +54,7 @@ export function IntegrationsSettings() {
 function ChannelRow({ channel, done, change }: { channel: Channel; done: (line: string) => void; change: () => void }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [removing, setRemoving] = useState(false); // a removal asks first, saying what stops (D16)
   const act = async (call: () => Promise<unknown>, line: string) => {
     if (sending) return;
     setSending(true);
@@ -78,8 +81,16 @@ function ChannelRow({ channel, done, change }: { channel: Channel; done: (line: 
       <span className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" label={`${S.integrationsTest}: ${channel.name}`} onClick={() => void act(() => testChannel(channel.id), S.integrationsTested)}>{S.integrationsTest}</Button>
         <Button size="sm" variant="ghost" label={`Change ${channel.name}`} onClick={change}>Change</Button>
-        <Button size="sm" variant="ghost" label={`Remove ${channel.name}`} onClick={() => void act(() => removeChannel(channel.id), S.integrationsRemoved)}>Remove</Button>
+        {!removing && <Button size="sm" variant="ghost" label={`Remove ${channel.name}`} onClick={() => setRemoving(true)}>Remove</Button>}
       </span>
+      {removing && (
+        <div className="col-span-full">
+          <AskFirst question={S.integrationsRemoveAsk.replace("<channel>", () => channel.name)} yes={S.integrationsRemoveYes} danger busy={sending}
+            onYes={() => void act(() => removeChannel(channel.id), S.integrationsRemoved)} onNo={() => setRemoving(false)}>
+            <p className="text-md">{S.integrationsRemoveMeans}</p>
+          </AskFirst>
+        </div>
+      )}
     </li>
   );
 }
@@ -92,6 +103,9 @@ function ChannelForm({ channel, taken, done, cancel }: { channel?: Channel; take
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const id = channel?.id ?? idFor(name, taken);
+  // Typed, so its Save shows only while the form differs from the channel saved, and leaving asks first (D16).
+  const changed = url.trim() !== "" || name.trim() !== (channel?.name ?? "") || kind !== (channel?.kind ?? "slack");
+  useUnsaved(changed);
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -130,7 +144,7 @@ function ChannelForm({ channel, taken, done, cancel }: { channel?: Channel; take
       <p className={NOTE}>{S.integrationsSaveNote}</p>
       {failure !== null && <p role="alert" className="mt-2 text-base text-critical">{failure}</p>}
       <span className="mt-3 flex gap-2">
-        <button type="submit" className={buttonClass("primary", "md")}>Save</button>
+        {changed && <button type="submit" className={buttonClass("primary", "md")}>{S.integrationsSave}</button>}
         <Button variant="ghost" onClick={cancel}>Cancel</Button>
       </span>
     </form>

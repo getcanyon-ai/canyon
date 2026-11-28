@@ -51,7 +51,7 @@ finish, alice at `$E2E_CANYON_URL` lands on `/#/setup-required` reading `Canyon 
 Ask whoever installed it.` and `GET /api/v1/audit` holds no `sign in` row for her. *Cleanup*: none.
 
 **A2 · front door, choice 2: the probe passes.** UI + API + cluster. *Given* A1. *Steps*: Settings
-→ App hosting shows `No front door is set, so no app can run on this Canyon yet.`;
+→ App hosting shows `Nobody can reach an app until this is set, so no app can run on this Canyon yet.`;
 choose `Canyon signs people in`; the note `A sign-in proxy runs beside each app, against your
 identity provider.` and the callbacks note are visible; enter issuer `$E2E_OIDC_ISSUER`, client id
 `$E2E_OIDC_CLIENT_ID`, secret `$E2E_OIDC_CLIENT_SECRET`, domain `$E2E_APPS_DOMAIN`, form
@@ -63,7 +63,7 @@ JSON for the value); cluster: no object labelled `canyon.probe` remains in `cany
 30 s. *Cleanup*: none. Docker cannot run this: `frontDoorDocker`.
 
 **A3 · the front door, outbound and playbooks refuse a member.** UI + API. *Given* A2. As alice: the front door reads
-`Only an admin can change the front door.` with no form; `PUT /api/v1/front-door` as alice is
+`Only an admin can change how people reach apps.` with no form; `PUT /api/v1/front-door` as alice is
 `403 {error:"admin_required"}` and writes no audit row. Settings › Outbound reads `Only an admin can
 change how apps call out.` above how apps call out, read-only, with no choice and no button; `PUT
 /api/v1/egress {mode}` as alice is `403 {error:"admin_required"}` (#2422). Guardrails › Playbooks is the admins-only page,
@@ -78,7 +78,7 @@ null`; the newest audit row is `egress.set`. *Cleanup*: none: the next fresh ins
 
 **A4 · front door, choice 1: the gateway signs people in.** UI + hook. *Given* phase 2 done, the
 test cluster's runner switched the gateway (`$E2E_SWITCH_FRONT_DOOR alb`, README). *Steps*: as admin, choose
-`Your gateway signs people in`, gateway `alb`, `alb_arn` `$E2E_ALB_ARN`, save. *Assert*: `Saved.
+`Your sign-in proxy signs people in`, gateway `alb`, `alb_arn` `$E2E_ALB_ARN`, save. *Assert*: `Saved.
 Apps change at their next deploy.`; `GET /api/v1/front-door` answers `choice: 1, gateway: "alb"`;
 `e2e-peer` (still running from phase 2) still answers with choice 2's oauth2-proxy until M8
 redeploys it: cluster, its pod's init containers still include the oauth2-proxy image. *Cleanup*:

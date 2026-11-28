@@ -108,11 +108,11 @@ async function people(page: Page, who: string) {
   await expect(page.getByRole("region", { name: "Who may sign in" })).toBeVisible();
   if (who === "admin") {
     await expect(page.getByRole("region", { name: "Security responders" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save people and sign-in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add person" })).toBeVisible(); // each section's Save shows once it changes (D16)
   } else {
     await expect(page.getByText("An admin changes these settings.")).toBeVisible();
     await expect(page.getByRole("region", { name: "Security responders" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Save people and sign-in" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add person" })).toHaveCount(0);
   }
   await walked(page, "people", who);
 }
@@ -160,6 +160,8 @@ async function sessions(page: Page, who: string) {
   await list.scrollIntoViewIfNeeded();
   await walked(page, "sessions", who);
   await mine.getByRole("button", { name: /^Disconnect / }).click();
+  // A disconnect ends someone's access, so it asks first (design/EXPERIENCE.md, D16).
+  await list.getByRole("group", { name: /^Disconnect .* session\?$/ }).getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(mine).toHaveCount(0);
   await walked(page, "sessions-disconnected", who);
 }

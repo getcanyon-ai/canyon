@@ -19,7 +19,7 @@ go-live checks says what that covers:
     a person promotes, or an agent they ask, signed in as them
 ```
 
-An org can go further. With **Production is approved in the dashboard** turned on, in the
+An org can go further. With **A person approves each promotion to production, here in Canyon** turned on, in the
 Production section of Settings › People & sign-in, the CLI and agents only ask. `canyon deploy --env prod` prints a link and a code that expires in
 24 hours, and a person on the app's team approves the promotion in Canyon's dashboard:
 
@@ -50,7 +50,7 @@ the same list when it refuses.
 ## If you think it's wrong
 
 This rule has no findings to approve. An admin can set it to Advisory or Off under Guardrails →
-Policies. While **Production is approved in the dashboard** is on, the rule blocks whatever its
+Policies. While **A person approves each promotion to production, here in Canyon** is on, the rule blocks whatever its
 state.
 
 While the rule is Blocking, only a person can also take production offline or cancel a promotion.

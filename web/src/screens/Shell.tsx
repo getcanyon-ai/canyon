@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getAuthConfig, getFleet, getPreferences, UNAUTHENTICATED, type Preferences, type Viewer } from "../api";
 import { S } from "../strings";
 import { RailContext } from "../ui/Rail";
+import { discarded, DiscardQuestion, guardUnload, unsaved } from "../ui/Unsaved";
 import { App } from "./App";
 import { Approve } from "./Approve";
 import { AuditTrail } from "./AuditTrail";
@@ -159,8 +160,19 @@ export function Shell() {
   // had a session to end.
   const [signedOut, setSignedOut] = useState<"signed-out" | "ended" | "none" | null>(null);
   const hadSession = useRef(false);
+  // Where the person was going when the page held unsaved typing (design/EXPERIENCE.md, D16): the address goes back to the
+  // page they were on, and they are asked first.
+  const [leaving, setLeaving] = useState<string | null>(null);
   useEffect(() => {
-    const follow = () => setHash(window.location.hash);
+    const follow = (event: HashChangeEvent) => {
+      if (unsaved() && !discarded()) {
+        window.history.replaceState(null, "", new URL(event.oldURL).hash || "#/fleet");
+        setLeaving(new URL(event.newURL).hash);
+        return;
+      }
+      setLeaving(null);
+      setHash(window.location.hash);
+    };
     // A chosen sign-out sticks: a poll already on its way answers 401 after it.
     const out = (event: Event) => {
       const chosen = (event as CustomEvent).detail === "signed-out";
@@ -171,7 +183,8 @@ export function Shell() {
     };
     window.addEventListener("hashchange", follow);
     window.addEventListener(UNAUTHENTICATED, out);
-    return () => { window.removeEventListener("hashchange", follow); window.removeEventListener(UNAUTHENTICATED, out); };
+    window.addEventListener("beforeunload", guardUnload);
+    return () => { window.removeEventListener("hashchange", follow); window.removeEventListener(UNAUTHENTICATED, out); window.removeEventListener("beforeunload", guardUnload); };
   }, []);
   if (signedOut !== null) return <SignIn reason={signedOut === "none" ? undefined : signedOut} />;
   if (hash.startsWith("#/setup-required")) return <SetupNotice />;
@@ -179,5 +192,10 @@ export function Shell() {
   // Everything else is the dashboard, and the dashboard asks whether this host is set up first.
   // The two routes above do not: neither reads anything, and a host in setup is exactly where the
   // callback sends somebody to them.
-  return <Dashboard hash={hash} answered={() => { hadSession.current = true; }} />;
+  return (
+    <>
+      <Dashboard hash={hash} answered={() => { hadSession.current = true; }} />
+      {leaving !== null && <DiscardQuestion to={leaving} stay={() => setLeaving(null)} />}
+    </>
+  );
 }

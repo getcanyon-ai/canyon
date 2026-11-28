@@ -2628,7 +2628,7 @@ an agent can drive a browser too: it would have been a speed bump described as a
 one claim the product cannot afford to have disbelieved. `design/AUTH.md` §4.4 is the reasoning.
 
 **Approved in the dashboard** (decided 2026-10-07, #1820; `design/AUTH.md` §4.5). An org that wants
-a person to approve production turns on *Production is approved in the dashboard* (off by default,
+a person to approve production turns on *A person approves each promotion to production, here in Canyon* (off by default,
 Settings › People & sign-in). With it on, the receipt's `prod.human-approval` row reads
 `a person approves it in Canyon's dashboard; an agent or the CLI only asks` and is the only rule that fails, so
 the verb prints what would ship, asks nothing — the one confirmation is the person's click — and

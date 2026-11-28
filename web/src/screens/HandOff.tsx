@@ -6,7 +6,11 @@ import {
 import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, ago } from "../ui/Age";
+import { AskFirst } from "../ui/AskFirst";
 import { Button } from "../ui/Button";
+import { Saved } from "../ui/Saved";
+import { SaveSection } from "../ui/SaveSection";
+import { useUnsaved } from "../ui/Unsaved";
 import { OVER, OVER_BOX } from "../ui/Modal";
 import { RepoStep, RepoTeamCard, type RepoRevealed } from "./HandOffRepo";
 
@@ -42,11 +46,13 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const [picked, setPicked] = useState<"canyon" | "org" | null>(null);
   const [revealed, setRevealed] = useState<Revealed | null>(null);
   const [asking, setAsking] = useState<Asking | null>(null);
-  const [refusal, setRefusal] = useState<{ at: Asking | "url" | "grace" | "delivery"; message: string } | null>(null);
+  const [refusal, setRefusal] = useState<{ at: Asking | "url" | "delivery"; message: string } | null>(null);
   const [url, setUrl] = useState("");
   const [editing, setEditing] = useState(false);
   const [ping, setPing] = useState<string | "sending" | null>(null);
   const [grace, setGrace] = useState(record.access_grace);
+  const [delivering, setDelivering] = useState<"webhook" | "repo" | null>(null); // the delivery asked about, before yes (D16)
+  const [saved, setSaved] = useState<"url" | "delivery" | null>(null); // what last saved, said until the next change
   const heading = useRef<HTMLHeadingElement>(null);
   const tester = useRef<HTMLButtonElement>(null);
   const afterReveal = useRef<"heading" | "tester">("heading");
@@ -63,6 +69,9 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   useEffect(() => { live.current = true; void readHook(); void readRepo(); return () => { live.current = false; }; }, []);
   useEffect(() => { setGrace(record.access_grace); }, [record.access_grace]);
 
+  // The webhook's address is typed: leaving it unsaved asks first (D16).
+  const urlChanged = hook === null ? url !== "" : editing && url !== hook?.url;
+  useUnsaved(urlChanged);
   const org = record.run_by === "org";
   const viaRepo = record.delivery === "repo";
   const repoSaved = repo !== null && repo !== undefined;
@@ -71,7 +80,7 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
     read.front_door?.choice === 1 && read.front_door.enforcing]; // a door not seen enforcing NetworkPolicy builds nothing (#2507)
   const current = steps.indexOf(false);
 
-  const fail = (at: Asking | "url" | "grace" | "delivery", err: unknown) => setRefusal({ at, message: said(err) });
+  const fail = (at: Asking | "url" | "delivery", err: unknown) => setRefusal({ at, message: said(err) });
   const choose = (to: "canyon" | "org") => {
     setRefusal(null);
     if (to === "canyon" && org) setAsking("off");
@@ -90,13 +99,14 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   };
   const saveUrl = async () => {
     try {
-      const saved = await putPlatformWebhook(url);
+      const answer = await putPlatformWebhook(url);
       setEditing(false);
       setUrl("");
       setRefusal(null);
-      if (saved.secret !== undefined || saved.token !== undefined) {
+      setSaved("url");
+      if (answer.secret !== undefined || answer.token !== undefined) {
         afterReveal.current = "heading";
-        setRevealed({ secret: saved.secret, token: saved.token });
+        setRevealed({ secret: answer.secret, token: answer.token });
       }
       await readHook();
     } catch (err) {
@@ -126,25 +136,27 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
     try {
       adopt(await putPreferences({ delivery: to }));
       setRefusal(null);
+      setDelivering(null);
+      setSaved("delivery");
     } catch (err) {
       fail("delivery", err);
       await reload();
     }
   };
+  // A refused grace reads the row again: the server may hold another value than the one typed.
   const saveGrace = async () => {
     try {
       adopt(await putPreferences({ access_grace: grace }));
-      setRefusal(null);
     } catch (err) {
-      fail("grace", err);
       await reload();
+      throw err;
     }
   };
   const done = () => {
     setRevealed(null);
     requestAnimationFrame(() => (afterReveal.current === "tester" ? tester.current : heading.current)?.focus());
   };
-  const refused = (at: Asking | "url" | "grace" | "delivery") => refusal?.at === at && <p role="alert" className="mt-1 text-base text-critical">{refusal.message}</p>;
+  const refused = (at: Asking | "url" | "delivery") => refusal?.at === at && <p role="alert" className="mt-1 text-base text-critical">{refusal.message}</p>;
   const confirm = (at: Asking, question: string, yes: string, go: () => void) => asking === at && (
     <div className={CARD}>
       <p className="text-base">{question}</p>
@@ -162,11 +174,11 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const urlForm = (label: string) => (
     <>
       <label className={LABEL} htmlFor="hand-off-url">Webhook URL</label>
-      <input id="hand-off-url" className={FIELD} value={url} placeholder="https://" onChange={(event) => setUrl(event.target.value)} />
+      <input id="hand-off-url" className={FIELD} value={url} placeholder="https://" onChange={(event) => { setUrl(event.target.value); setSaved(null); }} />
       <p className={NOTE}>{S.webhookNote}</p>
       <span className="mt-2 flex flex-wrap gap-2">
-        <Button variant="primary" label={label} onClick={() => void saveUrl()}>Save</Button>
-        {editing && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+        {urlChanged && <Button variant="primary" onClick={() => void saveUrl()}>{label}</Button>}
+        {editing && <Button variant="ghost" onClick={() => { setEditing(false); setUrl(""); }}>Cancel</Button>}
       </span>
       {refused("url")}
     </>
@@ -175,9 +187,10 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
     <>
       <p className="mt-1 font-mono text-sm break-all">{hook.url}</p>
       <p className={NOTE}><Actor actor={hook.set_by} /> · <Age at={hook.set_at} /></p>
+      {saved === "url" && <Saved />}
       {delivered}
       {admin && (
-        editing ? urlForm("Save the new webhook URL") : (
+        editing ? urlForm(S.webhookSaveNew) : (
           <>
             <span className="mt-2 flex flex-wrap gap-2">
               <button ref={tester} type="button" onClick={() => void sendPing()} className="inline-flex h-[34px] items-center rounded-[7px] border border-border-strong bg-surface px-3 text-base font-medium">
@@ -200,9 +213,13 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const team = hook && (
     <section aria-labelledby="hand-off-team" className={CARD}>
       <h3 id="hand-off-team" className="text-base font-semibold">{S.teamTitle}</h3>
-      <p className={NOTE}>{S.teamWebhook.replace("<url>", () => hook.url)}</p>
-      <p className={NOTE}>{S.teamReport}</p>
-      <p className={NOTE}>{S.teamDocs}</p>
+      {/* The contract the receiver is coded against, folded for whoever builds it. */}
+      <details className="mt-1">
+        <summary className="cursor-pointer text-md text-link">{S.teamFold}</summary>
+        <p className={NOTE}>{S.teamWebhook.replace("<url>", () => hook.url)}</p>
+        <p className={NOTE}>{S.teamReport}</p>
+        <p className={NOTE}>{S.teamDocs}</p>
+      </details>
     </section>
   );
   const deliveryChoice = admin ? (
@@ -211,12 +228,19 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
       {([["repo", S.deliveryRepo, S.deliveryRepoNote], ["webhook", S.deliveryWebhook, S.deliveryWebhookNote]] as const).map(([value, word, note]) => (
         <div key={value} className="mt-2">
           <label className="flex items-center gap-2 text-base">
-            <input type="radio" name="delivery" checked={record.delivery === value} aria-describedby={`delivery-${value}-note`} onChange={() => void pickDelivery(value)} />
+            <input type="radio" name="delivery" checked={(delivering ?? record.delivery) === value} aria-describedby={`delivery-${value}-note`} onChange={() => { setRefusal(null); setSaved(null); setDelivering(value === record.delivery ? null : value); }} />
             {word}
           </label>
           <p id={`delivery-${value}-note`} className={`${NOTE} ml-6`}>{note}</p>
         </div>
       ))}
+      {/* It changes how every release reaches the platform, so it asks first (D16). */}
+      {delivering !== null && (
+        <AskFirst question={S.deliveryAsk} yes={S.deliveryYes} onYes={() => void pickDelivery(delivering)} onNo={() => setDelivering(null)}>
+          <p className="text-md">{delivering === "repo" ? S.deliveryRepoNote : S.deliveryWebhookNote}</p>
+        </AskFirst>
+      )}
+      {saved === "delivery" && delivering === null && <Saved />}
       {refused("delivery")}
     </fieldset>
   ) : <p className="mt-2 text-base">{viaRepo ? S.deliveryRepo : S.deliveryWebhook}</p>;
@@ -226,15 +250,12 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
   const repoNext = repoSaved && <RepoTeamCard repo={repo} next />; // in the checklist, under the repo step: the platform team's part comes next
   const graceField = admin ? (
     <>
-      <label className={LABEL} htmlFor="hand-off-grace">Access grace</label>
-      <span className="flex flex-wrap items-center gap-2">
-        <input id="hand-off-grace" className={`${FIELD} max-w-[160px]`} value={grace} onChange={(event) => setGrace(event.target.value)} />
-        <Button variant="secondary" label="Save the access grace" onClick={() => void saveGrace()}>Save</Button>
-      </span>
+      <label className={LABEL} htmlFor="hand-off-grace">{S.graceLabel}</label>
+      <input id="hand-off-grace" className={`${FIELD} max-w-[160px]`} value={grace} onChange={(event) => setGrace(event.target.value)} />
       <p className={NOTE}>{S.graceNote}</p>
-      {refused("grace")}
+      <SaveSection label={S.graceSave} changed={grace !== record.access_grace} save={saveGrace} />
     </>
-  ) : <p className={NOTE}>Access grace: <span className="font-mono">{record.access_grace}</span></p>;
+  ) : <p className={NOTE}>{S.graceLabel}: <span className="font-mono">{record.access_grace}</span></p>;
 
   return (
     <section aria-labelledby="run-where">
@@ -293,7 +314,7 @@ export function HandOff({ read, record, admin, adopt, reload, toFrontDoor }: {
             </li>
             <li aria-current={current === 1 ? "step" : undefined} className={CARD}>
               <h3 className="text-base font-semibold">{steps[1] ? "✓ " : "2. "}{viaRepo ? S.stepRepo : S.stepWebhook}</h3>
-              {viaRepo ? <>{repoStep}{repoNext}</> : hook === null ? urlForm("Save the webhook") : webhookControls}
+              {viaRepo ? <>{repoStep}{repoNext}</> : hook === null ? urlForm(S.webhookSave) : webhookControls}
             </li>
             <li aria-current={current === 2 ? "step" : undefined} className={CARD}>
               <h3 className="text-base font-semibold">{steps[2] ? "✓ " : "3. "}{S.gateway}</h3>

@@ -57,7 +57,7 @@ until the last step, so you can walk away halfway and the host stays in setup.
    - **From the environment**: the `CANYON_ADMINS` addresses. They are admins whatever the screen
      says, and can't be removed here.
    - **By email**: more admin addresses. Yours is already on the list.
-   - **By sign-in group (optional)**: a claim and a value. Anyone whose sign-in carries that claim
+   - **By a group in your sign-in provider (optional)**: a claim and a value. Anyone whose sign-in carries that claim
      with that value is an admin. Canyon reads it at sign-in, so it takes effect at a person's next
      sign-in.
 
@@ -76,7 +76,7 @@ served and everyone on the lists can sign in.
 
 `CANYON_ORG`, `CANYON_OIDC_ALLOWED_DOMAINS`, `CANYON_OIDC_ALLOWED_EMAILS`, `CANYON_ADMIN_CLAIM` with
 `CANYON_ADMIN_VALUE`, and `CANYON_RESPONDER_CLAIM` with `CANYON_RESPONDER_VALUE` each fix one of these answers in the server's
-environment. The screen shows such a value read-only, with "Set on the server, by" and the
+environment. The screen shows such a value read-only, with "Set in Canyon's server configuration, as" and the
 variable's name. Change it there, not on the screen.
 
 `CANYON_ADMINS` is different: it adds admins and never replaces the list on the screen.
@@ -88,7 +88,7 @@ Every answer is on **Settings** later, in the same words:
 - **Organization** holds the name.
 - **People & sign-in** holds who may sign in, who administers Canyon, and **Groups**: the groups
   claim, the sign-in claim that lists a person's groups (`CANYON_GROUPS_CLAIM` fixes it on the
-  server). Once it is set, owners can share an app with a group. It also holds the **Production** switch, "Production is approved in the dashboard".
+  server). Once it is set, owners can share an app with a group. It also holds the **Production** switch, "A person approves each promotion to production, here in Canyon".
 
 Only an admin can save these. A member sees the values, except the admin claim, and no Save button.
 

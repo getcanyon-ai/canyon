@@ -47,7 +47,7 @@ describe("IntegrationsSettings", () => {
     fireEvent.click(form.getByRole("radio", { name: "Slack" }));
     fireEvent.change(form.getByLabelText("Name"), { target: { value: "#Platform Alerts" } });
     fireEvent.change(form.getByLabelText("Webhook URL"), { target: { value: "https://hooks.slack.com/services/T0/B0/XXXX" } });
-    fireEvent.click(form.getByRole("button", { name: "Save" }));
+    fireEvent.click(form.getByRole("button", { name: S.integrationsSave }));
     expect(await screen.findByText(S.integrationsSaved.replace("<channel>", "#platform-alerts"))).toBeDefined();
     expect(sent).toEqual([`PUT /api/v1/integrations/channels/platform-alerts {"name":"#Platform Alerts","kind":"slack","url":"https://hooks.slack.com/services/T0/B0/XXXX"}`]);
   });
@@ -60,9 +60,11 @@ describe("IntegrationsSettings", () => {
     const form = within(screen.getByRole("form", { name: "Change Risk team" }));
     expect((form.getByLabelText("Webhook URL") as HTMLInputElement).placeholder).toBe("prod-12.westeurope.logic.azure.com/…Qx7Z");
     expect(form.getByText(`${S.integrationsTeamsHow} ${S.integrationsKeep}`)).toBeDefined();
-    fireEvent.click(form.getByRole("button", { name: "Save" }));
+    expect(form.queryByRole("button", { name: S.integrationsSave })).toBeNull(); // nothing changed, nothing to save (D16)
+    fireEvent.change(form.getByLabelText("Name"), { target: { value: "Risk team EU" } });
+    fireEvent.click(form.getByRole("button", { name: S.integrationsSave }));
     expect(await form.findByRole("alert")).toHaveProperty("textContent", said);
-    expect(sent).toEqual(['PUT /api/v1/integrations/channels/risk-team {"name":"Risk team","kind":"teams"}']);
+    expect(sent).toEqual(['PUT /api/v1/integrations/channels/risk-team {"name":"Risk team EU","kind":"teams"}']);
   });
 
   it("tests and removes a channel, saying what each did", async () => {
@@ -71,6 +73,13 @@ describe("IntegrationsSettings", () => {
     fireEvent.click(await screen.findByRole("button", { name: `${S.integrationsTest}: #platform-alerts` }));
     expect(await screen.findByText(S.integrationsTested.replace("<channel>", "#platform-alerts"))).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Remove #platform-alerts" }));
+    // A removal asks first, saying what stops, and Cancel sends nothing (D16).
+    const ask = within(screen.getByRole("group", { name: "Remove #platform-alerts?" }));
+    expect(ask.getByText(S.integrationsRemoveMeans)).toBeDefined();
+    fireEvent.click(ask.getByRole("button", { name: "Cancel" }));
+    expect(sent).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove #platform-alerts" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Remove #platform-alerts?" })).getByRole("button", { name: S.integrationsRemoveYes }));
     expect(await screen.findByText(S.integrationsRemoved.replace("<channel>", "#platform-alerts"))).toBeDefined();
     expect(sent).toEqual(["POST /api/v1/integrations/channels/platform-alerts/test", "DELETE /api/v1/integrations/channels/platform-alerts"]);
   });

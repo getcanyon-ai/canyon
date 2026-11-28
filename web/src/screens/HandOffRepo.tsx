@@ -7,6 +7,8 @@ import { S } from "../strings";
 import { Actor } from "../ui/Actor";
 import { Age, ago } from "../ui/Age";
 import { Button } from "../ui/Button";
+import { Saved } from "../ui/Saved";
+import { useUnsaved } from "../ui/Unsaved";
 import appProjects from "../../../deploy/gitops/argocd/appprojects.yaml?raw";
 import services from "../../../deploy/gitops/admission/services.yaml?raw";
 import applicationSets from "../../../deploy/gitops/argocd/applicationsets.yaml?raw";
@@ -50,6 +52,11 @@ export function RepoStep({ repo, admin, reveal, saved }: {
   const [asking, setAsking] = useState<"token" | "fetch" | "host" | null>(null);
   const [newToken, setNewToken] = useState("");
   const [check, setCheck] = useState<{ passed: boolean; problems: RepoProblem[]; templates: string[] } | "checking" | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+  // Typed, so its Save shows only while the form differs from what is saved, and leaving asks first (D16); so does a
+  // replacement token typed and not yet used.
+  const changed = repo === null || editing ? JSON.stringify(form) !== JSON.stringify(repo === null ? blank : formOf(repo)) : false;
+  useUnsaved(changed || newToken !== "");
 
   const set = (key: keyof Form) => (value: string) => setForm((f) => {
     if (key !== "api") return { ...f, [key]: value };
@@ -74,6 +81,7 @@ export function RepoStep({ repo, admin, reveal, saved }: {
       setEditing(false);
       setRefusal(null);
       setForm(blank);
+      setJustSaved(true);
       if (answer.fetch_token !== undefined || answer.token !== undefined) reveal({ fetch: answer.fetch_token, token: answer.token });
       await saved();
     } catch (err) {
@@ -145,7 +153,7 @@ export function RepoStep({ repo, admin, reveal, saved }: {
       <textarea id="repo-ca" className={`${FIELD} h-24 font-mono text-sm`} value={form.ca} spellCheck={false} onChange={(event) => set("ca")(event.target.value)} />
       <p className={NOTE}>{S.repoCANote}</p>
       <span className="mt-2 flex flex-wrap gap-2">
-        <Button variant="primary" label="Save the deploy repo" onClick={() => void save()}>Save</Button>
+        {changed && <Button variant="primary" onClick={() => void save()}>{S.repoSave}</Button>}
         {editing && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
       </span>
       {refused("save")}
@@ -168,13 +176,14 @@ export function RepoStep({ repo, admin, reveal, saved }: {
     <>
       <p className="mt-1 font-mono text-sm break-all">{repo.url}</p>
       <p className={NOTE}><Actor actor={repo.set_by} /> · <Age at={repo.set_at} /></p>
+      {justSaved && <Saved />}
       <p className={NOTE}>{repo.preview.branch} · {repo.prod.branch} ({repo.prod.mode === "pull_request" ? S.repoPR : S.repoPush}) · {repo.root}</p>
       {repo.checked_at !== null && <p className={NOTE}>{S.checkedAt.replace("<age>", () => ago(repo.checked_at as string))}</p>}
       {admin && (
         <>
           <span className="mt-2 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => void runCheck()}>{check === "checking" ? S.checkPending : S.check}</Button>
-            <Button variant="ghost" onClick={() => { setForm(formOf(repo)); setEditing(true); }}>Change</Button>
+            <Button variant="ghost" onClick={() => { setForm(formOf(repo)); setEditing(true); setJustSaved(false); }}>Change</Button>
             <Button variant="ghost" onClick={() => { setRefusal(null); setAsking("token"); }}>{S.repoTokenReplace}</Button>
             <Button variant="ghost" onClick={() => { setRefusal(null); setAsking("host"); }}>{S.repoHostReplace}</Button>
             <Button variant="ghost" onClick={() => { setRefusal(null); setAsking("fetch"); }}>{S.fetchReplace}</Button>

@@ -106,7 +106,7 @@ canyon deploy --env prod --yes
   `canyon secret set NAME --env prod`. It never asks for the value in the chat.
 - **The strict mode for agents:** an agent you ask for production can promote it with your sign-in, as `--yes`
   does. An admin who wants a person to approve every production change, an agent's included, turns on
-  **Production is approved in the dashboard** ([below](#when-your-org-has-a-person-approve-production)).
+  **A person approves each promotion to production, here in Canyon** ([below](#when-your-org-has-a-person-approve-production)).
 - **From the dashboard:** the app's page has **Promote _version_ to production**. It lists the
   secrets production lacks before you confirm.
 - **Preview answering with an error:** when the version in preview answers its address with an
@@ -120,7 +120,7 @@ canyon deploy --env prod --yes
 
 ## When your org has a person approve production
 
-An admin can turn on **Production is approved in the dashboard**, in Settings › People & sign-in →
+An admin can turn on **A person approves each promotion to production, here in Canyon**, in Settings › People & sign-in →
 Production. It needs sign-in on. Then `canyon deploy --env prod` promotes nothing itself. It sends
 a promotion request and prints a link to it, a code, and how long the request lasts.
 

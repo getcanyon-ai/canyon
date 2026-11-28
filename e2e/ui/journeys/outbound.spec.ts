@@ -45,29 +45,28 @@ journey("set the org's outbound mode to allowlist and back", {
       name: "send apps' calls through Canyon",
       do: async (page) => {
         await radio(page, "Through Canyon").check();
-        await region(page).getByRole("button", { name: "Save how apps call out" }).click();
+        // It changes what apps can do, so it asks first (design/EXPERIENCE.md, D16).
+        await page.getByRole("group", { name: "Send apps' calls through Canyon?" }).getByRole("button", { name: "Turn on Through Canyon" }).click();
       },
       see: async (page) => { await expect(radio(page, "Allowlist")).toBeEnabled(taken); },
       changes: set,
     },
     {
-      name: "choose allowlist: what changes, then the question, nothing sent",
+      name: "choose allowlist: the question with what changes, nothing sent",
       do: async (page) => {
         await radio(page, "Allowlist").check();
-        const changes = page.getByRole("group", { name: "What changes" });
+        const changes = page.getByRole("group", { name: /^(Refuse \d+ destinations? now\?|Switch to allowlist now\?)/ });
         await expect(changes.getByText("This applies to running apps within seconds, not at their next deploy.")).toBeVisible();
-        await expect(changes.getByRole("button", { name: "Save what apps may call" })).toBeEnabled(); // the list is read
-        await changes.getByRole("button", { name: "Save what apps may call" }).click();
+        await expect(changes.getByRole("button", { name: "Switch to allowlist" })).toBeEnabled(); // the list is read
       },
       see: async (page) => {
-        const changes = page.getByRole("group", { name: "What changes" });
-        await expect(changes.getByText(/^(Refuse \d+ destinations? now\?|Switch to allowlist now\?)/)).toBeVisible();
+        const changes = page.getByRole("group", { name: /^(Refuse \d+ destinations? now\?|Switch to allowlist now\?)/ });
         await expect(changes.getByRole("button", { name: "Cancel" })).toBeVisible();
       },
     },
     {
       name: "switch to allowlist",
-      do: async (page) => { await page.getByRole("group", { name: "What changes" }).getByRole("button", { name: "Switch to allowlist" }).click(); },
+      do: async (page) => { await page.getByRole("group", { name: /^(Refuse \d+ destinations? now\?|Switch to allowlist now\?)/ }).getByRole("button", { name: "Switch to allowlist" }).click(); },
       see: async (page) => {
         await expect(region(page).getByText(saved)).toBeVisible(taken);
         await expect(radio(page, "Allowlist")).toBeChecked();
@@ -76,11 +75,12 @@ journey("set the org's outbound mode to allowlist and back", {
       changes: set,
     },
     {
-      name: "back to observe, with no question",
+      name: "back to observe, after its question",
       do: async (page) => {
         await radio(page, "Observe").check();
-        await expect(page.getByRole("group", { name: "What changes" }).getByText("Every app environment that follows the org's mode goes back to Observe.")).toBeVisible();
-        await page.getByRole("group", { name: "What changes" }).getByRole("button", { name: "Save what apps may call" }).click();
+        const ask = page.getByRole("group", { name: "Switch back to Observe?" });
+        await expect(ask.getByText("Every app environment that follows the org's mode goes back to Observe.")).toBeVisible();
+        await ask.getByRole("button", { name: "Switch to Observe" }).click();
       },
       see: async (page) => {
         await expect(region(page).getByText(saved)).toBeVisible(taken);
@@ -92,7 +92,7 @@ journey("set the org's outbound mode to allowlist and back", {
       name: "apps call out directly again",
       do: async (page) => {
         await radio(page, "Off").check();
-        await region(page).getByRole("button", { name: "Save how apps call out" }).click();
+        await page.getByRole("group", { name: "Let apps call out directly?" }).getByRole("button", { name: "Let apps call out directly" }).click();
       },
       see: async (page) => { await expect(radio(page, "Allowlist")).toBeDisabled(taken); },
       changes: set,

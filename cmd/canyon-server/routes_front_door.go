@@ -51,7 +51,7 @@ const (
 	// A door stored without passing the probe, and the switch back to canyon behind one (#2438).
 	notChecked         = "Not checked on this cluster: your platform can run apps behind this front door, but Canyon won't until a save passes the check."
 	notEnforcing       = "Not checked on this cluster: Canyon builds nothing here until a save finds NetworkPolicy enforced, so no deploy goes through, whoever runs the apps."
-	frontDoorUnchecked = "The front door hasn't passed Canyon's check of this cluster, so Canyon can't run apps here. Save the front door again so Canyon checks it, then switch."
+	frontDoorUnchecked = "How people reach apps hasn't passed Canyon's check of this cluster, so Canyon can't run apps here. Save it again so Canyon checks it, then switch."
 )
 
 // probeWait bounds the save's wait on the probe: two probes' 60 s (the executor runs one at a time, so

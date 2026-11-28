@@ -44,3 +44,12 @@ describe("the host's egress setting", () => {
     expect(what(row("egress.networks.recreate", { internal: false, started: ["preview"], stopped: ["prod"] }))).toEqual({ verb: "Recreated the app's network", rest: "directly, not through Canyon; prod left stopped" });
   });
 });
+
+// access_grace is how long a handed-off app keeps letting people in on its last access list when it can't reach Canyon
+// (design/HAND-OFF.md §1), and the trail says so in the dashboard's own words for the field (#270).
+describe("the access grace's row", () => {
+  it("says what the grace is, before and after", () => {
+    expect(what(row("PUT /api/v1/preferences", { access_grace: { before: "1h", after: "30m" } })))
+      .toEqual({ verb: "Changed how long apps keep letting people in when they can't reach Canyon", rest: "1h → 30m" });
+  });
+});

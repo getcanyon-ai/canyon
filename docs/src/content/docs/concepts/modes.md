@@ -118,9 +118,9 @@ flowchart TD
 - **On one Docker host there is nothing to choose:** Canyon's server is every app's front door.
 - **On Kubernetes, an admin picks who signs people in** in **Settings › App hosting**, and no app
   runs until it's saved:
-  - **Your gateway signs people in, as a standard OIDC gateway**, if an OIDC proxy already sits in
+  - **Your sign-in proxy signs people in, as a standard OIDC gateway**, if an OIDC proxy already sits in
     front of your internal apps.
-  - **Your gateway signs people in, as AWS load balancer sign-in**, if your apps sit behind an AWS
+  - **Your sign-in proxy signs people in, as AWS load balancer sign-in**, if your apps sit behind an AWS
     Application Load Balancer that signs people in.
   - **Canyon signs people in** if your gateway only routes and ends TLS: oauth2-proxy runs beside
     each app, against an OIDC client you register.
@@ -142,7 +142,7 @@ flowchart TD
 - **Hand off** (`run_by: org`) if Argo CD, Flux or your own CI should run the apps. Canyon still
   reviews, builds and pushes each image, and an environment is live only once your platform reports
   the exact image Canyon reviewed running. It needs Canyon on Kubernetes, the platform webhook saved,
-  a front door set to **Your gateway signs people in** (not **Canyon signs people in**), and two
+  a front door set to **Your sign-in proxy signs people in** (not **Canyon signs people in**), and two
   settings on Canyon's server: `CANYON_IMAGE_IDENTITY`, the sidecar image every release names, and an
   `https` `CANYON_PUBLIC_URL`, which the sidecar pulls the app's access list from.
 
@@ -202,7 +202,7 @@ steps:
 | How apps call out | What it does |
 |---|---|
 | **Off** (`off`, the default) | Apps call out directly. On Docker, an app can then reach the cloud's metadata address and the host itself. |
-| **Through Canyon** (`canyon`) | Apps call out through Canyon's egress gateway, which records each destination. Nothing else gets out, except on Kubernetes: there, DNS lookups and the sign-in hosts in `CANYON_KUBE_SIGNIN_DIRECT` also go out directly, unrecorded. |
+| **Through Canyon** (`canyon`) | Apps call out through Canyon, which records each destination. Nothing else gets out, except on Kubernetes: there, DNS lookups and the sign-in hosts in `CANYON_KUBE_SIGNIN_DIRECT` also go out directly, unrecorded. |
 
 | Mode, through Canyon | What it does |
 |---|---|

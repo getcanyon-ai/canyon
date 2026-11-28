@@ -88,16 +88,16 @@ test("A2 front door, choice 2: the probe passes", async ({ page }) => {
   const secret = bed("E2E_OIDC_CLIENT_SECRET");
   await page.goto("/#/settings/hosting");
   const door = settings(page);
-  await expect(door).toContainText("No front door is set, so no app can run on this Canyon yet.");
+  await expect(door).toContainText("Nobody can reach an app until this is set, so no app can run on this Canyon yet.");
   await door.getByRole("radio", { name: "Canyon signs people in" }).check();
-  await expect(door.getByText("A sign-in proxy runs beside each app, against your identity provider.")).toBeVisible();
-  await expect(door.getByText(/^Your identity provider must accept every app's sign-in address in both environments/)).toBeVisible();
+  await expect(door.getByText("A sign-in proxy runs beside each app, against your sign-in provider.")).toBeVisible();
+  await expect(door.getByText(/^Your sign-in provider must accept every app's sign-in address in both environments/)).toBeVisible();
   await door.getByLabel("Issuer").fill(bed("E2E_OIDC_ISSUER"));
   await door.getByLabel("Client ID").fill(bed("E2E_OIDC_CLIENT_ID"));
   await door.getByLabel("Client secret").fill(secret);
   await door.getByLabel("Domain").fill(bed("E2E_APPS_DOMAIN"));
   await door.getByRole("radio", { name: `https://claims-portal.preview.${bed("E2E_APPS_DOMAIN")}` }).check(); // the app.env.domain form, by its example address
-  await door.getByRole("button", { name: "Save the front door" }).click();
+  await door.getByRole("button", { name: "Save how people reach apps" }).click();
   const status = door.getByRole("status");
   await expect(status).toHaveText("Checking this cluster and the certificate…");
   await expect(status).toHaveText("Saved. Apps change at their next deploy.", { timeout: 90_000 });
@@ -119,10 +119,10 @@ test("A3 the front door, outbound and playbooks refuse a member", async ({ page 
   const session = await signIn(page, "alice");
   await page.goto("/#/settings/hosting");
   const door = settings(page);
-  await expect(door).toContainText("Only an admin can change the front door.");
+  await expect(door).toContainText("Only an admin can change how people reach apps.");
   await expect(door).toContainText("Canyon signs people in"); // the stored door is shown, read-only: A2 did save one
   await expect(door.getByRole("textbox")).toHaveCount(0);
-  await expect(door.getByRole("button", { name: "Save the front door" })).toHaveCount(0);
+  await expect(door.getByRole("button", { name: "Save how people reach apps" })).toHaveCount(0);
   const newest = (await audit(session))[0]?.id;
   const put = await raw(session, "PUT", "/api/v1/front-door", { choice: 1, gateway: "alb", alb_arn: "arn:aws:elasticloadbalancing:eu-central-1:000000000000:loadbalancer/app/e2e/0", form: "app.env.domain" });
   expect(put.status, put.text).toBe(403);
@@ -158,7 +158,8 @@ test("A5 apps call out through Canyon", async ({ page }) => {
   await page.goto("/#/settings/outbound");
   const outbound = page.getByRole("region", { name: "Outbound" });
   await outbound.getByRole("radio", { name: "Through Canyon" }).check();
-  await outbound.getByRole("button", { name: "Save how apps call out" }).click();
+  // It changes what apps can do, so it asks first (design/EXPERIENCE.md, D16).
+  await outbound.getByRole("group", { name: "Send apps' calls through Canyon?" }).getByRole("button", { name: "Turn on Through Canyon" }).click();
   await expect(outbound.getByRole("radio", { name: "Allowlist" })).toBeEnabled();
   expect((await raw(session, "GET", "/api/v1/egress")).json).toMatchObject({ via: "canyon", mode: "observe", receiver: true, canyon_refused: null });
   expect((await audit(session))[0], "the save's audit row").toMatchObject({ action: "egress.set" });
@@ -178,10 +179,10 @@ test("A4 front door, choice 1: the gateway signs people in", async ({ page }) =>
   const session = await signIn(page, "admin");
   await page.goto("/#/settings/hosting");
   const door = settings(page);
-  await door.getByRole("radio", { name: "Your gateway signs people in" }).check();
+  await door.getByRole("radio", { name: "Your sign-in proxy signs people in" }).check();
   await door.getByRole("radio", { name: "AWS load balancer sign-in" }).check();
   await door.getByLabel("Load balancer ARN").fill(bed("E2E_ALB_ARN"));
-  await door.getByRole("button", { name: "Save the front door" }).click();
+  await door.getByRole("button", { name: "Save how people reach apps" }).click();
   await expect(door.getByRole("status")).toHaveText("Saved. Apps change at their next deploy.", { timeout: 90_000 });
   const { front_door } = (await raw(session, "GET", "/api/v1/front-door")).json as FrontDoor;
   expect(front_door).toMatchObject({ choice: 1, gateway: "alb" });
